@@ -134,7 +134,7 @@ export async function PATCH(
 
       // Notify venue's Slack channel
       const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
-      const channelId = slackChRes.rows[0]?.slack_channel_id
+      const channelId = slackChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (channelId) {
         const action = status === 'resolved' || status === 'closed' ? 'resolved' : 'updated'
         const emoji = action === 'resolved' ? ':white_check_mark:' : ':pencil2:'

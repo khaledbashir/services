@@ -112,9 +112,9 @@ Respond ONLY with valid JSON, no other text:
       [venue.id, parsed.title, parsed.description, parsed.category, parsed.priority, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue]
     )
 
-    // Notify venue's Slack channel
+    // Notify venue's Slack channel (fallback to default channel)
     const slackResult = await query(`SELECT slack_channel_id FROM venues WHERE id = $1`, [venue.id])
-    const channelId = slackResult.rows[0]?.slack_channel_id
+    const channelId = slackResult.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
     if (channelId) {
       const msg = formatTicketNotification({
         ticket_number: result.rows[0].ticket_number,
