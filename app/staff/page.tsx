@@ -44,6 +44,8 @@ export default function StaffPage() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null)
   const [uploadingImage, setUploadingImage] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -225,6 +227,13 @@ export default function StaffPage() {
     return roleColors[role] || { bg: 'bg-zinc-100', text: 'text-zinc-600' }
   }
 
+  const filteredStaff = staff.filter((m) => {
+    const q = search.toLowerCase()
+    const matchesSearch = !q || m.full_name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q) || (m.city || '').toLowerCase().includes(q) || (m.title || '').toLowerCase().includes(q)
+    const matchesRole = roleFilter === 'all' || m.role === roleFilter
+    return matchesSearch && matchesRole
+  })
+
   const Avatar = ({ member, size = 'md' }: { member: Staff; size?: 'sm' | 'md' | 'lg' }) => {
     const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-12 h-12 text-sm', lg: 'w-20 h-20 text-xl' }
     if (member.profile_image) {
@@ -239,7 +248,7 @@ export default function StaffPage() {
 
   const CardView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {staff.map((member) => {
+      {filteredStaff.map((member) => {
         const roleColor = getRoleColor(member.role)
         return (
           <div key={member.id} onClick={() => router.push(`/staff/${member.id}`)} className="bg-white rounded border border-[#E8E8E8] shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer">
@@ -327,7 +336,7 @@ export default function StaffPage() {
           </tr>
         </thead>
         <tbody>
-          {staff.map((member) => {
+          {filteredStaff.map((member) => {
             const roleColor = getRoleColor(member.role)
             return (
               <tr key={member.id} onClick={() => router.push(`/staff/${member.id}`)} className="border-b border-[#E8E8E8] hover:bg-zinc-50 transition-colors cursor-pointer">
@@ -507,6 +516,32 @@ export default function StaffPage() {
           </div>
         )}
 
+        {/* Search & Filter */}
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by name, email, city..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="px-3 py-2 border border-[#E8E8E8] rounded text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+          >
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="technician">Technician</option>
+          </select>
+        </div>
+
         {loading ? (
           view === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -517,9 +552,9 @@ export default function StaffPage() {
           ) : (
             <TableSkeleton rows={8} cols={7} />
           )
-        ) : staff.length === 0 ? (
+        ) : filteredStaff.length === 0 ? (
           <div className="bg-white rounded shadow-sm border border-[#E8E8E8] p-12 text-center">
-            <p className="text-zinc-500 text-sm">No staff members found</p>
+            <p className="text-zinc-500 text-sm">{staff.length === 0 ? 'No staff members found' : 'No results match your search'}</p>
           </div>
         ) : view === 'cards' ? (
           <CardView />

@@ -18,6 +18,7 @@ export default function VenuesPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
+  const [search, setSearch] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -44,9 +45,21 @@ export default function VenuesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">Venues</h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <div className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search venues..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-48"
+              />
+            </div>
             {(['today', 'week', 'month'] as const).map((f) => (
               <button
                 key={f}
@@ -75,7 +88,10 @@ export default function VenuesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {venues.map((venue) => {
+            {venues.filter(v => {
+              const q = search.toLowerCase()
+              return !q || v.name.toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q)
+            }).map((venue) => {
               const eventCount = Number(venue.event_count) || 0
               const assignedCount = Number(venue.assigned_count) || 0
               const allAssigned = eventCount > 0 && assignedCount >= eventCount

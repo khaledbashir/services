@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([])
   const [activity, setActivity] = useState<Activity[]>([])
   const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [alerts, setAlerts] = useState<Array<{ type: string; severity: string; title: string; detail: string; count?: number }>>([])
   const [loading, setLoading] = useState(true)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const router = useRouter()
@@ -79,11 +80,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statsRes, todayRes, activityRes, chartRes] = await Promise.all([
+        const [statsRes, todayRes, activityRes, chartRes, alertsRes] = await Promise.all([
           fetch('/api/stats'),
           fetch('/api/events?filter=today'),
           fetch('/api/activity'),
           fetch('/api/stats/charts'),
+          fetch('/api/stats/alerts'),
         ])
 
         if (statsRes.ok) setStats(await statsRes.json())
@@ -93,6 +95,10 @@ export default function DashboardPage() {
         }
         if (activityRes.ok) setActivity(await activityRes.json())
         if (chartRes.ok) setChartData(await chartRes.json())
+        if (alertsRes.ok) {
+          const data = await alertsRes.json()
+          setAlerts(data.alerts || [])
+        }
       } catch (err) {
         console.error('Failed to fetch data:', err)
       } finally {
@@ -179,6 +185,39 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* SECTION 2.5: Alerts */}
+        {!loading && alerts.length > 0 && (
+          <div className="space-y-2">
+            {alerts.map((alert, idx) => {
+              const styles = {
+                critical: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-800', dot: 'bg-rose-500' },
+                warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', dot: 'bg-amber-500' },
+                info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', dot: 'bg-blue-500' },
+              }
+              const s = styles[alert.severity as keyof typeof styles] || styles.info
+              return (
+                <div key={idx} className={`${s.bg} ${s.border} border rounded-lg px-4 py-3 flex items-start gap-3`}>
+                  <div className={`w-2 h-2 rounded-full ${s.dot} mt-1.5 flex-shrink-0`}></div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${s.text}`}>{alert.title}</p>
+                    <p className={`text-xs ${s.text} opacity-75 mt-0.5`}>{alert.detail}</p>
+                  </div>
+                  {alert.type === 'unassigned' && (
+                    <button onClick={() => router.push('/events?filter=today')} className={`text-xs font-medium ${s.text} hover:underline flex-shrink-0`}>
+                      View →
+                    </button>
+                  )}
+                  {alert.type === 'upcoming_unassigned' && (
+                    <button onClick={() => router.push('/events?filter=week')} className={`text-xs font-medium ${s.text} hover:underline flex-shrink-0`}>
+                      View →
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* SECTION 3: Two-column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
