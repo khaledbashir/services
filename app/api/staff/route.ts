@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs'
 export async function GET(request: NextRequest) {
   try {
     const result = await query(
-      'SELECT id, full_name, email, role, is_active FROM staff ORDER BY full_name'
+      'SELECT id, full_name, email, phone, role, title, city, profile_image, is_active FROM staff ORDER BY full_name'
     )
 
     return NextResponse.json({ staff: result.rows })
