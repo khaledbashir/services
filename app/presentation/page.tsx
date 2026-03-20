@@ -168,7 +168,7 @@ export default function PresentationPage() {
               ? 'bg-white shadow-lg ring-2'
               : 'bg-white/80 hover:bg-white hover:shadow-md'
           }`}
-          style={{ borderColor: isSelected ? node.color : 'transparent', ringColor: node.color }}
+          style={{ borderColor: isSelected ? node.color : 'transparent' }}
         >
           <span className="text-xl flex-shrink-0">{node.icon}</span>
           <div className="flex-1 min-w-0">
