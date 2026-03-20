@@ -48,9 +48,11 @@ Given a client's issue description, extract:
 - priority: one of: low, medium, high, critical. Use critical if it sounds like a total outage, the display is completely dead, or there's a game happening/imminent. Use high if partial failure or significant impact. Use medium for degraded but functional. Use low for cosmetic or non-urgent.
 - description: a clean, professional version of their description that captures the key technical details
 - follow_up: 2-3 specific follow-up questions that would help the support team diagnose faster. Think like a field service engineer — what would Chris the tech support lead want to know? Examples: which specific display/zone, when it started, is it intermittent or constant, is there a game today, what was showing when it happened, any recent changes.
+- sentiment: one of: calm, concerned, frustrated, urgent, panicking. Read the tone of the message — are they casually reporting something or are they freaking out? This helps the team know how to approach the response.
+- urgency_note: a very brief (max 15 words) note about why this might be time-sensitive, or null if not. Examples: "Game in 2 hours", "Investors visiting tonight", "Third time this month", "Playoffs next week".
 
 Respond ONLY with valid JSON, no other text:
-{"title":"...","category":"...","priority":"...","description":"...","follow_up":["...","...","..."]}`
+{"title":"...","category":"...","priority":"...","description":"...","follow_up":["...","...","..."],"sentiment":"...","urgency_note":"..."}`
           },
           { role: 'user', content: `Venue: ${venue.name}\n\nClient says: "${message}"` }
         ],
@@ -75,7 +77,7 @@ Respond ONLY with valid JSON, no other text:
     // Strip <think>...</think> tags (some models include reasoning)
     aiText = aiText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
-    let parsed: { title: string; category: string; priority: string; description: string; follow_up?: string[] }
+    let parsed: { title: string; category: string; priority: string; description: string; follow_up?: string[]; sentiment?: string; urgency_note?: string }
     try {
       // Try to extract JSON from the response (may have extra text around it)
       const jsonMatch = aiText.match(/\{[\s\S]*\}/)
@@ -128,6 +130,15 @@ Respond ONLY with valid JSON, no other text:
         description: parsed.description,
       }, 'created')
       msg.channel = channelId
+
+      // Sentiment + urgency line
+      const sentimentEmoji: Record<string, string> = { calm: '😊', concerned: '😟', frustrated: '😤', urgent: '🚨', panicking: '🔴' }
+      const sentimentLabel = parsed.sentiment || 'calm'
+      const sEmoji = sentimentEmoji[sentimentLabel] || '😊'
+
+      msg.blocks.push(
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `${sEmoji} *Client tone:* ${sentimentLabel}${parsed.urgency_note ? ` — _${parsed.urgency_note}_` : ''}` }] }
+      )
 
       // Add original message
       if (message !== parsed.description) {
