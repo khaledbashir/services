@@ -7,6 +7,12 @@ import { sendSlackMessage } from '@/lib/slack'
 
 export async function GET() {
   try {
+    // Check if tech-reminders automation is enabled
+    const jobResult = await query(`SELECT enabled FROM automation_jobs WHERE id = 'tech-reminders'`)
+    if (jobResult.rows.length > 0 && !jobResult.rows[0].enabled) {
+      return NextResponse.json({ ok: true, message: 'Tech reminders are disabled', reminders: { tier1: 0, tier2: 0, tier3: 0 } })
+    }
+
     const now = new Date()
     const today = now.toISOString().split('T')[0]
 

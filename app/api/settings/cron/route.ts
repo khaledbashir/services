@@ -1,38 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import * as fs from 'fs'
-import * as path from 'path'
-
-// Config lives in public dir (copied during build) and /app/claw-config.json at runtime
-const CONFIG_PATH = path.join(process.cwd(), 'claw-config.json')
-
-const DEFAULT_CONFIG = {
-  jobs: [
-    { id: 'daily-event-digest', name: 'Daily Event Digest', description: 'Posts today\'s full game slate and flags unassigned events', schedule: '8:00 AM ET daily', enabled: true },
-    { id: 'escalation-alerts', name: 'Escalation Alerts', description: 'Alerts when events starting within 2 hours have no check-in', schedule: 'Every 30 minutes', enabled: true },
-    { id: 'post-game-summary', name: 'Post-Game Summaries', description: 'Posts workflow completion wrap-up after each game ends', schedule: 'Every hour', enabled: true },
-    { id: 'weekly-digest', name: 'Weekly Report', description: 'Last week\'s stats: events covered, workflows completed, tickets', schedule: 'Monday 8:00 AM ET', enabled: true },
-  ],
-  channel: '#external--ai-services'
-}
-
-function readConfig() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
-    }
-  } catch {}
-  // Write default and return
-  try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2)) } catch {}
-  return DEFAULT_CONFIG
-}
-
-function writeConfig(config: any) {
-  try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)) } catch (e) { console.error('Write error:', e) }
-}
 
 export async function GET() {
-  return NextResponse.json(readConfig())
+  try {
+    const result = await query(
+      `SELECT id, name, description, schedule, enabled FROM automation_jobs ORDER BY created_at`
+    )
+    return NextResponse.json({ jobs: result.rows, channel: '#external--ai-services' })
+  } catch (err) {
+    console.error('Error fetching automation jobs:', err)
+    return NextResponse.json({ jobs: [], channel: '#external--ai-services' })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -41,21 +20,25 @@ export async function POST(request: NextRequest) {
     if (isAuthError(auth)) return auth
 
     const { id, enabled, name, description, schedule } = await request.json()
-    const config = readConfig()
 
     if (id && typeof enabled === 'boolean') {
       // Toggle existing job
-      config.jobs = config.jobs.map((j: any) => j.id === id ? { ...j, enabled } : j)
+      await query(`UPDATE automation_jobs SET enabled = $1 WHERE id = $2`, [enabled, id])
     } else if (name && schedule) {
       // Create new job
       const newId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-      config.jobs.push({ id: newId, name, description: description || '', schedule, enabled: true })
+      await query(
+        `INSERT INTO automation_jobs (id, name, description, schedule, enabled) VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO NOTHING`,
+        [newId, name, description || '', schedule]
+      )
     }
 
-    writeConfig(config)
-    return NextResponse.json(config)
+    const result = await query(
+      `SELECT id, name, description, schedule, enabled FROM automation_jobs ORDER BY created_at`
+    )
+    return NextResponse.json({ jobs: result.rows, channel: '#external--ai-services' })
   } catch (err) {
-    console.error('Error updating cron config:', err)
+    console.error('Error updating automation job:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -66,10 +49,12 @@ export async function DELETE(request: NextRequest) {
     if (isAuthError(auth)) return auth
 
     const { id } = await request.json()
-    const config = readConfig()
-    config.jobs = config.jobs.filter((j: any) => j.id !== id)
-    writeConfig(config)
-    return NextResponse.json(config)
+    await query(`DELETE FROM automation_jobs WHERE id = $1`, [id])
+
+    const result = await query(
+      `SELECT id, name, description, schedule, enabled FROM automation_jobs ORDER BY created_at`
+    )
+    return NextResponse.json({ jobs: result.rows, channel: '#external--ai-services' })
   } catch (err) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
