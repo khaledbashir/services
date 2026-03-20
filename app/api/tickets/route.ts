@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -63,6 +64,23 @@ export async function POST(request: NextRequest) {
     // Write notification log for Claw
     const logEntry = `TICKET|created|${user.fullName || 'User'}|${title}|${venueName}|${new Date().toISOString()}\n`
     fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
+
+    // Notify venue's Slack channel
+    const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [venue_id])
+    const channelId = slackChRes.rows[0]?.slack_channel_id
+    if (channelId) {
+      const ticket = result.rows[0]
+      const msg = formatTicketNotification({
+        ticket_number: ticket.ticket_number,
+        title: ticket.title,
+        category: ticket.category,
+        priority: ticket.priority,
+        venue_name: venueName,
+        description: description || undefined,
+      }, 'created')
+      msg.channel = channelId
+      sendSlackMessage(msg)
+    }
 
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {

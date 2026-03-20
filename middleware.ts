@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/_next', '/favicon.ico', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
+  const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/api/webhooks', '/_next', '/favicon.ico', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
   
   if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     return NextResponse.next()

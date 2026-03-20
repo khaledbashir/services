@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 
@@ -125,6 +126,21 @@ export async function PATCH(
       // Write notification log for Claw
       const logEntry = `TICKET|status_changed|${user?.fullName || 'User'}|${oldTicket.title}|${venueName}|from ${oldTicket.status} to ${status}|${new Date().toISOString()}\n`
       fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
+
+      // Notify venue's Slack channel
+      const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
+      const channelId = slackChRes.rows[0]?.slack_channel_id
+      if (channelId) {
+        const action = status === 'resolved' || status === 'closed' ? 'resolved' : 'updated'
+        const emoji = action === 'resolved' ? ':white_check_mark:' : ':pencil2:'
+        sendSlackMessage({
+          channel: channelId,
+          text: `${emoji} Ticket #${oldTicket.ticket_number} ${action}: ${oldTicket.title}`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Ticket #${oldTicket.ticket_number} ${action}*\n*${oldTicket.title}*\nStatus: ${oldTicket.status} → ${status}` } },
+          ],
+        })
+      }
     }
 
     // Log assignment changes

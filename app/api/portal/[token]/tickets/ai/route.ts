@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
+const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
+const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
+const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
 
 export async function POST(
   request: NextRequest,
@@ -24,26 +27,28 @@ export async function POST(
       return NextResponse.json({ error: 'Please describe the issue' }, { status: 400 })
     }
 
-    // Use Claude to parse the issue
-    const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+    // Use AI to parse the issue (OpenAI-compatible API)
+    const aiResponse = await fetch(`${AI_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${AI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: AI_MODEL,
         max_tokens: 300,
-        system: `You are a support ticket parser for ANC Sports venue services. Given a client's issue description, extract:
+        messages: [
+          {
+            role: 'system',
+            content: `You are a support ticket parser for ANC Sports venue services. Given a client's issue description, extract:
 - title: a clear, concise ticket title (max 80 chars)
 - category: one of: hardware, software, content, operational, general
 - priority: one of: low, medium, high, critical
 - description: a clean, professional version of their description
 
 Respond ONLY with valid JSON, no other text:
-{"title":"...","category":"...","priority":"...","description":"..."}`,
-        messages: [
+{"title":"...","category":"...","priority":"...","description":"..."}`
+          },
           { role: 'user', content: `Venue: ${venue.name}\n\nClient says: "${message}"` }
         ],
       }),
@@ -62,7 +67,7 @@ Respond ONLY with valid JSON, no other text:
     }
 
     const aiData = await aiResponse.json()
-    const aiText = aiData.content?.[0]?.text || ''
+    const aiText = aiData.choices?.[0]?.message?.content || ''
 
     let parsed: { title: string; category: string; priority: string; description: string }
     try {
@@ -86,6 +91,22 @@ Respond ONLY with valid JSON, no other text:
        RETURNING id, ticket_number, title, category, priority, status`,
       [venue.id, parsed.title, parsed.description, parsed.category, parsed.priority, CLAW_STAFF_ID]
     )
+
+    // Notify venue's Slack channel
+    const slackResult = await query(`SELECT slack_channel_id FROM venues WHERE id = $1`, [venue.id])
+    const channelId = slackResult.rows[0]?.slack_channel_id
+    if (channelId) {
+      const msg = formatTicketNotification({
+        ticket_number: result.rows[0].ticket_number,
+        title: parsed.title,
+        category: parsed.category,
+        priority: parsed.priority,
+        venue_name: venue.name,
+        description: parsed.description,
+      }, 'created')
+      msg.channel = channelId
+      sendSlackMessage(msg)
+    }
 
     return NextResponse.json({
       ticket: result.rows[0],
