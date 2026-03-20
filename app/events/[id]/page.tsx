@@ -56,6 +56,10 @@ export default function EventDetailPage() {
   const [openTickets, setOpenTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false)
+  const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number }>>([])
+  const [assigning, setAssigning] = useState(false)
+  const [staffSearch, setStaffSearch] = useState('')
 
   useEffect(() => {
     if (!eventId) return
@@ -305,15 +309,93 @@ export default function EventDetailPage() {
                       <div className="w-6 h-6 rounded-full bg-[#0A52EF]/15 flex items-center justify-center text-[10px] font-semibold text-[#0A52EF]">
                         {tech.full_name.charAt(0)}
                       </div>
-                      <span className="text-zinc-700">{tech.full_name}</span>
-                      <button className="ml-auto text-zinc-400 hover:text-zinc-600">×</button>
+                      <span className="text-zinc-700 flex-1">{tech.full_name}</span>
+                      <button
+                        onClick={async () => {
+                          const res = await fetch(`/api/events/${eventId}/assign`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ staffId: tech.id }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            setTechnicians(data.assignedTechs || [])
+                          }
+                        }}
+                        className="text-zinc-400 hover:text-rose-500 transition-colors"
+                      >×</button>
                     </div>
                   ))}
                 </div>
               )}
-              <button className="w-full text-xs px-3 py-2 border border-[#E8E8E8] rounded hover:bg-zinc-50 text-zinc-700 font-medium">
-                Add Technician
-              </button>
+
+              {/* Add Technician */}
+              {showAssignDropdown ? (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Search staff..."
+                    value={staffSearch}
+                    onChange={(e) => setStaffSearch(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-[#E8E8E8] rounded text-xs focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
+                    autoFocus
+                  />
+                  <div className="max-h-48 overflow-y-auto border border-[#E8E8E8] rounded divide-y divide-[#E8E8E8]">
+                    {allStaff
+                      .filter(s => !technicians.some(t => t.id === s.id))
+                      .filter(s => !staffSearch || s.full_name.toLowerCase().includes(staffSearch.toLowerCase()))
+                      .map(s => (
+                        <button
+                          key={s.id}
+                          disabled={assigning}
+                          onClick={async () => {
+                            setAssigning(true)
+                            const res = await fetch(`/api/events/${eventId}/assign`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ staffId: s.id }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              setTechnicians(data.assignedTechs || [])
+                            }
+                            setAssigning(false)
+                            setStaffSearch('')
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="text-xs font-medium text-zinc-900">{s.full_name}</p>
+                            <p className="text-[10px] text-zinc-500">{s.role}</p>
+                          </div>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${Number(s.week_hours) > 40 ? 'bg-rose-50 text-rose-600' : Number(s.week_hours) > 30 ? 'bg-amber-50 text-amber-600' : 'bg-zinc-100 text-zinc-500'}`}>
+                            {Number(s.week_hours)}h this week
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                  <button
+                    onClick={() => { setShowAssignDropdown(false); setStaffSearch('') }}
+                    className="w-full text-xs px-3 py-1.5 text-zinc-500 hover:text-zinc-700"
+                  >Cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    setShowAssignDropdown(true)
+                    if (allStaff.length === 0) {
+                      const res = await fetch('/api/staff/available')
+                      if (res.ok) {
+                        const data = await res.json()
+                        setAllStaff(data.staff || [])
+                      }
+                    }
+                  }}
+                  className="w-full text-xs px-3 py-2 border border-[#E8E8E8] rounded hover:bg-zinc-50 text-zinc-700 font-medium"
+                >
+                  + Add Technician
+                </button>
+              )}
             </div>
 
             {/* Workflow Link */}

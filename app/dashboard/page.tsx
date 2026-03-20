@@ -136,9 +136,9 @@ export default function DashboardPage() {
     return workflowStatusColors[status] || workflowStatusColors.pending
   }
 
-  const StatCard = ({ title, value, color, key: cardKey }: { title: string; value: number; color: string; key: string }) => (
+  const StatCard = ({ title, value, color, key: cardKey, href }: { title: string; value: number; color: string; key: string; href?: string }) => (
     <div
-      onClick={() => setExpandedCard(expandedCard === cardKey ? null : cardKey)}
+      onClick={() => href ? router.push(href) : setExpandedCard(expandedCard === cardKey ? null : cardKey)}
       className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all cursor-pointer"
     >
       <div className="flex items-start justify-between">
@@ -170,10 +170,10 @@ export default function DashboardPage() {
 
         {/* SECTION 2: Stat Cards (5-column grid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" />
-          <StatCard key="staff" title="Staff Assigned" value={stats.assignedStaff} color="#10b981" />
-          <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" />
-          <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" />
+          <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" />
+          <StatCard key="staff" title="Staff Assigned" value={stats.assignedStaff} color="#10b981" href="/staff" />
+          <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" />
+          <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=today" />
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all">
             <div className="flex items-start justify-between">
               <div>

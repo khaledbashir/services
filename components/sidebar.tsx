@@ -40,6 +40,7 @@ export function Sidebar() {
     { href: '/events', label: 'Events' },
     { href: '/venues', label: 'Venues' },
     ...(isManager ? [{ href: '/tickets', label: 'Tickets' }] : []),
+    ...(isManager ? [{ href: '/reports', label: 'Reports' }] : []),
   ]
 
   const adminItems = isAdmin ? [
