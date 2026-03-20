@@ -19,6 +19,9 @@ export default function VenuesPage() {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
   const [search, setSearch] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [newVenue, setNewVenue] = useState({ name: '', address: '', primary_contact_name: '', primary_contact_email: '' })
+  const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -48,6 +51,10 @@ export default function VenuesPage() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">Venues</h1>
           <div className="flex gap-2 items-center">
+            <button onClick={() => setShowAdd(!showAdd)}
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors">
+              {showAdd ? 'Cancel' : '+ Add Venue'}
+            </button>
             <div className="relative">
               <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -75,6 +82,61 @@ export default function VenuesPage() {
             ))}
           </div>
         </div>
+
+        {showAdd && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-zinc-900 mb-4">Add New Venue</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              if (!newVenue.name.trim()) return
+              setSubmitting(true)
+              try {
+                const res = await fetch('/api/venues/create', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(newVenue),
+                })
+                if (res.ok) {
+                  setNewVenue({ name: '', address: '', primary_contact_name: '', primary_contact_email: '' })
+                  setShowAdd(false)
+                  // Refresh venues
+                  const vRes = await fetch(`/api/venues?period=${period}`)
+                  if (vRes.ok) { const d = await vRes.json(); setVenues(d.venues || []) }
+                }
+              } catch {} finally { setSubmitting(false) }
+            }} className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Venue Name *</label>
+                <input type="text" value={newVenue.name} onChange={e => setNewVenue({ ...newVenue, name: e.target.value })}
+                  placeholder="e.g., Madison Square Garden"
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Address</label>
+                <input type="text" value={newVenue.address} onChange={e => setNewVenue({ ...newVenue, address: e.target.value })}
+                  placeholder="e.g., 4 Pennsylvania Plaza, New York, NY"
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Contact Name</label>
+                <input type="text" value={newVenue.primary_contact_name} onChange={e => setNewVenue({ ...newVenue, primary_contact_name: e.target.value })}
+                  placeholder="e.g., John Smith"
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Contact Email</label>
+                <input type="email" value={newVenue.primary_contact_email} onChange={e => setNewVenue({ ...newVenue, primary_contact_email: e.target.value })}
+                  placeholder="e.g., john@venue.com"
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div className="col-span-2">
+                <button type="submit" disabled={submitting}
+                  className="px-6 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                  {submitting ? 'Creating...' : 'Create Venue'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
