@@ -80,7 +80,7 @@ function fmt(d: string) { return new Date(d).toLocaleDateString('en-US', { month
 function trendArrow(v: number) { return v > 0 ? `<span style="color:#059669">▲ +${v}%</span>` : v < 0 ? `<span style="color:#dc2626">▼ ${v}%</span>` : '<span style="color:#64748b">— No change</span>' }
 function progressBar(pct: number, color: string) { return `<div style="width:100%;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-top:6px"><div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div></div>` }
 
-function buildHTML(d: ReturnType<Awaited<typeof getReportData>>) {
+function buildHTML(d: Awaited<ReturnType<typeof getReportData>>) {
   const periodLabel = d.period === 'month' ? 'Monthly' : 'Weekly'
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
