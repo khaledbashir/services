@@ -17,8 +17,7 @@ COPY . .
 # Build Next.js app
 RUN npm run build
 
-# Copy service account key and scripts
-COPY google-sa-key.json ./
+# Copy scripts and config (already copied by COPY . . above, but explicit for clarity)
 COPY scripts/ ./scripts/
 COPY claw-config.json ./
 
