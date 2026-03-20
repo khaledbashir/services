@@ -32,6 +32,15 @@ export async function POST(
       [params.id, user.userId, body, is_internal || false]
     )
 
+    // Track first response for SLA (external comments only)
+    if (!is_internal) {
+      await query(
+        `UPDATE tickets SET first_response_at = NOW(), sla_response_met = (NOW() <= sla_response_due)
+         WHERE id = $1 AND first_response_at IS NULL`,
+        [params.id]
+      )
+    }
+
     return NextResponse.json({ comment: result.rows[0] })
   } catch (err) {
     console.error('Error creating comment:', err)

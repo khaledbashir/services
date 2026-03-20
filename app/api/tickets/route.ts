@@ -50,11 +50,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'venue_id and title are required' }, { status: 400 })
     }
 
+    // Auto-assignment: find matching rule if no assignee specified
+    let effectiveAssignee = assigned_to || null
+    if (!effectiveAssignee) {
+      const ruleResult = await query(
+        `SELECT assign_to FROM assignment_rules
+         WHERE is_active = true
+           AND (category IS NULL OR category = $1)
+           AND (venue_id IS NULL OR venue_id = $2)
+         ORDER BY
+           CASE WHEN venue_id IS NOT NULL AND category IS NOT NULL THEN 1
+                WHEN venue_id IS NOT NULL THEN 2
+                WHEN category IS NOT NULL THEN 3
+                ELSE 4 END,
+           priority DESC
+         LIMIT 1`,
+        [category || 'general', venue_id]
+      )
+      if (ruleResult.rows.length > 0) {
+        effectiveAssignee = ruleResult.rows[0].assign_to
+      }
+    }
+
+    // SLA: calculate response and resolution deadlines
+    const ticketPriority = priority || 'medium'
+    const slaResult = await query(
+      `SELECT response_hours, resolution_hours FROM sla_policies WHERE priority = $1 LIMIT 1`,
+      [ticketPriority]
+    )
+    const sla = slaResult.rows[0]
+    const now = new Date()
+    const slaResponseDue = sla ? new Date(now.getTime() + sla.response_hours * 3600000) : null
+    const slaResolutionDue = sla ? new Date(now.getTime() + sla.resolution_hours * 3600000) : null
+
     const result = await query(
-      `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9)
+      `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes, sla_response_due, sla_resolution_due)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, $11)
        RETURNING id, ticket_number, title, priority, status, category`,
-      [venue_id, event_id || null, user.userId, assigned_to || null, title, description || '', priority || 'medium', category || 'general', resolution_notes || null]
+      [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue]
     )
 
     // Get venue info for notification log

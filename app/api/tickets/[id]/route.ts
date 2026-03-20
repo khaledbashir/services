@@ -28,7 +28,9 @@ export async function GET(
               s2.full_name as assigned_to_name, t.assigned_to,
               TO_CHAR(t.created_at, 'Mon DD, YYYY HH12:MI AM') as created_date,
               TO_CHAR(t.updated_at, 'Mon DD, YYYY HH12:MI AM') as updated_date,
-              TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_date
+              TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_date,
+              t.sla_response_due, t.sla_resolution_due,
+              t.sla_response_met, t.sla_resolution_met, t.first_response_at
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        LEFT JOIN events e ON t.event_id = e.id
@@ -102,7 +104,10 @@ export async function PATCH(
     if (assigned_to !== undefined) { updates.push(`assigned_to = $${idx++}`); values.push(assigned_to || null) }
     
     updates.push(`updated_at = NOW()`)
-    if (status === 'resolved' || status === 'closed') updates.push(`resolved_at = NOW()`)
+    if (status === 'resolved' || status === 'closed') {
+      updates.push(`resolved_at = NOW()`)
+      updates.push(`sla_resolution_met = (NOW() <= sla_resolution_due OR sla_resolution_due IS NULL)`)
+    }
 
     values.push(params.id)
     const result = await query(

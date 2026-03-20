@@ -12,6 +12,9 @@ interface TicketDetail {
   event_id: string | null; event_name: string | null; venue_name: string; venue_id: string
   created_by_name: string; assigned_to_name: string | null; assigned_to: string | null
   created_date: string; updated_date: string; resolved_date: string | null
+  sla_response_due: string | null; sla_resolution_due: string | null
+  sla_response_met: boolean | null; sla_resolution_met: boolean | null
+  first_response_at: string | null
 }
 interface Comment { id: string; body: string; is_internal: boolean; author_name: string; created_date: string }
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
@@ -48,6 +51,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [submitting, setSubmitting] = useState(false)
   const [editResolution, setEditResolution] = useState(false)
   const [resolutionNotes, setResolutionNotes] = useState('')
+  const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
+  const [showCanned, setShowCanned] = useState(false)
   const router = useRouter()
 
   const fetchData = async () => {
@@ -63,6 +68,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       setActivity(ticketData.activity || [])
       setStaffList(staffData.staff || [])
       setResolutionNotes(ticketData.ticket?.resolution_notes || '')
+      // Fetch canned responses
+      const cannedRes = await fetch('/api/tickets/canned')
+      if (cannedRes.ok) { const cd = await cannedRes.json(); setCannedResponses(cd.responses || []) }
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
@@ -170,6 +178,19 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               {/* Comment composer */}
               <div className="px-6 py-4 border-b border-[#E8E8E8] bg-zinc-50/50">
                 <form onSubmit={addComment}>
+                  {/* Canned responses */}
+                  {showCanned && cannedResponses.length > 0 && (
+                    <div className="mb-3 border border-[#E8E8E8] rounded-lg bg-white divide-y divide-[#E8E8E8] max-h-48 overflow-y-auto">
+                      {cannedResponses.map(cr => (
+                        <button key={cr.id} type="button"
+                          onClick={() => { setNewComment(cr.body); setIsInternal(false); setShowCanned(false) }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors">
+                          <p className="text-xs font-medium text-zinc-900">{cr.title}</p>
+                          <p className="text-xs text-zinc-500 truncate mt-0.5">{cr.body}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <textarea
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
@@ -179,6 +200,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   />
                   <div className="flex items-center justify-between mt-3">
                     <div className="flex gap-2">
+                      <button type="button" onClick={() => setShowCanned(!showCanned)}
+                        className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${showCanned ? 'bg-violet-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
+                        Quick Replies
+                      </button>
                       <button type="button" onClick={() => setIsInternal(false)}
                         className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${!isInternal ? 'bg-[#0A52EF] text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
                         Client-visible
@@ -317,6 +342,60 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 ))}
               </div>
             </div>
+
+            {/* SLA */}
+            {(ticket.sla_response_due || ticket.sla_resolution_due) && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">SLA</p>
+                <div className="space-y-3">
+                  {ticket.sla_response_due && (() => {
+                    const due = new Date(ticket.sla_response_due)
+                    const now = new Date()
+                    const met = ticket.sla_response_met
+                    const responded = !!ticket.first_response_at
+                    const breached = !responded && now > due
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-zinc-500">Response</span>
+                          {responded ? (
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${met ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                              {met ? 'Met' : 'Breached'}
+                            </span>
+                          ) : breached ? (
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">Overdue</span>
+                          ) : (
+                            <span className="text-xs text-zinc-500">{due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  {ticket.sla_resolution_due && (() => {
+                    const due = new Date(ticket.sla_resolution_due)
+                    const now = new Date()
+                    const resolved = ticket.status === 'resolved' || ticket.status === 'closed'
+                    const breached = !resolved && now > due
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-zinc-500">Resolution</span>
+                          {resolved ? (
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ticket.sla_resolution_met ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                              {ticket.sla_resolution_met ? 'Met' : 'Breached'}
+                            </span>
+                          ) : breached ? (
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">Overdue</span>
+                          ) : (
+                            <span className="text-xs text-zinc-500">{due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
 
             {/* Details */}
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">

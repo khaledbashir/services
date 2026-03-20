@@ -83,13 +83,28 @@ Respond ONLY with valid JSON, no other text:
     if (!validCategories.includes(parsed.category)) parsed.category = 'general'
     if (!validPriorities.includes(parsed.priority)) parsed.priority = 'medium'
 
-    // Create the ticket (use Claw's staff ID for portal-created tickets)
+    // Auto-assignment
+    const ruleResult = await query(
+      `SELECT assign_to FROM assignment_rules WHERE is_active = true
+       AND (category IS NULL OR category = $1) AND (venue_id IS NULL OR venue_id = $2)
+       ORDER BY CASE WHEN venue_id IS NOT NULL AND category IS NOT NULL THEN 1 WHEN venue_id IS NOT NULL THEN 2 WHEN category IS NOT NULL THEN 3 ELSE 4 END, priority DESC LIMIT 1`,
+      [parsed.category, venue.id]
+    )
+    const autoAssign = ruleResult.rows[0]?.assign_to || null
+
+    // SLA deadlines
+    const slaResult = await query(`SELECT response_hours, resolution_hours FROM sla_policies WHERE priority = $1 LIMIT 1`, [parsed.priority])
+    const sla = slaResult.rows[0]
+    const now = new Date()
+    const slaResponseDue = sla ? new Date(now.getTime() + sla.response_hours * 3600000) : null
+    const slaResolutionDue = sla ? new Date(now.getTime() + sla.resolution_hours * 3600000) : null
+
     const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
     const result = await query(
-      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, 'open', $6)
+      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, assigned_to, sla_response_due, sla_resolution_due)
+       VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8, $9)
        RETURNING id, ticket_number, title, category, priority, status`,
-      [venue.id, parsed.title, parsed.description, parsed.category, parsed.priority, CLAW_STAFF_ID]
+      [venue.id, parsed.title, parsed.description, parsed.category, parsed.priority, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue]
     )
 
     // Notify venue's Slack channel
