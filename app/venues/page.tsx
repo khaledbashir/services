@@ -11,6 +11,7 @@ interface Venue {
   market: string
   event_count: number
   assigned_count: number
+  requires_assignment: boolean
 }
 
 export default function VenuesPage() {
@@ -79,6 +80,7 @@ export default function VenuesPage() {
               const assignedCount = Number(venue.assigned_count) || 0
               const allAssigned = eventCount > 0 && assignedCount >= eventCount
               const hasEvents = eventCount > 0
+              const needsAssignment = venue.requires_assignment
 
               return (
                 <div
@@ -86,15 +88,20 @@ export default function VenuesPage() {
                   onClick={() => router.push(`/venues/${venue.id}`)}
                   className="bg-white rounded shadow-sm border border-[#E8E8E8] overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
                 >
-                  <div className={`h-1 ${hasEvents ? (allAssigned ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-zinc-200'}`} style={{ width: '100%' }}></div>
+                  <div className={`h-1 ${!needsAssignment ? 'bg-zinc-300' : hasEvents ? (allAssigned ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-zinc-200'}`} style={{ width: '100%' }}></div>
                   <div className="p-5">
                     <h3 className="text-base font-semibold text-zinc-900 mb-1 hover:text-[#0A52EF] transition-colors">{venue.name}</h3>
                     <p className="text-zinc-500 text-sm mb-3">{venue.market}</p>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-zinc-600 font-medium">{eventCount} events {periodLabel}</p>
-                      {hasEvents && (
+                      {hasEvents && needsAssignment && (
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded ${allAssigned ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                           {assignedCount}/{eventCount} assigned
+                        </span>
+                      )}
+                      {!needsAssignment && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-500">
+                          Support only
                         </span>
                       )}
                     </div>

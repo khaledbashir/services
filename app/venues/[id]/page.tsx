@@ -13,6 +13,14 @@ interface VenueDetail {
   service_responsibilities: string[]
   primary_contact_name: string | null
   primary_contact_email: string | null
+  requires_assignment: boolean
+}
+
+interface VenueService {
+  service_type_id: string
+  name: string
+  description: string | null
+  enabled: boolean
 }
 
 interface UpcomingEvent {
@@ -52,9 +60,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [venue, setVenue] = useState<VenueDetail | null>(null)
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([])
+  const [venueServices, setVenueServices] = useState<VenueService[]>([])
   const [loading, setLoading] = useState(true)
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
+  const [togglingService, setTogglingService] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -66,6 +76,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setVenue(data.venue)
           setUpcomingEvents(data.upcomingEvents || [])
           setAssignedStaff(data.assignedStaff || [])
+          setVenueServices(data.venueServices || [])
           setSlackChannelId(data.venue.slack_channel_id || '')
         }
       } catch (err) {
@@ -100,6 +111,42 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
       console.error('Failed to update:', err)
     } finally {
       setSavingSlack(false)
+    }
+  }
+
+  const toggleService = async (serviceTypeId: string, enabled: boolean) => {
+    setTogglingService(serviceTypeId)
+    try {
+      const res = await fetch(`/api/venues/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service_type_id: serviceTypeId, enabled }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setVenue(data.venue)
+        setVenueServices(data.venueServices || [])
+      }
+    } catch (err) {
+      console.error('Failed to toggle service:', err)
+    } finally {
+      setTogglingService(null)
+    }
+  }
+
+  const toggleRequiresAssignment = async (val: boolean) => {
+    try {
+      const res = await fetch(`/api/venues/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requires_assignment: val }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setVenue(data.venue)
+      }
+    } catch (err) {
+      console.error('Failed to toggle assignment:', err)
     }
   }
 
@@ -260,6 +307,46 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
               </form>
             </div>
 
+            {/* Assignment Setting */}
+            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Assignment</h3>
+              <p className="text-xs text-gray-500 mb-4">Does this venue require staff assignment for events?</p>
+              <button
+                onClick={() => toggleRequiresAssignment(!venue.requires_assignment)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${venue.requires_assignment ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${venue.requires_assignment ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+              <span className="ml-3 text-sm text-gray-700">{venue.requires_assignment ? 'Required' : 'Not required (support only)'}</span>
+            </div>
+
+            {/* Contracted Services */}
+            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Contracted Services</h3>
+              <p className="text-xs text-gray-500 mb-4">Toggle which services this venue is contracted for</p>
+              {venueServices.length === 0 ? (
+                <p className="text-gray-500 text-sm">No service types configured</p>
+              ) : (
+                <div className="space-y-3">
+                  {venueServices.map((svc) => (
+                    <div key={svc.service_type_id} className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900">{svc.name}</p>
+                        {svc.description && <p className="text-xs text-gray-500 truncate">{svc.description}</p>}
+                      </div>
+                      <button
+                        onClick={() => toggleService(svc.service_type_id, !svc.enabled)}
+                        disabled={togglingService === svc.service_type_id}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${svc.enabled ? 'bg-emerald-500' : 'bg-zinc-300'}`}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow-sm ${svc.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Venue Info */}
             <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Venue Info</h3>
@@ -271,20 +358,6 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 <div>
                   <p className="text-sm font-medium text-gray-600">Contact Email</p>
                   <p className="text-gray-900 break-all">{venue.primary_contact_email || 'Not set'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-2">Service Responsibilities</p>
-                  {venue.service_responsibilities && venue.service_responsibilities.length > 0 ? (
-                    <ul className="space-y-1">
-                      {venue.service_responsibilities.map((resp: string, idx: number) => (
-                        <li key={idx} className="text-sm text-gray-700">
-                          • {resp}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-gray-600 text-sm">Not set</p>
-                  )}
                 </div>
               </div>
             </div>

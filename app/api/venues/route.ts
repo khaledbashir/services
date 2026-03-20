@@ -20,13 +20,14 @@ export async function GET(request: NextRequest) {
         v.id,
         v.name,
         m.name as market,
+        v.requires_assignment,
         COUNT(e.id) as event_count,
         COUNT(CASE WHEN ea.event_id IS NOT NULL THEN 1 END) as assigned_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id
-      GROUP BY v.id, v.name, m.name
+      GROUP BY v.id, v.name, m.name, v.requires_assignment
       ORDER BY v.name`
     )
 

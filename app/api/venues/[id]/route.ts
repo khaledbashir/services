@@ -10,7 +10,7 @@ export async function GET(
 
     // Get venue details
     const venueResult = await query(
-      `SELECT 
+      `SELECT
         v.id,
         v.name,
         m.name as market_name,
@@ -18,7 +18,8 @@ export async function GET(
         v.slack_channel_id,
         v.service_responsibilities,
         v.primary_contact_name,
-        v.primary_contact_email
+        v.primary_contact_email,
+        v.requires_assignment
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
@@ -69,10 +70,21 @@ export async function GET(
       [venueId]
     )
 
+    // Get venue services
+    const servicesResult = await query(
+      `SELECT st.id as service_type_id, st.name, st.description,
+              COALESCE(vs.enabled, false) as enabled
+       FROM service_types st
+       LEFT JOIN venue_services vs ON st.id = vs.service_type_id AND vs.venue_id = $1
+       ORDER BY st.name`,
+      [venueId]
+    )
+
     return NextResponse.json({
       venue,
       upcomingEvents: eventsResult.rows,
       assignedStaff: staffResult.rows,
+      venueServices: servicesResult.rows,
     })
   } catch (err) {
     console.error('Error fetching venue:', err)
@@ -86,27 +98,46 @@ export async function PATCH(
 ) {
   try {
     const venueId = params.id
-    const { slack_channel_id } = await request.json()
+    const body = await request.json()
 
-    const result = await query(
-      `UPDATE venues 
-       SET slack_channel_id = $1
-       WHERE id = $2
-       RETURNING 
-        id,
-        name,
-        slack_channel_id,
-        address`,
-      [slack_channel_id, venueId]
-    )
+    // Handle service toggle
+    if (body.service_type_id !== undefined) {
+      if (body.enabled) {
+        await query(
+          `INSERT INTO venue_services (venue_id, service_type_id, enabled)
+           VALUES ($1, $2, true)
+           ON CONFLICT (venue_id, service_type_id) DO UPDATE SET enabled = true`,
+          [venueId, body.service_type_id]
+        )
+      } else {
+        await query(
+          `INSERT INTO venue_services (venue_id, service_type_id, enabled)
+           VALUES ($1, $2, false)
+           ON CONFLICT (venue_id, service_type_id) DO UPDATE SET enabled = false`,
+          [venueId, body.service_type_id]
+        )
+      }
+    }
 
-    if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
+    // Handle requires_assignment toggle
+    if (body.requires_assignment !== undefined) {
+      await query(
+        `UPDATE venues SET requires_assignment = $1 WHERE id = $2`,
+        [body.requires_assignment, venueId]
+      )
+    }
+
+    // Handle slack_channel_id
+    if (body.slack_channel_id !== undefined) {
+      await query(
+        `UPDATE venues SET slack_channel_id = $1 WHERE id = $2`,
+        [body.slack_channel_id, venueId]
+      )
     }
 
     // Fetch full venue data
     const fullVenue = await query(
-      `SELECT 
+      `SELECT
         v.id,
         v.name,
         m.name as market_name,
@@ -114,14 +145,29 @@ export async function PATCH(
         v.slack_channel_id,
         v.service_responsibilities,
         v.primary_contact_name,
-        v.primary_contact_email
+        v.primary_contact_email,
+        v.requires_assignment
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
       [venueId]
     )
 
-    return NextResponse.json({ venue: fullVenue.rows[0] })
+    if (fullVenue.rows.length === 0) {
+      return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
+    }
+
+    // Get updated services
+    const servicesResult = await query(
+      `SELECT st.id as service_type_id, st.name, st.description,
+              COALESCE(vs.enabled, false) as enabled
+       FROM service_types st
+       LEFT JOIN venue_services vs ON st.id = vs.service_type_id AND vs.venue_id = $1
+       ORDER BY st.name`,
+      [venueId]
+    )
+
+    return NextResponse.json({ venue: fullVenue.rows[0], venueServices: servicesResult.rows })
   } catch (err) {
     console.error('Error updating venue:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
