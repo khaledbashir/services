@@ -114,6 +114,41 @@ export async function GET(
     const openTickets = ticketsResult.rows.filter((t: any) => t.status === 'open' || t.status === 'in_progress').length
     const avgResolution = resolutionResult.rows[0]?.avg_hours ? Math.round(parseFloat(resolutionResult.rows[0].avg_hours) * 10) / 10 : null
 
+    // Today's events with assigned staff (for live game day view + "Your ANC Team")
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayEventsResult = await query(
+      `SELECT e.id, e.summary, e.league,
+              TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time,
+              e.workflow_status
+       FROM events e
+       WHERE e.venue_id = $1 AND e.event_date = $2
+       ORDER BY e.start_time`,
+      [venue.id, todayStr]
+    )
+
+    // Assigned staff for this venue's upcoming events (with profile images)
+    const teamResult = await query(
+      `SELECT DISTINCT s.id, s.full_name, s.title, s.profile_image, s.role
+       FROM staff s
+       JOIN event_assignments ea ON s.id = ea.staff_id
+       JOIN events e ON ea.event_id = e.id
+       WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= $3
+       ORDER BY s.full_name`,
+      [venue.id, todayStr, thirtyDays]
+    )
+
+    // Today's workflow timeline (all steps for today's events)
+    const todayWorkflowResult = await query(
+      `SELECT ws.event_id, ws.type, s.full_name as staff_name,
+              TO_CHAR(ws.submitted_at AT TIME ZONE 'America/New_York', 'HH12:MI AM') as time
+       FROM workflow_submissions ws
+       JOIN events e ON ws.event_id = e.id
+       LEFT JOIN staff s ON ws.staff_id = s.id
+       WHERE e.venue_id = $1 AND e.event_date = $2
+       ORDER BY ws.submitted_at`,
+      [venue.id, todayStr]
+    )
+
     // Installed screens/specs
     const screensResult = await query(
       `SELECT display_name, manufacturer, model, pixel_pitch, width_ft, height_ft,
@@ -132,6 +167,9 @@ export async function GET(
       tickets: ticketsResult.rows,
       services: servicesResult.rows,
       screens: screensResult.rows,
+      todayEvents: todayEventsResult.rows,
+      todayWorkflow: todayWorkflowResult.rows,
+      team: teamResult.rows,
       stats: {
         upcomingEvents: parseInt(statsResult.rows[0]?.upcoming_events || '0'),
         pastMonthEvents: pastMonth,

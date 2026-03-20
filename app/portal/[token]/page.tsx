@@ -32,6 +32,9 @@ export default function PortalPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [screens, setScreens] = useState<any[]>([])
+  const [todayEvents, setTodayEvents] = useState<any[]>([])
+  const [todayWorkflow, setTodayWorkflow] = useState<any[]>([])
+  const [team, setTeam] = useState<any[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -63,6 +66,9 @@ export default function PortalPage() {
         setTickets(data.tickets || [])
         setServices(data.services || [])
         setScreens(data.screens || [])
+        setTodayEvents(data.todayEvents || [])
+        setTodayWorkflow(data.todayWorkflow || [])
+        setTeam(data.team || [])
         setStats(data.stats)
       } catch { setError('Unable to load portal.') }
       finally { setLoading(false) }
@@ -166,9 +172,22 @@ export default function PortalPage() {
         {activeTab === 'overview' && stats && (
           <div className="space-y-8">
             {/* Service Level Banner */}
-            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-8 text-white">
-              <p className="text-xs font-medium uppercase tracking-wider opacity-75">Service Level — Last 30 Days</p>
-              <div className="flex items-end gap-12 mt-4">
+            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-8 text-white relative overflow-hidden">
+              {/* Brand slashes */}
+              <div className="absolute top-[-20px] right-[-10px] opacity-[0.06]">
+                <div className="inline-block w-[60px] h-[140px] bg-white transform skew-x-[-35deg] ml-3"></div>
+                <div className="inline-block w-[60px] h-[140px] bg-white transform skew-x-[-35deg] ml-3"></div>
+                <div className="inline-block w-[60px] h-[140px] bg-white transform skew-x-[-35deg] ml-3"></div>
+                <div className="inline-block w-[60px] h-[140px] bg-white transform skew-x-[-35deg] ml-3"></div>
+              </div>
+              <div className="flex items-start justify-between relative z-10">
+                <p className="text-xs font-medium uppercase tracking-wider opacity-75">Service Level — Last 30 Days</p>
+                <a href={`/api/portal/${token}/report`} download
+                  className="text-xs font-medium bg-white/15 hover:bg-white/25 px-4 py-2 rounded-lg transition-colors">
+                  Download Monthly Report
+                </a>
+              </div>
+              <div className="flex items-end gap-12 mt-4 relative z-10">
                 <div>
                   <p className="text-5xl font-bold">{stats.completionRate}%</p>
                   <p className="text-sm opacity-75 mt-1">Workflow Completion</p>
@@ -189,6 +208,85 @@ export default function PortalPage() {
                 )}
               </div>
             </div>
+
+            {/* LIVE GAME DAY VIEW */}
+            {todayEvents.length > 0 && (
+              <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <h2 className="text-sm font-semibold text-zinc-900">Live — Today's Events</h2>
+                  </div>
+                  <span className="text-xs text-zinc-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  {todayEvents.map((event: any) => {
+                    const st = statusConfig[event.workflow_status] || statusConfig.pending
+                    const eventWf = todayWorkflow.filter((w: any) => w.event_id === event.id)
+                    return (
+                      <div key={event.id} className="px-6 py-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-1.5 h-8 rounded-full" style={{ backgroundColor: leagueColors[event.league] || '#94a3b8' }}></div>
+                            <div>
+                              <p className="text-sm font-semibold text-zinc-900">{event.summary}</p>
+                              <p className="text-xs text-zinc-500">{event.start_time} ET • {event.league}</p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
+                        </div>
+                        {/* Timeline */}
+                        <div className="ml-6 pl-4 border-l-2 border-zinc-100 space-y-3">
+                          {eventWf.length > 0 ? eventWf.map((step: any, i: number) => (
+                            <div key={i} className="flex items-center gap-3 relative">
+                              <div className="absolute -left-[21px] w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></div>
+                              <div className="flex-1">
+                                <p className="text-sm text-zinc-900">{workflowLabels[step.type] || step.type}</p>
+                                <p className="text-xs text-zinc-500">{step.staff_name} — {step.time} ET</p>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="flex items-center gap-3 relative">
+                              <div className="absolute -left-[21px] w-3 h-3 rounded-full bg-zinc-300 border-2 border-white"></div>
+                              <p className="text-xs text-zinc-400">Awaiting staff check-in...</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* YOUR ANC TEAM */}
+            {team.length > 0 && (
+              <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-100">
+                  <h2 className="text-sm font-semibold text-zinc-900">Your ANC Team</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">Technicians assigned to your upcoming events</p>
+                </div>
+                <div className="px-6 py-4">
+                  <div className="flex flex-wrap gap-4">
+                    {team.map((member: any) => (
+                      <div key={member.id} className="flex items-center gap-3 bg-zinc-50 rounded-lg px-4 py-3 min-w-48">
+                        {member.profile_image ? (
+                          <img src={member.profile_image} alt={member.full_name} className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-[#0A52EF]/10 flex items-center justify-center text-sm font-semibold text-[#0A52EF]">
+                            {member.full_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-medium text-zinc-900">{member.full_name}</p>
+                          <p className="text-xs text-zinc-500">{member.title || member.role}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Quick Glance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
