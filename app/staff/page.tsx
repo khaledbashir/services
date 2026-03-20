@@ -242,10 +242,10 @@ export default function StaffPage() {
       {staff.map((member) => {
         const roleColor = getRoleColor(member.role)
         return (
-          <div key={member.id} className="bg-white rounded border border-[#E8E8E8] shadow-sm hover:shadow-md transition-all overflow-hidden">
+          <div key={member.id} onClick={() => router.push(`/staff/${member.id}`)} className="bg-white rounded border border-[#E8E8E8] shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer">
             <div className="p-6 flex flex-col items-center text-center">
               {/* Avatar with upload */}
-              <div className="relative group mb-3">
+              <div className="relative group mb-3" onClick={(e) => e.stopPropagation()}>
                 <Avatar member={member} size="lg" />
                 <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                   {uploadingImage === member.id ? (
@@ -330,7 +330,7 @@ export default function StaffPage() {
           {staff.map((member) => {
             const roleColor = getRoleColor(member.role)
             return (
-              <tr key={member.id} className="border-b border-[#E8E8E8] hover:bg-zinc-50 transition-colors">
+              <tr key={member.id} onClick={() => router.push(`/staff/${member.id}`)} className="border-b border-[#E8E8E8] hover:bg-zinc-50 transition-colors cursor-pointer">
                 <td className="py-3 px-6">
                   <div className="flex items-center gap-3">
                     <Avatar member={member} size="sm" />
