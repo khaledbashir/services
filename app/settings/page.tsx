@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { useAuth } from '@/lib/useAuth'
 
 interface AutoTask {
   id: string
@@ -18,6 +19,7 @@ interface LeagueSetting {
 }
 
 export default function SettingsPage() {
+  const auth = useAuth('admin')
   const [tasks, setTasks] = useState<AutoTask[]>([])
   const [leagues, setLeagues] = useState<LeagueSetting[]>([])
   const [loading, setLoading] = useState(true)

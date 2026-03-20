@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole, isAuthError } from '@/lib/rbac'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -36,6 +37,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { id, enabled, name, description, schedule } = await request.json()
     const config = readConfig()
 
@@ -58,6 +62,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { id } = await request.json()
     const config = readConfig()
     config.jobs = config.jobs.filter((j: any) => j.id !== id)

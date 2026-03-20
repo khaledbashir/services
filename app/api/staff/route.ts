@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 import bcrypt from 'bcryptjs'
 
 export async function GET(request: NextRequest) {
@@ -17,6 +18,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { fullName, email, role, password } = await request.json()
 
     // Hash password

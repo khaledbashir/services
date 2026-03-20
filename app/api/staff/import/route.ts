@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 import bcrypt from 'bcryptjs'
 import { readFile } from 'fs/promises'
 
@@ -19,6 +20,9 @@ async function loadXlsx() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 
 export async function GET() {
   try {
@@ -15,6 +16,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { id, estimated_hours } = await request.json()
 
     await query(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 
 export async function GET(
   request: NextRequest,
@@ -97,6 +98,9 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
     const venueId = params.id
     const body = await request.json()
 

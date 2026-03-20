@@ -26,20 +26,26 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
+    localStorage.removeItem('userName')
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('userId')
     router.push('/login')
   }
+
+  const isAdmin = userRole === 'admin'
+  const isManager = userRole === 'manager' || isAdmin
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/events', label: 'Events' },
     { href: '/venues', label: 'Venues' },
-    { href: '/staff', label: 'Staff' },
-    { href: '/tickets', label: 'Tickets' },
-    { href: '/settings', label: 'Automations' },
+    ...(isManager ? [{ href: '/tickets', label: 'Tickets' }] : []),
   ]
 
-  const adminItems: { href: string; label: string }[] = [
-  ]
+  const adminItems = isAdmin ? [
+    { href: '/staff', label: 'Staff' },
+    { href: '/settings', label: 'Settings' },
+  ] : []
 
   const sidebarContent = (
     <>

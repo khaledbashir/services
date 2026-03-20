@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
     const eventId = params.id // Use UUID as string
     const { staffId, role_at_event, estimated_hours } = await request.json()
 
@@ -52,6 +56,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
     const eventId = params.id // Use UUID as string
     const { staffId } = await request.json()
 

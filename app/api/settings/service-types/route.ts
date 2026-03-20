@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
 
 export async function GET() {
   try {
@@ -15,6 +16,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { name, description } = await request.json()
 
     await query(
@@ -34,6 +38,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
     const { id } = await request.json()
     await query(`DELETE FROM service_types WHERE id = $1`, [id])
 

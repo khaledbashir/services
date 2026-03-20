@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton, CardSkeleton } from '@/components/skeleton'
+import { useAuth } from '@/lib/useAuth'
 
 interface DashboardStats {
   todaysEvents: number
@@ -59,6 +60,7 @@ const workflowStatusColors: Record<string, { dot: string; bg: string; text: stri
 }
 
 export default function DashboardPage() {
+  const auth = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     todaysEvents: 0,
     assignedStaff: 0,
@@ -154,7 +156,7 @@ export default function DashboardPage() {
         {/* SECTION 1: Welcome Header */}
         <div className="flex justify-between items-baseline">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">Welcome back, Ahmad</h1>
+            <h1 className="text-2xl font-semibold text-zinc-900">Welcome back{auth.userName ? `, ${auth.userName.split(' ')[0]}` : ''}</h1>
             <p className="text-zinc-500 text-sm mt-1">Here's your operations overview</p>
           </div>
           <p className="text-xs text-zinc-400">{todayFormatted}</p>

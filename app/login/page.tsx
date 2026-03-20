@@ -29,6 +29,13 @@ export default function LoginPage() {
         return
       }
 
+      // Store user info for frontend role checks
+      if (data.user) {
+        localStorage.setItem('userName', data.user.fullName)
+        localStorage.setItem('userRole', data.user.role)
+        localStorage.setItem('userId', data.user.userId)
+      }
+
       router.push('/dashboard')
     } catch (err) {
       setError('An error occurred')

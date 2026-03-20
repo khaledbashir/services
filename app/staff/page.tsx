@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
+import { useAuth } from '@/lib/useAuth'
 
 interface Staff {
   id: string
@@ -21,6 +22,7 @@ const roleColors: Record<string, { bg: string; text: string }> = {
 }
 
 export default function StaffPage() {
+  const auth = useAuth('admin')
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
