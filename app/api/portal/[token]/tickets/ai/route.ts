@@ -36,7 +36,7 @@ export async function POST(
       },
       body: JSON.stringify({
         model: AI_MODEL,
-        max_tokens: 300,
+        max_tokens: 800,
         messages: [
           {
             role: 'system',
@@ -45,10 +45,10 @@ export async function POST(
 Given a client's issue description, extract:
 - title: a clear, concise ticket title (max 80 chars)
 - category: one of: hardware, software, content, operational, general
-- priority: one of: low, medium, high, critical. Use critical if it sounds like a total outage, the display is completely dead, or there's a game happening/imminent. Use high if partial failure or significant impact. Use medium for degraded but functional. Use low for cosmetic or non-urgent.
+- priority: one of: low, medium, high, critical. Use critical if: total outage, multiple systems down, game happening/imminent, ALL CAPS panic, words like "NOW" or "emergency". Use high if: partial failure, significant impact, client mentions consequences (sponsors, playoffs, investors), threats, repeated issues ("third time"). Use medium for degraded but functional. Use low for cosmetic or non-urgent requests.
 - description: a clean, professional version of their description that captures the key technical details
 - follow_up: 2-3 specific follow-up questions that would help the support team diagnose faster. Think like a field service engineer — what would Chris the tech support lead want to know? Examples: which specific display/zone, when it started, is it intermittent or constant, is there a game today, what was showing when it happened, any recent changes.
-- sentiment: one of: calm, concerned, frustrated, urgent, panicking. Read the tone of the message — are they casually reporting something or are they freaking out? This helps the team know how to approach the response.
+- sentiment: one of: calm, concerned, frustrated, urgent, panicking. Read the ACTUAL tone — ALL CAPS = panicking or urgent. Sarcasm/passive aggression ("im not saying... but") = frustrated. Threats or ultimatums ("fix this or") = frustrated/urgent. Exclamation marks and "NOW" = urgent/panicking. Casual "hey no rush" = calm. Do NOT default to calm — really read the emotion.
 - urgency_note: a very brief (max 15 words) note about why this might be time-sensitive, or null if not. Examples: "Game in 2 hours", "Investors visiting tonight", "Third time this month", "Playoffs next week".
 
 Respond ONLY with valid JSON, no other text:
