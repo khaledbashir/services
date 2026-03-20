@@ -211,7 +211,12 @@ export default function EventsPage() {
                             style={{ backgroundColor: leagueColor.hex + '20', borderLeft: `3px solid ${leagueColor.hex}` }}
                           >
                             <p className="font-medium text-zinc-900 truncate">{event.summary}</p>
-                            <p className="text-zinc-600 truncate">{event.time}</p>
+                            <p className="text-zinc-600 truncate">{(event as any).time}</p>
+                            {(event as any).assigned_techs && (
+                              <p className="text-zinc-500 truncate mt-0.5" title={(event as any).assigned_techs}>
+                                {(event as any).assigned_techs}
+                              </p>
+                            )}
                           </button>
                         )
                       })}
@@ -245,6 +250,7 @@ export default function EventsPage() {
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Event</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Venue</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">League</th>
+                <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Assigned</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
@@ -266,6 +272,9 @@ export default function EventsPage() {
                       <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium ${leagueColor.bg} ${leagueColor.text}`}>
                         {event.league}
                       </span>
+                    </td>
+                    <td className="py-3 px-6 text-zinc-600 text-xs max-w-48 truncate">
+                      {(event as any).assigned_techs || <span className="text-zinc-400">Unassigned</span>}
                     </td>
                     <td className="py-3 px-6">
                       <div className="flex items-center gap-2">

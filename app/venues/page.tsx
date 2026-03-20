@@ -9,18 +9,21 @@ interface Venue {
   id: string
   name: string
   market: string
-  events_this_month: number
+  event_count: number
+  assigned_count: number
 }
 
 export default function VenuesPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
   const router = useRouter()
 
   useEffect(() => {
     const fetchVenues = async () => {
       try {
-        const res = await fetch('/api/venues')
+        setLoading(true)
+        const res = await fetch(`/api/venues?period=${period}`)
         if (res.ok) {
           const data = await res.json()
           setVenues(data.venues || [])
@@ -33,12 +36,31 @@ export default function VenuesPage() {
     }
 
     fetchVenues()
-  }, [])
+  }, [period])
+
+  const periodLabel = period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold text-zinc-900">Venues</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-semibold text-zinc-900">Venues</h1>
+          <div className="flex gap-2">
+            {(['today', 'week', 'month'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setPeriod(f)}
+                className={`px-4 py-2 rounded font-medium text-sm transition-colors ${
+                  period === f ? 'bg-[#0A52EF] text-white' : 'bg-white text-zinc-600 border border-[#E8E8E8] hover:border-zinc-300'
+                }`}
+              >
+                {f === 'today' && 'Today'}
+                {f === 'week' && 'Week'}
+                {f === 'month' && 'Month'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -53,24 +75,28 @@ export default function VenuesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {venues.map((venue) => {
-              const eventCount = venue.events_this_month || 0
-              const maxEvents = Math.max(...venues.map((v) => v.events_this_month || 0), 1)
-              const coverage = (eventCount / maxEvents) * 100
+              const eventCount = Number(venue.event_count) || 0
+              const assignedCount = Number(venue.assigned_count) || 0
+              const allAssigned = eventCount > 0 && assignedCount >= eventCount
+              const hasEvents = eventCount > 0
+
               return (
                 <div
                   key={venue.id}
                   onClick={() => router.push(`/venues/${venue.id}`)}
                   className="bg-white rounded shadow-sm border border-[#E8E8E8] overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
                 >
-                  <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600" style={{ width: `${coverage}%` }}></div>
+                  <div className={`h-1 ${hasEvents ? (allAssigned ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-zinc-200'}`} style={{ width: '100%' }}></div>
                   <div className="p-5">
                     <h3 className="text-base font-semibold text-zinc-900 mb-1 hover:text-[#0A52EF] transition-colors">{venue.name}</h3>
                     <p className="text-zinc-500 text-sm mb-3">{venue.market}</p>
-                    <div className="space-y-2">
-                      <p className="text-xs text-zinc-600 font-medium">{eventCount} events this week</p>
-                      <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${coverage}%` }}></div>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-zinc-600 font-medium">{eventCount} events {periodLabel}</p>
+                      {hasEvents && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${allAssigned ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          {assignedCount}/{eventCount} assigned
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

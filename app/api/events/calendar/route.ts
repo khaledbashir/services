@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await query(
-      `SELECT 
+      `SELECT
         e.id,
         e.summary,
         e.league,
@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
         TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as time,
         v.name as venue,
         e.workflow_status,
-        (SELECT count(*) FROM event_assignments ea WHERE ea.event_id = e.id) as assigned_count
+        (SELECT count(*) FROM event_assignments ea WHERE ea.event_id = e.id) as assigned_count,
+        (SELECT STRING_AGG(s.full_name, ', ') FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id WHERE ea.event_id = e.id) as assigned_techs
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
       WHERE e.event_date BETWEEN $1 AND $2

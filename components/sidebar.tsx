@@ -9,6 +9,7 @@ export function Sidebar() {
   const router = useRouter()
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState('')
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     const name = localStorage.getItem('userName')
@@ -16,6 +17,10 @@ export function Sidebar() {
     if (name) setUserName(name)
     if (role) setUserRole(role)
   }, [])
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
   const isActive = (path: string) => pathname.startsWith(path)
 
@@ -36,8 +41,8 @@ export function Sidebar() {
   const adminItems: { href: string; label: string }[] = [
   ]
 
-  return (
-    <div className="w-60 bg-[#0A1628] text-white h-screen flex flex-col fixed left-0 top-0 border-r border-[#0A1628]">
+  const sidebarContent = (
+    <>
       {/* Logo Area */}
       <div className="p-6 border-b border-[#0A1628]">
         <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-8" />
@@ -87,6 +92,45 @@ export function Sidebar() {
           Sign out
         </button>
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded shadow-lg"
+        aria-label="Open menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
+      )}
+
+      {/* Mobile sidebar */}
+      <div className={`md:hidden fixed inset-y-0 left-0 z-50 w-60 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+          aria-label="Close menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        {sidebarContent}
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-[#0A1628]">
+        {sidebarContent}
+      </div>
+    </>
   )
 }
