@@ -41,6 +41,21 @@ interface AssignedStaff {
   role: string
 }
 
+interface VenueScreen {
+  id: string
+  display_name: string
+  manufacturer: string | null
+  model: string | null
+  pixel_pitch: number | null
+  width_ft: number | null
+  height_ft: number | null
+  brightness_nits: number | null
+  environment: string | null
+  location_zone: string | null
+  install_date: string | null
+  is_active: boolean
+}
+
 const leagueColors: Record<string, { bg: string; text: string }> = {
   NBA: { bg: 'bg-orange-50', text: 'text-orange-600' },
   NHL: { bg: 'bg-blue-50', text: 'text-blue-600' },
@@ -70,8 +85,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([])
   const [venueServices, setVenueServices] = useState<VenueService[]>([])
+  const [screens, setScreens] = useState<VenueScreen[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'settings'>('events')
+  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'specs' | 'settings'>('events')
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
   const [togglingService, setTogglingService] = useState<string | null>(null)
@@ -89,6 +105,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setAssignedStaff(data.assignedStaff || [])
           setVenueServices(data.venueServices || [])
           setSlackChannelId(data.venue.slack_channel_id || '')
+
+          // Fetch screens
+          const screensRes = await fetch(`/api/venues/${params.id}/screens`)
+          if (screensRes.ok) {
+            const screensData = await screensRes.json()
+            setScreens(screensData.screens || [])
+          }
         }
       } catch (err) {
         console.error('Failed to fetch venue:', err)
@@ -191,11 +214,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
           {/* Tabs */}
           <div className="border-t border-[#E8E8E8] flex px-8">
-            {(['events', 'staff', 'settings'] as const).map(tab => (
+            {(['events', 'staff', 'specs', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
                 {tab === 'events' && `Events (${upcomingEvents.length})`}
                 {tab === 'staff' && `Staff (${assignedStaff.length})`}
+                {tab === 'specs' && `Specs${screens.length > 0 ? ` (${screens.length})` : ''}`}
                 {tab === 'settings' && 'Settings'}
               </button>
             ))}
@@ -259,6 +283,83 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     <div className="flex-1">
                       <p className="text-sm font-medium text-zinc-900">{staff.full_name}</p>
                       <p className="text-xs text-zinc-500 capitalize">{staff.role}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SPECS TAB */}
+        {activeTab === 'specs' && (
+          <div className="space-y-6">
+            {screens.length === 0 ? (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-12 text-center">
+                <p className="text-zinc-500 text-sm">No display specifications on file</p>
+                <p className="text-xs text-zinc-400 mt-1">Specs auto-populate when a proposal is signed in the Proposal Engine</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {screens.map(screen => (
+                  <div key={screen.id} className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+                    <div className={`h-1 ${screen.is_active ? 'bg-emerald-500' : 'bg-zinc-300'}`}></div>
+                    <div className="p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-zinc-900">{screen.display_name}</h3>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${screen.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                          {screen.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      {screen.location_zone && (
+                        <p className="text-xs text-zinc-500 mb-3 capitalize">{screen.location_zone}</p>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        {screen.manufacturer && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Manufacturer</p>
+                            <p className="text-zinc-900 mt-0.5">{screen.manufacturer}</p>
+                          </div>
+                        )}
+                        {screen.model && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Model</p>
+                            <p className="text-zinc-900 mt-0.5">{screen.model}</p>
+                          </div>
+                        )}
+                        {screen.pixel_pitch && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Pixel Pitch</p>
+                            <p className="text-zinc-900 mt-0.5">{screen.pixel_pitch}mm</p>
+                          </div>
+                        )}
+                        {(screen.width_ft || screen.height_ft) && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Dimensions</p>
+                            <p className="text-zinc-900 mt-0.5">{screen.width_ft}' x {screen.height_ft}'</p>
+                          </div>
+                        )}
+                        {screen.brightness_nits && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Brightness</p>
+                            <p className="text-zinc-900 mt-0.5">{screen.brightness_nits.toLocaleString()} nits</p>
+                          </div>
+                        )}
+                        {screen.environment && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Environment</p>
+                            <p className="text-zinc-900 mt-0.5 capitalize">{screen.environment}</p>
+                          </div>
+                        )}
+                        {screen.install_date && (
+                          <div>
+                            <p className="text-zinc-500 font-medium">Installed</p>
+                            <p className="text-zinc-900 mt-0.5">{new Date(screen.install_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

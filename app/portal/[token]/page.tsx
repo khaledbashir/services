@@ -31,6 +31,7 @@ export default function PortalPage() {
   const [workflowsByEvent, setWorkflowsByEvent] = useState<Record<string, WorkflowStep[]>>({})
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [screens, setScreens] = useState<any[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -61,6 +62,7 @@ export default function PortalPage() {
         setWorkflowsByEvent(data.workflowsByEvent || {})
         setTickets(data.tickets || [])
         setServices(data.services || [])
+        setScreens(data.screens || [])
         setStats(data.stats)
       } catch { setError('Unable to load portal.') }
       finally { setLoading(false) }
@@ -152,7 +154,7 @@ export default function PortalPage() {
               {tab === 'overview' && 'Overview'}
               {tab === 'events' && 'Events'}
               {tab === 'tickets' && `Tickets${openTickets.length > 0 ? ` (${openTickets.length})` : ''}`}
-              {tab === 'services' && 'Services'}
+              {tab === 'services' && 'Services & Specs'}
             </button>
           ))}
         </div>
@@ -530,6 +532,32 @@ export default function PortalPage() {
                 ))}
               </div>
             )}
+            {/* Installed Displays */}
+            {screens.length > 0 && (
+              <>
+                <div className="mt-8"><h2 className="text-lg font-semibold text-zinc-900">Installed Displays</h2><p className="text-sm text-zinc-500 mt-1">LED displays and specifications at your venue</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {screens.map((screen: any, i: number) => (
+                    <div key={i} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                      <div className="h-1 bg-[#0A52EF]"></div>
+                      <div className="p-5">
+                        <h3 className="text-sm font-semibold text-zinc-900 mb-3">{screen.display_name}</h3>
+                        {screen.location_zone && <p className="text-xs text-zinc-500 mb-3 capitalize">{screen.location_zone}</p>}
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          {screen.manufacturer && <div><p className="text-zinc-500 font-medium">Manufacturer</p><p className="text-zinc-900 mt-0.5">{screen.manufacturer}</p></div>}
+                          {screen.model && <div><p className="text-zinc-500 font-medium">Model</p><p className="text-zinc-900 mt-0.5">{screen.model}</p></div>}
+                          {screen.pixel_pitch && <div><p className="text-zinc-500 font-medium">Pixel Pitch</p><p className="text-zinc-900 mt-0.5">{screen.pixel_pitch}mm</p></div>}
+                          {(screen.width_ft || screen.height_ft) && <div><p className="text-zinc-500 font-medium">Dimensions</p><p className="text-zinc-900 mt-0.5">{screen.width_ft}' x {screen.height_ft}'</p></div>}
+                          {screen.brightness_nits && <div><p className="text-zinc-500 font-medium">Brightness</p><p className="text-zinc-900 mt-0.5">{Number(screen.brightness_nits).toLocaleString()} nits</p></div>}
+                          {screen.environment && <div><p className="text-zinc-500 font-medium">Environment</p><p className="text-zinc-900 mt-0.5 capitalize">{screen.environment}</p></div>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             <div className="bg-white rounded-lg border border-zinc-200 p-6 mt-8">
               <h3 className="text-sm font-semibold text-zinc-900 mb-4">Venue Information</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">

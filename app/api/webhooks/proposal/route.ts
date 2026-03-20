@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { action, proposal } = body
+    const { action, proposal, screens } = body
 
     if (action !== 'proposal_signed' && action !== 'proposal_closed') {
       return NextResponse.json({ ok: true, message: 'Ignored — not a won deal' })
@@ -69,6 +69,29 @@ export async function POST(request: NextRequest) {
         await query(
           `INSERT INTO venue_services (venue_id, service_type_id, enabled) VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
           [venueId, fullServiceResult.rows[0].id]
+        )
+      }
+    }
+
+    // Import installed screens
+    if (screens && Array.isArray(screens) && screens.length > 0) {
+      for (const screen of screens) {
+        await query(
+          `INSERT INTO venue_screens (venue_id, display_name, manufacturer, model, pixel_pitch, width_ft, height_ft, install_date, is_active, source_proposal_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT DO NOTHING`,
+          [
+            venueId,
+            screen.displayName || screen.name || 'Display',
+            screen.manufacturer || null,
+            screen.modelNumber || screen.model || null,
+            screen.pixelPitch || null,
+            screen.widthFt || null,
+            screen.heightFt || null,
+            screen.installDate || null,
+            screen.isActive !== false,
+            proposal.id || null,
+          ]
         )
       }
     }

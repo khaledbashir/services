@@ -114,6 +114,16 @@ export async function GET(
     const openTickets = ticketsResult.rows.filter((t: any) => t.status === 'open' || t.status === 'in_progress').length
     const avgResolution = resolutionResult.rows[0]?.avg_hours ? Math.round(parseFloat(resolutionResult.rows[0].avg_hours) * 10) / 10 : null
 
+    // Installed screens/specs
+    const screensResult = await query(
+      `SELECT display_name, manufacturer, model, pixel_pitch, width_ft, height_ft,
+              brightness_nits, environment, location_zone, is_active
+       FROM venue_screens
+       WHERE venue_id = $1 AND is_active = true
+       ORDER BY display_name`,
+      [venue.id]
+    )
+
     return NextResponse.json({
       venue,
       upcomingEvents: eventsResult.rows,
@@ -121,6 +131,7 @@ export async function GET(
       workflowsByEvent,
       tickets: ticketsResult.rows,
       services: servicesResult.rows,
+      screens: screensResult.rows,
       stats: {
         upcomingEvents: parseInt(statsResult.rows[0]?.upcoming_events || '0'),
         pastMonthEvents: pastMonth,
