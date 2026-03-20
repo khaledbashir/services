@@ -67,11 +67,16 @@ Respond ONLY with valid JSON, no other text:
     }
 
     const aiData = await aiResponse.json()
-    const aiText = aiData.choices?.[0]?.message?.content || ''
+    let aiText = aiData.choices?.[0]?.message?.content || ''
+
+    // Strip <think>...</think> tags (some models include reasoning)
+    aiText = aiText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
     let parsed: { title: string; category: string; priority: string; description: string }
     try {
-      parsed = JSON.parse(aiText)
+      // Try to extract JSON from the response (may have extra text around it)
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : aiText)
     } catch {
       // Fallback
       parsed = { title: message.substring(0, 80), category: 'general', priority: 'medium', description: message }
