@@ -34,6 +34,8 @@ export default function StaffPage() {
     password: '',
   })
   const [submitting, setSubmitting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null)
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -107,18 +109,97 @@ export default function StaffPage() {
     return roleColors[role] || { bg: 'bg-zinc-100', text: 'text-zinc-600' }
   }
 
+  const downloadTemplate = () => {
+    const headers = ['Full Name', 'Email', 'Phone', 'Role']
+    const example = ['John Doe', 'john@example.com', '(555) 123-4567', 'technician']
+    const csv = [headers.join(','), example.join(',')].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'staff-import-template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setImportResult(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/staff/import', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setImportResult({ imported: data.imported, skipped: data.skipped, errors: data.errors })
+        showToast(`Imported ${data.imported} staff members`, 'success')
+
+        // Refresh staff list
+        const staffRes = await fetch('/api/staff')
+        if (staffRes.ok) {
+          const staffData = await staffRes.json()
+          setStaff(staffData.staff || [])
+        }
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Import failed', 'error')
+      }
+    } catch (err) {
+      showToast('Error importing file', 'error')
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-semibold text-zinc-900">Staff</h1>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
-          >
-            {showForm ? 'Cancel' : '+ Add Staff'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={downloadTemplate}
+              className="px-4 py-2 bg-white text-zinc-700 border border-[#E8E8E8] rounded text-sm font-medium hover:border-zinc-300 transition-colors"
+            >
+              Download Template
+            </button>
+            <label className={`px-4 py-2 bg-white text-zinc-700 border border-[#E8E8E8] rounded text-sm font-medium hover:border-zinc-300 transition-colors cursor-pointer ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
+              {importing ? 'Importing...' : 'Import CSV/Excel'}
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleImport}
+                className="hidden"
+                disabled={importing}
+              />
+            </label>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
+            >
+              {showForm ? 'Cancel' : '+ Add Staff'}
+            </button>
+          </div>
         </div>
+
+        {importResult && (
+          <div className="bg-blue-50 border border-blue-200 rounded p-4 flex items-center justify-between">
+            <div className="text-sm text-blue-900">
+              Import complete: <span className="font-semibold">{importResult.imported}</span> imported, <span className="font-semibold">{importResult.skipped}</span> skipped, <span className="font-semibold">{importResult.errors}</span> errors
+            </div>
+            <button onClick={() => setImportResult(null)} className="text-blue-500 hover:text-blue-700 text-sm font-medium">Dismiss</button>
+          </div>
+        )}
 
         {showForm && (
           <div className="bg-white rounded shadow-sm border border-[#E8E8E8] p-6">
