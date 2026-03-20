@@ -113,12 +113,13 @@ export default function PortalPage() {
   const submitFollowUp = async () => {
     if (!aiResult?.ticket?.id || !aiResult?.parsed?.follow_up) return
     setFollowUpSubmitting(true)
-    const answers = aiResult.parsed.follow_up.map((q: string, i: number) => `**${q}**\n${followUpAnswers[i] || 'No answer provided'}`).join('\n\n')
+    const answers = aiResult.parsed.follow_up.map((q: string, i: number) => `Q: ${q}\nA: ${followUpAnswers[i] || 'No answer provided'}`).join('\n\n')
     try {
-      await fetch(`/api/portal/${token}/tickets`, {
+      // Add as a comment on the existing ticket, not a new ticket
+      await fetch(`/api/portal/${token}/tickets/comment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: `Follow-up details for ticket #${aiResult.ticket.ticket_number}`, description: answers }),
+        body: JSON.stringify({ ticket_id: aiResult.ticket.id, body: answers }),
       })
       setFollowUpDone(true)
     } catch {}

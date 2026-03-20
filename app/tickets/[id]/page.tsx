@@ -251,7 +251,23 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             {comment.is_internal && <span className="text-[10px] font-medium bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Internal</span>}
                             <span className="text-xs text-zinc-400">{comment.created_date}</span>
                           </div>
-                          <p className="text-sm text-zinc-700 mt-1 whitespace-pre-wrap">{comment.body}</p>
+                          {comment.body.includes('Q:') && comment.body.includes('A:') ? (
+                            <div className="mt-2 space-y-2">
+                              {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
+                                const lines = block.split('\n')
+                                const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
+                                const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
+                                return q ? (
+                                  <div key={bi} className="bg-zinc-50 rounded-lg p-3">
+                                    <p className="text-xs font-medium text-zinc-500">{q}</p>
+                                    <p className="text-sm text-zinc-900 mt-1 font-medium">{a}</p>
+                                  </div>
+                                ) : null
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-zinc-700 mt-1 whitespace-pre-wrap">{comment.body}</p>
+                          )}
                         </div>
                       </div>
                     </div>
