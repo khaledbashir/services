@@ -3,6 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { Skeleton } from '@/components/skeleton'
 
 interface VenueDetail {
   id: string
@@ -41,20 +42,27 @@ interface AssignedStaff {
 }
 
 const leagueColors: Record<string, { bg: string; text: string }> = {
-  NBA: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  NHL: { bg: 'bg-blue-100', text: 'text-[#0840C0]' },
-  NCAAM: { bg: 'bg-purple-100', text: 'text-purple-700' },
-  NCAAW: { bg: 'bg-pink-100', text: 'text-pink-700' },
-  MLB: { bg: 'bg-red-100', text: 'text-red-700' },
-  AHL: { bg: 'bg-teal-100', text: 'text-teal-700' },
-  MiLB: { bg: 'bg-green-100', text: 'text-green-700' },
+  NBA: { bg: 'bg-orange-50', text: 'text-orange-600' },
+  NHL: { bg: 'bg-blue-50', text: 'text-blue-600' },
+  NCAAM: { bg: 'bg-violet-50', text: 'text-violet-600' },
+  NCAAW: { bg: 'bg-pink-50', text: 'text-pink-600' },
+  MLB: { bg: 'bg-red-50', text: 'text-red-600' },
+  AHL: { bg: 'bg-teal-50', text: 'text-teal-600' },
+  MiLB: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  'NBA G League': { bg: 'bg-orange-50', text: 'text-orange-500' },
 }
 
-const workflowStatusColors: Record<string, { bg: string; text: string }> = {
-  pending: { bg: 'bg-gray-100', text: 'text-gray-700' },
-  checked_in: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  game_ready: { bg: 'bg-green-100', text: 'text-green-700' },
-  post_game_submitted: { bg: 'bg-blue-100', text: 'text-[#0840C0]' },
+const workflowConfig: Record<string, { label: string; dot: string; bg: string; text: string }> = {
+  pending: { label: 'Pending', dot: 'bg-zinc-300', bg: 'bg-zinc-50', text: 'text-zinc-600' },
+  checked_in: { label: 'Checked In', dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
+  game_ready: { label: 'Game Ready', dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  post_game_submitted: { label: 'Complete', dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
+}
+
+const roleColors: Record<string, string> = {
+  admin: 'bg-blue-500',
+  manager: 'bg-emerald-500',
+  technician: 'bg-zinc-500',
 }
 
 export default function VenueDetailPage({ params }: { params: { id: string } }) {
@@ -63,9 +71,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([])
   const [venueServices, setVenueServices] = useState<VenueService[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'settings'>('events')
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
   const [togglingService, setTogglingService] = useState<string | null>(null)
+  const [portalCopied, setPortalCopied] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -86,303 +96,274 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         setLoading(false)
       }
     }
-
     fetchData()
   }, [params.id])
 
   const handleSlackUpdate = async (e: FormEvent) => {
     e.preventDefault()
     if (!venue) return
-
     setSavingSlack(true)
     try {
       const res = await fetch(`/api/venues/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slack_channel_id: slackChannelId || null }),
       })
-
-      if (res.ok) {
-        const data = await res.json()
-        setVenue(data.venue)
-      } else {
-        alert('Failed to update Slack channel')
-      }
-    } catch (err) {
-      console.error('Failed to update:', err)
-    } finally {
-      setSavingSlack(false)
-    }
+      if (res.ok) { const data = await res.json(); setVenue(data.venue) }
+    } catch {} finally { setSavingSlack(false) }
   }
 
   const toggleService = async (serviceTypeId: string, enabled: boolean) => {
     setTogglingService(serviceTypeId)
     try {
       const res = await fetch(`/api/venues/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ service_type_id: serviceTypeId, enabled }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        setVenue(data.venue)
-        setVenueServices(data.venueServices || [])
-      }
-    } catch (err) {
-      console.error('Failed to toggle service:', err)
-    } finally {
-      setTogglingService(null)
-    }
+      if (res.ok) { const data = await res.json(); setVenue(data.venue); setVenueServices(data.venueServices || []) }
+    } catch {} finally { setTogglingService(null) }
   }
 
   const toggleRequiresAssignment = async (val: boolean) => {
     try {
       const res = await fetch(`/api/venues/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requires_assignment: val }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        setVenue(data.venue)
-      }
-    } catch (err) {
-      console.error('Failed to toggle assignment:', err)
-    }
+      if (res.ok) { const data = await res.json(); setVenue(data.venue) }
+    } catch {}
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
-  const formatTime = (dateTimeStr: string) => {
-    const date = new Date(dateTimeStr)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
-  }
-
-  const getLeagueBadge = (league: string) => {
-    return leagueColors[league] || { bg: 'bg-gray-100', text: 'text-gray-700' }
-  }
-
-  const getWorkflowStatus = (status: string) => {
-    return workflowStatusColors[status] || workflowStatusColors.pending
-  }
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
+  const getInitials = (name: string) => { const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
 
   if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="text-gray-500">Loading venue details...</div>
-      </DashboardLayout>
-    )
+    return <DashboardLayout><div className="space-y-6"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div></DashboardLayout>
   }
 
   if (!venue) {
-    return (
-      <DashboardLayout>
-        <div className="bg-white rounded shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500 text-lg">Venue not found</p>
-        </div>
-      </DashboardLayout>
-    )
+    return <DashboardLayout><div className="bg-white rounded border border-[#E8E8E8] p-12 text-center"><p className="text-zinc-500">Venue not found</p></div></DashboardLayout>
   }
+
+  const enabledServices = venueServices.filter(s => s.enabled)
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Back */}
+        <button onClick={() => router.push('/venues')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">← Back to Venues</button>
+
         {/* Header */}
-        <div className="bg-white rounded shadow-sm border border-gray-200 p-8">
-          <h1 className="text-4xl font-bold text-gray-900">{venue.name}</h1>
-          <p className="text-gray-600 text-lg mt-1">{venue.market_name}</p>
-          <p className="text-gray-500 mt-2">{venue.address}</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Upcoming Events */}
-            <div className="bg-white rounded shadow-sm border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Upcoming Events (Next 30 Days)</h2>
+        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+          <div className="p-8 flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-zinc-900">{venue.name}</h1>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-sm text-zinc-500">{venue.market_name}</span>
+                {venue.address && <><span className="text-zinc-300">•</span><span className="text-sm text-zinc-500">{venue.address}</span></>}
               </div>
-              {upcomingEvents.length === 0 ? (
-                <div className="p-12 text-center">
-                  <p className="text-gray-500">No events scheduled in the next 30 days</p>
+              <div className="flex items-center gap-4 mt-3">
+                <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded ${venue.requires_assignment ? 'bg-blue-50 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
+                  {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">Date</th>
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">Event</th>
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">League</th>
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">Time</th>
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">Assigned Techs</th>
-                        <th className="text-left py-3 px-6 text-sm font-semibold text-gray-700">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {upcomingEvents.map((event) => {
-                        const leagueColor = getLeagueBadge(event.league)
-                        const statusColor = getWorkflowStatus(event.workflow_status)
-                        return (
-                          <tr
-                            key={event.id}
-                            className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                            onClick={() => router.push(`/events/${event.id}`)}
-                          >
-                            <td className="py-3 px-6 text-sm font-medium text-gray-900">{formatDate(event.event_date)}</td>
-                            <td className="py-3 px-6 font-medium text-[#0A52EF] hover:text-[#0840C0]">{event.event_name}</td>
-                            <td className="py-3 px-6">
-                              <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${leagueColor.bg} ${leagueColor.text}`}>
-                                {event.league}
-                              </span>
-                            </td>
-                            <td className="py-3 px-6 text-sm text-gray-600">{formatTime(event.start_time)}</td>
-                            <td className="py-3 px-6 text-sm text-gray-600">{event.assigned_techs || '-'}</td>
-                            <td className="py-3 px-6">
-                              <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${statusColor.bg} ${statusColor.text}`}>
-                                {event.workflow_status.replace(/_/g, ' ')}
-                              </span>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                {enabledServices.length > 0 && (
+                  <span className="text-xs text-zinc-400">{enabledServices.length} active service{enabledServices.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
             </div>
-
-            {/* Assigned Staff */}
-            <div className="bg-white rounded shadow-sm border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Assigned Staff</h2>
+            {/* Quick stats */}
+            <div className="flex gap-6 text-center">
+              <div>
+                <p className="text-2xl font-semibold text-zinc-900">{upcomingEvents.length}</p>
+                <p className="text-xs text-zinc-500">Upcoming</p>
               </div>
-              {assignedStaff.length === 0 ? (
-                <div className="p-12 text-center">
-                  <p className="text-gray-500">No staff assigned to events at this venue</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200">
-                  {assignedStaff.map((staff) => (
-                    <div key={staff.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-gray-900">{staff.full_name}</p>
-                          <p className="text-sm text-gray-600">{staff.role}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div>
+                <p className="text-2xl font-semibold text-zinc-900">{assignedStaff.length}</p>
+                <p className="text-xs text-zinc-500">Staff</p>
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-zinc-900">{upcomingEvents.filter(e => e.assigned_techs).length}</p>
+                <p className="text-xs text-zinc-500">Assigned</p>
+              </div>
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Slack Channel */}
-            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Slack Channel</h3>
-              <form onSubmit={handleSlackUpdate} className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Channel ID</label>
-                  <input
-                    type="text"
-                    value={slackChannelId}
-                    onChange={(e) => setSlackChannelId(e.target.value)}
-                    placeholder="e.g., C05XXXXXX"
-                    className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:ring-[#0A52EF]/30"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">Paste Slack channel ID to map this venue</p>
-                </div>
-                <button
-                  type="submit"
-                  disabled={savingSlack}
-                  className="w-full px-4 py-2 bg-[#0A52EF] hover:bg-[#0840C0] disabled:bg-gray-400 transition-colors text-sm font-medium"
-                >
-                  {savingSlack ? 'Saving...' : 'Save'}
-                </button>
-              </form>
-            </div>
+          {/* Tabs */}
+          <div className="border-t border-[#E8E8E8] flex px-8">
+            {(['events', 'staff', 'settings'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
+                {tab === 'events' && `Events (${upcomingEvents.length})`}
+                {tab === 'staff' && `Staff (${assignedStaff.length})`}
+                {tab === 'settings' && 'Settings'}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            {/* Client Portal Link */}
-            {venue.portal_token && (
-              <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Client Portal</h3>
-                <p className="text-xs text-gray-500 mb-3">Share this link with venue contacts for self-service access</p>
-                <div className="bg-[#FAFAFA] font-mono text-xs rounded p-3 mb-3 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {typeof window !== 'undefined' ? `${window.location.origin}/portal/${venue.portal_token}` : `/portal/${venue.portal_token}`}
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/portal/${venue.portal_token}`)
-                  }}
-                  className="w-full text-xs px-3 py-2 bg-[#0A52EF] text-white rounded hover:bg-[#0840C0] font-medium transition-colors"
-                >
-                  Copy Portal Link
-                </button>
+        {/* EVENTS TAB */}
+        {activeTab === 'events' && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+            {upcomingEvents.length === 0 ? (
+              <div className="p-12 text-center text-zinc-400 text-sm">No upcoming events in the next 30 days</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#E8E8E8] bg-zinc-50">
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Date</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Event</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">League</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Time</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Assigned</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcomingEvents.map(event => {
+                    const lc = leagueColors[event.league] || { bg: 'bg-zinc-100', text: 'text-zinc-500' }
+                    const wf = workflowConfig[event.workflow_status] || workflowConfig.pending
+                    return (
+                      <tr key={event.id} onClick={() => router.push(`/events/${event.id}`)} className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors">
+                        <td className="py-3 px-6 text-zinc-600 text-xs whitespace-nowrap">{formatDate(event.event_date)}</td>
+                        <td className="py-3 px-6 font-medium text-zinc-900">{event.event_name}</td>
+                        <td className="py-3 px-6"><span className={`text-xs font-medium px-2 py-0.5 rounded ${lc.bg} ${lc.text}`}>{event.league}</span></td>
+                        <td className="py-3 px-6 text-zinc-600 text-xs">{formatTime(event.start_time)}</td>
+                        <td className="py-3 px-6 text-xs text-zinc-600 max-w-40 truncate">{event.assigned_techs || <span className="text-zinc-400">Unassigned</span>}</td>
+                        <td className="py-3 px-6">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1.5 w-fit ${wf.bg} ${wf.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${wf.dot}`}></span>{wf.label}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* STAFF TAB */}
+        {activeTab === 'staff' && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+            {assignedStaff.length === 0 ? (
+              <div className="p-12 text-center text-zinc-400 text-sm">No staff assigned to events at this venue</div>
+            ) : (
+              <div className="divide-y divide-[#E8E8E8]">
+                {assignedStaff.map(staff => (
+                  <div key={staff.id} onClick={() => router.push(`/staff/${staff.id}`)} className="px-6 py-4 flex items-center gap-4 hover:bg-zinc-50 cursor-pointer transition-colors">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold ${roleColors[staff.role] || 'bg-zinc-500'}`}>
+                      {getInitials(staff.full_name)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-zinc-900">{staff.full_name}</p>
+                      <p className="text-xs text-zinc-500 capitalize">{staff.role}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
+        )}
 
-            {/* Assignment Setting */}
-            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Assignment</h3>
-              <p className="text-xs text-gray-500 mb-4">Does this venue require staff assignment for events?</p>
-              <button
-                onClick={() => toggleRequiresAssignment(!venue.requires_assignment)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${venue.requires_assignment ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${venue.requires_assignment ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-              <span className="ml-3 text-sm text-gray-700">{venue.requires_assignment ? 'Required' : 'Not required (support only)'}</span>
-            </div>
-
-            {/* Contracted Services */}
-            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Contracted Services</h3>
-              <p className="text-xs text-gray-500 mb-4">Toggle which services this venue is contracted for</p>
-              {venueServices.length === 0 ? (
-                <p className="text-gray-500 text-sm">No service types configured</p>
-              ) : (
-                <div className="space-y-3">
-                  {venueServices.map((svc) => (
-                    <div key={svc.service_type_id} className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900">{svc.name}</p>
-                        {svc.description && <p className="text-xs text-gray-500 truncate">{svc.description}</p>}
-                      </div>
-                      <button
-                        onClick={() => toggleService(svc.service_type_id, !svc.enabled)}
-                        disabled={togglingService === svc.service_type_id}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${svc.enabled ? 'bg-emerald-500' : 'bg-zinc-300'}`}
-                      >
-                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow-sm ${svc.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                      </button>
-                    </div>
-                  ))}
+        {/* SETTINGS TAB */}
+        {activeTab === 'settings' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left column */}
+            <div className="space-y-6">
+              {/* Client Portal */}
+              {venue.portal_token && (
+                <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                  <h3 className="text-sm font-semibold text-zinc-900 mb-2">Client Portal</h3>
+                  <p className="text-xs text-zinc-500 mb-3">Share this link with venue contacts for self-service access</p>
+                  <div className="bg-zinc-50 font-mono text-xs rounded p-3 mb-3 overflow-hidden text-ellipsis whitespace-nowrap border border-[#E8E8E8]">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/portal/${venue.portal_token}` : `/portal/${venue.portal_token}`}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/portal/${venue.portal_token}`)
+                      setPortalCopied(true)
+                      setTimeout(() => setPortalCopied(false), 2000)
+                    }}
+                    className="w-full text-xs px-3 py-2 bg-[#0A52EF] text-white rounded hover:bg-[#0840C0] font-medium transition-colors"
+                  >
+                    {portalCopied ? 'Copied!' : 'Copy Portal Link'}
+                  </button>
                 </div>
               )}
+
+              {/* Assignment */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Assignment</h3>
+                <p className="text-xs text-zinc-500 mb-4">Does this venue require staff assignment for events?</p>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => toggleRequiresAssignment(!venue.requires_assignment)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${venue.requires_assignment ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${venue.requires_assignment ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-zinc-700">{venue.requires_assignment ? 'Required' : 'Not required (support only)'}</span>
+                </div>
+              </div>
+
+              {/* Slack */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-3">Slack Channel</h3>
+                <form onSubmit={handleSlackUpdate} className="space-y-3">
+                  <input type="text" value={slackChannelId} onChange={e => setSlackChannelId(e.target.value)}
+                    placeholder="e.g., C05XXXXXX"
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                  <button type="submit" disabled={savingSlack}
+                    className="w-full px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50">
+                    {savingSlack ? 'Saving...' : 'Save'}
+                  </button>
+                </form>
+              </div>
             </div>
 
-            {/* Venue Info */}
-            <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Venue Info</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Contact Name</p>
-                  <p className="text-gray-900">{venue.primary_contact_name || 'Not set'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Contact Email</p>
-                  <p className="text-gray-900 break-all">{venue.primary_contact_email || 'Not set'}</p>
+            {/* Right column */}
+            <div className="space-y-6">
+              {/* Contracted Services */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Contracted Services</h3>
+                <p className="text-xs text-zinc-500 mb-4">Toggle which services this venue is contracted for</p>
+                {venueServices.length === 0 ? (
+                  <p className="text-zinc-400 text-sm">No service types configured</p>
+                ) : (
+                  <div className="space-y-3">
+                    {venueServices.map(svc => (
+                      <div key={svc.service_type_id} className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-zinc-900">{svc.name}</p>
+                          {svc.description && <p className="text-xs text-zinc-500 truncate">{svc.description}</p>}
+                        </div>
+                        <button onClick={() => toggleService(svc.service_type_id, !svc.enabled)} disabled={togglingService === svc.service_type_id}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${svc.enabled ? 'bg-emerald-500' : 'bg-zinc-300'}`}>
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow-sm ${svc.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Contact Info */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-4">Contact Info</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-zinc-500">Contact Name</p>
+                    <p className="text-sm text-zinc-900 mt-0.5">{venue.primary_contact_name || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-zinc-500">Contact Email</p>
+                    <p className="text-sm text-zinc-900 mt-0.5 break-all">{venue.primary_contact_email || 'Not set'}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   )

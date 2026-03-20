@@ -70,7 +70,9 @@ export function Sidebar() {
 
         {userRole === 'admin' && (
           <>
-            <div className="py-2" />
+            <div className="py-2">
+              <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">Admin</p>
+            </div>
             {adminItems.map((item) => (
               <Link
                 key={item.href}
@@ -80,6 +82,20 @@ export function Sidebar() {
                 {item.label}
               </Link>
             ))}
+          </>
+        )}
+
+        {isManager && (
+          <>
+            <div className="py-2">
+              <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">External</p>
+            </div>
+            <Link
+              href="/portals"
+              className={isActive('/portals') ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
+            >
+              Client Portals
+            </Link>
           </>
         )}
       </nav>
