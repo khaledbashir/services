@@ -10,6 +10,8 @@ interface DashboardStats {
   assignedStaff: number
   openTickets: number
   pendingWorkflows: number
+  estimatedLaborHours: number
+  laborByStaff: Array<{ full_name: string; total_hours: number; event_count: number }>
 }
 
 interface Event {
@@ -62,6 +64,8 @@ export default function DashboardPage() {
     assignedStaff: 0,
     openTickets: 0,
     pendingWorkflows: 0,
+    estimatedLaborHours: 0,
+    laborByStaff: [],
   })
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([])
   const [activity, setActivity] = useState<Activity[]>([])
@@ -156,12 +160,22 @@ export default function DashboardPage() {
           <p className="text-xs text-zinc-400">{todayFormatted}</p>
         </div>
 
-        {/* SECTION 2: Stat Cards (4-column grid) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* SECTION 2: Stat Cards (5-column grid) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" />
           <StatCard key="staff" title="Staff Assigned" value={stats.assignedStaff} color="#10b981" />
           <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" />
           <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" />
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Est. Labor Hours</p>
+                <p className="text-3xl font-semibold text-zinc-900 mt-3">{stats.estimatedLaborHours}</p>
+                <p className="text-xs text-zinc-400 mt-1">this week</p>
+              </div>
+              <div className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: '#8b5cf6' }}></div>
+            </div>
+          </div>
         </div>
 
         {/* SECTION 3: Two-column layout */}
@@ -307,6 +321,31 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+
+            {/* Labor Budget */}
+            {!loading && stats.laborByStaff.length > 0 && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h2 className="text-lg font-semibold text-zinc-900 mb-4">Labor Budget</h2>
+                <p className="text-xs text-zinc-400 mb-3">Estimated hours this week by staff</p>
+                <div className="space-y-3">
+                  {stats.laborByStaff.map((staff, idx) => {
+                    const maxHours = stats.laborByStaff[0]?.total_hours || 1
+                    const pct = (Number(staff.total_hours) / Number(maxHours)) * 100
+                    return (
+                      <div key={idx}>
+                        <div className="flex justify-between items-center text-xs mb-1">
+                          <span className="font-medium text-zinc-900 truncate">{staff.full_name}</span>
+                          <span className="text-zinc-500 flex-shrink-0 ml-2">{Number(staff.total_hours)}h / {staff.event_count} events</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-violet-500 rounded-full" style={{ width: `${pct}%` }}></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Live Activity */}
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">

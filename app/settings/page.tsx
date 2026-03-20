@@ -11,12 +11,20 @@ interface AutoTask {
   enabled: boolean
 }
 
+interface LeagueSetting {
+  id: string
+  league: string
+  estimated_hours: number
+}
+
 export default function SettingsPage() {
   const [tasks, setTasks] = useState<AutoTask[]>([])
+  const [leagues, setLeagues] = useState<LeagueSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', description: '', schedule: '' })
   const [creating, setCreating] = useState(false)
+  const [savingLeague, setSavingLeague] = useState<string | null>(null)
 
   const fetchTasks = async () => {
     try {
@@ -26,7 +34,30 @@ export default function SettingsPage() {
     } catch {} finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchTasks() }, [])
+  const fetchLeagues = async () => {
+    try {
+      const res = await fetch('/api/settings/leagues')
+      const data = await res.json()
+      setLeagues(data.leagues || [])
+    } catch {}
+  }
+
+  const updateLeagueHours = async (id: string, estimated_hours: number) => {
+    setSavingLeague(id)
+    try {
+      const res = await fetch('/api/settings/leagues', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estimated_hours }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLeagues(data.leagues || [])
+      }
+    } catch {} finally { setSavingLeague(null) }
+  }
+
+  useEffect(() => { fetchTasks(); fetchLeagues() }, [])
 
   const toggleTask = async (id: string, enabled: boolean) => {
     // Optimistic update
@@ -74,6 +105,52 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* League Estimated Hours */}
+        <div>
+          <h2 className="text-xl font-semibold text-zinc-900">League Settings</h2>
+          <p className="text-sm text-zinc-500 mt-1">Default estimated hours per game type — used for labor budget tracking</p>
+        </div>
+
+        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+          <div className="px-6 py-4 border-b border-[#E8E8E8]">
+            <h3 className="text-sm font-semibold text-zinc-900">Estimated Hours by League</h3>
+          </div>
+          {leagues.length === 0 ? (
+            <div className="p-8 text-center text-zinc-400 text-sm">Loading...</div>
+          ) : (
+            <div className="divide-y divide-[#E8E8E8]">
+              {leagues.map(league => (
+                <div key={league.id} className="px-6 py-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
+                  <span className="text-sm font-medium text-zinc-900">{league.league}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={league.estimated_hours}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0
+                        setLeagues(leagues.map(l => l.id === league.id ? { ...l, estimated_hours: val } : l))
+                      }}
+                      className="w-20 border border-[#E8E8E8] rounded px-3 py-1.5 text-sm text-right focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
+                    />
+                    <span className="text-xs text-zinc-400">hrs</span>
+                    <button
+                      onClick={() => updateLeagueHours(league.id, league.estimated_hours)}
+                      disabled={savingLeague === league.id}
+                      className="text-xs text-[#0A52EF] hover:text-[#0840C0] font-medium disabled:opacity-50 px-2"
+                    >
+                      {savingLeague === league.id ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#E8E8E8] pt-6"></div>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-zinc-900">Automations</h2>

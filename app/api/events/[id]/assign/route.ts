@@ -16,9 +16,21 @@ export async function POST(
     )
 
     if (checkResult.rows.length === 0) {
+      // Auto-populate estimated_hours from league defaults if not provided
+      let hours = estimated_hours
+      if (!hours) {
+        const leagueResult = await query(
+          `SELECT ls.estimated_hours FROM events e
+           JOIN league_settings ls ON e.league = ls.league
+           WHERE e.id = $1`,
+          [eventId]
+        )
+        hours = leagueResult.rows[0]?.estimated_hours || 0
+      }
+
       await query(
         'INSERT INTO event_assignments (event_id, staff_id, role_at_event, estimated_hours) VALUES ($1, $2, $3, $4)',
-        [eventId, staffId, role_at_event || 'technician', estimated_hours || 0]
+        [eventId, staffId, role_at_event || 'technician', hours]
       )
     }
 
