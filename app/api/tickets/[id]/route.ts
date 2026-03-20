@@ -30,7 +30,8 @@ export async function GET(
               TO_CHAR(t.updated_at, 'Mon DD, YYYY HH12:MI AM') as updated_date,
               TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_date,
               t.sla_response_due, t.sla_resolution_due,
-              t.sla_response_met, t.sla_resolution_met, t.first_response_at
+              t.sla_response_met, t.sla_resolution_met, t.first_response_at,
+              t.original_message
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        LEFT JOIN events e ON t.event_id = e.id

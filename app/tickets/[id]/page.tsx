@@ -15,6 +15,7 @@ interface TicketDetail {
   sla_response_due: string | null; sla_resolution_due: string | null
   sla_response_met: boolean | null; sla_resolution_met: boolean | null
   first_response_at: string | null
+  original_message: string | null
 }
 interface Comment { id: string; body: string; is_internal: boolean; author_name: string; created_date: string }
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
@@ -136,6 +137,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 </div>
                 <h1 className="text-xl font-semibold text-zinc-900">{ticket.title}</h1>
                 {ticket.description && <p className="text-sm text-zinc-600 mt-2">{ticket.description}</p>}
+                {ticket.original_message && ticket.original_message !== ticket.description && (
+                  <div className="mt-3 flex gap-3">
+                    <div className="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                      <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">Client's Original Message</p>
+                      <p className="text-xs text-zinc-600 italic">"{ticket.original_message}"</p>
+                    </div>
+                    <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-1">AI Summary</p>
+                      <p className="text-xs text-blue-900">{ticket.description}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center gap-4 mt-4 text-xs text-zinc-500">
                   <span>Opened by <span className="font-medium text-zinc-700">{ticket.created_by_name}</span></span>
                   <span>•</span>
