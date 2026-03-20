@@ -14,6 +14,7 @@ interface VenueDetail {
   primary_contact_name: string | null
   primary_contact_email: string | null
   requires_assignment: boolean
+  portal_token: string | null
 }
 
 interface VenueService {
@@ -306,6 +307,25 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 </button>
               </form>
             </div>
+
+            {/* Client Portal Link */}
+            {venue.portal_token && (
+              <div className="bg-white rounded shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Client Portal</h3>
+                <p className="text-xs text-gray-500 mb-3">Share this link with venue contacts for self-service access</p>
+                <div className="bg-[#FAFAFA] font-mono text-xs rounded p-3 mb-3 overflow-hidden text-ellipsis whitespace-nowrap">
+                  {typeof window !== 'undefined' ? `${window.location.origin}/portal/${venue.portal_token}` : `/portal/${venue.portal_token}`}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/portal/${venue.portal_token}`)
+                  }}
+                  className="w-full text-xs px-3 py-2 bg-[#0A52EF] text-white rounded hover:bg-[#0840C0] font-medium transition-colors"
+                >
+                  Copy Portal Link
+                </button>
+              </div>
+            )}
 
             {/* Assignment Setting */}
             <div className="bg-white rounded shadow-sm border border-gray-200 p-6">

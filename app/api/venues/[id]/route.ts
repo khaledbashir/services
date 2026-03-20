@@ -20,7 +20,8 @@ export async function GET(
         v.service_responsibilities,
         v.primary_contact_name,
         v.primary_contact_email,
-        v.requires_assignment
+        v.requires_assignment,
+        v.portal_token
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
@@ -150,7 +151,8 @@ export async function PATCH(
         v.service_responsibilities,
         v.primary_contact_name,
         v.primary_contact_email,
-        v.requires_assignment
+        v.requires_assignment,
+        v.portal_token
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
