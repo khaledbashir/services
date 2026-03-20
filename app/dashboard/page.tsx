@@ -162,7 +162,7 @@ export default function DashboardPage() {
         {/* SECTION 1: Welcome Header */}
         <div className="flex justify-between items-baseline">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">Welcome back{auth.userName ? `, ${auth.userName.split(' ')[0]}` : ''}</h1>
+            <h1 className="text-2xl font-semibold text-zinc-900">Welcome back{auth.loaded && auth.userName ? `, ${auth.userName.split(' ')[0]}` : ''}</h1>
             <p className="text-zinc-500 text-sm mt-1">Here's your operations overview</p>
           </div>
           <p className="text-xs text-zinc-400">{todayFormatted}</p>
