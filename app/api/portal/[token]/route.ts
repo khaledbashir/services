@@ -6,7 +6,6 @@ export async function GET(
   { params }: { params: { token: string } }
 ) {
   try {
-    // Validate token and get venue
     const venueResult = await query(
       `SELECT v.id, v.name, v.address, v.primary_contact_name, v.primary_contact_email,
               v.requires_assignment, m.name as market
@@ -24,7 +23,7 @@ export async function GET(
     const today = new Date().toISOString().split('T')[0]
     const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    // Upcoming events (next 30 days)
+    // Upcoming events with workflow timeline
     const eventsResult = await query(
       `SELECT e.id, e.summary, e.league,
               TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
@@ -37,28 +36,47 @@ export async function GET(
       [venue.id, today, thirtyDays]
     )
 
-    // Recent past events (last 14 days) with workflow status
+    // Past events with workflow timeline
     const pastEventsResult = await query(
       `SELECT e.id, e.summary, e.league,
               TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time,
               e.workflow_status
        FROM events e
-       WHERE e.venue_id = $1 AND e.event_date < $2 AND e.event_date >= $2::date - 14
+       WHERE e.venue_id = $1 AND e.event_date < $2 AND e.event_date >= $2::date - 30
        ORDER BY e.event_date DESC, e.start_time DESC
-       LIMIT 20`,
+       LIMIT 30`,
       [venue.id, today]
     )
 
-    // Open tickets (external view only)
+    // Workflow timelines for all events (past 30 days + upcoming)
+    const workflowResult = await query(
+      `SELECT ws.event_id, ws.type,
+              TO_CHAR(ws.submitted_at AT TIME ZONE 'America/New_York', 'Mon DD, HH12:MI AM') as submitted_at
+       FROM workflow_submissions ws
+       JOIN events e ON ws.event_id = e.id
+       WHERE e.venue_id = $1 AND e.event_date >= $2::date - 30
+       ORDER BY ws.submitted_at`,
+      [venue.id, today]
+    )
+
+    // Group workflows by event
+    const workflowsByEvent: Record<string, any[]> = {}
+    for (const w of workflowResult.rows) {
+      if (!workflowsByEvent[w.event_id]) workflowsByEvent[w.event_id] = []
+      workflowsByEvent[w.event_id].push({ type: w.type, submitted_at: w.submitted_at })
+    }
+
+    // Tickets
     const ticketsResult = await query(
-      `SELECT t.id, t.ticket_number, t.title, t.category, t.priority, t.status,
+      `SELECT t.id, t.ticket_number, t.title, t.description, t.category, t.priority, t.status,
+              t.resolution_notes,
               TO_CHAR(t.created_at, 'Mon DD, YYYY') as created_at,
               TO_CHAR(t.resolved_at, 'Mon DD, YYYY') as resolved_at
        FROM tickets t
        WHERE t.venue_id = $1
        ORDER BY CASE t.status WHEN 'open' THEN 1 WHEN 'in_progress' THEN 2 ELSE 3 END, t.created_at DESC
-       LIMIT 20`,
+       LIMIT 30`,
       [venue.id]
     )
 
@@ -72,7 +90,7 @@ export async function GET(
       [venue.id]
     )
 
-    // Stats
+    // Service level stats
     const statsResult = await query(
       `SELECT
         COUNT(CASE WHEN e.event_date >= $2 AND e.event_date <= $3 THEN 1 END) as upcoming_events,
@@ -83,19 +101,33 @@ export async function GET(
       [venue.id, today, thirtyDays]
     )
 
+    // Average ticket resolution time
+    const resolutionResult = await query(
+      `SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg_hours
+       FROM tickets
+       WHERE venue_id = $1 AND resolved_at IS NOT NULL AND created_at > NOW() - INTERVAL '90 days'`,
+      [venue.id]
+    )
+
+    const pastMonth = parseInt(statsResult.rows[0]?.past_month_events || '0')
+    const completed = parseInt(statsResult.rows[0]?.completed_events || '0')
     const openTickets = ticketsResult.rows.filter((t: any) => t.status === 'open' || t.status === 'in_progress').length
+    const avgResolution = resolutionResult.rows[0]?.avg_hours ? Math.round(parseFloat(resolutionResult.rows[0].avg_hours) * 10) / 10 : null
 
     return NextResponse.json({
       venue,
       upcomingEvents: eventsResult.rows,
       pastEvents: pastEventsResult.rows,
+      workflowsByEvent,
       tickets: ticketsResult.rows,
       services: servicesResult.rows,
       stats: {
         upcomingEvents: parseInt(statsResult.rows[0]?.upcoming_events || '0'),
-        pastMonthEvents: parseInt(statsResult.rows[0]?.past_month_events || '0'),
-        completedEvents: parseInt(statsResult.rows[0]?.completed_events || '0'),
+        pastMonthEvents: pastMonth,
+        completedEvents: completed,
+        completionRate: pastMonth > 0 ? Math.round((completed / pastMonth) * 100) : 100,
         openTickets,
+        avgResolutionHours: avgResolution,
       },
     })
   } catch (err) {

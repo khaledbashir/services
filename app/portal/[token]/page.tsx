@@ -3,74 +3,23 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 
-interface Venue {
-  id: string
-  name: string
-  address: string
-  market: string
-  primary_contact_name: string | null
-  primary_contact_email: string | null
-}
+interface Venue { id: string; name: string; address: string; market: string; primary_contact_name: string | null; primary_contact_email: string | null }
+interface Event { id: string; summary: string; league: string; event_date: string; start_time: string; workflow_status: string; staff_count?: number }
+interface Ticket { id: string; ticket_number: number; title: string; description: string; category: string; priority: string; status: string; resolution_notes: string | null; created_at: string; resolved_at: string | null }
+interface Service { name: string; description: string | null; enabled: boolean }
+interface WorkflowStep { type: string; submitted_at: string }
+interface Stats { upcomingEvents: number; pastMonthEvents: number; completedEvents: number; completionRate: number; openTickets: number; avgResolutionHours: number | null }
 
-interface Event {
-  id: string
-  summary: string
-  league: string
-  event_date: string
-  start_time: string
-  workflow_status: string
-  staff_count?: number
-}
-
-interface Ticket {
-  id: string
-  ticket_number: number
-  title: string
-  category: string
-  priority: string
-  status: string
-  created_at: string
-  resolved_at: string | null
-}
-
-interface Service {
-  name: string
-  description: string | null
-  enabled: boolean
-}
-
-interface Stats {
-  upcomingEvents: number
-  pastMonthEvents: number
-  completedEvents: number
-  openTickets: number
-}
-
-const leagueColors: Record<string, string> = {
-  NBA: '#f97316', NHL: '#3b82f6', NCAAM: '#7c3aed', NCAAW: '#ec4899',
-  MLB: '#dc2626', AHL: '#14b8a6', 'NBA G League': '#f97316', MiLB: '#10b981',
-}
-
-const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
+const leagueColors: Record<string, string> = { NBA: '#f97316', NHL: '#3b82f6', NCAAM: '#7c3aed', NCAAW: '#ec4899', MLB: '#dc2626', AHL: '#14b8a6', 'NBA G League': '#f97316', MiLB: '#10b981' }
+const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Scheduled', color: '#64748b', bg: '#f1f5f9' },
   checked_in: { label: 'Staff On Site', color: '#d97706', bg: '#fffbeb' },
   game_ready: { label: 'Game Ready', color: '#059669', bg: '#ecfdf5' },
   post_game_submitted: { label: 'Completed', color: '#2563eb', bg: '#eff6ff' },
 }
-
-const priorityColors: Record<string, { color: string; bg: string }> = {
-  low: { color: '#64748b', bg: '#f1f5f9' },
-  medium: { color: '#d97706', bg: '#fffbeb' },
-  high: { color: '#ea580c', bg: '#fff7ed' },
-  critical: { color: '#dc2626', bg: '#fef2f2' },
-}
-
-const ticketStatusColors: Record<string, { color: string; bg: string }> = {
-  open: { color: '#dc2626', bg: '#fef2f2' },
-  in_progress: { color: '#d97706', bg: '#fffbeb' },
-  resolved: { color: '#059669', bg: '#ecfdf5' },
-  closed: { color: '#64748b', bg: '#f1f5f9' },
-}
+const priorityColors: Record<string, { color: string; bg: string }> = { low: { color: '#64748b', bg: '#f1f5f9' }, medium: { color: '#d97706', bg: '#fffbeb' }, high: { color: '#ea580c', bg: '#fff7ed' }, critical: { color: '#dc2626', bg: '#fef2f2' } }
+const ticketStatusColors: Record<string, { color: string; bg: string }> = { open: { color: '#dc2626', bg: '#fef2f2' }, in_progress: { color: '#d97706', bg: '#fffbeb' }, resolved: { color: '#059669', bg: '#ecfdf5' }, closed: { color: '#64748b', bg: '#f1f5f9' } }
+const workflowLabels: Record<string, string> = { check_in: 'Staff checked in on site', game_ready: 'Game readiness confirmed', post_game_report: 'Post-game report submitted' }
 
 export default function PortalPage() {
   const params = useParams()
@@ -79,90 +28,103 @@ export default function PortalPage() {
   const [venue, setVenue] = useState<Venue | null>(null)
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [pastEvents, setPastEvents] = useState<Event[]>([])
+  const [workflowsByEvent, setWorkflowsByEvent] = useState<Record<string, WorkflowStep[]>>({})
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'tickets' | 'services'>('overview')
-  const [showNewTicket, setShowNewTicket] = useState(false)
-  const [newTicket, setNewTicket] = useState({ title: '', description: '', category: 'general', priority: 'medium' })
-  const [submittingTicket, setSubmittingTicket] = useState(false)
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
+
+  // AI ticket
+  const [aiMessage, setAiMessage] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResult, setAiResult] = useState<any>(null)
+
+  // Ticket reply
+  const [viewingTicket, setViewingTicket] = useState<string | null>(null)
+  const [ticketComments, setTicketComments] = useState<any[]>([])
+  const [newReply, setNewReply] = useState('')
+  const [replyLoading, setReplyLoading] = useState(false)
 
   useEffect(() => {
     if (!token) return
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/portal/${token}`)
-        if (!res.ok) {
-          setError('This portal link is invalid or has expired.')
-          return
-        }
+        if (!res.ok) { setError('This portal link is invalid or has expired.'); return }
         const data = await res.json()
         setVenue(data.venue)
         setUpcomingEvents(data.upcomingEvents || [])
         setPastEvents(data.pastEvents || [])
+        setWorkflowsByEvent(data.workflowsByEvent || {})
         setTickets(data.tickets || [])
         setServices(data.services || [])
         setStats(data.stats)
-      } catch {
-        setError('Unable to load portal. Please try again later.')
-      } finally {
-        setLoading(false)
-      }
+      } catch { setError('Unable to load portal.') }
+      finally { setLoading(false) }
     }
     fetchData()
   }, [token])
 
-  const submitTicket = async () => {
-    if (!newTicket.title.trim()) return
-    setSubmittingTicket(true)
+  const submitAiTicket = async () => {
+    if (!aiMessage.trim()) return
+    setAiLoading(true)
     try {
-      const res = await fetch(`/api/portal/${token}/tickets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTicket),
+      const res = await fetch(`/api/portal/${token}/tickets/ai`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: aiMessage }),
       })
       if (res.ok) {
         const data = await res.json()
-        setTickets([{ ...data.ticket, category: newTicket.category, priority: newTicket.priority, created_at: 'Just now', resolved_at: null }, ...tickets])
-        setNewTicket({ title: '', description: '', category: 'general', priority: 'medium' })
-        setShowNewTicket(false)
+        setAiResult(data)
+        setTickets([{ ...data.ticket, description: data.parsed?.description || aiMessage, created_at: 'Just now', resolved_at: null }, ...tickets])
+        setAiMessage('')
       }
     } catch {}
-    setSubmittingTicket(false)
+    setAiLoading(false)
   }
 
-  const formatDate = (d: string) => {
-    const date = new Date(d)
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const viewTicket = async (ticketId: string) => {
+    setViewingTicket(ticketId)
+    try {
+      const res = await fetch(`/api/portal/${token}/tickets?id=${ticketId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setTicketComments(data.comments || [])
+      }
+    } catch {}
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center">
-        <div className="text-center">
-          <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto mb-4" />
-          <p className="text-zinc-400 text-sm">Loading your portal...</p>
-        </div>
-      </div>
-    )
+  const submitReply = async () => {
+    if (!newReply.trim() || !viewingTicket) return
+    setReplyLoading(true)
+    try {
+      const res = await fetch(`/api/portal/${token}/tickets`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `Reply on ticket`, description: newReply }),
+      })
+      if (res.ok) { setNewReply(''); viewTicket(viewingTicket) }
+    } catch {}
+    setReplyLoading(false)
   }
 
-  if (error || !venue) {
-    return (
-      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto mb-6" />
-          <h1 className="text-xl font-semibold text-zinc-900 mb-2">Portal Unavailable</h1>
-          <p className="text-zinc-500 text-sm">{error || 'Venue not found.'}</p>
-        </div>
-      </div>
-    )
-  }
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center">
+      <div className="text-center"><img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto mb-4" /><p className="text-zinc-400 text-sm">Loading your portal...</p></div>
+    </div>
+  )
+
+  if (error || !venue) return (
+    <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center">
+      <div className="text-center max-w-md"><img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto mb-6" /><h1 className="text-xl font-semibold text-zinc-900 mb-2">Portal Unavailable</h1><p className="text-zinc-500 text-sm">{error}</p></div>
+    </div>
+  )
 
   const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress')
-  const closedTickets = tickets.filter(t => t.status === 'resolved' || t.status === 'closed')
 
   return (
     <div className="min-h-screen bg-[#fafbfc]">
@@ -177,27 +139,18 @@ export default function PortalPage() {
               <p className="text-xs text-zinc-500">{venue.market}</p>
             </div>
           </div>
-          {venue.primary_contact_name && (
-            <p className="text-xs text-zinc-400">Welcome, {venue.primary_contact_name}</p>
-          )}
+          {venue.primary_contact_name && <p className="text-xs text-zinc-400">Welcome, {venue.primary_contact_name}</p>}
         </div>
       </header>
 
-      {/* Navigation */}
+      {/* Nav */}
       <nav className="bg-white border-b border-zinc-200">
         <div className="max-w-6xl mx-auto px-6 flex gap-0">
           {(['overview', 'events', 'tickets', 'services'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-[#0A52EF] text-[#0A52EF]'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-700'
-              }`}
-            >
+            <button key={tab} onClick={() => { setActiveTab(tab); setViewingTicket(null); setAiResult(null) }}
+              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
               {tab === 'overview' && 'Overview'}
-              {tab === 'events' && `Events`}
+              {tab === 'events' && 'Events'}
               {tab === 'tickets' && `Tickets${openTickets.length > 0 ? ` (${openTickets.length})` : ''}`}
               {tab === 'services' && 'Services'}
             </button>
@@ -205,39 +158,39 @@ export default function PortalPage() {
         </div>
       </nav>
 
-      {/* Content */}
       <main className="max-w-6xl mx-auto px-6 py-8">
 
-        {/* OVERVIEW TAB */}
+        {/* OVERVIEW */}
         {activeTab === 'overview' && stats && (
           <div className="space-y-8">
-            {/* Stat Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg border border-zinc-200 p-6">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Upcoming Events</p>
-                <p className="text-3xl font-semibold text-zinc-900 mt-2">{stats.upcomingEvents}</p>
-                <p className="text-xs text-zinc-400 mt-1">next 30 days</p>
-              </div>
-              <div className="bg-white rounded-lg border border-zinc-200 p-6">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Events Last Month</p>
-                <p className="text-3xl font-semibold text-zinc-900 mt-2">{stats.pastMonthEvents}</p>
-                <p className="text-xs text-zinc-400 mt-1">{stats.completedEvents} completed</p>
-              </div>
-              <div className="bg-white rounded-lg border border-zinc-200 p-6">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Open Tickets</p>
-                <p className={`text-3xl font-semibold mt-2 ${stats.openTickets > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{stats.openTickets}</p>
-                <p className="text-xs text-zinc-400 mt-1">{stats.openTickets === 0 ? 'all clear' : 'in progress'}</p>
-              </div>
-              <div className="bg-white rounded-lg border border-zinc-200 p-6">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Active Services</p>
-                <p className="text-3xl font-semibold text-zinc-900 mt-2">{services.length}</p>
-                <p className="text-xs text-zinc-400 mt-1">contracted</p>
+            {/* Service Level Banner */}
+            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-8 text-white">
+              <p className="text-xs font-medium uppercase tracking-wider opacity-75">Service Level — Last 30 Days</p>
+              <div className="flex items-end gap-12 mt-4">
+                <div>
+                  <p className="text-5xl font-bold">{stats.completionRate}%</p>
+                  <p className="text-sm opacity-75 mt-1">Workflow Completion</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-bold">{stats.pastMonthEvents}</p>
+                  <p className="text-sm opacity-75 mt-1">Events Covered</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-bold">{stats.completedEvents}</p>
+                  <p className="text-sm opacity-75 mt-1">Reports Filed</p>
+                </div>
+                {stats.avgResolutionHours !== null && (
+                  <div>
+                    <p className="text-3xl font-bold">{stats.avgResolutionHours}h</p>
+                    <p className="text-sm opacity-75 mt-1">Avg Resolution</p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Quick Glance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Next Events */}
+              {/* Upcoming Events with Live Status */}
               <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center">
                   <h2 className="text-sm font-semibold text-zinc-900">Upcoming Events</h2>
@@ -248,19 +201,40 @@ export default function PortalPage() {
                 ) : (
                   <div className="divide-y divide-zinc-100">
                     {upcomingEvents.slice(0, 5).map(event => {
-                      const st = statusLabels[event.workflow_status] || statusLabels.pending
+                      const st = statusConfig[event.workflow_status] || statusConfig.pending
+                      const wf = workflowsByEvent[event.id] || []
+                      const isExpanded = expandedEvent === event.id
                       return (
-                        <div key={event.id} className="px-6 py-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: leagueColors[event.league] || '#94a3b8' }}></div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-zinc-900 truncate">{event.summary}</p>
-                              <p className="text-xs text-zinc-500">{formatDate(event.event_date)} • {event.start_time}</p>
+                        <div key={event.id}>
+                          <div className="px-6 py-3 flex items-center justify-between cursor-pointer hover:bg-zinc-50" onClick={() => setExpandedEvent(isExpanded ? null : event.id)}>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: leagueColors[event.league] || '#94a3b8' }}></div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-zinc-900 truncate">{event.summary}</p>
+                                <p className="text-xs text-zinc-500">{formatDate(event.event_date)} • {event.start_time}</p>
+                              </div>
                             </div>
+                            <span className="text-xs font-medium px-2 py-1 rounded flex-shrink-0 ml-3" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
                           </div>
-                          <span className="text-xs font-medium px-2 py-1 rounded flex-shrink-0 ml-3" style={{ color: st.color, backgroundColor: st.bg }}>
-                            {st.label}
-                          </span>
+                          {/* Expanded workflow timeline */}
+                          {isExpanded && wf.length > 0 && (
+                            <div className="px-6 pb-3 pl-12">
+                              <div className="border-l-2 border-zinc-200 pl-4 space-y-2">
+                                {wf.map((step, i) => (
+                                  <div key={i} className="flex items-center gap-2 text-xs">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 -ml-5"></div>
+                                    <span className="text-zinc-700">{workflowLabels[step.type] || step.type}</span>
+                                    <span className="text-zinc-400">{step.submitted_at}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {isExpanded && wf.length === 0 && (
+                            <div className="px-6 pb-3 pl-12">
+                              <p className="text-xs text-zinc-400">No workflow activity yet</p>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -268,83 +242,123 @@ export default function PortalPage() {
                 )}
               </div>
 
-              {/* Open Tickets */}
-              <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center">
-                  <h2 className="text-sm font-semibold text-zinc-900">Open Tickets</h2>
-                  <button onClick={() => { setActiveTab('tickets'); setShowNewTicket(true) }} className="text-xs text-[#0A52EF] font-medium">+ New Ticket</button>
+              {/* AI Ticket + Open Tickets */}
+              <div className="space-y-6">
+                {/* AI Ticket Creator */}
+                <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                  <h2 className="text-sm font-semibold text-zinc-900 mb-1">Need Help?</h2>
+                  <p className="text-xs text-zinc-500 mb-4">Describe your issue and we'll create a support ticket for you</p>
+                  {aiResult ? (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                      <p className="text-sm font-medium text-emerald-900">Ticket #{aiResult.ticket.ticket_number} created</p>
+                      <p className="text-xs text-emerald-700 mt-1">{aiResult.parsed?.title || aiResult.ticket.title}</p>
+                      <div className="flex gap-2 mt-2">
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.category}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.priority} priority</span>
+                      </div>
+                      <button onClick={() => setAiResult(null)} className="text-xs text-emerald-700 mt-3 hover:underline">Submit another</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <textarea
+                        value={aiMessage}
+                        onChange={e => setAiMessage(e.target.value)}
+                        placeholder='e.g., "The left LED panel on the scoreboard went dark during the third quarter"'
+                        className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 resize-none"
+                        rows={3}
+                      />
+                      <button onClick={submitAiTicket} disabled={aiLoading || !aiMessage.trim()}
+                        className="mt-3 w-full py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                        {aiLoading ? 'Creating ticket...' : 'Submit Issue'}
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {openTickets.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-emerald-600 font-medium text-sm">All clear</p>
-                    <p className="text-zinc-400 text-xs mt-1">No open tickets</p>
+
+                {/* Open Tickets */}
+                <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-zinc-100">
+                    <h2 className="text-sm font-semibold text-zinc-900">Open Tickets</h2>
                   </div>
-                ) : (
-                  <div className="divide-y divide-zinc-100">
-                    {openTickets.slice(0, 5).map(ticket => {
-                      const pc = priorityColors[ticket.priority] || priorityColors.medium
-                      return (
-                        <div key={ticket.id} className="px-6 py-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-zinc-900">{ticket.title}</p>
-                            <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span>
+                  {openTickets.length === 0 ? (
+                    <div className="p-6 text-center"><p className="text-emerald-600 font-medium text-sm">All clear</p></div>
+                  ) : (
+                    <div className="divide-y divide-zinc-100">
+                      {openTickets.slice(0, 5).map(ticket => {
+                        const pc = priorityColors[ticket.priority] || priorityColors.medium
+                        return (
+                          <div key={ticket.id} className="px-6 py-3 hover:bg-zinc-50 cursor-pointer" onClick={() => { setActiveTab('tickets'); viewTicket(ticket.id) }}>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-zinc-900">{ticket.title}</p>
+                              <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span>
+                            </div>
+                            <p className="text-xs text-zinc-400 mt-1">#{ticket.ticket_number} • {ticket.category} • {ticket.created_at}</p>
                           </div>
-                          <p className="text-xs text-zinc-400 mt-1">#{ticket.ticket_number} • {ticket.category} • {ticket.created_at}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* EVENTS TAB */}
+        {/* EVENTS */}
         {activeTab === 'events' && (
           <div className="space-y-6">
             <h2 className="text-lg font-semibold text-zinc-900">Upcoming Events</h2>
             {upcomingEvents.length === 0 ? (
-              <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center text-zinc-400">No upcoming events scheduled</div>
+              <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center text-zinc-400">No upcoming events</div>
             ) : (
-              <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50">
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Date</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Event</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">League</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Time</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Staff</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {upcomingEvents.map(event => {
-                      const st = statusLabels[event.workflow_status] || statusLabels.pending
-                      return (
-                        <tr key={event.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                          <td className="py-3 px-6 text-zinc-600 text-xs whitespace-nowrap">{formatDate(event.event_date)}</td>
-                          <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
-                          <td className="py-3 px-6">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ backgroundColor: (leagueColors[event.league] || '#94a3b8') + '15', color: leagueColors[event.league] || '#64748b' }}>{event.league}</span>
-                          </td>
-                          <td className="py-3 px-6 text-zinc-600 text-xs">{event.start_time}</td>
-                          <td className="py-3 px-6">
-                            {Number(event.staff_count) > 0 ? (
-                              <span className="text-xs text-emerald-600 font-medium">{event.staff_count} assigned</span>
+              <div className="space-y-3">
+                {upcomingEvents.map(event => {
+                  const st = statusConfig[event.workflow_status] || statusConfig.pending
+                  const wf = workflowsByEvent[event.id] || []
+                  const isExpanded = expandedEvent === event.id
+                  return (
+                    <div key={event.id} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                      <div className="p-5 flex items-center justify-between cursor-pointer hover:bg-zinc-50" onClick={() => setExpandedEvent(isExpanded ? null : event.id)}>
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="w-1.5 h-12 rounded-full flex-shrink-0" style={{ backgroundColor: leagueColors[event.league] || '#94a3b8' }}></div>
+                          <div>
+                            <p className="text-sm font-medium text-zinc-900">{event.summary}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">{formatDate(event.event_date)} • {event.start_time} • {event.league}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {Number(event.staff_count) > 0 && <span className="text-xs text-zinc-500">{event.staff_count} staff</span>}
+                          <span className="text-xs font-medium px-3 py-1.5 rounded-full" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
+                          <span className="text-xs text-zinc-400">{isExpanded ? '▲' : '▼'}</span>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-0 border-t border-zinc-100">
+                          <div className="mt-4 ml-6">
+                            {wf.length > 0 ? (
+                              <div className="space-y-3">
+                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Live Updates</p>
+                                {wf.map((step, i) => (
+                                  <div key={i} className="flex items-center gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-zinc-900">{workflowLabels[step.type] || step.type}</p>
+                                      <p className="text-xs text-zinc-500">{step.submitted_at}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             ) : (
-                              <span className="text-xs text-zinc-400">Pending</span>
+                              <p className="text-sm text-zinc-400">No updates yet — workflow begins when staff arrive on site</p>
                             )}
-                          </td>
-                          <td className="py-3 px-6">
-                            <span className="text-xs font-medium px-2 py-1 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -352,204 +366,186 @@ export default function PortalPage() {
               <>
                 <h2 className="text-lg font-semibold text-zinc-900 mt-8">Recent Events</h2>
                 <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-200 bg-zinc-50">
-                        <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Date</th>
-                        <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Event</th>
-                        <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">League</th>
-                        <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pastEvents.map(event => {
-                        const st = statusLabels[event.workflow_status] || statusLabels.pending
-                        return (
-                          <tr key={event.id} className="border-b border-zinc-100">
-                            <td className="py-3 px-6 text-zinc-500 text-xs">{formatDate(event.event_date)}</td>
-                            <td className="py-3 px-6 text-zinc-700">{event.summary}</td>
-                            <td className="py-3 px-6 text-xs text-zinc-500">{event.league}</td>
-                            <td className="py-3 px-6">
-                              <span className="text-xs font-medium px-2 py-1 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="divide-y divide-zinc-100">
+                    {pastEvents.map(event => {
+                      const st = statusConfig[event.workflow_status] || statusConfig.pending
+                      return (
+                        <div key={event.id} className="px-6 py-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-zinc-700">{event.summary}</p>
+                            <p className="text-xs text-zinc-400">{formatDate(event.event_date)} • {event.league}</p>
+                          </div>
+                          <span className="text-xs font-medium px-2 py-1 rounded" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               </>
             )}
           </div>
         )}
 
-        {/* TICKETS TAB */}
+        {/* TICKETS */}
         {activeTab === 'tickets' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-zinc-900">Support Tickets</h2>
-              <button
-                onClick={() => setShowNewTicket(!showNewTicket)}
-                className="px-4 py-2 bg-[#0A52EF] text-white rounded-lg text-sm font-medium hover:bg-[#0840C0] transition-colors"
-              >
-                {showNewTicket ? 'Cancel' : '+ New Ticket'}
-              </button>
+            {/* AI Ticket Creator */}
+            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-6 text-white">
+              <h2 className="text-sm font-semibold mb-1">Report an Issue</h2>
+              <p className="text-xs opacity-75 mb-4">Describe your problem in plain English — AI will categorize and create your ticket</p>
+              {aiResult ? (
+                <div className="bg-white/10 rounded-lg p-4">
+                  <p className="text-sm font-medium">Ticket #{aiResult.ticket.ticket_number} created</p>
+                  <p className="text-xs opacity-75 mt-1">{aiResult.parsed?.title}</p>
+                  <div className="flex gap-2 mt-2">
+                    <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.category}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.priority}</span>
+                  </div>
+                  <button onClick={() => setAiResult(null)} className="text-xs opacity-75 hover:opacity-100 mt-3">Submit another →</button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={aiMessage}
+                    onChange={e => setAiMessage(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') submitAiTicket() }}
+                    placeholder='e.g., "Scoreboard display is flickering on the right side"'
+                    className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+                  />
+                  <button onClick={submitAiTicket} disabled={aiLoading || !aiMessage.trim()}
+                    className="px-6 py-2.5 bg-white text-[#0A52EF] rounded-lg text-sm font-medium hover:bg-white/90 disabled:opacity-50 transition-colors flex-shrink-0">
+                    {aiLoading ? 'Creating...' : 'Submit'}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {showNewTicket && (
-              <div className="bg-white rounded-lg border border-zinc-200 p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-zinc-900">Submit a Support Request</h3>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Subject *</label>
-                  <input type="text" value={newTicket.title} onChange={e => setNewTicket({ ...newTicket, title: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
-                    placeholder="Brief description of the issue" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Details</label>
-                  <textarea value={newTicket.description} onChange={e => setNewTicket({ ...newTicket, description: e.target.value })}
-                    rows={4}
-                    className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 resize-none"
-                    placeholder="Provide as much detail as possible..." />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-600 mb-1">Category</label>
-                    <select value={newTicket.category} onChange={e => setNewTicket({ ...newTicket, category: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900">
-                      <option value="general">General</option>
-                      <option value="hardware">Hardware</option>
-                      <option value="software">Software</option>
-                      <option value="content">Content</option>
-                      <option value="operational">Operational</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-600 mb-1">Priority</label>
-                    <select value={newTicket.priority} onChange={e => setNewTicket({ ...newTicket, priority: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900">
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                  </div>
-                </div>
-                <button onClick={submitTicket} disabled={submittingTicket || !newTicket.title.trim()}
-                  className="px-6 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50">
-                  {submittingTicket ? 'Submitting...' : 'Submit Ticket'}
-                </button>
+            {/* Ticket Detail View */}
+            {viewingTicket && (
+              <div className="bg-white rounded-lg border border-zinc-200 p-6">
+                <button onClick={() => setViewingTicket(null)} className="text-xs text-zinc-500 hover:text-zinc-700 mb-4">← Back to tickets</button>
+                {(() => {
+                  const t = tickets.find(t => t.id === viewingTicket)
+                  if (!t) return null
+                  const sc = ticketStatusColors[t.status] || ticketStatusColors.open
+                  return (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-mono text-zinc-400">#{t.ticket_number}</span>
+                        <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: sc.color, backgroundColor: sc.bg }}>{t.status.replace('_', ' ')}</span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-zinc-900">{t.title}</h3>
+                      {t.description && <p className="text-sm text-zinc-600 mt-2">{t.description}</p>}
+                      {t.resolution_notes && (
+                        <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                          <p className="text-xs font-medium text-emerald-900">Resolution</p>
+                          <p className="text-sm text-emerald-800 mt-1">{t.resolution_notes}</p>
+                        </div>
+                      )}
+
+                      {/* Comments */}
+                      <div className="mt-6 border-t border-zinc-200 pt-4">
+                        <h4 className="text-sm font-semibold text-zinc-900 mb-3">Updates</h4>
+                        {ticketComments.length === 0 ? (
+                          <p className="text-xs text-zinc-400">No updates yet</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {ticketComments.map((c: any, i: number) => (
+                              <div key={i} className="bg-zinc-50 rounded-lg p-3">
+                                <div className="flex justify-between">
+                                  <span className="text-xs font-medium text-zinc-900">{c.author}</span>
+                                  <span className="text-xs text-zinc-400">{new Date(c.created_at).toLocaleString()}</span>
+                                </div>
+                                <p className="text-sm text-zinc-700 mt-1">{c.body}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
-            {tickets.length === 0 ? (
-              <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center">
-                <p className="text-emerald-600 font-medium">No tickets</p>
-                <p className="text-zinc-400 text-sm mt-1">Submit a ticket if you need support</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50">
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">#</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Subject</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Category</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Priority</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Status</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tickets.map(ticket => {
-                      const pc = priorityColors[ticket.priority] || priorityColors.medium
-                      const sc = ticketStatusColors[ticket.status] || ticketStatusColors.open
-                      return (
-                        <tr key={ticket.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                          <td className="py-3 px-6 text-zinc-400 text-xs font-mono">{ticket.ticket_number}</td>
-                          <td className="py-3 px-6 font-medium text-zinc-900">{ticket.title}</td>
-                          <td className="py-3 px-6 text-zinc-600 text-xs capitalize">{ticket.category}</td>
-                          <td className="py-3 px-6">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span>
-                          </td>
-                          <td className="py-3 px-6">
-                            <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: sc.color, backgroundColor: sc.bg }}>{ticket.status.replace('_', ' ')}</span>
-                          </td>
-                          <td className="py-3 px-6 text-zinc-500 text-xs">{ticket.created_at}</td>
+            {/* Tickets List */}
+            {!viewingTicket && (
+              <>
+                {tickets.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center">
+                    <p className="text-emerald-600 font-medium">No tickets</p>
+                    <p className="text-zinc-400 text-sm mt-1">Use the form above to report any issues</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-zinc-200 bg-zinc-50">
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">#</th>
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Subject</th>
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Category</th>
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Priority</th>
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Status</th>
+                          <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase">Date</th>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {tickets.map(ticket => {
+                          const pc = priorityColors[ticket.priority] || priorityColors.medium
+                          const sc = ticketStatusColors[ticket.status] || ticketStatusColors.open
+                          return (
+                            <tr key={ticket.id} onClick={() => viewTicket(ticket.id)} className="border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer">
+                              <td className="py-3 px-6 text-zinc-400 text-xs font-mono">{ticket.ticket_number}</td>
+                              <td className="py-3 px-6 font-medium text-zinc-900">{ticket.title}</td>
+                              <td className="py-3 px-6 text-zinc-600 text-xs capitalize">{ticket.category}</td>
+                              <td className="py-3 px-6"><span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span></td>
+                              <td className="py-3 px-6"><span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: sc.color, backgroundColor: sc.bg }}>{ticket.status.replace('_', ' ')}</span></td>
+                              <td className="py-3 px-6 text-zinc-500 text-xs">{ticket.created_at}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
-        {/* SERVICES TAB */}
+        {/* SERVICES */}
         {activeTab === 'services' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900">Contracted Services</h2>
-              <p className="text-sm text-zinc-500 mt-1">Services included in your venue's agreement with ANC</p>
-            </div>
-
+            <div><h2 className="text-lg font-semibold text-zinc-900">Contracted Services</h2><p className="text-sm text-zinc-500 mt-1">Services included in your venue's agreement with ANC</p></div>
             {services.length === 0 ? (
-              <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center text-zinc-400 text-sm">
-                No services configured for this venue
-              </div>
+              <div className="bg-white rounded-lg border border-zinc-200 p-12 text-center text-zinc-400 text-sm">No services configured</div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {services.map(svc => (
                   <div key={svc.name} className="bg-white rounded-lg border border-zinc-200 p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                      <h3 className="text-sm font-semibold text-zinc-900">{svc.name}</h3>
-                    </div>
+                    <div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><h3 className="text-sm font-semibold text-zinc-900">{svc.name}</h3></div>
                     {svc.description && <p className="text-xs text-zinc-500 mt-2 ml-5">{svc.description}</p>}
                   </div>
                 ))}
               </div>
             )}
-
-            {/* Venue Info */}
             <div className="bg-white rounded-lg border border-zinc-200 p-6 mt-8">
               <h3 className="text-sm font-semibold text-zinc-900 mb-4">Venue Information</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs font-medium text-zinc-500">Venue</p>
-                  <p className="text-zinc-900 mt-1">{venue.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-zinc-500">Market</p>
-                  <p className="text-zinc-900 mt-1">{venue.market}</p>
-                </div>
-                {venue.address && (
-                  <div>
-                    <p className="text-xs font-medium text-zinc-500">Address</p>
-                    <p className="text-zinc-900 mt-1">{venue.address}</p>
-                  </div>
-                )}
-                {venue.primary_contact_name && (
-                  <div>
-                    <p className="text-xs font-medium text-zinc-500">Primary Contact</p>
-                    <p className="text-zinc-900 mt-1">{venue.primary_contact_name}</p>
-                    {venue.primary_contact_email && <p className="text-zinc-500 text-xs">{venue.primary_contact_email}</p>}
-                  </div>
-                )}
+                <div><p className="text-xs font-medium text-zinc-500">Venue</p><p className="text-zinc-900 mt-1">{venue.name}</p></div>
+                <div><p className="text-xs font-medium text-zinc-500">Market</p><p className="text-zinc-900 mt-1">{venue.market}</p></div>
+                {venue.address && <div><p className="text-xs font-medium text-zinc-500">Address</p><p className="text-zinc-900 mt-1">{venue.address}</p></div>}
+                {venue.primary_contact_name && <div><p className="text-xs font-medium text-zinc-500">Contact</p><p className="text-zinc-900 mt-1">{venue.primary_contact_name}</p></div>}
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-zinc-200 mt-16">
         <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-5 opacity-40" />
-            <span className="text-xs text-zinc-400">ANC Sports — Operations & Venue Services</span>
-          </div>
+          <div className="flex items-center gap-3"><img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-5 opacity-40" /><span className="text-xs text-zinc-400">ANC Sports — Operations & Venue Services</span></div>
           <span className="text-xs text-zinc-400">Need help? Contact support@anc.com</span>
         </div>
       </footer>
