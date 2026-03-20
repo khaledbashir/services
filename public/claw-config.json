@@ -1,0 +1,9 @@
+{
+  "jobs": [
+    { "id": "daily-event-digest", "name": "Daily Event Digest", "schedule": "8:00 AM ET daily", "enabled": true },
+    { "id": "escalation-alerts", "name": "Escalation Alerts", "schedule": "Every 30 minutes", "enabled": true },
+    { "id": "post-game-summary", "name": "Post-Game Summaries", "schedule": "Every hour", "enabled": true },
+    { "id": "weekly-digest", "name": "Weekly Report", "schedule": "Monday 8:00 AM ET", "enabled": true }
+  ],
+  "channel": "#external--ai-services"
+}

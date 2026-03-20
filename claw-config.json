@@ -1,0 +1,40 @@
+{
+  "jobs": [
+    {
+      "id": "daily-event-digest",
+      "name": "Daily Event Digest",
+      "description": "Posts today's full game slate and flags unassigned events",
+      "schedule": "8:00 AM ET daily",
+      "enabled": false
+    },
+    {
+      "id": "escalation-alerts",
+      "name": "Escalation Alerts",
+      "description": "Alerts when events starting within 2 hours have no check-in",
+      "schedule": "Every 30 minutes",
+      "enabled": false
+    },
+    {
+      "id": "post-game-summary",
+      "name": "Post-Game Summaries",
+      "description": "Posts workflow completion wrap-up after each game ends",
+      "schedule": "Every hour",
+      "enabled": false
+    },
+    {
+      "id": "weekly-digest",
+      "name": "Weekly Report",
+      "description": "Last week's stats: events covered, workflows completed, tickets",
+      "schedule": "Monday 8:00 AM ET",
+      "enabled": false
+    },
+    {
+      "id": "workflow-completion-report",
+      "name": "Workflow Completion Report",
+      "description": "How many events last week had all 3 workflow stages completed vs incomplete. Which techs missed check-ins",
+      "schedule": "Every 15 minutes",
+      "enabled": true
+    }
+  ],
+  "channel": "#external--ai-services"
+}
