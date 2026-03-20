@@ -45,6 +45,7 @@ export function Sidebar() {
 
   const adminItems = isAdmin ? [
     { href: '/staff', label: 'Staff' },
+    { href: '/inventory', label: 'Inventory' },
     { href: '/settings', label: 'Settings' },
   ] : []
 
