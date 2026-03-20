@@ -75,7 +75,7 @@ Respond ONLY with valid JSON, no other text:
     // Strip <think>...</think> tags (some models include reasoning)
     aiText = aiText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
-    let parsed: { title: string; category: string; priority: string; description: string }
+    let parsed: { title: string; category: string; priority: string; description: string; follow_up?: string[] }
     try {
       // Try to extract JSON from the response (may have extra text around it)
       const jsonMatch = aiText.match(/\{[\s\S]*\}/)
