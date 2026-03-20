@@ -79,11 +79,13 @@ export async function POST(
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
 
+    // Use Claw's staff ID for portal-created tickets
+    const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
     const result = await query(
-      `INSERT INTO tickets (venue_id, title, description, category, priority, status)
-       VALUES ($1, $2, $3, $4, $5, 'open')
+      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, 'open', $6)
        RETURNING id, ticket_number, title, status`,
-      [venueId, title, description || '', category || 'general', priority || 'medium']
+      [venueId, title, description || '', category || 'general', priority || 'medium', CLAW_STAFF_ID]
     )
 
     return NextResponse.json({ ticket: result.rows[0] })
