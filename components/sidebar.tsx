@@ -106,7 +106,7 @@ export function Sidebar() {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded shadow-lg"
         aria-label="Open menu"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -116,11 +116,11 @@ export function Sidebar() {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Mobile sidebar */}
-      <div className={`md:hidden fixed inset-y-0 left-0 z-50 w-60 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-60 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button
           onClick={() => setMobileOpen(false)}
           className="absolute top-4 right-4 text-zinc-400 hover:text-white"
@@ -134,7 +134,7 @@ export function Sidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-[#0A1628]">
+      <div className="hidden lg:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-[#0A1628]">
         {sidebarContent}
       </div>
     </>
