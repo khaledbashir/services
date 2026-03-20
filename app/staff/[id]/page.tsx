@@ -86,6 +86,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
   const [recentActivity, setRecentActivity] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [editData, setEditData] = useState({ full_name: '', email: '', phone: '', role: '', title: '', city: '', password: '' })
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
   const { showToast } = useToast()
 
@@ -133,6 +136,48 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
       setUploadingImage(false)
     }
     reader.readAsDataURL(file)
+  }
+
+  const openEdit = () => {
+    if (!staff) return
+    setEditData({
+      full_name: staff.full_name, email: staff.email, phone: staff.phone || '',
+      role: staff.role, title: staff.title || '', city: staff.city || '', password: ''
+    })
+    setShowEdit(true)
+  }
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      const payload: any = { ...editData }
+      if (!payload.password) delete payload.password
+      const res = await fetch(`/api/staff/${params.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        showToast('Staff member updated', 'success')
+        setShowEdit(false)
+        // Refresh
+        const r = await fetch(`/api/staff/${params.id}/stats`)
+        if (r.ok) { const d = await r.json(); setStaff(d.staff) }
+      } else {
+        showToast('Failed to update', 'error')
+      }
+    } catch { showToast('Error updating', 'error') }
+    finally { setSaving(false) }
+  }
+
+  const deleteStaff = async () => {
+    if (!confirm(`Deactivate ${staff?.full_name}? They will no longer be able to log in.`)) return
+    try {
+      const res = await fetch(`/api/staff/${params.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        showToast('Staff member deactivated', 'success')
+        router.push('/staff')
+      }
+    } catch { showToast('Error', 'error') }
   }
 
   const formatDate = (d: string) => {
@@ -197,9 +242,68 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     <DashboardLayout>
       <div className="space-y-6">
         {/* Back button */}
-        <button onClick={() => router.push('/staff')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
-          ← Back to Staff
-        </button>
+        <div className="flex justify-between items-center">
+          <button onClick={() => router.push('/staff')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">← Back to Staff</button>
+          <div className="flex gap-2">
+            <button onClick={openEdit} className="px-3 py-1.5 text-xs font-medium bg-white border border-[#E8E8E8] rounded hover:border-zinc-300 text-zinc-700 transition-colors">Edit</button>
+            <button onClick={deleteStaff} className="px-3 py-1.5 text-xs font-medium bg-white border border-red-200 rounded hover:bg-red-50 text-red-600 transition-colors">Deactivate</button>
+          </div>
+        </div>
+
+        {/* Edit Form */}
+        {showEdit && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-zinc-900 mb-4">Edit Staff Member</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Full Name</label>
+                <input type="text" value={editData.full_name} onChange={e => setEditData({ ...editData, full_name: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Email</label>
+                <input type="email" value={editData.email} onChange={e => setEditData({ ...editData, email: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Phone</label>
+                <input type="tel" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Role</label>
+                <select value={editData.role} onChange={e => setEditData({ ...editData, role: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                  <option value="technician">Technician</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Title</label>
+                <input type="text" value={editData.title} onChange={e => setEditData({ ...editData, title: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" placeholder="e.g., Senior Field Technician" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">City</label>
+                <input type="text" value={editData.city} onChange={e => setEditData({ ...editData, city: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Reset Password <span className="text-zinc-400">(leave blank to keep current)</span></label>
+                <input type="password" value={editData.password} onChange={e => setEditData({ ...editData, password: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" placeholder="New password..." />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={saveEdit} disabled={saving}
+                className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button onClick={() => setShowEdit(false)} className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900">Cancel</button>
+            </div>
+          </div>
+        )}
 
         {/* Profile Header */}
         <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-8">
