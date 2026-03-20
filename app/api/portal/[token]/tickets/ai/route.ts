@@ -36,11 +36,11 @@ export async function POST(
       },
       body: JSON.stringify({
         model: AI_MODEL,
-        max_tokens: 800,
+        max_tokens: 4000,
         messages: [
           {
             role: 'system',
-            content: `You are a support ticket parser for ANC Sports, a company that installs and maintains LED displays at sports venues and arenas nationwide.
+            content: `You are a support ticket parser for ANC Sports, a company that installs and maintains LED displays at sports venues and arenas nationwide. Keep your thinking brief — go straight to the JSON output.
 
 Given a client's issue description, extract:
 - title: a clear, concise ticket title (max 80 chars)
