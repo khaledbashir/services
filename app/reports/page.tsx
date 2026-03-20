@@ -74,9 +74,13 @@ export default function ReportsPage() {
               <button onClick={() => setPeriod('week')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${period === 'week' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Week</button>
               <button onClick={() => setPeriod('month')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${period === 'month' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Month</button>
             </div>
-            <button onClick={() => window.print()} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors">
-              Print Report
-            </button>
+            <a
+              href={`/api/reports/pdf?period=${period}`}
+              download
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors inline-block"
+            >
+              Export PDF
+            </a>
           </div>
         </div>
 
