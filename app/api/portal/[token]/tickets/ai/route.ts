@@ -40,14 +40,17 @@ export async function POST(
         messages: [
           {
             role: 'system',
-            content: `You are a support ticket parser for ANC Sports venue services. Given a client's issue description, extract:
+            content: `You are a support ticket parser for ANC Sports, a company that installs and maintains LED displays at sports venues and arenas nationwide.
+
+Given a client's issue description, extract:
 - title: a clear, concise ticket title (max 80 chars)
 - category: one of: hardware, software, content, operational, general
-- priority: one of: low, medium, high, critical
-- description: a clean, professional version of their description
+- priority: one of: low, medium, high, critical. Use critical if it sounds like a total outage, the display is completely dead, or there's a game happening/imminent. Use high if partial failure or significant impact. Use medium for degraded but functional. Use low for cosmetic or non-urgent.
+- description: a clean, professional version of their description that captures the key technical details
+- follow_up: 2-3 specific follow-up questions that would help the support team diagnose faster. Think like a field service engineer — what would Chris the tech support lead want to know? Examples: which specific display/zone, when it started, is it intermittent or constant, is there a game today, what was showing when it happened, any recent changes.
 
 Respond ONLY with valid JSON, no other text:
-{"title":"...","category":"...","priority":"...","description":"..."}`
+{"title":"...","category":"...","priority":"...","description":"...","follow_up":["...","...","..."]}`
           },
           { role: 'user', content: `Venue: ${venue.name}\n\nClient says: "${message}"` }
         ],
@@ -125,13 +128,50 @@ Respond ONLY with valid JSON, no other text:
         description: parsed.description,
       }, 'created')
       msg.channel = channelId
-      // Add original message block
+
+      // Add original message
       if (message !== parsed.description) {
         msg.blocks.push(
           { type: 'divider' },
-          { type: 'context', elements: [{ type: 'mrkdwn', text: `💬 *Client's exact words:* _"${message.substring(0, 300)}"_` }] }
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `💬 *Client said:* _"${message.substring(0, 300)}"_` }] }
         )
       }
+
+      // Add follow-up questions if AI generated them
+      if (parsed.follow_up && parsed.follow_up.length > 0) {
+        msg.blocks.push({
+          type: 'section',
+          text: { type: 'mrkdwn', text: `❓ *Follow-up needed:*\n${parsed.follow_up.map((q: string) => `• ${q}`).join('\n')}` }
+        })
+      }
+
+      // Add venue context: next event at this venue
+      const nextEventResult = await query(
+        `SELECT e.summary, TO_CHAR(e.event_date, 'Mon DD') as event_date,
+                TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time,
+                (SELECT string_agg(s.full_name, ', ') FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id WHERE ea.event_id = e.id) as assigned
+         FROM events e WHERE e.venue_id = $1 AND e.event_date >= CURRENT_DATE
+         ORDER BY e.start_time LIMIT 1`,
+        [venue.id]
+      )
+      if (nextEventResult.rows.length > 0) {
+        const ev = nextEventResult.rows[0]
+        msg.blocks.push({
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: `📅 *Next event:* ${ev.summary} — ${ev.event_date} at ${ev.start_time}${ev.assigned ? ` (Assigned: ${ev.assigned})` : ' ⚠️ _No staff assigned_'}` }]
+        })
+      }
+
+      // Add SLA deadline
+      if (slaResponseDue) {
+        const deadline = new Date(slaResponseDue)
+        const hoursLeft = Math.round((deadline.getTime() - Date.now()) / 3600000 * 10) / 10
+        msg.blocks.push({
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: `⏱️ *SLA Response due in ${hoursLeft}h* (${parsed.priority} priority)` }]
+        })
+      }
+
       sendSlackMessage(msg)
     }
 

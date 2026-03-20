@@ -46,6 +46,11 @@ export default function PortalPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState<any>(null)
 
+  // Follow-up flow
+  const [followUpAnswers, setFollowUpAnswers] = useState<Record<number, string>>({})
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
+  const [followUpDone, setFollowUpDone] = useState(false)
+
   // Ticket reply
   const [viewingTicket, setViewingTicket] = useState<string | null>(null)
   const [ticketComments, setTicketComments] = useState<any[]>([])
@@ -103,6 +108,21 @@ export default function PortalPage() {
         setTicketComments(data.comments || [])
       }
     } catch {}
+  }
+
+  const submitFollowUp = async () => {
+    if (!aiResult?.ticket?.id || !aiResult?.parsed?.follow_up) return
+    setFollowUpSubmitting(true)
+    const answers = aiResult.parsed.follow_up.map((q: string, i: number) => `**${q}**\n${followUpAnswers[i] || 'No answer provided'}`).join('\n\n')
+    try {
+      await fetch(`/api/portal/${token}/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `Follow-up details for ticket #${aiResult.ticket.ticket_number}`, description: answers }),
+      })
+      setFollowUpDone(true)
+    } catch {}
+    setFollowUpSubmitting(false)
   }
 
   const submitReply = async () => {
@@ -349,14 +369,55 @@ export default function PortalPage() {
                   <h2 className="text-sm font-semibold text-zinc-900 mb-1">Need Help?</h2>
                   <p className="text-xs text-zinc-500 mb-4">Describe your issue and we'll create a support ticket for you</p>
                   {aiResult ? (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                      <p className="text-sm font-medium text-emerald-900">Ticket #{aiResult.ticket.ticket_number} created</p>
-                      <p className="text-xs text-emerald-700 mt-1">{aiResult.parsed?.title || aiResult.ticket.title}</p>
-                      <div className="flex gap-2 mt-2">
-                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.category}</span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.priority} priority</span>
+                    <div className="space-y-3">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                        <p className="text-sm font-medium text-emerald-900">Ticket #{aiResult.ticket.ticket_number} created</p>
+                        <p className="text-xs text-emerald-700 mt-1">{aiResult.parsed?.title || aiResult.ticket.title}</p>
+                        <div className="flex gap-2 mt-2">
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.category}</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.priority} priority</span>
+                        </div>
                       </div>
-                      <button onClick={() => setAiResult(null)} className="text-xs text-emerald-700 mt-3 hover:underline">Submit another</button>
+
+                      {/* Follow-up questions */}
+                      {aiResult.parsed?.follow_up && aiResult.parsed.follow_up.length > 0 && !followUpDone && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <p className="text-xs font-semibold text-blue-900 mb-3">To help us resolve this faster:</p>
+                          <div className="space-y-3">
+                            {aiResult.parsed.follow_up.map((q: string, i: number) => (
+                              <div key={i}>
+                                <p className="text-xs font-medium text-blue-800 mb-1">{q}</p>
+                                <input
+                                  type="text"
+                                  value={followUpAnswers[i] || ''}
+                                  onChange={e => setFollowUpAnswers({ ...followUpAnswers, [i]: e.target.value })}
+                                  placeholder="Your answer..."
+                                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white text-zinc-900"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={submitFollowUp} disabled={followUpSubmitting}
+                              className="text-xs font-medium px-4 py-2 bg-[#0A52EF] text-white rounded-lg hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                              {followUpSubmitting ? 'Sending...' : 'Send Details'}
+                            </button>
+                            <button onClick={() => setFollowUpDone(true)} className="text-xs text-zinc-500 px-3 py-2 hover:text-zinc-700">
+                              Skip
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {followUpDone && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-emerald-700">Thanks! Our team has been notified and will follow up shortly.</p>
+                        </div>
+                      )}
+
+                      <button onClick={() => { setAiResult(null); setFollowUpAnswers({}); setFollowUpDone(false) }} className="text-xs text-zinc-500 hover:underline">
+                        Submit another issue
+                      </button>
                     </div>
                   ) : (
                     <div>
@@ -501,7 +562,28 @@ export default function PortalPage() {
                     <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.category}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.priority}</span>
                   </div>
-                  <button onClick={() => setAiResult(null)} className="text-xs opacity-75 hover:opacity-100 mt-3">Submit another →</button>
+                  {aiResult.parsed?.follow_up && aiResult.parsed.follow_up.length > 0 && !followUpDone && (
+                    <div className="mt-3 pt-3 border-t border-white/20 space-y-2">
+                      <p className="text-xs font-medium opacity-90">Quick follow-up:</p>
+                      {aiResult.parsed.follow_up.map((q: string, i: number) => (
+                        <div key={i}>
+                          <p className="text-xs opacity-75 mb-1">{q}</p>
+                          <input type="text" value={followUpAnswers[i] || ''} onChange={e => setFollowUpAnswers({ ...followUpAnswers, [i]: e.target.value })}
+                            placeholder="Your answer..."
+                            className="w-full px-3 py-1.5 bg-white/10 border border-white/20 rounded text-xs text-white placeholder-white/40 focus:outline-none" />
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
+                        <button onClick={submitFollowUp} disabled={followUpSubmitting}
+                          className="text-xs font-medium px-4 py-1.5 bg-white text-[#0A52EF] rounded hover:bg-white/90 disabled:opacity-50">
+                          {followUpSubmitting ? 'Sending...' : 'Send'}
+                        </button>
+                        <button onClick={() => setFollowUpDone(true)} className="text-xs opacity-50 hover:opacity-75 px-3">Skip</button>
+                      </div>
+                    </div>
+                  )}
+                  {followUpDone && <p className="text-xs opacity-75 mt-3">Thanks! Our team is on it.</p>}
+                  <button onClick={() => { setAiResult(null); setFollowUpAnswers({}); setFollowUpDone(false) }} className="text-xs opacity-75 hover:opacity-100 mt-3">Submit another →</button>
                 </div>
               ) : (
                 <div className="flex gap-3">
