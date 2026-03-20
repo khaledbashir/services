@@ -104,7 +104,7 @@ export async function POST(
        VALUES ($1, $2, $3, $4, NOW())
        ON CONFLICT (event_id, staff_id, type) DO UPDATE 
        SET data = EXCLUDED.data, submitted_at = NOW()`,
-      [eventId, staffId, submissionType, data ? JSON.stringify(data) : null]
+      [eventId, staffId, submissionType, data ? JSON.stringify(data) : '{}']
     )
 
     // Get all workflow submissions for event
