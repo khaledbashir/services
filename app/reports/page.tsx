@@ -15,6 +15,12 @@ interface ReportData {
     workflowCompletionRate: number
     totalLaborHours: number
     uniqueStaff: number
+    tickets?: {
+      total: number; resolved: number
+      slaResponseMet: number; slaResponseBreached: number
+      slaResolutionMet: number; slaResolutionBreached: number
+      avgResponseHours: number | null; avgResolutionHours: number | null
+    }
   }
   byMarket: Array<{ market: string; events: number; covered: number; hours: number }>
   byLeague: Array<{ league: string; events: number; hours: number }>
@@ -102,6 +108,40 @@ export default function ReportsPage() {
             <p className="text-xs text-zinc-500 mt-1">{s.uniqueStaff} staff across {s.totalEvents} events</p>
           </div>
         </div>
+
+        {/* SLA & Ticket Metrics */}
+        {s.tickets && s.tickets.total > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Tickets</p>
+              <p className="text-2xl font-semibold text-zinc-900 mt-2">{s.tickets.total}</p>
+              <p className="text-xs text-zinc-500 mt-1">{s.tickets.resolved} resolved</p>
+            </div>
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">SLA Response</p>
+              <p className={`text-2xl font-semibold mt-2 ${s.tickets.slaResponseBreached > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {s.tickets.slaResponseMet + s.tickets.slaResponseBreached > 0
+                  ? Math.round((s.tickets.slaResponseMet / (s.tickets.slaResponseMet + s.tickets.slaResponseBreached)) * 100)
+                  : 100}%
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">{s.tickets.slaResponseBreached} breached</p>
+            </div>
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">SLA Resolution</p>
+              <p className={`text-2xl font-semibold mt-2 ${s.tickets.slaResolutionBreached > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {s.tickets.slaResolutionMet + s.tickets.slaResolutionBreached > 0
+                  ? Math.round((s.tickets.slaResolutionMet / (s.tickets.slaResolutionMet + s.tickets.slaResolutionBreached)) * 100)
+                  : 100}%
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">{s.tickets.slaResolutionBreached} breached</p>
+            </div>
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Avg Response</p>
+              <p className="text-2xl font-semibold text-zinc-900 mt-2">{s.tickets.avgResponseHours ?? '—'}<span className="text-sm text-zinc-400 ml-1">hrs</span></p>
+              <p className="text-xs text-zinc-500 mt-1">Avg resolution: {s.tickets.avgResolutionHours ?? '—'}h</p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* By Market */}

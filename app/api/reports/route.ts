@@ -116,6 +116,24 @@ export async function GET(request: NextRequest) {
     const wfTotal = parseInt(workflowResult.rows[0]?.total || '0')
     const wfCompleted = parseInt(workflowResult.rows[0]?.completed || '0')
 
+    // SLA compliance
+    const slaResult = await query(
+      `SELECT
+        COUNT(*) as total_tickets,
+        COUNT(CASE WHEN status IN ('resolved','closed') THEN 1 END) as resolved,
+        COUNT(CASE WHEN sla_response_met = true THEN 1 END) as response_met,
+        COUNT(CASE WHEN sla_response_met = false THEN 1 END) as response_breached,
+        COUNT(CASE WHEN sla_resolution_met = true THEN 1 END) as resolution_met,
+        COUNT(CASE WHEN sla_resolution_met = false THEN 1 END) as resolution_breached,
+        AVG(CASE WHEN first_response_at IS NOT NULL THEN EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600 END) as avg_response_hours,
+        AVG(CASE WHEN resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600 END) as avg_resolution_hours
+       FROM tickets
+       WHERE created_at >= $1 AND created_at <= $2::date + 1`,
+      [startDate, endDate]
+    )
+
+    const slaData = slaResult.rows[0]
+
     return NextResponse.json({
       period,
       startDate,
@@ -127,6 +145,16 @@ export async function GET(request: NextRequest) {
         workflowCompletionRate: wfTotal > 0 ? Math.round((wfCompleted / wfTotal) * 100) : 0,
         totalLaborHours: parseFloat(laborResult.rows[0]?.total_hours || '0'),
         uniqueStaff: parseInt(laborResult.rows[0]?.unique_staff || '0'),
+        tickets: {
+          total: parseInt(slaData?.total_tickets || '0'),
+          resolved: parseInt(slaData?.resolved || '0'),
+          slaResponseMet: parseInt(slaData?.response_met || '0'),
+          slaResponseBreached: parseInt(slaData?.response_breached || '0'),
+          slaResolutionMet: parseInt(slaData?.resolution_met || '0'),
+          slaResolutionBreached: parseInt(slaData?.resolution_breached || '0'),
+          avgResponseHours: slaData?.avg_response_hours ? Math.round(parseFloat(slaData.avg_response_hours) * 10) / 10 : null,
+          avgResolutionHours: slaData?.avg_resolution_hours ? Math.round(parseFloat(slaData.avg_resolution_hours) * 10) / 10 : null,
+        },
       },
       byMarket: marketResult.rows,
       byLeague: leagueResult.rows,
