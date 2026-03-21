@@ -758,6 +758,31 @@ export default function PortalPage() {
           <span className="text-xs text-zinc-400">Need help? Contact support@anc.com</span>
         </div>
       </footer>
+
+      {/* ANC AI Assistant Chat Widget */}
+      <script
+        data-embed-id="8c3aad8f-edf0-43e5-b249-6b9cce51287e"
+        data-base-api-url="https://ancservices-anything-llm.izcgmb.easypanel.host/api/embed"
+        data-brand-image-url="/ANC_Logo_2023_white.png"
+        data-greeting="Hi! I'm your ANC assistant. Ask me anything about our services, technology, or your venue."
+        data-button-color="#1B2A4A"
+        data-user-bg-color="#3B82F6"
+        data-assistant-bg-color="#1B2A4A"
+        data-assistant-name="ANC Assistant"
+        data-assistant-icon="/ANC_Logo_2023_white.png"
+        data-window-title="ANC Support"
+        data-no-sponsor="true"
+        src="https://ancservices-anything-llm.izcgmb.easypanel.host/embed/anythingllm-chat-widget.min.js"
+      />
+
+      {/* Hide AnythingLLM branding from widget */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        [data-anythingllm-footer], [class*="anythingllm"], a[href*="anythingllm.com"],
+        #anything-llm-chat-widget a[href*="anythingllm"],
+        #anything-llm-chat-widget [class*="powered"] {
+          display: none !important;
+        }
+      `}} />
     </div>
   )
 }
