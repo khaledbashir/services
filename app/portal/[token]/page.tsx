@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 
@@ -91,6 +91,186 @@ function ChatWidget({ venueName }: { venueName: string }) {
     };
   }, [venueName]);
   return null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESOURCES TAB — Inline AI Chat + Document Vault
+   ═══════════════════════════════════════════════════════════════════════ */
+
+interface ChatMsg { role: 'user' | 'assistant'; content: string }
+
+function ResourcesTab({ token, venueName }: { token: string; venueName: string }) {
+  const [messages, setMessages] = useState<ChatMsg[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const suggestedQuestions = [
+    'What services does ANC provide?',
+    'Tell me about LiveSync',
+    'Who is on ANC\'s leadership team?',
+    `What displays are installed at ${venueName}?`,
+    'How does ANC handle game-day operations?',
+    'What is ANC\'s history?',
+  ]
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || loading) return
+    const userMsg: ChatMsg = { role: 'user', content: text.trim() }
+    setMessages(prev => [...prev, userMsg])
+    setInput('')
+    setLoading(true)
+
+    try {
+      const res = await fetch(`/api/portal/${token}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text.trim() }),
+      })
+      const data = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response || 'No response received.' }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* AI Chat — Hero Section */}
+      <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-5" />
+            </div>
+            <div>
+              <h2 className="text-white font-semibold text-sm">ANC Knowledge Assistant</h2>
+              <p className="text-white/60 text-xs">Ask anything about ANC services, technology, or your venue</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Messages */}
+        <div className="h-[400px] overflow-y-auto px-6 py-4 space-y-4 bg-zinc-50/50">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-14 h-14 rounded-full bg-[#0A52EF]/10 flex items-center justify-center mb-4">
+                <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-7" />
+              </div>
+              <p className="text-sm font-medium text-zinc-700 mb-1">Hi! I'm your ANC Knowledge Assistant</p>
+              <p className="text-xs text-zinc-400 mb-6 max-w-sm">I can answer questions about ANC's services, technology, projects, and your venue. Try one of the suggestions below or type your own question.</p>
+              <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                {suggestedQuestions.map((q, i) => (
+                  <button key={i} onClick={() => sendMessage(q)}
+                    className="text-xs bg-white border border-zinc-200 rounded-full px-3.5 py-1.5 text-zinc-600 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors">
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                msg.role === 'user'
+                  ? 'bg-[#0A52EF] text-white rounded-br-md'
+                  : 'bg-white border border-zinc-200 text-zinc-800 rounded-bl-md shadow-sm'
+              }`}>
+                {msg.role === 'assistant' && (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <img src="/ANC_Logo_2023_blue.png" alt="" className="h-3" />
+                    <span className="text-[10px] font-medium text-[#0A52EF]">ANC Assistant</span>
+                  </div>
+                )}
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-zinc-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <img src="/ANC_Logo_2023_blue.png" alt="" className="h-3" />
+                  <span className="text-[10px] font-medium text-[#0A52EF]">ANC Assistant</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div className="px-6 py-4 border-t border-zinc-200 bg-white">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') sendMessage(input) }}
+              placeholder="Ask about ANC services, displays, support..."
+              className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] text-zinc-900 placeholder-zinc-400"
+              disabled={loading}
+            />
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={loading || !input.trim()}
+              className="px-5 py-2.5 bg-[#0A52EF] text-white rounded-xl text-sm font-medium hover:bg-[#0840C0] disabled:opacity-40 transition-colors flex-shrink-0"
+            >
+              Send
+            </button>
+          </div>
+          {messages.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {suggestedQuestions.slice(0, 3).map((q, i) => (
+                <button key={i} onClick={() => sendMessage(q)} disabled={loading}
+                  className="text-[10px] bg-zinc-50 border border-zinc-200 rounded-full px-2.5 py-1 text-zinc-500 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors disabled:opacity-40">
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Documents section below chat */}
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900 mb-3">Documents & Resources</h3>
+        <p className="text-xs text-zinc-400 mb-4">Need the actual files? Documents will be available here as they're uploaded by your ANC team. In the meantime, ask the AI above for quick answers.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { title: 'Installation Guides', desc: 'Setup and configuration docs', icon: '📋' },
+            { title: 'Maintenance SOPs', desc: 'Preventive maintenance procedures', icon: '🔧' },
+            { title: 'Warranty & Support', desc: 'Coverage details and contacts', icon: '🛡' },
+            { title: 'Technical Specs', desc: 'Display specifications and power requirements', icon: '📐' },
+          ].map((cat, i) => (
+            <div key={i} className="bg-white rounded-lg border border-zinc-200 p-4 flex items-start gap-3">
+              <span className="text-lg mt-0.5">{cat.icon}</span>
+              <div>
+                <p className="text-sm font-medium text-zinc-900">{cat.title}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{cat.desc}</p>
+                <span className="text-[10px] text-zinc-300 mt-1 inline-block">Coming soon</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 interface Venue { id: string; name: string; address: string; market: string; primary_contact_name: string | null; primary_contact_email: string | null }
@@ -843,62 +1023,7 @@ export default function PortalPage() {
         )}
         {/* RESOURCES / DOCUMENT VAULT */}
         {activeTab === 'resources' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900">Document Vault</h2>
-              <p className="text-sm text-zinc-500 mt-1">Access your venue's documentation, manuals, and resources. Use the AI assistant (bottom-right) to ask questions across all documents.</p>
-            </div>
-
-            {/* Document categories */}
-            {[
-              { title: 'Installation & Setup', icon: '📋', docs: [
-                { name: 'LED Display Installation Guide', type: 'PDF', size: 'Available on request' },
-                { name: 'Display Network Configuration', type: 'PDF', size: 'Available on request' },
-              ]},
-              { title: 'Operations & Maintenance', icon: '🔧', docs: [
-                { name: 'Game Day Operations Checklist', type: 'PDF', size: 'Available on request' },
-                { name: 'Preventive Maintenance Schedule', type: 'PDF', size: 'Available on request' },
-                { name: 'Troubleshooting Guide', type: 'PDF', size: 'Available on request' },
-              ]},
-              { title: 'Warranty & Support', icon: '🛡️', docs: [
-                { name: 'Hardware Warranty Certificate', type: 'PDF', size: 'Available on request' },
-                { name: 'Support SLA Agreement', type: 'PDF', size: 'Available on request' },
-                { name: 'Emergency Contact Card', type: 'PDF', size: 'Available on request' },
-              ]},
-              { title: 'Technical Specifications', icon: '📐', docs: [
-                { name: 'Display Specifications Sheet', type: 'PDF', size: 'Available on request' },
-                { name: 'Power Requirements Document', type: 'PDF', size: 'Available on request' },
-              ]},
-            ].map((cat, ci) => (
-              <div key={ci} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-zinc-100 flex items-center gap-3">
-                  <span className="text-lg">{cat.icon}</span>
-                  <h3 className="text-sm font-semibold text-zinc-900">{cat.title}</h3>
-                </div>
-                <div className="divide-y divide-zinc-100">
-                  {cat.docs.map((doc, di) => (
-                    <div key={di} className="px-6 py-3 flex items-center justify-between hover:bg-zinc-50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-red-50 flex items-center justify-center">
-                          <span className="text-[10px] font-bold text-red-500">{doc.type}</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-zinc-900">{doc.name}</p>
-                          <p className="text-xs text-zinc-400">{doc.size}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs text-zinc-400">Coming soon</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-6 text-white">
-              <h3 className="text-sm font-semibold mb-1">Need a quick answer?</h3>
-              <p className="text-xs opacity-75">Click the chat button in the bottom-right corner to ask our AI assistant about any of these documents, ANC services, or your venue's setup.</p>
-            </div>
-          </div>
+          <ResourcesTab token={token} venueName={venue.name} />
         )}
 
         {/* VENUE MAP — disabled for now, will be its own standalone page */}
