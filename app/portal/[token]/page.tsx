@@ -2,6 +2,35 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
+
+const VenueMap3D = dynamic(() => import('./venue-3d/VenueMap3D'), { ssr: false })
+
+function ChatWidget() {
+  useEffect(() => {
+    if (document.getElementById('anc-chat-widget')) return;
+    const script = document.createElement('script');
+    script.id = 'anc-chat-widget';
+    script.src = 'https://ancservices-anything-llm.izcgmb.easypanel.host/embed/anythingllm-chat-widget.min.js';
+    script.setAttribute('data-embed-id', '8c3aad8f-edf0-43e5-b249-6b9cce51287e');
+    script.setAttribute('data-base-api-url', 'https://ancservices-anything-llm.izcgmb.easypanel.host/api/embed');
+    script.setAttribute('data-brand-image-url', '/ANC_Logo_2023_white.png');
+    script.setAttribute('data-greeting', "Hi! I'm your ANC assistant. Ask me anything about our services, technology, or your venue.");
+    script.setAttribute('data-button-color', '#1B2A4A');
+    script.setAttribute('data-user-bg-color', '#3B82F6');
+    script.setAttribute('data-assistant-bg-color', '#1B2A4A');
+    script.setAttribute('data-assistant-name', 'ANC Assistant');
+    script.setAttribute('data-assistant-icon', '/ANC_Logo_2023_white.png');
+    script.setAttribute('data-window-title', 'ANC Support');
+    script.setAttribute('data-no-sponsor', 'true');
+    document.body.appendChild(script);
+    return () => {
+      const el = document.getElementById('anc-chat-widget');
+      if (el) el.remove();
+    };
+  }, []);
+  return null;
+}
 
 interface Venue { id: string; name: string; address: string; market: string; primary_contact_name: string | null; primary_contact_email: string | null }
 interface Event { id: string; summary: string; league: string; event_date: string; start_time: string; workflow_status: string; staff_count?: number }
@@ -38,7 +67,7 @@ export default function PortalPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'tickets' | 'services'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'tickets' | 'services' | 'venue-map'>('overview')
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
 
   // AI ticket
@@ -175,13 +204,14 @@ export default function PortalPage() {
       {/* Nav */}
       <nav className="bg-white border-b border-zinc-200">
         <div className="max-w-6xl mx-auto px-6 flex gap-0">
-          {(['overview', 'events', 'tickets', 'services'] as const).map(tab => (
+          {(['overview', 'events', 'tickets', 'services', 'venue-map'] as const).map(tab => (
             <button key={tab} onClick={() => { setActiveTab(tab); setViewingTicket(null); setAiResult(null) }}
               className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
               {tab === 'overview' && 'Overview'}
               {tab === 'events' && 'Events'}
               {tab === 'tickets' && `Tickets${openTickets.length > 0 ? ` (${openTickets.length})` : ''}`}
               {tab === 'services' && 'Services & Specs'}
+              {tab === 'venue-map' && 'Venue Map'}
             </button>
           ))}
         </div>
@@ -750,6 +780,39 @@ export default function PortalPage() {
             </div>
           </div>
         )}
+        {/* VENUE MAP */}
+        {activeTab === 'venue-map' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900">Interactive Venue Map</h2>
+              <p className="text-sm text-zinc-500 mt-1">Explore your venue's installed display systems in 3D — click any screen for specifications</p>
+            </div>
+            <VenueMap3D screens={screens} venueName={venue.name} />
+            {screens.length > 0 && (
+              <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-100">
+                  <h3 className="text-sm font-semibold text-zinc-900">All Installed Displays ({screens.length})</h3>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  {screens.map((screen: any, i: number) => (
+                    <div key={i} className="px-6 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-900">{screen.display_name}</p>
+                        <p className="text-xs text-zinc-500">
+                          {[screen.manufacturer, screen.model, screen.pixel_pitch ? `${screen.pixel_pitch}mm` : null].filter(Boolean).join(' • ')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-xs text-emerald-600 font-medium">Active</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-zinc-200 mt-16">
@@ -759,21 +822,8 @@ export default function PortalPage() {
         </div>
       </footer>
 
-      {/* ANC AI Assistant Chat Widget */}
-      <script
-        data-embed-id="8c3aad8f-edf0-43e5-b249-6b9cce51287e"
-        data-base-api-url="https://ancservices-anything-llm.izcgmb.easypanel.host/api/embed"
-        data-brand-image-url="/ANC_Logo_2023_white.png"
-        data-greeting="Hi! I'm your ANC assistant. Ask me anything about our services, technology, or your venue."
-        data-button-color="#1B2A4A"
-        data-user-bg-color="#3B82F6"
-        data-assistant-bg-color="#1B2A4A"
-        data-assistant-name="ANC Assistant"
-        data-assistant-icon="/ANC_Logo_2023_white.png"
-        data-window-title="ANC Support"
-        data-no-sponsor="true"
-        src="https://ancservices-anything-llm.izcgmb.easypanel.host/embed/anythingllm-chat-widget.min.js"
-      />
+      {/* ANC AI Assistant Chat Widget — injected via useEffect since React doesn't execute <script> tags in JSX */}
+      <ChatWidget />
 
       {/* Hide AnythingLLM branding from widget */}
       <style dangerouslySetInnerHTML={{ __html: `
