@@ -86,17 +86,6 @@ export function Sidebar() {
           </>
         )}
 
-        {/* AI Tools */}
-        <div className="py-2">
-          <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">Intelligence</p>
-        </div>
-        <Link
-          href="/knowledge"
-          className={isActive('/knowledge') ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
-        >
-          Knowledge Base <span className="ml-1 text-[9px] bg-[#0A52EF]/20 text-[#0A52EF] px-1.5 py-0.5 rounded-full font-medium">Preview</span>
-        </Link>
-
         {isManager && (
           <>
             <div className="py-2">
