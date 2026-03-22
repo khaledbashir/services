@@ -94,7 +94,7 @@ export function Sidebar() {
           href="/knowledge"
           className={isActive('/knowledge') ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
         >
-          Knowledge Base
+          Knowledge Base <span className="ml-1 text-[9px] bg-[#0A52EF]/20 text-[#0A52EF] px-1.5 py-0.5 rounded-full font-medium">Preview</span>
         </Link>
 
         {isManager && (

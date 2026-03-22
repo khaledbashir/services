@@ -453,7 +453,7 @@ export default function PortalPage() {
               {tab === 'events' && 'Events'}
               {tab === 'tickets' && `Tickets${openTickets.length > 0 ? ` (${openTickets.length})` : ''}`}
               {tab === 'services' && 'Services & Specs'}
-              {tab === 'resources' && 'Resources'}
+              {tab === 'resources' && <span>Resources <span className="ml-1 text-[9px] bg-[#0A52EF]/15 text-[#0A52EF] px-1.5 py-0.5 rounded-full font-medium">Beta</span></span>}
             </button>
           ))}
         </div>
