@@ -17,10 +17,12 @@ function ChatWidget() {
     script.setAttribute('data-brand-image-url', '/ANC_Logo_2023_white.png');
     script.setAttribute('data-greeting', "Hi! I'm your ANC assistant. Ask me anything about our services, technology, or your venue.");
     script.setAttribute('data-button-color', '#1B2A4A');
-    script.setAttribute('data-user-bg-color', '#3B82F6');
-    script.setAttribute('data-assistant-bg-color', '#1B2A4A');
+    script.setAttribute('data-user-bg-color', '#0A52EF');
+    script.setAttribute('data-assistant-bg-color', '#F1F5F9');
+    script.setAttribute('data-assistant-text-color', '#1B2A4A');
+    script.setAttribute('data-user-text-color', '#FFFFFF');
     script.setAttribute('data-assistant-name', 'ANC Assistant');
-    script.setAttribute('data-assistant-icon', '/ANC_Logo_2023_white.png');
+    script.setAttribute('data-assistant-icon', '/ANC_Logo_2023_blue.png');
     script.setAttribute('data-window-title', 'ANC Support');
     script.setAttribute('data-no-sponsor', 'true');
     document.body.appendChild(script);
