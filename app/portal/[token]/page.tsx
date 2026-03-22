@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import ReactMarkdown from 'react-markdown'
 
 // const VenueMap3D = dynamic(() => import('./venue-3d/VenueMap3D'), { ssr: false })
 
@@ -190,7 +191,7 @@ function ResourcesTab({ token, venueName }: { token: string; venueName: string }
                     <span className="text-[10px] font-medium text-[#0A52EF]">ANC Assistant</span>
                   </div>
                 )}
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                <div className="text-sm leading-relaxed prose prose-sm prose-zinc max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>li]:ml-4"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
               </div>
             </div>
           ))}

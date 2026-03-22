@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { DashboardLayout } from '@/components/dashboard-layout'
 
 interface Message {
@@ -332,7 +333,7 @@ export default function KnowledgePage() {
                         ? 'bg-[#0A52EF] text-white rounded-br-md'
                         : 'bg-zinc-50 border border-zinc-200 text-zinc-800 rounded-bl-md'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      <div className="text-sm leading-relaxed prose prose-sm prose-zinc max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>li]:ml-4"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
                     </div>
                     {msg.role === 'user' && (
                       <p className="text-[10px] text-zinc-300 text-right mt-1 mr-1">
