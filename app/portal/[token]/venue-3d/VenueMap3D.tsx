@@ -126,8 +126,8 @@ function makeScreenTexture(name: string, type: string, color: number, w = 512, h
 }
 
 function buildArena(scene: THREE.Scene) {
-  // Ambient
-  scene.add(new THREE.AmbientLight(0x1a1a3a, 0.12));
+  // Ambient — brighter so the structure is visible
+  scene.add(new THREE.AmbientLight(0x2a2a5a, 0.25));
 
   // Main arena spotlight
   const spot1 = new THREE.SpotLight(0x6699ff, 120, 80, 0.7, 0.6);
@@ -151,19 +151,6 @@ function buildArena(scene: THREE.Scene) {
     new THREE.MeshStandardMaterial({ color: 0x050510, metalness: 0.5, roughness: 0.8 })
   );
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-
-  // Arena bowl
-  const pts = [
-    new THREE.Vector2(18, 0), new THREE.Vector2(20, 1), new THREE.Vector2(24, 3),
-    new THREE.Vector2(27, 6), new THREE.Vector2(30, 10), new THREE.Vector2(33, 14),
-    new THREE.Vector2(35, 18), new THREE.Vector2(36, 20), new THREE.Vector2(35, 20.5),
-  ];
-  const bowlGeo = new THREE.LatheGeometry(pts, 64);
-  bowlGeo.scale(1, 1, 0.75);
-  const bowl = new THREE.Mesh(bowlGeo, new THREE.MeshStandardMaterial({
-    color: 0x0a0a1a, roughness: 0.95, side: THREE.BackSide,
-  }));
-  scene.add(bowl);
 
   // Court
   const court = new THREE.Mesh(
@@ -192,34 +179,44 @@ function buildArena(scene: THREE.Scene) {
     scene.add(arc);
   });
 
-  // Concourse ring (outer wall)
+  // Concourse ring (outer wall) — more visible
   const wallGeo = new THREE.CylinderGeometry(38, 38, 22, 64, 1, true);
   const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({
-    color: 0x0d0d1a, roughness: 0.9, side: THREE.BackSide, transparent: true, opacity: 0.7,
+    color: 0x141428, roughness: 0.8, side: THREE.BackSide,
   }));
   wall.position.y = 11; scene.add(wall);
 
-  // Crowd particles
-  const N = 6000;
-  const cPos = new Float32Array(N * 3);
-  const cCol = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const ang = Math.random() * Math.PI * 2;
-    const r = 18 + Math.random() * 16;
-    const y = 1 + Math.random() * 18;
-    cPos[i * 3] = Math.sin(ang) * r;
-    cPos[i * 3 + 1] = y;
-    cPos[i * 3 + 2] = Math.cos(ang) * r * 0.75;
-    const colors = [[0.04, 0.2, 0.93], [0.01, 0.72, 1], [1, 1, 1], [0.6, 0.1, 0.1]];
-    const c = colors[Math.floor(Math.random() * colors.length)];
-    cCol[i * 3] = c[0]; cCol[i * 3 + 1] = c[1]; cCol[i * 3 + 2] = c[2];
-  }
-  const cGeo = new THREE.BufferGeometry();
-  cGeo.setAttribute("position", new THREE.BufferAttribute(cPos, 3));
-  cGeo.setAttribute("color", new THREE.BufferAttribute(cCol, 3));
-  scene.add(new THREE.Points(cGeo, new THREE.PointsMaterial({
-    size: 0.25, transparent: true, opacity: 0.6, vertexColors: true,
-  })));
+  // Seating tiers — solid rows instead of particles
+  const tierMat = new THREE.MeshStandardMaterial({ color: 0x12122a, roughness: 0.9 });
+  const tierHighlight = new THREE.MeshStandardMaterial({ color: 0x1a1a40, roughness: 0.85 });
+  [
+    { innerR: 19, outerR: 23, y: 2, h: 3 },
+    { innerR: 24, outerR: 29, y: 5.5, h: 4 },
+    { innerR: 30, outerR: 35, y: 11, h: 6 },
+  ].forEach((tier, i) => {
+    const tierGeo = new THREE.CylinderGeometry(tier.outerR, tier.innerR, tier.h, 64, 1, true);
+    tierGeo.scale(1, 1, 0.75);
+    const tierMesh = new THREE.Mesh(tierGeo, i % 2 === 0 ? tierMat : tierHighlight);
+    tierMesh.position.y = tier.y;
+    scene.add(tierMesh);
+
+    // Top cap for each tier
+    const capGeo = new THREE.RingGeometry(tier.innerR, tier.outerR, 64);
+    const cap = new THREE.Mesh(capGeo, i % 2 === 0 ? tierHighlight : tierMat);
+    cap.rotation.x = -Math.PI / 2;
+    cap.position.y = tier.y + tier.h / 2;
+    cap.scale.set(1, 0.75, 1);
+    scene.add(cap);
+  });
+
+  // Walkway dividers between tiers
+  const dividerMat = new THREE.MeshStandardMaterial({ color: 0x0A52EF, emissive: new THREE.Color(0x0A52EF), emissiveIntensity: 0.3, transparent: true, opacity: 0.4 });
+  [3.5, 7.5].forEach(y => {
+    const divider = new THREE.Mesh(new THREE.TorusGeometry(26, 0.08, 8, 64), dividerMat);
+    divider.position.y = y;
+    divider.scale.set(1, 1, 0.75);
+    scene.add(divider);
+  });
 
   // Scoreboard housing
   const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7, roughness: 0.4 });
