@@ -9,7 +9,7 @@ RUN apk add --no-cache python3 py3-pip postgresql-client
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy app source
 COPY . .
