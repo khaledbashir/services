@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Environment } from "@react-three/drei";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════════════════════════ */
 
 interface Screen {
   display_name: string;
@@ -26,175 +28,195 @@ interface Props {
   venueName: string;
 }
 
-// Screen positions mapped to 3D space
-const SCREEN_POSITIONS: Record<string, {
-  pos: [number, number, number];
-  rot: [number, number, number];
-  scale: [number, number, number];
-  type: 'scoreboard' | 'ribbon' | 'fascia' | 'courtside' | 'concourse' | 'portal';
-}> = {
-  'center hung - north': { pos: [0, 38, -6.5], rot: [0, 0, 0], scale: [20, 11, 1], type: 'scoreboard' },
-  'center hung - south': { pos: [0, 38, 6.5], rot: [0, Math.PI, 0], scale: [20, 11, 1], type: 'scoreboard' },
-  'center hung - east': { pos: [10.5, 38, 0], rot: [0, -Math.PI / 2, 0], scale: [12, 11, 1], type: 'scoreboard' },
-  'center hung - west': { pos: [-10.5, 38, 0], rot: [0, Math.PI / 2, 0], scale: [12, 11, 1], type: 'scoreboard' },
-  'scoreboard - bottom': { pos: [0, 32, 0], rot: [Math.PI / 2, 0, 0], scale: [20, 12, 1], type: 'scoreboard' },
-  'upper ribbon': { pos: [0, 24, 0], rot: [0, 0, 0], scale: [1, 1, 1], type: 'ribbon' },
-  'lower ribbon': { pos: [0, 12, 0], rot: [0, 0, 0], scale: [1, 1, 1], type: 'ribbon' },
-  'upper fascia - north': { pos: [0, 28, -55], rot: [0, 0, 0], scale: [40, 3, 1], type: 'fascia' },
-  'upper fascia - south': { pos: [0, 28, 55], rot: [0, Math.PI, 0], scale: [40, 3, 1], type: 'fascia' },
-  'upper fascia - east': { pos: [44, 28, 0], rot: [0, -Math.PI / 2, 0], scale: [40, 3, 1], type: 'fascia' },
-  'upper fascia - west': { pos: [-44, 28, 0], rot: [0, Math.PI / 2, 0], scale: [40, 3, 1], type: 'fascia' },
-  'courtside - north': { pos: [0, 1.2, -26], rot: [0, 0, 0], scale: [36, 2, 1], type: 'courtside' },
-  'courtside - south': { pos: [0, 1.2, 26], rot: [0, Math.PI, 0], scale: [36, 2, 1], type: 'courtside' },
-  'courtside - east': { pos: [30, 1.2, 0], rot: [0, -Math.PI / 2, 0], scale: [24, 2, 1], type: 'courtside' },
-  'courtside - west': { pos: [-30, 1.2, 0], rot: [0, Math.PI / 2, 0], scale: [24, 2, 1], type: 'courtside' },
-  'power portal': { pos: [0, 12, -68], rot: [0, 0, 0], scale: [24, 16, 1], type: 'portal' },
-  'concourse - nw': { pos: [-52, 14, -36], rot: [0, Math.PI / 4, 0], scale: [12, 6, 1], type: 'concourse' },
-  'concourse - ne': { pos: [52, 14, -36], rot: [0, -Math.PI / 4, 0], scale: [12, 6, 1], type: 'concourse' },
-  'concourse - sw': { pos: [-52, 14, 36], rot: [0, 3 * Math.PI / 4, 0], scale: [12, 6, 1], type: 'concourse' },
-  'concourse - se': { pos: [52, 14, 36], rot: [0, -3 * Math.PI / 4, 0], scale: [12, 6, 1], type: 'concourse' },
-};
+interface ScreenZone {
+  id: string;
+  label: string;
+  type: 'scoreboard' | 'ribbon' | 'fascia' | 'courtside' | 'concourse';
+  position: [number, number, number];
+  rotation: [number, number, number];
+  width: number;
+  height: number;
+  color: string;
+}
 
-const TYPE_COLORS: Record<string, number> = {
-  scoreboard: 0x0A52EF,
-  ribbon: 0x03B8FF,
-  fascia: 0x6366f1,
-  courtside: 0x10b981,
-  concourse: 0xf59e0b,
-  portal: 0xec4899,
-};
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN LAYOUT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const ZONES: ScreenZone[] = [
+  // Center-hung scoreboard (4 faces + bottom)
+  { id: 'sb-n', label: 'Scoreboard North', type: 'scoreboard', position: [0, 38, -7], rotation: [0, 0, 0], width: 20, height: 11, color: '#0A52EF' },
+  { id: 'sb-s', label: 'Scoreboard South', type: 'scoreboard', position: [0, 38, 7], rotation: [0, Math.PI, 0], width: 20, height: 11, color: '#0A52EF' },
+  { id: 'sb-e', label: 'Scoreboard East', type: 'scoreboard', position: [11, 38, 0], rotation: [0, -Math.PI / 2, 0], width: 13, height: 11, color: '#0A52EF' },
+  { id: 'sb-w', label: 'Scoreboard West', type: 'scoreboard', position: [-11, 38, 0], rotation: [0, Math.PI / 2, 0], width: 13, height: 11, color: '#0A52EF' },
+  { id: 'sb-bot', label: 'Scoreboard Bottom', type: 'scoreboard', position: [0, 32.5, 0], rotation: [Math.PI / 2, 0, 0], width: 20, height: 13, color: '#0A52EF' },
+  // Ribbon boards
+  { id: 'rib-n', label: 'Ribbon North', type: 'ribbon', position: [0, 22, -42], rotation: [0, 0, 0], width: 50, height: 2.5, color: '#03B8FF' },
+  { id: 'rib-s', label: 'Ribbon South', type: 'ribbon', position: [0, 22, 42], rotation: [0, Math.PI, 0], width: 50, height: 2.5, color: '#03B8FF' },
+  { id: 'rib-e', label: 'Ribbon East', type: 'ribbon', position: [34, 22, 0], rotation: [0, -Math.PI / 2, 0], width: 40, height: 2.5, color: '#03B8FF' },
+  { id: 'rib-w', label: 'Ribbon West', type: 'ribbon', position: [-34, 22, 0], rotation: [0, Math.PI / 2, 0], width: 40, height: 2.5, color: '#03B8FF' },
+  // Fascia
+  { id: 'fas-n', label: 'Upper Fascia North', type: 'fascia', position: [0, 28, -54], rotation: [0, 0, 0], width: 45, height: 3, color: '#6366f1' },
+  { id: 'fas-s', label: 'Upper Fascia South', type: 'fascia', position: [0, 28, 54], rotation: [0, Math.PI, 0], width: 45, height: 3, color: '#6366f1' },
+  // Courtside
+  { id: 'cs-n', label: 'Courtside North', type: 'courtside', position: [0, 1.2, -16], rotation: [0, 0, 0], width: 30, height: 1.8, color: '#10b981' },
+  { id: 'cs-s', label: 'Courtside South', type: 'courtside', position: [0, 1.2, 16], rotation: [0, Math.PI, 0], width: 30, height: 1.8, color: '#10b981' },
+  { id: 'cs-e', label: 'Courtside East', type: 'courtside', position: [20, 1.2, 0], rotation: [0, -Math.PI / 2, 0], width: 18, height: 1.8, color: '#10b981' },
+  { id: 'cs-w', label: 'Courtside West', type: 'courtside', position: [-20, 1.2, 0], rotation: [0, Math.PI / 2, 0], width: 18, height: 1.8, color: '#10b981' },
+  // Concourse
+  { id: 'con-nw', label: 'Concourse NW', type: 'concourse', position: [-44, 14, -30], rotation: [0, Math.PI / 4, 0], width: 10, height: 5, color: '#f59e0b' },
+  { id: 'con-ne', label: 'Concourse NE', type: 'concourse', position: [44, 14, -30], rotation: [0, -Math.PI / 4, 0], width: 10, height: 5, color: '#f59e0b' },
+  { id: 'con-sw', label: 'Concourse SW', type: 'concourse', position: [-44, 14, 30], rotation: [0, 3 * Math.PI / 4, 0], width: 10, height: 5, color: '#f59e0b' },
+  { id: 'con-se', label: 'Concourse SE', type: 'concourse', position: [44, 14, 30], rotation: [0, -3 * Math.PI / 4, 0], width: 10, height: 5, color: '#f59e0b' },
+];
 
 const TYPE_LABELS: Record<string, string> = {
-  scoreboard: 'Center-Hung Scoreboard',
-  ribbon: 'Ribbon Board',
-  fascia: 'Upper Fascia',
-  courtside: 'Courtside LED',
-  concourse: 'Concourse Display',
-  portal: 'Power Portal',
+  scoreboard: 'Center-Hung Scoreboard', ribbon: 'Ribbon Board', fascia: 'Upper Fascia',
+  courtside: 'Courtside LED', concourse: 'Concourse Display',
 };
 
-const VIEWS: Record<string, { pos: [number, number, number]; target: [number, number, number]; label: string }> = {
-  all: { pos: [65, 50, 75], target: [0, 15, 0], label: 'Overview' },
-  scoreboard: { pos: [0, 30, 45], target: [0, 38, 0], label: 'Scoreboard' },
-  courtside: { pos: [25, 6, 40], target: [0, 1, 0], label: 'Courtside' },
-  portal: { pos: [0, 15, -55], target: [0, 12, -68], label: 'Power Portal' },
-  concourse: { pos: [60, 25, 0], target: [0, 14, 0], label: 'Concourse' },
-};
+/* ═══════════════════════════════════════════════════════════════════════
+   LED SCREEN TEXTURE
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Screen texture (MeshBasicMaterial — always bright, fog-immune) ── */
-function makeScreenTexture(name: string, color: number, w = 512, h = 256): THREE.CanvasTexture {
+function makeLEDTexture(label: string, color: string, w: number, h: number, selected: boolean): THREE.CanvasTexture {
+  const cw = 512, ch = Math.max(64, Math.round(512 * (h / w)));
   const c = document.createElement("canvas");
-  c.width = w; c.height = h;
+  c.width = cw; c.height = ch;
   const ctx = c.getContext("2d")!;
 
-  const r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
-
-  // Dark gradient background
-  const grad = ctx.createLinearGradient(0, 0, w, h);
-  grad.addColorStop(0, "#030812");
-  grad.addColorStop(1, "#0a1628");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, 0, cw, ch);
+  grad.addColorStop(0, "#030812"); grad.addColorStop(1, "#0a1628");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, cw, ch);
 
   // LED pixel grid
-  ctx.strokeStyle = `rgba(${r},${g},${b},0.06)`;
-  ctx.lineWidth = 0.5;
-  for (let x = 0; x < w; x += 4) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-  for (let y = 0; y < h; y += 4) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  ctx.strokeStyle = `${color}10`; ctx.lineWidth = 0.5;
+  for (let x = 0; x < cw; x += 4) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke(); }
+  for (let y = 0; y < ch; y += 4) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke(); }
 
   // Corner markers
-  ctx.strokeStyle = `rgb(${r},${g},${b})`;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(12, 12, 40, 2);
-  ctx.strokeRect(12, 12, 2, 30);
-  ctx.strokeRect(w - 52, h - 14, 40, 2);
-  ctx.strokeRect(w - 14, h - 42, 2, 30);
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.strokeRect(12, 12, 40, 2); ctx.strokeRect(12, 12, 2, 30);
+  ctx.strokeRect(cw - 52, ch - 14, 40, 2); ctx.strokeRect(cw - 14, ch - 42, 2, 30);
 
-  // ANC text with glow
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "bold 52px 'Work Sans', system-ui";
-  ctx.shadowColor = `rgb(${r},${g},${b})`;
-  ctx.shadowBlur = 30;
-  ctx.fillStyle = `rgb(${r},${g},${b})`;
-  ctx.fillText("ANC", w / 2, h / 2 - 20);
+  // ANC text
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `bold ${ch > 128 ? 52 : 32}px system-ui`;
+  ctx.shadowColor = color; ctx.shadowBlur = 30;
+  ctx.fillStyle = color;
+  ctx.fillText("ANC", cw / 2, ch / 2 - (ch > 128 ? 20 : 8));
   ctx.shadowBlur = 0;
+  ctx.font = `300 ${ch > 128 ? 18 : 12}px system-ui`;
+  ctx.fillStyle = `${color}bb`;
+  ctx.fillText(label.length > 30 ? label.slice(0, 27) + '...' : label, cw / 2, ch / 2 + (ch > 128 ? 25 : 10));
 
-  ctx.font = "300 18px 'Work Sans', system-ui";
-  ctx.fillStyle = `rgba(${r},${g},${b},0.7)`;
-  const displayName = name.length > 35 ? name.slice(0, 32) + '...' : name;
-  ctx.fillText(displayName, w / 2, h / 2 + 25);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/* ── Court texture with wood grain and lines ── */
-function makeCourtTexture(): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 1600; c.height = 960;
-  const ctx = c.getContext("2d")!;
-
-  // Hardwood base
-  ctx.fillStyle = '#b8803a';
-  ctx.fillRect(0, 0, 1600, 960);
-
-  // Wood plank lines
-  ctx.strokeStyle = 'rgba(100,60,20,0.12)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 1600; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 960); ctx.stroke(); }
-  for (let j = 0; j < 960; j += 80) {
-    ctx.strokeStyle = 'rgba(80,50,15,0.08)';
-    ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(1600, j); ctx.stroke();
+  // Selection border
+  if (selected) {
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, cw - 4, ch - 4);
   }
 
-  // Paint areas
-  ctx.fillStyle = 'rgba(0,40,180,0.12)';
-  ctx.fillRect(60, 280, 300, 400);
-  ctx.fillRect(1240, 280, 300, 400);
-
-  // Court lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4;
-  ctx.strokeRect(60, 60, 1480, 840); // boundary
-  ctx.beginPath(); ctx.moveTo(800, 60); ctx.lineTo(800, 900); ctx.stroke(); // center
-  ctx.beginPath(); ctx.arc(800, 480, 100, 0, Math.PI * 2); ctx.stroke(); // center circle
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(260, 480, 100, -Math.PI / 2, Math.PI / 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(1340, 480, 100, Math.PI / 2, -Math.PI / 2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4;
-  ctx.strokeRect(60, 280, 300, 400);
-  ctx.strokeRect(1240, 280, 300, 400);
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(160, 480, 320, -1.2, 1.2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(1440, 480, 320, Math.PI - 1.2, Math.PI + 1.2); ctx.stroke();
-
   const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 16;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
   tex.needsUpdate = true;
   return tex;
 }
 
-/* ── Build arena (ported from /3d project) ── */
-function buildArena(scene: THREE.Scene) {
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a0a10, metalness: 0.95, roughness: 0.15 });
+/* ═══════════════════════════════════════════════════════════════════════
+   LED SCREEN COMPONENT (ported from /3d)
+   ═══════════════════════════════════════════════════════════════════════ */
 
-  // ── Ground ──
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshStandardMaterial({ color: 0x08090e, roughness: 0.98 })
+function LEDScreen({ zone, selected, onSelect }: { zone: ScreenZone; selected: boolean; onSelect: () => void }) {
+  const texture = useMemo(() => makeLEDTexture(zone.label, zone.color, zone.width, zone.height, selected), [zone, selected]);
+
+  return (
+    <group position={zone.position} rotation={zone.rotation}>
+      {/* Frame */}
+      <mesh position={[0, 0, -0.2]}>
+        <boxGeometry args={[zone.width + 1, zone.height + 1, 0.3]} />
+        <meshStandardMaterial color="#0a0a10" metalness={0.95} roughness={0.15} />
+      </mesh>
+      {/* Bezel */}
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[zone.width + 0.4, zone.height + 0.4, 0.08]} />
+        <meshStandardMaterial color="#111118" metalness={0.9} roughness={0.2} />
+      </mesh>
+      {/* Light spill */}
+      <pointLight position={[0, 0, 4]} color={zone.color} intensity={1.2} distance={zone.width * 2} decay={2} />
+      {/* Selection glow */}
+      {selected && (
+        <mesh position={[0, 0, -0.06]}>
+          <planeGeometry args={[zone.width + 3, zone.height + 3]} />
+          <meshBasicMaterial color="#0A52EF" transparent opacity={0.15} />
+        </mesh>
+      )}
+      {/* LED face — MeshBasicMaterial = always bright, fog immune */}
+      <mesh onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+        <planeGeometry args={[zone.width, zone.height]} />
+        <meshBasicMaterial map={texture} toneMapped={false} fog={false} />
+      </mesh>
+    </group>
   );
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
+}
 
-  // ── Arena bowl (2 tiers) ──
-  const bowlMaker = (rx: number, rz: number, h: number, yBase: number, color: number) => {
+/* ═══════════════════════════════════════════════════════════════════════
+   COURT (ported from /3d Arena.tsx)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function Court() {
+  const texture = useMemo(() => {
+    const c = document.createElement('canvas'); c.width = 1600; c.height = 960;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#b8803a'; ctx.fillRect(0, 0, 1600, 960);
+    ctx.strokeStyle = 'rgba(100,60,20,0.12)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 1600; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 960); ctx.stroke(); }
+    for (let j = 0; j < 960; j += 80) { ctx.strokeStyle = 'rgba(80,50,15,0.08)'; ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(1600, j); ctx.stroke(); }
+    for (let i = 0; i < 80; i++) {
+      const x = Math.random() * 1600, y = Math.random() * 960;
+      ctx.fillStyle = `rgba(${100 + Math.random() * 30},${60 + Math.random() * 20},${15 + Math.random() * 10},0.04)`;
+      ctx.fillRect(x, y, 20 + Math.random() * 40, 960);
+    }
+    ctx.fillStyle = 'rgba(0,40,180,0.12)'; ctx.fillRect(60, 280, 300, 400); ctx.fillRect(1240, 280, 300, 400);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4;
+    ctx.strokeRect(60, 60, 1480, 840);
+    ctx.beginPath(); ctx.moveTo(800, 60); ctx.lineTo(800, 900); ctx.stroke();
+    ctx.beginPath(); ctx.arc(800, 480, 100, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,40,180,0.08)'; ctx.beginPath(); ctx.arc(800, 480, 100, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(260, 480, 100, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(1340, 480, 100, Math.PI / 2, -Math.PI / 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 4;
+    ctx.strokeRect(60, 280, 300, 400); ctx.strokeRect(1240, 280, 300, 400);
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(160, 480, 320, -1.2, 1.2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(1440, 480, 320, Math.PI - 1.2, Math.PI + 1.2); ctx.stroke();
+    const tex = new THREE.CanvasTexture(c); tex.anisotropy = 16; return tex;
+  }, []);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]} receiveShadow>
+      <planeGeometry args={[50, 30]} />
+      <meshStandardMaterial map={texture} roughness={0.55} metalness={0.05} />
+    </mesh>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ARENA BOWL (ported from /3d Arena.tsx)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function ArenaBowl({ radiusX, radiusZ, height, yBase, color }: {
+  radiusX: number; radiusZ: number; height: number; yBase: number; color: string
+}) {
+  const geometry = useMemo(() => {
     const shape = new THREE.Shape();
-    const segs = 48;
-    const innerRX = rx * 0.84, innerRZ = rz * 0.84;
+    const segs = 48, innerRX = radiusX * 0.84, innerRZ = radiusZ * 0.84;
     for (let i = 0; i <= segs; i++) {
       const a = (i / segs) * Math.PI * 2;
-      if (i === 0) shape.moveTo(Math.cos(a) * rx, Math.sin(a) * rz);
-      else shape.lineTo(Math.cos(a) * rx, Math.sin(a) * rz);
+      if (i === 0) shape.moveTo(Math.cos(a) * radiusX, Math.sin(a) * radiusZ);
+      else shape.lineTo(Math.cos(a) * radiusX, Math.sin(a) * radiusZ);
     }
     shape.closePath();
     const hole = new THREE.Path();
@@ -203,400 +225,238 @@ function buildArena(scene: THREE.Scene) {
       if (i === 0) hole.moveTo(Math.cos(a) * innerRX, Math.sin(a) * innerRZ);
       else hole.lineTo(Math.cos(a) * innerRX, Math.sin(a) * innerRZ);
     }
-    hole.closePath();
-    shape.holes.push(hole);
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05 }));
-    mesh.rotation.x = -Math.PI / 2; mesh.position.y = yBase;
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    scene.add(mesh);
-  };
+    hole.closePath(); shape.holes.push(hole);
+    return new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+  }, [radiusX, radiusZ, height]);
 
-  bowlMaker(50, 35, 12, 0, 0x1a2844);     // Lower bowl
-  bowlMaker(53, 37, 3, 11, 0x1e3050);      // Suite ring
-  bowlMaker(58, 42, 14, 12, 0x162238);     // Upper bowl
-
-  // ── Seating rows (torus rings) ──
-  const seatRows: { r: number; y: number; color: string; sz: number }[] = [];
-  for (let i = 0; i < 6; i++) seatRows.push({ r: 32 + i * 2.5, y: 1 + i * 1.8, color: i < 3 ? '#1a3a5f' : '#15304a', sz: 0.68 });
-  for (let i = 0; i < 6; i++) seatRows.push({ r: 47 + i * 1.5, y: 13 + i * 2, color: i < 3 ? '#162850' : '#122040', sz: 0.7 });
-  seatRows.forEach(row => {
-    const seat = new THREE.Mesh(
-      new THREE.TorusGeometry(row.r, 0.2, 4, 48),
-      new THREE.MeshStandardMaterial({ color: row.color, roughness: 0.92, metalness: 0.02 })
-    );
-    seat.rotation.x = -Math.PI / 2; seat.position.y = row.y; seat.scale.set(1, 1, row.sz);
-    scene.add(seat);
-  });
-
-  // ── Roof ring ──
-  const roofRing = new THREE.Mesh(
-    new THREE.TorusGeometry(55, 3, 6, 48),
-    new THREE.MeshStandardMaterial({ color: 0x1e1e2a, metalness: 0.85, roughness: 0.2 })
+  return (
+    <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, yBase, 0]} castShadow receiveShadow>
+      <meshStandardMaterial color={color} roughness={0.85} metalness={0.05} />
+    </mesh>
   );
-  roofRing.rotation.x = -Math.PI / 2; roofRing.position.y = 28; roofRing.scale.set(1, 1, 0.72);
-  scene.add(roofRing);
-
-  // ── Court ──
-  const courtTex = makeCourtTexture();
-  const court = new THREE.Mesh(
-    new THREE.PlaneGeometry(50, 30),
-    new THREE.MeshStandardMaterial({ map: courtTex, roughness: 0.55, metalness: 0.05 })
-  );
-  court.rotation.x = -Math.PI / 2; court.position.y = 0.1; court.receiveShadow = true;
-  scene.add(court);
-
-  // ── Stadium flood lights (visible glowing boxes) ──
-  const lightPositions: [number, number, number][] = [[-30, 42, -20], [30, 42, -20], [-30, 42, 20], [30, 42, 20]];
-  lightPositions.forEach(pos => {
-    const spot = new THREE.SpotLight(0xfff8f0, 40, 150, 0.7, 0.4, 2);
-    spot.position.set(pos[0], pos[1], pos[2]);
-    spot.target.position.set(0, 0, 0);
-    scene.add(spot);
-    scene.add(spot.target);
-    // Visible light fixture
-    const fixture = new THREE.Mesh(
-      new THREE.BoxGeometry(8, 1.2, 3.5),
-      new THREE.MeshStandardMaterial({ color: 0xfff5e0, emissive: new THREE.Color(0xfff5e0), emissiveIntensity: 1.5, toneMapped: false })
-    );
-    fixture.position.set(pos[0], pos[1], pos[2]);
-    scene.add(fixture);
-  });
-
-  // ── Scoreboard housing ──
-  const sbFrame = new THREE.Mesh(new THREE.BoxGeometry(22, 12, 14), frameMat);
-  sbFrame.position.set(0, 38, 0); scene.add(sbFrame);
-
-  // Cables
-  [[-12, -6], [12, -6], [-12, 6], [12, 6]].forEach(([x, z]) => {
-    const cable = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.12, 12, 6),
-      new THREE.MeshStandardMaterial({ color: 0x2a2a38, metalness: 0.9, roughness: 0.15 })
-    );
-    cable.position.set(x, 50, z); scene.add(cable);
-  });
-
-  // ── Tunnel entrances ──
-  [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(a => {
-    const t = new THREE.Mesh(
-      new THREE.BoxGeometry(5, 7, 5),
-      new THREE.MeshStandardMaterial({ color: 0x020208, roughness: 1 })
-    );
-    t.position.set(Math.sin(a) * 36, 3.5, Math.cos(a) * 36 * 0.7);
-    t.rotation.y = a; scene.add(t);
-    // Gate glow
-    const gl = new THREE.PointLight(0x0A52EF, 3, 15, 2);
-    gl.position.set(Math.sin(a) * 34, 3, Math.cos(a) * 34 * 0.7);
-    scene.add(gl);
-  });
-
-  // ── Scorer's table ──
-  const table = new THREE.Mesh(
-    new THREE.BoxGeometry(16, 1, 1.5),
-    new THREE.MeshStandardMaterial({ color: 0x1a1a2a, roughness: 0.6, metalness: 0.3 })
-  );
-  table.position.set(0, 0.5, -11); scene.add(table);
 }
 
-/* ── Name matcher ── */
-function matchScreenToPosition(screenName: string): string | null {
-  const lower = screenName.toLowerCase();
-  const keys = Object.keys(SCREEN_POSITIONS);
-  const direct = keys.find(k => lower.includes(k) || k.includes(lower));
-  if (direct) return direct;
-  if (lower.includes('center') || lower.includes('scoreboard') || lower.includes('videoboard')) {
-    if (lower.includes('north') || lower.includes('front')) return 'center hung - north';
-    if (lower.includes('south') || lower.includes('back')) return 'center hung - south';
-    if (lower.includes('east') || lower.includes('right')) return 'center hung - east';
-    if (lower.includes('west') || lower.includes('left')) return 'center hung - west';
-    if (lower.includes('bottom') || lower.includes('under')) return 'scoreboard - bottom';
-    return 'center hung - north';
-  }
-  if (lower.includes('ribbon')) return lower.includes('upper') || lower.includes('top') ? 'upper ribbon' : 'lower ribbon';
-  if (lower.includes('fascia')) {
-    if (lower.includes('north')) return 'upper fascia - north';
-    if (lower.includes('south')) return 'upper fascia - south';
-    if (lower.includes('east')) return 'upper fascia - east';
-    return 'upper fascia - west';
-  }
-  if (lower.includes('courtside') || lower.includes('court')) {
-    if (lower.includes('north')) return 'courtside - north';
-    if (lower.includes('south')) return 'courtside - south';
-    if (lower.includes('east')) return 'courtside - east';
-    return 'courtside - west';
-  }
-  if (lower.includes('portal') || lower.includes('entry') || lower.includes('entrance')) return 'power portal';
-  if (lower.includes('concourse')) {
-    if (lower.includes('nw') || lower.includes('northwest')) return 'concourse - nw';
-    if (lower.includes('ne') || lower.includes('northeast')) return 'concourse - ne';
-    if (lower.includes('sw') || lower.includes('southwest')) return 'concourse - sw';
-    return 'concourse - se';
-  }
+function Seats() {
+  const rows: { r: number; y: number; color: string; sz: number }[] = [];
+  for (let i = 0; i < 6; i++) rows.push({ r: 32 + i * 2.5, y: 1 + i * 1.8, color: i < 3 ? '#1a3a5f' : '#15304a', sz: 0.68 });
+  for (let i = 0; i < 6; i++) rows.push({ r: 47 + i * 1.5, y: 13 + i * 2, color: i < 3 ? '#162850' : '#122040', sz: 0.7 });
+  return (
+    <>
+      {rows.map((row, i) => (
+        <mesh key={i} rotation={[Math.PI / 2, 0, 0]} position={[0, row.y, 0]} scale={[1, 1, row.sz]}>
+          <torusGeometry args={[row.r, 0.2, 4, 48]} />
+          <meshStandardMaterial color={row.color} roughness={0.92} metalness={0.02} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+function StadiumLights() {
+  const positions: [number, number, number][] = [[-30, 42, -20], [30, 42, -20], [-30, 42, 20], [30, 42, 20]];
+  return (
+    <>
+      {positions.map((pos, i) => (
+        <group key={i}>
+          <spotLight position={pos} color="#fff8f0" intensity={40} distance={150} angle={0.7} penumbra={0.4} decay={2} />
+          <mesh position={pos}>
+            <boxGeometry args={[8, 1.2, 3.5]} />
+            <meshStandardMaterial color="#fff5e0" emissive="#fff5e0" emissiveIntensity={1.5} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
+function ScoreboardFrame() {
+  return (
+    <group>
+      <mesh position={[0, 38, 0]}>
+        <boxGeometry args={[22, 12, 15]} />
+        <meshStandardMaterial color="#0a0a10" metalness={0.95} roughness={0.15} />
+      </mesh>
+      {[[-12, -6], [12, -6], [-12, 6], [12, 6]].map(([x, z], i) => (
+        <mesh key={i} position={[x, 50, z]}>
+          <cylinderGeometry args={[0.12, 0.12, 12, 6]} />
+          <meshStandardMaterial color="#2a2a38" metalness={0.9} roughness={0.15} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CAMERA CONTROLLER (ported from /3d)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function CameraController() {
+  const { camera, gl } = useThree();
+  const target = useRef({ angle: 0.4, pitch: 0.5, distance: 130 });
+  const current = useRef({ angle: 0.4, pitch: 0.5, distance: 130 });
+  const isDragging = useRef(false);
+  const lastMouse = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const el = gl.domElement;
+    const onDown = (e: MouseEvent) => { isDragging.current = true; lastMouse.current = { x: e.clientX, y: e.clientY }; };
+    const onUp = () => { isDragging.current = false; };
+    const onMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const dx = e.clientX - lastMouse.current.x, dy = e.clientY - lastMouse.current.y;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+      target.current.angle -= dx * 0.005;
+      target.current.pitch = Math.max(0.1, Math.min(1.2, target.current.pitch + dy * 0.005));
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      target.current.distance = Math.max(40, Math.min(300, target.current.distance + e.deltaY * 0.15));
+    };
+    const onTouchStart = (e: TouchEvent) => { if (e.touches.length === 1) { isDragging.current = true; lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; } };
+    const onTouchEnd = () => { isDragging.current = false; };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - lastMouse.current.x, dy = e.touches[0].clientY - lastMouse.current.y;
+      lastMouse.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      target.current.angle -= dx * 0.005;
+      target.current.pitch = Math.max(0.1, Math.min(1.2, target.current.pitch + dy * 0.005));
+    };
+
+    el.addEventListener('mousedown', onDown);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('mousemove', onMove);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener('mousedown', onDown); window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMove); el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart); window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [gl]);
+
+  useFrame(() => {
+    const t = current.current;
+    t.angle += (target.current.angle - t.angle) * 0.06;
+    t.pitch += (target.current.pitch - t.pitch) * 0.06;
+    t.distance += (target.current.distance - t.distance) * 0.06;
+    camera.position.x = Math.sin(t.angle) * Math.cos(t.pitch) * t.distance;
+    camera.position.y = Math.sin(t.pitch) * t.distance + 20;
+    camera.position.z = Math.cos(t.angle) * Math.cos(t.pitch) * t.distance;
+    camera.lookAt(0, 15, 0);
+  });
+
   return null;
 }
 
-/* ── Main component ── */
+/* ═══════════════════════════════════════════════════════════════════════
+   VENUE SCENE
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function VenueScene({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string) => void }) {
+  return (
+    <>
+      <ambientLight color="#1a2540" intensity={0.4} />
+      <directionalLight position={[80, 180, 60]} intensity={1.2} color="#fff5e8" castShadow
+        shadow-mapSize={[2048, 2048]} shadow-camera-near={1} shadow-camera-far={500}
+        shadow-camera-left={-150} shadow-camera-right={150} shadow-camera-top={150} shadow-camera-bottom={-150} shadow-bias={-0.0002} />
+      <directionalLight position={[-60, 100, -40]} intensity={0.3} color="#4488cc" />
+      <directionalLight position={[0, 50, -120]} intensity={0.2} color="#6688bb" />
+      <hemisphereLight color="#1a3050" groundColor="#0a0a14" intensity={0.3} />
+      <Environment preset="night" background={false} />
+      <fog attach="fog" args={['#000a1a', 250, 900]} />
+
+      <CameraController />
+
+      {/* Ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+        <planeGeometry args={[400, 400]} />
+        <meshStandardMaterial color="#08090e" roughness={0.98} />
+      </mesh>
+
+      {/* Arena structure */}
+      <ArenaBowl radiusX={50} radiusZ={35} height={12} yBase={0} color="#1a2844" />
+      <ArenaBowl radiusX={53} radiusZ={37} height={3} yBase={11} color="#1e3050" />
+      <ArenaBowl radiusX={58} radiusZ={42} height={14} yBase={12} color="#162238" />
+
+      {/* Roof ring */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 28, 0]} scale={[1, 1, 0.72]}>
+        <torusGeometry args={[55, 3, 6, 48]} />
+        <meshStandardMaterial color="#1e1e2a" metalness={0.85} roughness={0.2} />
+      </mesh>
+
+      <Court />
+      <Seats />
+      <StadiumLights />
+      <ScoreboardFrame />
+
+      {/* LED Screens */}
+      {ZONES.map(zone => (
+        <LEDScreen key={zone.id} zone={zone} selected={selectedId === zone.id} onSelect={() => onSelect(zone.id)} />
+      ))}
+
+      {/* Tunnel entrances */}
+      {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((a, i) => (
+        <group key={i}>
+          <mesh position={[Math.sin(a) * 36, 3.5, Math.cos(a) * 36 * 0.7]} rotation={[0, a, 0]}>
+            <boxGeometry args={[5, 7, 5]} />
+            <meshStandardMaterial color="#020208" roughness={1} />
+          </mesh>
+          <pointLight position={[Math.sin(a) * 34, 3, Math.cos(a) * 34 * 0.7]} color="#0A52EF" intensity={3} distance={15} decay={2} />
+        </group>
+      ))}
+
+      <EffectComposer>
+        <Bloom intensity={0.9} luminanceThreshold={0.3} luminanceSmoothing={0.85} mipmapBlur />
+        <Vignette darkness={0.4} offset={0.3} />
+      </EffectComposer>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MAIN EXPORT
+   ═══════════════════════════════════════════════════════════════════════ */
+
 export default function VenueMap3D({ screens, venueName }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const animIdRef = useRef<number>(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedZone = selectedId ? ZONES.find(z => z.id === selectedId) : null;
 
-  const [activeView, setActiveView] = useState<string>('all');
-  const [hoveredScreen, setHoveredScreen] = useState<string | null>(null);
-  const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
-  const [isReady, setIsReady] = useState(false);
-
-  const camTarget = useRef({ pos: new THREE.Vector3(65, 50, 75), look: new THREE.Vector3(0, 15, 0) });
-  const camCurrent = useRef({ pos: new THREE.Vector3(65, 50, 75), look: new THREE.Vector3(0, 15, 0) });
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // ── Renderer ──
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
-
-    // ── Camera ──
-    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 500);
-    camera.position.set(65, 50, 75);
-
-    // ── Scene ──
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x000a1a, 250, 900);
-
-    // ── Lighting (from /3d project) ──
-    scene.add(new THREE.AmbientLight(0x1a2540, 0.4));
-
-    const dirMain = new THREE.DirectionalLight(0xfff5e8, 1.2);
-    dirMain.position.set(80, 180, 60);
-    dirMain.castShadow = true;
-    dirMain.shadow.mapSize.set(2048, 2048);
-    dirMain.shadow.camera.near = 1;
-    dirMain.shadow.camera.far = 500;
-    dirMain.shadow.camera.left = -150;
-    dirMain.shadow.camera.right = 150;
-    dirMain.shadow.camera.top = 150;
-    dirMain.shadow.camera.bottom = -150;
-    dirMain.shadow.bias = -0.0002;
-    scene.add(dirMain);
-
-    const dirFill = new THREE.DirectionalLight(0x4488cc, 0.3);
-    dirFill.position.set(-60, 100, -40); scene.add(dirFill);
-
-    const dirRim = new THREE.DirectionalLight(0x6688bb, 0.2);
-    dirRim.position.set(0, 50, -120); scene.add(dirRim);
-
-    const hemi = new THREE.HemisphereLight(0x1a3050, 0x0a0a14, 0.3);
-    scene.add(hemi);
-
-    // ── Build arena ──
-    buildArena(scene);
-
-    // ── Post-processing ──
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(
-      new THREE.Vector2(container.clientWidth, container.clientHeight),
-      0.9, 0.4, 0.3 // intensity, radius, threshold
-    );
-    composer.addPass(bloom);
-    composer.addPass(new OutputPass());
-
-    // ── Place LED screens ──
-    const allScreenMeshes: THREE.Mesh[] = [];
-    const meshMap = new Map<string, THREE.Mesh>();
-
-    Object.entries(SCREEN_POSITIONS).forEach(([key, config]) => {
-      const color = TYPE_COLORS[config.type] || 0x0A52EF;
-      const dbScreen = screens.find(s => matchScreenToPosition(s.display_name) === key);
-      const displayName = dbScreen?.display_name || TYPE_LABELS[config.type] || key;
-
-      if (config.type === 'ribbon') {
-        // Ribbon: ring of panels
-        const radius = key === 'upper ribbon' ? 52 : 44;
-        const tex = makeScreenTexture(displayName, color, 2048, 256);
-        tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(8, 1); tex.needsUpdate = true;
-        const ribGeo = new THREE.CylinderGeometry(radius, radius, 2.5, 64, 1, true);
-        const ribMat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, side: THREE.BackSide, fog: false });
-        const ribbon = new THREE.Mesh(ribGeo, ribMat);
-        ribbon.position.set(config.pos[0], config.pos[1], config.pos[2]);
-        ribbon.scale.set(1, 1, 0.7);
-        ribbon.name = key;
-        scene.add(ribbon);
-        meshMap.set(key, ribbon);
-        allScreenMeshes.push(ribbon);
-        // Light spill
-        const spill = new THREE.PointLight(color, 2, radius, 2);
-        spill.position.set(0, config.pos[1], 0); scene.add(spill);
-      } else {
-        // Flat LED screen — MeshBasicMaterial so it's always bright
-        const tex = makeScreenTexture(displayName, color);
-        // Bezel/frame
-        const bezel = new THREE.Mesh(
-          new THREE.BoxGeometry(config.scale[0] + 0.8, config.scale[1] + 0.8, 0.15),
-          new THREE.MeshStandardMaterial({ color: 0x111118, metalness: 0.9, roughness: 0.2 })
-        );
-        bezel.position.set(config.pos[0], config.pos[1], config.pos[2]);
-        bezel.rotation.set(config.rot[0], config.rot[1], config.rot[2]);
-        bezel.position.add(new THREE.Vector3(0, 0, -0.1).applyEuler(new THREE.Euler(config.rot[0], config.rot[1], config.rot[2])));
-        scene.add(bezel);
-
-        // LED face — BasicMaterial = fog-immune, always bright
-        const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, fog: false });
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(config.scale[0], config.scale[1]), mat);
-        mesh.position.set(config.pos[0], config.pos[1], config.pos[2]);
-        mesh.rotation.set(config.rot[0], config.rot[1], config.rot[2]);
-        mesh.name = key;
-        scene.add(mesh);
-        meshMap.set(key, mesh);
-        allScreenMeshes.push(mesh);
-
-        // Light spill from screen
-        const spillColor = color;
-        const spill = new THREE.PointLight(spillColor, 1.2, config.scale[0] * 2, 2);
-        const spillOffset = new THREE.Vector3(0, 0, 4).applyEuler(new THREE.Euler(config.rot[0], config.rot[1], config.rot[2]));
-        spill.position.set(config.pos[0] + spillOffset.x, config.pos[1] + spillOffset.y, config.pos[2] + spillOffset.z);
-        scene.add(spill);
-      }
+  // Match DB screen to zone
+  const getDbScreen = useCallback((zone: ScreenZone): Screen | null => {
+    const match = screens.find(s => {
+      const l = s.display_name.toLowerCase();
+      if (zone.type === 'scoreboard' && (l.includes('scoreboard') || l.includes('center') || l.includes('video'))) return true;
+      if (zone.type === 'ribbon' && l.includes('ribbon')) return true;
+      if (zone.type === 'fascia' && l.includes('fascia')) return true;
+      if (zone.type === 'courtside' && (l.includes('courtside') || l.includes('court'))) return true;
+      if (zone.type === 'concourse' && l.includes('concourse')) return true;
+      return false;
     });
-
-    // ── Controls ──
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enablePan = false;
-    controls.minDistance = 15;
-    controls.maxDistance = 180;
-    controls.maxPolarAngle = Math.PI / 2 - 0.05;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.25;
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-
-    // ── Mouse ──
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    };
-
-    const onClick = () => {
-      raycaster.setFromCamera(mouse, camera);
-      const hits = raycaster.intersectObjects(allScreenMeshes);
-      if (hits.length > 0) {
-        const name = hits[0].object.name;
-        const db = screens.find(s => matchScreenToPosition(s.display_name) === name);
-        const cfg = SCREEN_POSITIONS[name];
-        setSelectedScreen(db || {
-          display_name: TYPE_LABELS[cfg?.type || ''] || name,
-          manufacturer: null, model: null, pixel_pitch: null,
-          width_ft: null, height_ft: null, brightness_nits: null,
-          environment: cfg?.type || null, location_zone: name, is_active: true,
-        });
-      }
-    };
-
-    container.addEventListener('mousemove', onMouseMove);
-    container.addEventListener('click', onClick);
-
-    // ── Animate ──
-    const clock = new THREE.Clock();
-    function animate() {
-      animIdRef.current = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      const elapsed = clock.getElapsedTime();
-
-      camCurrent.current.pos.lerp(camTarget.current.pos, Math.min(2 * delta, 1));
-      camCurrent.current.look.lerp(camTarget.current.look, Math.min(2 * delta, 1));
-      camera.position.copy(camCurrent.current.pos);
-      controls.target.copy(camCurrent.current.look);
-      controls.update();
-
-      // Ribbon scroll
-      allScreenMeshes.forEach(mesh => {
-        if (mesh.geometry instanceof THREE.CylinderGeometry) {
-          const m = mesh.material as THREE.MeshBasicMaterial;
-          if (m.map) m.map.offset.x += delta * 0.015;
-        }
-      });
-
-      // Hover detection
-      raycaster.setFromCamera(mouse, camera);
-      const hits = raycaster.intersectObjects(allScreenMeshes);
-      if (hits.length > 0) {
-        setHoveredScreen(hits[0].object.name);
-        container!.style.cursor = 'pointer';
-      } else {
-        setHoveredScreen(null);
-        container!.style.cursor = 'grab';
-      }
-
-      composer.render();
-    }
-    animate();
-    setIsReady(true);
-
-    const onResize = () => {
-      if (!container) return;
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-      composer.setSize(container.clientWidth, container.clientHeight);
-    };
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      container.removeEventListener('mousemove', onMouseMove);
-      container.removeEventListener('click', onClick);
-      cancelAnimationFrame(animIdRef.current);
-      controls.dispose();
-      renderer.dispose();
-      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
-    };
+    return match || null;
   }, [screens]);
 
-  useEffect(() => {
-    const view = VIEWS[activeView] || VIEWS.all;
-    camTarget.current.pos.set(...view.pos);
-    camTarget.current.look.set(...view.target);
-  }, [activeView]);
-
-  const hoveredConfig = hoveredScreen ? SCREEN_POSITIONS[hoveredScreen] : null;
+  const dbScreen = selectedZone ? getDbScreen(selectedZone) : null;
 
   return (
     <div className="relative w-full rounded-xl overflow-hidden bg-[#030812]" style={{ height: '600px' }}>
-      {!isReady && (
-        <div className="absolute inset-0 z-30 bg-[#030812] flex flex-col items-center justify-center">
-          <div className="relative w-16 h-16 mb-5">
-            <div className="absolute inset-0 rounded-full border-2 border-[#0A52EF]/20 animate-ping" />
-            <div className="absolute inset-2 rounded-full border-2 border-t-[#0A52EF] border-r-transparent border-b-transparent border-l-transparent animate-spin" />
-            <div className="absolute inset-4 rounded-full border border-[#03B8FF]/30 animate-pulse" />
-          </div>
-          <p className="text-sm text-slate-300 font-semibold tracking-wide">Loading Arena</p>
-          <p className="text-[10px] text-slate-500 mt-1">Initializing 3D environment</p>
-        </div>
-      )}
+      <Canvas
+        camera={{ fov: 55, near: 0.1, far: 2000, position: [0, 120, 200] }}
+        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
+        shadows
+        dpr={[1, 2]}
+        onCreated={({ gl }) => { gl.setClearColor('#000a1a'); }}
+      >
+        <VenueScene selectedId={selectedId} onSelect={setSelectedId} />
+      </Canvas>
 
-      {/* Camera controls */}
-      <div className="absolute top-4 left-4 z-20">
-        <div className="bg-black/60 backdrop-blur-md rounded-lg px-3 py-2 border border-white/10">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-medium">Camera View</p>
-          <div className="flex flex-col gap-1">
-            {Object.entries(VIEWS).map(([key, view]) => (
-              <button key={key} onClick={() => setActiveView(key)}
-                className={`text-xs px-3 py-1.5 rounded transition-all text-left ${activeView === key ? 'bg-[#0A52EF] text-white font-medium' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}>
-                {view.label}
-              </button>
-            ))}
-          </div>
+      {/* Title */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+        <div className="bg-black/60 backdrop-blur-md rounded-lg px-4 py-2 border border-white/10">
+          <p className="text-xs text-white font-semibold text-center">{venueName}</p>
+          <p className="text-[10px] text-slate-500 text-center mt-0.5">Drag to orbit · Scroll to zoom · Click screens for specs</p>
         </div>
       </div>
 
@@ -604,45 +464,36 @@ export default function VenueMap3D({ screens, venueName }: Props) {
       <div className="absolute bottom-4 left-4 z-20">
         <div className="bg-black/60 backdrop-blur-md rounded-lg px-3 py-2 border border-white/10">
           <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-medium">Display Types</p>
-          {Object.entries(TYPE_COLORS).map(([type, color]) => (
-            <div key={type} className="flex items-center gap-2 mb-0.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: `#${color.toString(16).padStart(6, '0')}` }} />
-              <span className="text-[10px] text-slate-400">{TYPE_LABELS[type]}</span>
-            </div>
-          ))}
+          {Object.entries(TYPE_LABELS).map(([type, label]) => {
+            const zone = ZONES.find(z => z.type === type);
+            return (
+              <div key={type} className="flex items-center gap-2 mb-0.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: zone?.color || '#666' }} />
+                <span className="text-[10px] text-slate-400">{label}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredScreen && hoveredConfig && !selectedScreen && (
-        <div className="absolute top-4 right-4 z-20">
-          <div className="bg-black/70 backdrop-blur-md rounded-lg px-4 py-3 border border-white/10 min-w-[180px]">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: `#${(TYPE_COLORS[hoveredConfig.type] || 0x0A52EF).toString(16).padStart(6, '0')}` }} />
-              <span className="text-xs text-white font-medium">{TYPE_LABELS[hoveredConfig.type]}</span>
-            </div>
-            <p className="text-[10px] text-slate-400 capitalize">{hoveredScreen}</p>
-            <p className="text-[10px] text-blue-400 mt-1">Click for specs</p>
-          </div>
-        </div>
-      )}
-
       {/* Selected screen detail */}
-      {selectedScreen && (
+      {selectedZone && (
         <div className="absolute top-4 right-4 z-20">
           <div className="bg-black/80 backdrop-blur-md rounded-lg border border-white/10 w-[280px] overflow-hidden">
             <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">{selectedScreen.display_name}</h3>
-              <button onClick={() => setSelectedScreen(null)} className="text-slate-500 hover:text-white text-lg leading-none">&times;</button>
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: selectedZone.color }} />
+                <h3 className="text-sm font-semibold text-white">{selectedZone.label}</h3>
+              </div>
+              <button onClick={() => setSelectedId(null)} className="text-slate-500 hover:text-white text-lg leading-none">&times;</button>
             </div>
             <div className="px-4 py-3 grid grid-cols-2 gap-3">
-              {selectedScreen.manufacturer && <div><p className="text-[10px] text-slate-500 font-medium">Manufacturer</p><p className="text-xs text-white mt-0.5">{selectedScreen.manufacturer}</p></div>}
-              {selectedScreen.model && <div><p className="text-[10px] text-slate-500 font-medium">Model</p><p className="text-xs text-white mt-0.5">{selectedScreen.model}</p></div>}
-              {selectedScreen.pixel_pitch && <div><p className="text-[10px] text-slate-500 font-medium">Pixel Pitch</p><p className="text-xs text-white mt-0.5">{selectedScreen.pixel_pitch}mm</p></div>}
-              {(selectedScreen.width_ft || selectedScreen.height_ft) && <div><p className="text-[10px] text-slate-500 font-medium">Dimensions</p><p className="text-xs text-white mt-0.5">{selectedScreen.width_ft}' x {selectedScreen.height_ft}'</p></div>}
-              {selectedScreen.brightness_nits && <div><p className="text-[10px] text-slate-500 font-medium">Brightness</p><p className="text-xs text-white mt-0.5">{Number(selectedScreen.brightness_nits).toLocaleString()} nits</p></div>}
-              {selectedScreen.environment && <div><p className="text-[10px] text-slate-500 font-medium">Environment</p><p className="text-xs text-white mt-0.5 capitalize">{selectedScreen.environment}</p></div>}
-              {selectedScreen.location_zone && <div className="col-span-2"><p className="text-[10px] text-slate-500 font-medium">Location</p><p className="text-xs text-white mt-0.5 capitalize">{selectedScreen.location_zone}</p></div>}
+              <div><p className="text-[10px] text-slate-500 font-medium">Type</p><p className="text-xs text-white mt-0.5">{TYPE_LABELS[selectedZone.type]}</p></div>
+              <div><p className="text-[10px] text-slate-500 font-medium">Size</p><p className="text-xs text-white mt-0.5">{selectedZone.width}' x {selectedZone.height}'</p></div>
+              {dbScreen?.manufacturer && <div><p className="text-[10px] text-slate-500 font-medium">Manufacturer</p><p className="text-xs text-white mt-0.5">{dbScreen.manufacturer}</p></div>}
+              {dbScreen?.model && <div><p className="text-[10px] text-slate-500 font-medium">Model</p><p className="text-xs text-white mt-0.5">{dbScreen.model}</p></div>}
+              {dbScreen?.pixel_pitch && <div><p className="text-[10px] text-slate-500 font-medium">Pixel Pitch</p><p className="text-xs text-white mt-0.5">{dbScreen.pixel_pitch}mm</p></div>}
+              {dbScreen?.brightness_nits && <div><p className="text-[10px] text-slate-500 font-medium">Brightness</p><p className="text-xs text-white mt-0.5">{Number(dbScreen.brightness_nits).toLocaleString()} nits</p></div>}
             </div>
             <div className="px-4 py-2 border-t border-white/10">
               <div className="flex items-center gap-1.5">
@@ -654,19 +505,7 @@ export default function VenueMap3D({ screens, venueName }: Props) {
         </div>
       )}
 
-      {/* Title */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
-        <div className="bg-black/60 backdrop-blur-md rounded-lg px-4 py-2 border border-white/10">
-          <p className="text-xs text-white font-semibold text-center">{venueName}</p>
-          <p className="text-[10px] text-slate-500 text-center mt-0.5">Interactive 3D Venue Map</p>
-        </div>
-      </div>
-
-      <div ref={containerRef} className="absolute inset-0" />
-
-      <div className="absolute bottom-4 right-4 z-10 text-[10px] text-slate-600">
-        ANC Venue Vision
-      </div>
+      <div className="absolute bottom-4 right-4 z-10 text-[10px] text-slate-600">ANC Venue Vision</div>
     </div>
   );
 }

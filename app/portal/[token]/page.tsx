@@ -128,7 +128,7 @@ export default function PortalPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'tickets' | 'services' | 'venue-map'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'tickets' | 'services' | 'venue-map' | 'resources'>('overview')
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
 
   // AI ticket
@@ -265,7 +265,7 @@ export default function PortalPage() {
       {/* Nav */}
       <nav className="bg-white border-b border-zinc-200">
         <div className="max-w-6xl mx-auto px-6 flex gap-0">
-          {(['overview', 'events', 'tickets', 'services', 'venue-map'] as const).map(tab => (
+          {(['overview', 'events', 'tickets', 'services', 'venue-map', 'resources'] as const).map(tab => (
             <button key={tab} onClick={() => { setActiveTab(tab); setViewingTicket(null); setAiResult(null) }}
               className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
               {tab === 'overview' && 'Overview'}
@@ -273,6 +273,7 @@ export default function PortalPage() {
               {tab === 'tickets' && `Tickets${openTickets.length > 0 ? ` (${openTickets.length})` : ''}`}
               {tab === 'services' && 'Services & Specs'}
               {tab === 'venue-map' && 'Venue Map'}
+              {tab === 'resources' && 'Resources'}
             </button>
           ))}
         </div>
@@ -841,6 +842,66 @@ export default function PortalPage() {
             </div>
           </div>
         )}
+        {/* RESOURCES / DOCUMENT VAULT */}
+        {activeTab === 'resources' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900">Document Vault</h2>
+              <p className="text-sm text-zinc-500 mt-1">Access your venue's documentation, manuals, and resources. Use the AI assistant (bottom-right) to ask questions across all documents.</p>
+            </div>
+
+            {/* Document categories */}
+            {[
+              { title: 'Installation & Setup', icon: '📋', docs: [
+                { name: 'LED Display Installation Guide', type: 'PDF', size: 'Available on request' },
+                { name: 'Display Network Configuration', type: 'PDF', size: 'Available on request' },
+              ]},
+              { title: 'Operations & Maintenance', icon: '🔧', docs: [
+                { name: 'Game Day Operations Checklist', type: 'PDF', size: 'Available on request' },
+                { name: 'Preventive Maintenance Schedule', type: 'PDF', size: 'Available on request' },
+                { name: 'Troubleshooting Guide', type: 'PDF', size: 'Available on request' },
+              ]},
+              { title: 'Warranty & Support', icon: '🛡️', docs: [
+                { name: 'Hardware Warranty Certificate', type: 'PDF', size: 'Available on request' },
+                { name: 'Support SLA Agreement', type: 'PDF', size: 'Available on request' },
+                { name: 'Emergency Contact Card', type: 'PDF', size: 'Available on request' },
+              ]},
+              { title: 'Technical Specifications', icon: '📐', docs: [
+                { name: 'Display Specifications Sheet', type: 'PDF', size: 'Available on request' },
+                { name: 'Power Requirements Document', type: 'PDF', size: 'Available on request' },
+              ]},
+            ].map((cat, ci) => (
+              <div key={ci} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-100 flex items-center gap-3">
+                  <span className="text-lg">{cat.icon}</span>
+                  <h3 className="text-sm font-semibold text-zinc-900">{cat.title}</h3>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  {cat.docs.map((doc, di) => (
+                    <div key={di} className="px-6 py-3 flex items-center justify-between hover:bg-zinc-50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded bg-red-50 flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-red-500">{doc.type}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-zinc-900">{doc.name}</p>
+                          <p className="text-xs text-zinc-400">{doc.size}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-zinc-400">Coming soon</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="bg-gradient-to-r from-[#002C73] to-[#0A52EF] rounded-xl p-6 text-white">
+              <h3 className="text-sm font-semibold mb-1">Need a quick answer?</h3>
+              <p className="text-xs opacity-75">Click the chat button in the bottom-right corner to ask our AI assistant about any of these documents, ANC services, or your venue's setup.</p>
+            </div>
+          </div>
+        )}
+
         {/* VENUE MAP */}
         {activeTab === 'venue-map' && (
           <div className="space-y-6">
