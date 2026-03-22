@@ -126,51 +126,50 @@ function makeScreenTexture(name: string, type: string, color: number, w = 512, h
 }
 
 function buildArena(scene: THREE.Scene) {
-  // Ambient — brighter so the structure is visible
-  scene.add(new THREE.AmbientLight(0x2a2a5a, 0.25));
+  // Bright ambient so everything is visible
+  scene.add(new THREE.AmbientLight(0x4466aa, 0.5));
 
-  // Main arena spotlight
-  const spot1 = new THREE.SpotLight(0x6699ff, 120, 80, 0.7, 0.6);
-  spot1.position.set(0, 35, 0); spot1.castShadow = true; scene.add(spot1);
-  const spot2 = new THREE.SpotLight(0x0A52EF, 80, 80, 0.5, 0.7);
-  spot2.position.set(25, 30, -20); scene.add(spot2);
-  const spot3 = new THREE.SpotLight(0x03B8FF, 50, 70, 0.4, 0.9);
-  spot3.position.set(-25, 26, 18); scene.add(spot3);
+  // Strong overhead arena lights (like stadium floods)
+  const spot1 = new THREE.SpotLight(0xffffff, 200, 100, 0.8, 0.5);
+  spot1.position.set(0, 40, 0); spot1.castShadow = true; scene.add(spot1);
+  const spot2 = new THREE.SpotLight(0x88aaff, 100, 100, 0.6, 0.5);
+  spot2.position.set(25, 35, -20); scene.add(spot2);
+  const spot3 = new THREE.SpotLight(0x88ccff, 80, 100, 0.5, 0.6);
+  spot3.position.set(-25, 35, 20); scene.add(spot3);
+  // Extra fill lights
+  const spot4 = new THREE.SpotLight(0xaabbff, 60, 80, 0.5, 0.7);
+  spot4.position.set(0, 30, 25); scene.add(spot4);
+  const spot5 = new THREE.SpotLight(0xaabbff, 60, 80, 0.5, 0.7);
+  spot5.position.set(0, 30, -25); scene.add(spot5);
 
-  // Rim lights
+  // Rim lights — brighter
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
-    const p = new THREE.PointLight(i % 2 === 0 ? 0x0A52EF : 0x03B8FF, 12, 60);
-    p.position.set(Math.sin(angle) * 34, 3, Math.cos(angle) * 34);
+    const p = new THREE.PointLight(i % 2 === 0 ? 0x0A52EF : 0x03B8FF, 25, 70);
+    p.position.set(Math.sin(angle) * 34, 8, Math.cos(angle) * 34);
     scene.add(p);
   }
 
   // Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshStandardMaterial({ color: 0x050510, metalness: 0.5, roughness: 0.8 })
+    new THREE.MeshStandardMaterial({ color: 0x0a0a20, metalness: 0.3, roughness: 0.8 })
   );
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
-  // Court
+  // Court — brighter wood color
   const court = new THREE.Mesh(
     new THREE.PlaneGeometry(28, 15),
-    new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.85 })
+    new THREE.MeshStandardMaterial({ color: 0xC4933B, roughness: 0.7 })
   );
   court.rotation.x = -Math.PI / 2; court.position.y = 0.01; scene.add(court);
 
   // Court lines
   const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
-  // Center circle
-  const circle = new THREE.Mesh(
-    new THREE.RingGeometry(1.8, 1.9, 32),
-    lineMat
-  );
+  const circle = new THREE.Mesh(new THREE.RingGeometry(1.8, 1.9, 32), lineMat);
   circle.rotation.x = -Math.PI / 2; circle.position.y = 0.02; scene.add(circle);
-  // Center line
   const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 15), lineMat);
   centerLine.rotation.x = -Math.PI / 2; centerLine.position.y = 0.02; scene.add(centerLine);
-  // Three point arcs
   [-10, 10].forEach(x => {
     const arc = new THREE.Mesh(new THREE.RingGeometry(5.8, 5.9, 32, 1, -Math.PI / 2, Math.PI), lineMat);
     arc.rotation.x = -Math.PI / 2;
@@ -179,68 +178,86 @@ function buildArena(scene: THREE.Scene) {
     scene.add(arc);
   });
 
-  // Concourse ring (outer wall) — more visible
-  const wallGeo = new THREE.CylinderGeometry(38, 38, 22, 64, 1, true);
+  // Concourse ring (outer wall)
+  const wallGeo = new THREE.CylinderGeometry(38, 38, 24, 64, 1, true);
   const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({
-    color: 0x141428, roughness: 0.8, side: THREE.BackSide,
+    color: 0x1a1a35, roughness: 0.7, side: THREE.BackSide,
   }));
-  wall.position.y = 11; scene.add(wall);
+  wall.position.y = 12; scene.add(wall);
 
-  // Seating tiers — solid rows instead of particles
-  const tierMat = new THREE.MeshStandardMaterial({ color: 0x12122a, roughness: 0.9 });
-  const tierHighlight = new THREE.MeshStandardMaterial({ color: 0x1a1a40, roughness: 0.85 });
+  // Seating tiers — lighter colors so they're visible
+  const tierColors = [0x1c1c3a, 0x222250, 0x1c1c3a];
   [
     { innerR: 19, outerR: 23, y: 2, h: 3 },
     { innerR: 24, outerR: 29, y: 5.5, h: 4 },
     { innerR: 30, outerR: 35, y: 11, h: 6 },
   ].forEach((tier, i) => {
+    const mat = new THREE.MeshStandardMaterial({ color: tierColors[i], roughness: 0.8 });
+    // Inner face
     const tierGeo = new THREE.CylinderGeometry(tier.outerR, tier.innerR, tier.h, 64, 1, true);
     tierGeo.scale(1, 1, 0.75);
-    const tierMesh = new THREE.Mesh(tierGeo, i % 2 === 0 ? tierMat : tierHighlight);
+    const tierMesh = new THREE.Mesh(tierGeo, mat);
     tierMesh.position.y = tier.y;
     scene.add(tierMesh);
-
-    // Top cap for each tier
+    // Top cap
     const capGeo = new THREE.RingGeometry(tier.innerR, tier.outerR, 64);
-    const cap = new THREE.Mesh(capGeo, i % 2 === 0 ? tierHighlight : tierMat);
+    const capMat = new THREE.MeshStandardMaterial({ color: tierColors[i] + 0x080810, roughness: 0.75 });
+    const cap = new THREE.Mesh(capGeo, capMat);
     cap.rotation.x = -Math.PI / 2;
     cap.position.y = tier.y + tier.h / 2;
     cap.scale.set(1, 0.75, 1);
     scene.add(cap);
   });
 
-  // Walkway dividers between tiers
-  const dividerMat = new THREE.MeshStandardMaterial({ color: 0x0A52EF, emissive: new THREE.Color(0x0A52EF), emissiveIntensity: 0.3, transparent: true, opacity: 0.4 });
-  [3.5, 7.5].forEach(y => {
-    const divider = new THREE.Mesh(new THREE.TorusGeometry(26, 0.08, 8, 64), dividerMat);
-    divider.position.y = y;
-    divider.scale.set(1, 1, 0.75);
-    scene.add(divider);
+  // Tier edge lights (blue glow strips)
+  const edgeMat = new THREE.MeshStandardMaterial({
+    color: 0x0A52EF, emissive: new THREE.Color(0x0A52EF), emissiveIntensity: 1.0,
+  });
+  [3.5, 7.5, 14].forEach(y => {
+    const edge = new THREE.Mesh(new THREE.TorusGeometry(26, 0.12, 8, 64), edgeMat);
+    edge.position.y = y;
+    edge.scale.set(1, 1, 0.75);
+    scene.add(edge);
   });
 
-  // Scoreboard housing
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7, roughness: 0.4 });
-  const sbHousing = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 6), frameMat);
-  sbHousing.position.set(0, 16, 0); scene.add(sbHousing);
+  // Scoreboard frame — open wireframe so screens inside are visible
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x222233, metalness: 0.8, roughness: 0.3 });
+  // Just the edges/frame, not a solid box
+  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.3, 6.5), frameMat);
+  frameTop.position.set(0, 18.5, 0); scene.add(frameTop);
+  const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.3, 6.5), frameMat);
+  frameBottom.position.set(0, 13.3, 0); scene.add(frameBottom);
+  // Vertical supports
+  [[-4.5, -3], [4.5, -3], [-4.5, 3], [4.5, 3]].forEach(([x, z]) => {
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.3, 5.2, 0.3), frameMat);
+    strut.position.set(x, 16, z); scene.add(strut);
+  });
 
   // Scoreboard cables
-  [[-3.5, -2.5], [3.5, -2.5], [-3.5, 2.5], [3.5, 2.5]].forEach(([x, z]) => {
+  [[-3, -2], [3, -2], [-3, 2], [3, 2]].forEach(([x, z]) => {
     const cable = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 14, 6),
-      new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 })
+      new THREE.CylinderGeometry(0.05, 0.05, 16, 6),
+      new THREE.MeshStandardMaterial({ color: 0x333344, metalness: 0.8 })
     );
-    cable.position.set(x, 23, z); scene.add(cable);
+    cable.position.set(x, 26, z); scene.add(cable);
   });
 
-  // Power Portal arch (at the entrance)
+  // Ceiling structure
+  const ceilingGeo = new THREE.CylinderGeometry(40, 38, 1, 64, 1, true);
+  const ceiling = new THREE.Mesh(ceilingGeo, new THREE.MeshStandardMaterial({
+    color: 0x151530, roughness: 0.9, side: THREE.BackSide,
+  }));
+  ceiling.position.y = 24; scene.add(ceiling);
+
+  // Power Portal arch
   const archGeo = new THREE.TorusGeometry(6, 0.8, 8, 32, Math.PI);
-  const archMat = new THREE.MeshStandardMaterial({ color: 0x111122, metalness: 0.6, roughness: 0.5 });
+  const archMat = new THREE.MeshStandardMaterial({ color: 0x222244, metalness: 0.6, roughness: 0.5 });
   const arch = new THREE.Mesh(archGeo, archMat);
-  arch.position.set(0, 6, -34); arch.rotation.x = 0; scene.add(arch);
+  arch.position.set(0, 6, -34); scene.add(arch);
 
   // Entrance tunnel
   const tunnelGeo = new THREE.BoxGeometry(14, 10, 4);
-  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x080818, roughness: 0.9 });
+  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x10102a, roughness: 0.9 });
   const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
   tunnel.position.set(0, 5, -36); scene.add(tunnel);
 }
@@ -311,7 +328,7 @@ export default function VenueMap3D({ screens, venueName }: Props) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.6;
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
@@ -354,7 +371,7 @@ export default function VenueMap3D({ screens, venueName }: Props) {
         tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(6, 1); tex.needsUpdate = true;
         const ribMat = new THREE.MeshStandardMaterial({
           map: tex, emissiveMap: tex,
-          emissive: new THREE.Color("#ffffff"), emissiveIntensity: 2.5,
+          emissive: new THREE.Color("#ffffff"), emissiveIntensity: 5,
           toneMapped: false, side: THREE.BackSide,
         });
         const ribbon = new THREE.Mesh(ribGeo, ribMat);
@@ -376,7 +393,7 @@ export default function VenueMap3D({ screens, venueName }: Props) {
         const tex = makeScreenTexture(displayName, config.type, color);
         const mat = new THREE.MeshStandardMaterial({
           map: tex, emissiveMap: tex,
-          emissive: new THREE.Color("#ffffff"), emissiveIntensity: 2.5, toneMapped: false,
+          emissive: new THREE.Color("#ffffff"), emissiveIntensity: 5, toneMapped: false,
         });
         const geo = new THREE.PlaneGeometry(config.scale[0], config.scale[1]);
         const mesh = new THREE.Mesh(geo, mat);
