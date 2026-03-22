@@ -109,44 +109,86 @@ export default function SettingsPage() {
       <div className="space-y-6">
         {/* League Estimated Hours */}
         <div>
-          <h2 className="text-xl font-semibold text-zinc-900">League Settings</h2>
-          <p className="text-sm text-zinc-500 mt-1">Default estimated hours per game type — used for labor budget tracking</p>
+          <h2 className="text-xl font-semibold text-zinc-900">Labor Budget Settings</h2>
+          <p className="text-sm text-zinc-500 mt-1">Default hours per game by league — drives labor cost projections and staffing targets</p>
         </div>
 
-        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
-          <div className="px-6 py-4 border-b border-[#E8E8E8]">
-            <h3 className="text-sm font-semibold text-zinc-900">Estimated Hours by League</h3>
+        <div className="bg-white rounded-lg border border-[#E8E8E8] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#E8E8E8] bg-zinc-50/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900">Estimated Hours by League</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Includes setup, game coverage, and post-game breakdown</p>
+              </div>
+              <div className="text-xs text-zinc-400 bg-white border border-[#E8E8E8] rounded-full px-3 py-1">
+                {leagues.length} leagues
+              </div>
+            </div>
           </div>
           {leagues.length === 0 ? (
             <div className="p-8 text-center text-zinc-400 text-sm">Loading...</div>
           ) : (
             <div className="divide-y divide-[#E8E8E8]">
-              {leagues.map(league => (
-                <div key={league.id} className="px-6 py-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
-                  <span className="text-sm font-medium text-zinc-900">{league.league}</span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={league.estimated_hours}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0
-                        setLeagues(leagues.map(l => l.id === league.id ? { ...l, estimated_hours: val } : l))
-                      }}
-                      className="w-20 border border-[#E8E8E8] rounded px-3 py-1.5 text-sm text-right focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
-                    />
-                    <span className="text-xs text-zinc-400">hrs</span>
-                    <button
-                      onClick={() => updateLeagueHours(league.id, league.estimated_hours)}
-                      disabled={savingLeague === league.id}
-                      className="text-xs text-[#0A52EF] hover:text-[#0840C0] font-medium disabled:opacity-50 px-2"
-                    >
-                      {savingLeague === league.id ? 'Saving...' : 'Save'}
-                    </button>
+              {leagues.map(league => {
+                const maxHours = 10
+                const pct = Math.min((league.estimated_hours / maxHours) * 100, 100)
+                const leagueColors: Record<string, { bg: string; bar: string; text: string; badge: string }> = {
+                  'NBA': { bg: 'bg-orange-50', bar: 'bg-orange-500', text: 'text-orange-700', badge: 'bg-orange-100 text-orange-600' },
+                  'NHL': { bg: 'bg-blue-50', bar: 'bg-blue-500', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-600' },
+                  'MLB': { bg: 'bg-red-50', bar: 'bg-red-500', text: 'text-red-700', badge: 'bg-red-100 text-red-600' },
+                  'AHL': { bg: 'bg-teal-50', bar: 'bg-teal-500', text: 'text-teal-700', badge: 'bg-teal-100 text-teal-600' },
+                  'MiLB': { bg: 'bg-emerald-50', bar: 'bg-emerald-500', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-600' },
+                  'NCAAM': { bg: 'bg-purple-50', bar: 'bg-purple-500', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-600' },
+                  'NCAAW': { bg: 'bg-pink-50', bar: 'bg-pink-500', text: 'text-pink-700', badge: 'bg-pink-100 text-pink-600' },
+                  'NBA G League': { bg: 'bg-amber-50', bar: 'bg-amber-500', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-600' },
+                }
+                const colors = leagueColors[league.league] || { bg: 'bg-zinc-50', bar: 'bg-zinc-500', text: 'text-zinc-700', badge: 'bg-zinc-100 text-zinc-600' }
+
+                return (
+                  <div key={league.id} className="px-6 py-4 hover:bg-zinc-50/50 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${colors.badge}`}>
+                          {league.league}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            const val = Math.max(0, league.estimated_hours - 0.5)
+                            setLeagues(leagues.map(l => l.id === league.id ? { ...l, estimated_hours: val } : l))
+                            updateLeagueHours(league.id, val)
+                          }}
+                          className="w-7 h-7 rounded-full border border-[#E8E8E8] flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:border-zinc-300 transition-colors text-sm"
+                        >
+                          −
+                        </button>
+                        <div className="w-16 text-center">
+                          <span className={`text-lg font-bold ${colors.text}`}>{league.estimated_hours}</span>
+                          <span className="text-xs text-zinc-400 ml-0.5">hrs</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const val = league.estimated_hours + 0.5
+                            setLeagues(leagues.map(l => l.id === league.id ? { ...l, estimated_hours: val } : l))
+                            updateLeagueHours(league.id, val)
+                          }}
+                          className="w-7 h-7 rounded-full border border-[#E8E8E8] flex items-center justify-center text-zinc-400 hover:text-zinc-600 hover:border-zinc-300 transition-colors text-sm"
+                        >
+                          +
+                        </button>
+                        {savingLeague === league.id && (
+                          <span className="text-[10px] text-[#0A52EF] font-medium animate-pulse ml-1">Saving...</span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-300 ${colors.bar}`} style={{ width: `${pct}%` }} />
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
