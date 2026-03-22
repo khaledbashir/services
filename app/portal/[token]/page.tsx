@@ -6,16 +6,72 @@ import dynamic from 'next/dynamic'
 
 const VenueMap3D = dynamic(() => import('./venue-3d/VenueMap3D'), { ssr: false })
 
-function ChatWidget() {
+// Per-venue embed IDs from AnythingLLM
+const VENUE_EMBED_MAP: Record<string, string> = {
+  'Amerant Bank Arena': '3daf5a20-3433-47c5-932c-e3ffb6cb210a',
+  'American Airlines Center': 'afbc9b25-cbce-4f1c-ada8-09490d0d3b12',
+  'American Family Field': '6ad1f6b2-bbc2-4a11-ad0b-a25118dbf3e3',
+  'Amica Mutual Pavilion': 'e6af961a-a84b-4c88-b3ce-3f4647e48b64',
+  'BMO Harris Bank Center': 'b12a4846-4384-44e4-a4ef-103001735832',
+  'Bryce Jordan Center': '4be03f6a-9979-430f-ab01-e1e69c1d5d68',
+  'Cheney Stadium': '36d1b51b-b721-4284-921e-8e9b5ac7bccd',
+  'Cleveland Public Auditorium': '83fdda86-48e3-4ee8-8288-247a14bba1ec',
+  'Comerica Park': '72cb0a54-e246-4122-b8ce-d4344a1af336',
+  'Crypto.com Arena': '477a853c-a5a4-4235-9857-5c1892202a59',
+  'Dahlberg Arena': '20335937-1dc9-420e-a5c4-66c501a2dcd7',
+  'ExtraMile Arena': '27b6fccc-0cdf-4afe-892b-fb37766786f1',
+  'Fenway Park': '987e6194-21d4-43d6-ba46-bd675528fc24',
+  'Fifth Third Field': 'd49b59cd-8c8a-4a34-ad4a-45388ecb60fd',
+  'Finneran Pavilion': 'd62cb962-ec2b-4e7d-bfb2-adc08cbdf2ea',
+  'Gainbridge Fieldhouse': 'c8f01288-6710-4fd8-bdf1-98670a1e6da9',
+  'Haas Pavilion': 'ca83f8cc-acdd-4b1f-94fe-74181fea6b74',
+  'H-E-B Center at Cedar Park': '7feea515-d12c-4497-8b9d-52005552df95',
+  'JetBlue Park at Fenway South': 'e5f4b442-ea6b-4362-8ac6-fb992f9a9a44',
+  'John E. Glaser Arena': '9acdfb5f-4de8-4eaf-b5e4-849355c6a0ee',
+  'Kauffman Stadium': '119f0bd8-e6b9-4308-adf0-f3e01401dd69',
+  'KFC Yum! Center': 'c1e6f2af-d352-49e1-a333-64ac71fb75a4',
+  'Kia Center': '051e93db-43ae-45f7-b670-ff452e10bfdd',
+  'Maimonides Park': '18c3ea43-fde4-4aea-8322-800e649cf85e',
+  'Moda Center': '51a5fb26-c2af-44e6-82c0-2a9210259838',
+  'Moody Coliseum': 'bee8a405-bdbf-4df3-8109-f05185ccb37f',
+  'Nationals Park': '9f073a1d-69e9-4353-a892-73553d06805a',
+  'Oriole Park at Camden Yards': 'a89b1d62-607a-4ad1-a6dc-306417bc06f2',
+  'Pegula Ice Arena': '56f03240-7c82-416a-9f8c-3f70c3c4567f',
+  'Polar Park': 'c78ea6f9-bdbc-4414-8f5d-5c575d08805c',
+  'PPG Paints Arena': '9ee05aeb-2e98-4406-ad5e-de77a4809423',
+  'Prudential Center': 'f8c24035-cdc6-4233-8f91-e1d877f0e6ad',
+  'Rocket Arena': '3986e273-64bf-472e-8aaa-ec518360ad21',
+  'Smoothie King Center': '088e3686-ada5-4803-babc-4396efc6eb20',
+  'TD Ballpark': '04bf9f43-56a5-4cda-bb99-84c7ea874d4c',
+  'TD Garden': '29c4489c-8bd4-43c9-8af2-18a0ed399924',
+  'The Arena at Innovation Mile': '42ca276c-eac1-4620-823a-ae28e1b3c714',
+  'The Liacouras Center': '71142811-27eb-451b-bebe-2165b8d19c81',
+  'Toyota Center': 'e1b187c9-f0f5-4d9f-b83d-faf1a2fc1b97',
+  'Truist Stadium': 'f66561af-672f-43ca-b71b-44c0502ed8c6',
+  'Tsongas Center': '19e3c37f-6ced-48dc-9b7b-5e2c9a5c8805',
+  'Watsco Center': '1aa8de88-be2c-45e5-946b-b21c09fabd22',
+  'Xfinity Mobile Arena': '20bd5f8c-d6d0-4651-b473-c0bb0e6d62b5',
+};
+const DEFAULT_EMBED_ID = '8c3aad8f-edf0-43e5-b249-6b9cce51287e';
+
+function ChatWidget({ venueName }: { venueName: string }) {
   useEffect(() => {
-    if (document.getElementById('anc-chat-widget')) return;
+    // Remove previous widget if venue changed
+    const existing = document.getElementById('anc-chat-widget');
+    if (existing) existing.remove();
+    // Also remove the widget container that AnythingLLM injects
+    const widgetContainer = document.getElementById('anything-llm-chat-widget-container');
+    if (widgetContainer) widgetContainer.remove();
+
+    const embedId = VENUE_EMBED_MAP[venueName] || DEFAULT_EMBED_ID;
+
     const script = document.createElement('script');
     script.id = 'anc-chat-widget';
     script.src = 'https://ancservices-anything-llm.izcgmb.easypanel.host/embed/anythingllm-chat-widget.min.js';
-    script.setAttribute('data-embed-id', '8c3aad8f-edf0-43e5-b249-6b9cce51287e');
+    script.setAttribute('data-embed-id', embedId);
     script.setAttribute('data-base-api-url', 'https://ancservices-anything-llm.izcgmb.easypanel.host/api/embed');
     script.setAttribute('data-brand-image-url', '/ANC_Logo_2023_white.png');
-    script.setAttribute('data-greeting', "Hi! I'm your ANC assistant. Ask me anything about our services, technology, or your venue.");
+    script.setAttribute('data-greeting', `Hi! I'm the ANC assistant for ${venueName}. How can I help?`);
     script.setAttribute('data-button-color', '#1B2A4A');
     script.setAttribute('data-user-bg-color', '#0A52EF');
     script.setAttribute('data-assistant-bg-color', '#F1F5F9');
@@ -23,14 +79,17 @@ function ChatWidget() {
     script.setAttribute('data-user-text-color', '#FFFFFF');
     script.setAttribute('data-assistant-name', 'ANC Assistant');
     script.setAttribute('data-assistant-icon', '/ANC_Logo_2023_blue.png');
-    script.setAttribute('data-window-title', 'ANC Support');
+    script.setAttribute('data-window-title', `${venueName} — ANC Support`);
     script.setAttribute('data-no-sponsor', 'true');
     document.body.appendChild(script);
+
     return () => {
       const el = document.getElementById('anc-chat-widget');
       if (el) el.remove();
+      const wc = document.getElementById('anything-llm-chat-widget-container');
+      if (wc) wc.remove();
     };
-  }, []);
+  }, [venueName]);
   return null;
 }
 
@@ -825,7 +884,7 @@ export default function PortalPage() {
       </footer>
 
       {/* ANC AI Assistant Chat Widget — injected via useEffect since React doesn't execute <script> tags in JSX */}
-      <ChatWidget />
+      <ChatWidget venueName={venue.name} />
 
       {/* Hide AnythingLLM branding from widget */}
       <style dangerouslySetInnerHTML={{ __html: `
