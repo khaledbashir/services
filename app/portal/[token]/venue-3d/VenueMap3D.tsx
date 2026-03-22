@@ -125,51 +125,83 @@ function makeScreenTexture(name: string, type: string, color: number, w = 512, h
   return tex;
 }
 
+// Helper: create octagonal shape (like Gainbridge Fieldhouse)
+function makeOctagonShape(radius: number, squeeze = 0.75): THREE.Shape {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius * squeeze;
+    if (i === 0) shape.moveTo(x, z);
+    else shape.lineTo(x, z);
+  }
+  shape.closePath();
+  return shape;
+}
+
 function buildArena(scene: THREE.Scene) {
-  // Bright ambient so everything is visible
-  scene.add(new THREE.AmbientLight(0x4466aa, 0.5));
+  // ── LIGHTING: bright arena atmosphere ──
+  scene.add(new THREE.AmbientLight(0x6680bb, 0.6));
 
-  // Strong overhead arena lights (like stadium floods)
-  const spot1 = new THREE.SpotLight(0xffffff, 200, 100, 0.8, 0.5);
-  spot1.position.set(0, 40, 0); spot1.castShadow = true; scene.add(spot1);
-  const spot2 = new THREE.SpotLight(0x88aaff, 100, 100, 0.6, 0.5);
-  spot2.position.set(25, 35, -20); scene.add(spot2);
-  const spot3 = new THREE.SpotLight(0x88ccff, 80, 100, 0.5, 0.6);
-  spot3.position.set(-25, 35, 20); scene.add(spot3);
-  // Extra fill lights
-  const spot4 = new THREE.SpotLight(0xaabbff, 60, 80, 0.5, 0.7);
-  spot4.position.set(0, 30, 25); scene.add(spot4);
-  const spot5 = new THREE.SpotLight(0xaabbff, 60, 80, 0.5, 0.7);
-  spot5.position.set(0, 30, -25); scene.add(spot5);
+  // Stadium flood lights — white, strong, overhead
+  [
+    { pos: [0, 38, 0], intensity: 300, color: 0xffeedd },
+    { pos: [20, 35, -15], intensity: 150, color: 0xffffff },
+    { pos: [-20, 35, 15], intensity: 150, color: 0xffffff },
+    { pos: [15, 35, 20], intensity: 120, color: 0xeeeeff },
+    { pos: [-15, 35, -20], intensity: 120, color: 0xeeeeff },
+  ].forEach(({ pos, intensity, color }) => {
+    const s = new THREE.SpotLight(color, intensity, 100, 0.9, 0.4);
+    s.position.set(pos[0], pos[1], pos[2]);
+    s.castShadow = true;
+    scene.add(s);
+  });
 
-  // Rim lights — brighter
+  // Accent rim lights around arena
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2;
-    const p = new THREE.PointLight(i % 2 === 0 ? 0x0A52EF : 0x03B8FF, 25, 70);
-    p.position.set(Math.sin(angle) * 34, 8, Math.cos(angle) * 34);
+    const p = new THREE.PointLight(0x4488ff, 20, 60);
+    p.position.set(Math.cos(angle) * 32, 10, Math.sin(angle) * 32 * 0.75);
     scene.add(p);
   }
 
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshStandardMaterial({ color: 0x0a0a20, metalness: 0.3, roughness: 0.8 })
-  );
-  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  // ── FLOOR ──
+  const floorShape = makeOctagonShape(42);
+  const floorGeo = new THREE.ShapeGeometry(floorShape);
+  const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({
+    color: 0x1a1a30, roughness: 0.8,
+  }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.01; scene.add(floor);
 
-  // Court — brighter wood color
+  // ── COURT (basketball) ──
   const court = new THREE.Mesh(
     new THREE.PlaneGeometry(28, 15),
-    new THREE.MeshStandardMaterial({ color: 0xC4933B, roughness: 0.7 })
+    new THREE.MeshStandardMaterial({ color: 0xD4A446, roughness: 0.65 })
   );
   court.rotation.x = -Math.PI / 2; court.position.y = 0.01; scene.add(court);
 
+  // Court paint (key areas)
+  [-10, 10].forEach(x => {
+    const paint = new THREE.Mesh(
+      new THREE.PlaneGeometry(5.7, 12),
+      new THREE.MeshStandardMaterial({ color: 0x002D62, roughness: 0.7 })
+    );
+    paint.rotation.x = -Math.PI / 2; paint.position.set(x, 0.015, 0);
+    scene.add(paint);
+  });
+
   // Court lines
   const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+  // Center circle
   const circle = new THREE.Mesh(new THREE.RingGeometry(1.8, 1.9, 32), lineMat);
   circle.rotation.x = -Math.PI / 2; circle.position.y = 0.02; scene.add(circle);
-  const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 15), lineMat);
-  centerLine.rotation.x = -Math.PI / 2; centerLine.position.y = 0.02; scene.add(centerLine);
+  // Center line
+  const cl = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 15), lineMat);
+  cl.rotation.x = -Math.PI / 2; cl.position.y = 0.02; scene.add(cl);
+  // Boundary
+  const boundary = new THREE.Mesh(new THREE.RingGeometry(0, 0.04, 4), lineMat);
+  boundary.rotation.x = -Math.PI / 2; boundary.position.y = 0.02; scene.add(boundary);
+  // 3-point arcs
   [-10, 10].forEach(x => {
     const arc = new THREE.Mesh(new THREE.RingGeometry(5.8, 5.9, 32, 1, -Math.PI / 2, Math.PI), lineMat);
     arc.rotation.x = -Math.PI / 2;
@@ -178,88 +210,111 @@ function buildArena(scene: THREE.Scene) {
     scene.add(arc);
   });
 
-  // Concourse ring (outer wall)
-  const wallGeo = new THREE.CylinderGeometry(38, 38, 24, 64, 1, true);
-  const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({
-    color: 0x1a1a35, roughness: 0.7, side: THREE.BackSide,
-  }));
-  wall.position.y = 12; scene.add(wall);
+  // ── SEATING BOWL (octagonal tiers) ──
+  const seatMat1 = new THREE.MeshStandardMaterial({ color: 0x002D62, roughness: 0.75 }); // dark navy (Pacers)
+  const seatMat2 = new THREE.MeshStandardMaterial({ color: 0x1a3366, roughness: 0.75 }); // lighter navy
+  const seatMat3 = new THREE.MeshStandardMaterial({ color: 0x253d6e, roughness: 0.75 }); // upper deck
 
-  // Seating tiers — lighter colors so they're visible
-  const tierColors = [0x1c1c3a, 0x222250, 0x1c1c3a];
-  [
-    { innerR: 19, outerR: 23, y: 2, h: 3 },
-    { innerR: 24, outerR: 29, y: 5.5, h: 4 },
-    { innerR: 30, outerR: 35, y: 11, h: 6 },
-  ].forEach((tier, i) => {
-    const mat = new THREE.MeshStandardMaterial({ color: tierColors[i], roughness: 0.8 });
-    // Inner face
-    const tierGeo = new THREE.CylinderGeometry(tier.outerR, tier.innerR, tier.h, 64, 1, true);
-    tierGeo.scale(1, 1, 0.75);
-    const tierMesh = new THREE.Mesh(tierGeo, mat);
-    tierMesh.position.y = tier.y;
-    scene.add(tierMesh);
-    // Top cap
-    const capGeo = new THREE.RingGeometry(tier.innerR, tier.outerR, 64);
-    const capMat = new THREE.MeshStandardMaterial({ color: tierColors[i] + 0x080810, roughness: 0.75 });
-    const cap = new THREE.Mesh(capGeo, capMat);
-    cap.rotation.x = -Math.PI / 2;
-    cap.position.y = tier.y + tier.h / 2;
-    cap.scale.set(1, 0.75, 1);
-    scene.add(cap);
+  const tiers = [
+    { inner: 16, outer: 22, y: 0, h: 4, mat: seatMat1 },
+    { inner: 23, outer: 28, y: 4.5, h: 5, mat: seatMat2 },
+    { inner: 29, outer: 36, y: 10, h: 8, mat: seatMat3 },
+  ];
+
+  tiers.forEach(tier => {
+    // Create octagonal ring using extrude
+    const outerShape = makeOctagonShape(tier.outer);
+    const innerShape = makeOctagonShape(tier.inner);
+    outerShape.holes.push(new THREE.Path(innerShape.getPoints()));
+    const extrudeSettings = { depth: tier.h, bevelEnabled: false };
+    const geo = new THREE.ExtrudeGeometry(outerShape, extrudeSettings);
+    const mesh = new THREE.Mesh(geo, tier.mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = tier.y;
+    scene.add(mesh);
   });
 
-  // Tier edge lights (blue glow strips)
+  // Tier edge lights (gold accent like Pacers)
   const edgeMat = new THREE.MeshStandardMaterial({
-    color: 0x0A52EF, emissive: new THREE.Color(0x0A52EF), emissiveIntensity: 1.0,
+    color: 0xFFB81C, emissive: new THREE.Color(0xFFB81C), emissiveIntensity: 0.8,
   });
-  [3.5, 7.5, 14].forEach(y => {
-    const edge = new THREE.Mesh(new THREE.TorusGeometry(26, 0.12, 8, 64), edgeMat);
-    edge.position.y = y;
-    edge.scale.set(1, 1, 0.75);
-    scene.add(edge);
+  [4, 9.5, 18].forEach(y => {
+    // Octagonal edge ring
+    const pts: THREE.Vector2[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 - Math.PI / 8;
+      pts.push(new THREE.Vector2(Math.cos(angle) * 25, Math.sin(angle) * 25 * 0.75));
+    }
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(
+      pts.map(p => new THREE.Vector3(p.x, y, p.y))
+    );
+    const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xFFB81C, linewidth: 2 }));
+    scene.add(line);
   });
 
-  // Scoreboard frame — open wireframe so screens inside are visible
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x222233, metalness: 0.8, roughness: 0.3 });
-  // Just the edges/frame, not a solid box
-  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.3, 6.5), frameMat);
-  frameTop.position.set(0, 18.5, 0); scene.add(frameTop);
-  const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.3, 6.5), frameMat);
-  frameBottom.position.set(0, 13.3, 0); scene.add(frameBottom);
-  // Vertical supports
+  // ── OUTER WALL (octagonal) ──
+  const wallShape = makeOctagonShape(38);
+  const wallInner = makeOctagonShape(37.5);
+  wallShape.holes.push(new THREE.Path(wallInner.getPoints()));
+  const wallGeo = new THREE.ExtrudeGeometry(wallShape, { depth: 22, bevelEnabled: false });
+  const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({
+    color: 0x1e1e3a, roughness: 0.7,
+  }));
+  wall.rotation.x = -Math.PI / 2; wall.position.y = 0;
+  scene.add(wall);
+
+  // ── CEILING ──
+  const ceilShape = makeOctagonShape(39);
+  const ceilGeo = new THREE.ShapeGeometry(ceilShape);
+  const ceil = new THREE.Mesh(ceilGeo, new THREE.MeshStandardMaterial({
+    color: 0x1a1a35, roughness: 0.9, side: THREE.BackSide,
+  }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = 24; scene.add(ceil);
+
+  // Ceiling trusses
+  const trussMat = new THREE.MeshStandardMaterial({ color: 0x333355, metalness: 0.6, roughness: 0.4 });
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI;
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(78, 0.4, 0.4), trussMat);
+    truss.position.y = 23;
+    truss.rotation.y = angle;
+    scene.add(truss);
+  }
+
+  // ── SCOREBOARD (center-hung, open frame) ──
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x333355, metalness: 0.8, roughness: 0.3 });
+
+  // Horizontal frame bars
+  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.25, 6.5), frameMat);
+  frameTop.position.set(0, 18.6, 0); scene.add(frameTop);
+  const frameBot = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.25, 6.5), frameMat);
+  frameBot.position.set(0, 13.2, 0); scene.add(frameBot);
+
+  // Corner struts
   [[-4.5, -3], [4.5, -3], [-4.5, 3], [4.5, 3]].forEach(([x, z]) => {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.3, 5.2, 0.3), frameMat);
-    strut.position.set(x, 16, z); scene.add(strut);
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.25, 5.4, 0.25), frameMat);
+    strut.position.set(x, 15.9, z); scene.add(strut);
   });
 
-  // Scoreboard cables
+  // Cables to ceiling
   [[-3, -2], [3, -2], [-3, 2], [3, 2]].forEach(([x, z]) => {
     const cable = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.05, 0.05, 16, 6),
-      new THREE.MeshStandardMaterial({ color: 0x333344, metalness: 0.8 })
+      new THREE.CylinderGeometry(0.04, 0.04, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x444466 })
     );
-    cable.position.set(x, 26, z); scene.add(cable);
+    cable.position.set(x, 22.5, z); scene.add(cable);
   });
 
-  // Ceiling structure
-  const ceilingGeo = new THREE.CylinderGeometry(40, 38, 1, 64, 1, true);
-  const ceiling = new THREE.Mesh(ceilingGeo, new THREE.MeshStandardMaterial({
-    color: 0x151530, roughness: 0.9, side: THREE.BackSide,
-  }));
-  ceiling.position.y = 24; scene.add(ceiling);
-
-  // Power Portal arch
-  const archGeo = new THREE.TorusGeometry(6, 0.8, 8, 32, Math.PI);
-  const archMat = new THREE.MeshStandardMaterial({ color: 0x222244, metalness: 0.6, roughness: 0.5 });
-  const arch = new THREE.Mesh(archGeo, archMat);
-  arch.position.set(0, 6, -34); scene.add(arch);
-
-  // Entrance tunnel
-  const tunnelGeo = new THREE.BoxGeometry(14, 10, 4);
-  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x10102a, roughness: 0.9 });
-  const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
-  tunnel.position.set(0, 5, -36); scene.add(tunnel);
+  // ── CONCOURSE ENTRANCES (gates) ──
+  const gateMat = new THREE.MeshStandardMaterial({ color: 0x252545, roughness: 0.8 });
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const gateR = 37;
+    const gate = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 1.5), gateMat);
+    gate.position.set(Math.cos(angle) * gateR, 2.5, Math.sin(angle) * gateR * 0.75);
+    gate.rotation.y = -angle;
+    scene.add(gate);
+  }
 }
 
 export default function VenueMap3D({ screens, venueName }: Props) {
@@ -364,30 +419,32 @@ export default function VenueMap3D({ screens, venueName }: Props) {
       const displayName = dbScreen?.display_name || TYPE_LABELS[config.type] || key;
 
       if (config.type === 'ribbon') {
-        // Ribbon is a cylinder
+        // Ribbon as octagonal ring (matches arena shape)
         const radius = key === 'upper ribbon' ? 27 : 24;
-        const ribGeo = new THREE.CylinderGeometry(radius, radius, 1.2, 64, 1, true);
         const tex = makeScreenTexture(displayName, config.type, color, 2048, 256);
-        tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(6, 1); tex.needsUpdate = true;
+        tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(8, 1); tex.needsUpdate = true;
         const ribMat = new THREE.MeshStandardMaterial({
           map: tex, emissiveMap: tex,
           emissive: new THREE.Color("#ffffff"), emissiveIntensity: 5,
-          toneMapped: false, side: THREE.BackSide,
+          toneMapped: false, side: THREE.DoubleSide,
         });
-        const ribbon = new THREE.Mesh(ribGeo, ribMat);
-        ribbon.position.set(config.pos[0], config.pos[1], config.pos[2]);
-        ribbon.name = key;
-        scene.add(ribbon);
-        meshMap.set(key, ribbon);
-        allScreenMeshes.push(ribbon);
-
-        // Ring frame
-        const ringMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6, roughness: 0.5 });
-        [0, 1.4].forEach(yOff => {
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(radius + 0.5, 0.15, 8, 64), ringMat);
-          ring.position.set(config.pos[0], config.pos[1] + yOff, config.pos[2]);
-          scene.add(ring);
-        });
+        // Build octagonal ribbon from 8 flat panels
+        const ribGroup = new THREE.Group();
+        ribGroup.name = key;
+        for (let i = 0; i < 8; i++) {
+          const a1 = (i / 8) * Math.PI * 2 - Math.PI / 8;
+          const a2 = ((i + 1) / 8) * Math.PI * 2 - Math.PI / 8;
+          const x1 = Math.cos(a1) * radius, z1 = Math.sin(a1) * radius * 0.75;
+          const x2 = Math.cos(a2) * radius, z2 = Math.sin(a2) * radius * 0.75;
+          const segLen = Math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2);
+          const panel = new THREE.Mesh(new THREE.PlaneGeometry(segLen, 1.5), ribMat.clone());
+          panel.position.set((x1 + x2) / 2, config.pos[1], (z1 + z2) / 2);
+          panel.rotation.y = Math.atan2(x1 - x2, z1 - z2);
+          ribGroup.add(panel);
+          allScreenMeshes.push(panel);
+        }
+        scene.add(ribGroup);
+        meshMap.set(key, ribGroup.children[0] as THREE.Mesh);
       } else {
         // Flat screen
         const tex = makeScreenTexture(displayName, config.type, color);
