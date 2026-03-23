@@ -15,9 +15,6 @@ export async function GET(request: NextRequest) {
       dateFilter = `AND e.event_date >= DATE_TRUNC('month', CURRENT_DATE) AND e.event_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'`
     }
 
-    // Ensure venue_type column exists
-    await query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_type TEXT DEFAULT 'sports'`).catch(() => {})
-
     const result = await query(
       `SELECT
         v.id,

@@ -13,9 +13,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Event name, date, and venue are required' }, { status: 400 })
     }
 
-    // Ensure event_type column exists (for shift vs event distinction)
-    await query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'event'`).catch(() => {})
-
     // Build start/end timestamps from date + time
     const startTimestamp = start_time
       ? `${event_date}T${start_time}:00`

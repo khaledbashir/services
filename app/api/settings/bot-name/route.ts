@@ -6,15 +6,6 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    // Create table if not exists
-    await query(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-
     const result = await query(`SELECT value FROM app_settings WHERE key = 'bot_name'`)
     const botName = result.rows[0]?.value || 'ANC Bot'
 
@@ -34,14 +25,6 @@ export async function PUT(request: NextRequest) {
     if (!botName || typeof botName !== 'string' || botName.trim().length === 0) {
       return NextResponse.json({ error: 'Bot name is required' }, { status: 400 })
     }
-
-    await query(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
 
     await query(
       `INSERT INTO app_settings (key, value, updated_at) VALUES ('bot_name', $1, NOW())

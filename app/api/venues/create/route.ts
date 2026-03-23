@@ -13,9 +13,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Venue name is required' }, { status: 400 })
     }
 
-    // Ensure venue_type column exists
-    await query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_type TEXT DEFAULT 'sports'`).catch(() => {})
-
     const validTypes = ['sports', 'ooh', 'facility']
     const vType = validTypes.includes(venue_type) ? venue_type : 'sports'
 
