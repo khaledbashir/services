@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
       dateFilter = `AND e.event_date >= DATE_TRUNC('month', CURRENT_DATE) AND e.event_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'`
     }
 
+    // Ensure venue_type column exists
+    await query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_type TEXT DEFAULT 'sports'`).catch(() => {})
+
     const result = await query(
       `SELECT
         v.id,
@@ -24,13 +27,14 @@ export async function GET(request: NextRequest) {
         v.portal_token,
         v.primary_contact_name,
         v.primary_contact_email,
+        COALESCE(v.venue_type, 'sports') as venue_type,
         COUNT(e.id) as event_count,
         COUNT(CASE WHEN ea.event_id IS NOT NULL THEN 1 END) as assigned_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id
-      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email
+      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type
       ORDER BY v.name`
     )
 

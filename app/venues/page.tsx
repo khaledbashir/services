@@ -12,6 +12,13 @@ interface Venue {
   event_count: number
   assigned_count: number
   requires_assignment: boolean
+  venue_type: string
+}
+
+const venueTypeConfig: Record<string, { label: string; badge: string }> = {
+  sports: { label: 'Sports', badge: 'bg-blue-50 text-blue-600' },
+  ooh: { label: 'OOH', badge: 'bg-amber-50 text-amber-600' },
+  facility: { label: 'Facility', badge: 'bg-purple-50 text-purple-600' },
 }
 
 export default function VenuesPage() {
@@ -20,7 +27,7 @@ export default function VenuesPage() {
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week')
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
-  const [newVenue, setNewVenue] = useState({ name: '', address: '', primary_contact_name: '', primary_contact_email: '' })
+  const [newVenue, setNewVenue] = useState({ name: '', address: '', primary_contact_name: '', primary_contact_email: '', venue_type: 'sports' })
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
 
@@ -96,7 +103,7 @@ export default function VenuesPage() {
                   body: JSON.stringify(newVenue),
                 })
                 if (res.ok) {
-                  setNewVenue({ name: '', address: '', primary_contact_name: '', primary_contact_email: '' })
+                  setNewVenue({ name: '', address: '', primary_contact_name: '', primary_contact_email: '', venue_type: 'sports' })
                   setShowAdd(false)
                   // Refresh venues
                   const vRes = await fetch(`/api/venues?period=${period}`)
@@ -127,6 +134,15 @@ export default function VenuesPage() {
                 <input type="email" value={newVenue.primary_contact_email} onChange={e => setNewVenue({ ...newVenue, primary_contact_email: e.target.value })}
                   placeholder="e.g., john@venue.com"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Venue Type</label>
+                <select value={newVenue.venue_type} onChange={e => setNewVenue({ ...newVenue, venue_type: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                  <option value="sports">Sports</option>
+                  <option value="ooh">OOH (Out-of-Home)</option>
+                  <option value="facility">Facility</option>
+                </select>
               </div>
               <div className="col-span-2">
                 <button type="submit" disabled={submitting}
@@ -168,7 +184,14 @@ export default function VenuesPage() {
                 >
                   <div className={`h-1 ${!needsAssignment ? 'bg-zinc-300' : hasEvents ? (allAssigned ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-zinc-200'}`} style={{ width: '100%' }}></div>
                   <div className="p-5">
-                    <h3 className="text-base font-semibold text-zinc-900 mb-1 hover:text-[#0A52EF] transition-colors">{venue.name}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-base font-semibold text-zinc-900 hover:text-[#0A52EF] transition-colors">{venue.name}</h3>
+                      {venue.venue_type && venue.venue_type !== 'sports' && (
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${venueTypeConfig[venue.venue_type]?.badge || 'bg-zinc-100 text-zinc-500'}`}>
+                          {venueTypeConfig[venue.venue_type]?.label || venue.venue_type}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-zinc-500 text-sm mb-3">{venue.market}</p>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-zinc-600 font-medium">{eventCount} events {periodLabel}</p>

@@ -16,6 +16,7 @@ interface VenueDetail {
   primary_contact_email: string | null
   requires_assignment: boolean
   portal_token: string | null
+  venue_type: string
 }
 
 interface VenueService {
@@ -151,6 +152,16 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
       const res = await fetch(`/api/venues/${params.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requires_assignment: val }),
+      })
+      if (res.ok) { const data = await res.json(); setVenue(data.venue) }
+    } catch {}
+  }
+
+  const updateVenueType = async (venueType: string) => {
+    try {
+      const res = await fetch(`/api/venues/${params.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue_type: venueType }),
       })
       if (res.ok) { const data = await res.json(); setVenue(data.venue) }
     } catch {}
@@ -393,6 +404,29 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   </button>
                 </div>
               )}
+
+              {/* Venue Type */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Venue Type</h3>
+                <p className="text-xs text-zinc-500 mb-3">Categorize this venue to distinguish sports, OOH, and facility locations</p>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'sports', label: 'Sports', style: 'bg-blue-50 text-blue-700 border-blue-200' },
+                    { value: 'ooh', label: 'OOH', style: 'bg-amber-50 text-amber-700 border-amber-200' },
+                    { value: 'facility', label: 'Facility', style: 'bg-purple-50 text-purple-700 border-purple-200' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => updateVenueType(opt.value)}
+                      className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                        venue.venue_type === opt.value ? opt.style : 'bg-white text-zinc-400 border-[#E8E8E8] hover:border-zinc-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Assignment */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">

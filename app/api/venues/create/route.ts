@@ -7,17 +7,23 @@ export async function POST(request: NextRequest) {
     const auth = await requireRole(request, 'admin')
     if (isAuthError(auth)) return auth
 
-    const { name, market_id, address, primary_contact_name, primary_contact_email, requires_assignment } = await request.json()
+    const { name, market_id, address, primary_contact_name, primary_contact_email, requires_assignment, venue_type } = await request.json()
 
     if (!name) {
       return NextResponse.json({ error: 'Venue name is required' }, { status: 400 })
     }
 
+    // Ensure venue_type column exists
+    await query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_type TEXT DEFAULT 'sports'`).catch(() => {})
+
+    const validTypes = ['sports', 'ooh', 'facility']
+    const vType = validTypes.includes(venue_type) ? venue_type : 'sports'
+
     const result = await query(
-      `INSERT INTO venues (name, market_id, address, primary_contact_name, primary_contact_email, requires_assignment, portal_token)
-       VALUES ($1, $2, $3, $4, $5, $6, encode(gen_random_bytes(16), 'hex'))
+      `INSERT INTO venues (name, market_id, address, primary_contact_name, primary_contact_email, requires_assignment, venue_type, portal_token)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, encode(gen_random_bytes(16), 'hex'))
        RETURNING id, name`,
-      [name, market_id || null, address || null, primary_contact_name || null, primary_contact_email || null, requires_assignment !== false]
+      [name, market_id || null, address || null, primary_contact_name || null, primary_contact_email || null, requires_assignment !== false, vType]
     )
 
     return NextResponse.json({ venue: result.rows[0] })

@@ -21,7 +21,8 @@ export async function GET(
         v.primary_contact_name,
         v.primary_contact_email,
         v.requires_assignment,
-        v.portal_token
+        v.portal_token,
+        COALESCE(v.venue_type, 'sports') as venue_type
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
@@ -140,6 +141,17 @@ export async function PATCH(
       )
     }
 
+    // Handle venue_type
+    if (body.venue_type !== undefined) {
+      const validTypes = ['sports', 'ooh', 'facility']
+      if (validTypes.includes(body.venue_type)) {
+        await query(
+          `UPDATE venues SET venue_type = $1 WHERE id = $2`,
+          [body.venue_type, venueId]
+        )
+      }
+    }
+
     // Fetch full venue data
     const fullVenue = await query(
       `SELECT
@@ -152,7 +164,8 @@ export async function PATCH(
         v.primary_contact_name,
         v.primary_contact_email,
         v.requires_assignment,
-        v.portal_token
+        v.portal_token,
+        COALESCE(v.venue_type, 'sports') as venue_type
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
