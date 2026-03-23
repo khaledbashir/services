@@ -75,7 +75,7 @@ export async function GET(
               TO_CHAR(t.resolved_at, 'Mon DD, YYYY') as resolved_at
        FROM tickets t
        WHERE t.venue_id = $1
-       ORDER BY CASE t.status WHEN 'open' THEN 1 WHEN 'in_progress' THEN 2 ELSE 3 END, t.created_at DESC
+       ORDER BY CASE t.status WHEN 'new' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'escalated' THEN 3 WHEN 'on_hold' THEN 4 ELSE 5 END, t.created_at DESC
        LIMIT 30`,
       [venue.id]
     )
@@ -111,7 +111,7 @@ export async function GET(
 
     const pastMonth = parseInt(statsResult.rows[0]?.past_month_events || '0')
     const completed = parseInt(statsResult.rows[0]?.completed_events || '0')
-    const openTickets = ticketsResult.rows.filter((t: any) => t.status === 'open' || t.status === 'in_progress').length
+    const openTickets = ticketsResult.rows.filter((t: any) => t.status !== 'closed').length
     const avgResolution = resolutionResult.rows[0]?.avg_hours ? Math.round(parseFloat(resolutionResult.rows[0].avg_hours) * 10) / 10 : null
 
     // Today's events with assigned staff (for live game day view + "Your ANC Team")

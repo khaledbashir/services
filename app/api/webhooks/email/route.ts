@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, assigned_to, sla_response_due, sla_resolution_due, original_message)
-       VALUES ($1, $2, $3, 'general', 'medium', 'open', $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, 'general', 'medium', 'new', $4, $5, $6, $7, $8)
        RETURNING id, ticket_number, title, category, priority, status`,
       [venueId, subject.substring(0, 100), description, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue, emailBody || subject]
     )
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
               { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
               { type: 'mrkdwn', text: `*Venue:*\n${venueName}` },
               { type: 'mrkdwn', text: `*Priority:*\n:large_yellow_circle: medium` },
-              { type: 'mrkdwn', text: `*Status:*\nopen` },
+              { type: 'mrkdwn', text: `*Status:*\nnew` },
             ],
           },
           ...(emailBody ? [

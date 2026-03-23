@@ -105,7 +105,7 @@ export async function PATCH(
     if (assigned_to !== undefined) { updates.push(`assigned_to = $${idx++}`); values.push(assigned_to || null) }
     
     updates.push(`updated_at = NOW()`)
-    if (status === 'resolved' || status === 'closed') {
+    if (status === 'closed') {
       updates.push(`resolved_at = NOW()`)
       updates.push(`sla_resolution_met = (NOW() <= sla_resolution_due OR sla_resolution_due IS NULL)`)
     }
@@ -137,7 +137,7 @@ export async function PATCH(
       const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
       const channelId = slackChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (channelId) {
-        const action = status === 'resolved' || status === 'closed' ? 'resolved' : 'updated'
+        const action = status === 'closed' ? 'resolved' : 'updated'
         const emoji = action === 'resolved' ? ':white_check_mark:' : ':pencil2:'
         sendSlackMessage({
           channel: channelId,

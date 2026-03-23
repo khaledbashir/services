@@ -64,7 +64,7 @@ Respond ONLY with valid JSON, no other text:
       const CLAW_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
       const result = await query(
         `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by)
-         VALUES ($1, $2, $3, 'general', 'medium', 'open', $4)
+         VALUES ($1, $2, $3, 'general', 'medium', 'new', $4)
          RETURNING id, ticket_number, title, category, priority, status`,
         [venue.id, message.substring(0, 80), message, CLAW_ID]
       )
@@ -112,7 +112,7 @@ Respond ONLY with valid JSON, no other text:
     const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
     const result = await query(
       `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, assigned_to, sla_response_due, sla_resolution_due, original_message)
-       VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, 'new', $6, $7, $8, $9, $10)
        RETURNING id, ticket_number, title, category, priority, status`,
       [venue.id, parsed.title, parsed.description, parsed.category, parsed.priority, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue, message]
     )

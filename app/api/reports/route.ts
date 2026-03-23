@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     const slaResult = await query(
       `SELECT
         COUNT(*) as total_tickets,
-        COUNT(CASE WHEN t.status IN ('resolved','closed') THEN 1 END) as resolved,
+        COUNT(CASE WHEN t.status = 'closed' THEN 1 END) as resolved,
         COUNT(CASE WHEN t.sla_response_met = true THEN 1 END) as response_met,
         COUNT(CASE WHEN t.sla_response_met = false THEN 1 END) as response_breached,
         COUNT(CASE WHEN t.sla_resolution_met = true THEN 1 END) as resolution_met,

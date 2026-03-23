@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     )
 
     const openTicketsResult = await query(
-      `SELECT COUNT(*) as count FROM tickets WHERE status IN ('open', 'in_progress')`
+      `SELECT COUNT(*) as count FROM tickets WHERE status IN ('new', 'on_hold', 'in_progress', 'escalated')`
     )
 
     const pendingWorkflowsResult = await query(

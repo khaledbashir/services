@@ -289,7 +289,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   post_game_submitted: { label: 'Completed', color: '#2563eb', bg: '#eff6ff' },
 }
 const priorityColors: Record<string, { color: string; bg: string }> = { low: { color: '#64748b', bg: '#f1f5f9' }, medium: { color: '#d97706', bg: '#fffbeb' }, high: { color: '#ea580c', bg: '#fff7ed' }, critical: { color: '#dc2626', bg: '#fef2f2' } }
-const ticketStatusColors: Record<string, { color: string; bg: string }> = { open: { color: '#dc2626', bg: '#fef2f2' }, in_progress: { color: '#d97706', bg: '#fffbeb' }, resolved: { color: '#059669', bg: '#ecfdf5' }, closed: { color: '#64748b', bg: '#f1f5f9' } }
+const ticketStatusColors: Record<string, { color: string; bg: string }> = { new: { color: '#dc2626', bg: '#fef2f2' }, on_hold: { color: '#7c3aed', bg: '#f5f3ff' }, in_progress: { color: '#d97706', bg: '#fffbeb' }, escalated: { color: '#ea580c', bg: '#fff7ed' }, closed: { color: '#64748b', bg: '#f1f5f9' } }
 const workflowLabels: Record<string, string> = { check_in: 'Staff checked in on site', game_ready: 'Game readiness confirmed', post_game_report: 'Post-game report submitted' }
 
 export default function PortalPage() {
@@ -424,7 +424,7 @@ export default function PortalPage() {
     </div>
   )
 
-  const openTickets = tickets.filter(t => t.status === 'open' || t.status === 'in_progress')
+  const openTickets = tickets.filter(t => t.status !== 'closed')
 
   return (
     <div className="min-h-screen bg-[#fafbfc]">
@@ -883,7 +883,7 @@ export default function PortalPage() {
                 {(() => {
                   const t = tickets.find(t => t.id === viewingTicket)
                   if (!t) return null
-                  const sc = ticketStatusColors[t.status] || ticketStatusColors.open
+                  const sc = ticketStatusColors[t.status] || ticketStatusColors.new
                   return (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
@@ -948,7 +948,7 @@ export default function PortalPage() {
                       <tbody>
                         {tickets.map(ticket => {
                           const pc = priorityColors[ticket.priority] || priorityColors.medium
-                          const sc = ticketStatusColors[ticket.status] || ticketStatusColors.open
+                          const sc = ticketStatusColors[ticket.status] || ticketStatusColors.new
                           return (
                             <tr key={ticket.id} onClick={() => viewTicket(ticket.id)} className="border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer">
                               <td className="py-3 px-6 text-zinc-400 text-xs font-mono">{ticket.ticket_number}</td>

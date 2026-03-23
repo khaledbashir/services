@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes, sla_response_due, sla_resolution_due)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11)
        RETURNING id, ticket_number, title, priority, status, category`,
       [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue]
     )

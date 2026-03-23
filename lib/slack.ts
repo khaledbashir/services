@@ -72,7 +72,7 @@ export function formatTicketNotification(ticket: {
         { type: 'mrkdwn', text: `*Venue:*\n${ticket.venue_name}` },
         { type: 'mrkdwn', text: `*Category:*\n${ticket.category}` },
         { type: 'mrkdwn', text: `*Priority:*\n${priorityEmoji} ${ticket.priority}` },
-        { type: 'mrkdwn', text: `*Status:*\n${ticket.status || 'open'}` },
+        { type: 'mrkdwn', text: `*Status:*\n${ticket.status || 'new'}` },
       ],
     },
   ]

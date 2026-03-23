@@ -28,10 +28,15 @@ const priorityConfig: Record<string, { dot: string; bg: string; text: string; la
   critical: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Critical' },
 }
 const statusConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
-  open: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Open' },
+  new: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'New' },
+  on_hold: { dot: 'bg-violet-500', bg: 'bg-violet-50', text: 'text-violet-700', label: 'On Hold' },
   in_progress: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'In Progress' },
-  resolved: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Resolved' },
+  escalated: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700', label: 'Escalated' },
   closed: { dot: 'bg-zinc-400', bg: 'bg-zinc-100', text: 'text-zinc-500', label: 'Closed' },
+}
+const statusFlow = ['new', 'on_hold', 'in_progress', 'escalated', 'closed']
+const statusFlowColors: Record<string, string> = {
+  new: '#0A52EF', on_hold: '#7c3aed', in_progress: '#d97706', escalated: '#ea580c', closed: '#64748b',
 }
 const categoryConfig: Record<string, { bg: string; text: string }> = {
   hardware: { bg: 'bg-red-50', text: 'text-red-600' },
@@ -112,13 +117,55 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   if (!ticket) return <DashboardLayout><div className="bg-white rounded border border-[#E8E8E8] p-12 text-center"><p className="text-zinc-500">Ticket not found</p></div></DashboardLayout>
 
   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-  const st = statusConfig[ticket.status] || statusConfig.open
+  const st = statusConfig[ticket.status] || statusConfig.new
+  const currentStepIdx = statusFlow.indexOf(ticket.status)
   const cat = categoryConfig[ticket.category] || categoryConfig.general
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">← Back to Tickets</button>
+
+        {/* Salesforce-style Status Stepper */}
+        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-zinc-400">{String(ticket.ticket_number).padStart(8, '0')}</span>
+              <span className="text-zinc-300">|</span>
+              <span className="text-sm font-semibold text-zinc-900">Case</span>
+            </div>
+            <span className="text-xs text-zinc-500">Status: {st.label}</span>
+          </div>
+          <div className="flex">
+            {statusFlow.map((step, idx) => {
+              const isActive = step === ticket.status
+              const isPast = idx < currentStepIdx
+              const color = statusFlowColors[step]
+              return (
+                <button
+                  key={step}
+                  onClick={() => updateField('status', step)}
+                  className="flex-1 relative group"
+                >
+                  <div
+                    className="py-3 px-4 text-center text-xs font-semibold transition-colors"
+                    style={{
+                      backgroundColor: isActive ? color : isPast ? `${color}22` : '#f8fafc',
+                      color: isActive ? '#fff' : isPast ? color : '#94a3b8',
+                      clipPath: idx === statusFlow.length - 1
+                        ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 8px 50%)'
+                        : idx === 0
+                        ? 'polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%)'
+                        : 'polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 8px 50%)',
+                    }}
+                  >
+                    {statusConfig[step]?.label || step}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main column */}
@@ -128,7 +175,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               <div className={`h-1 ${pri.dot}`}></div>
               <div className="p-6">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-mono text-zinc-400">#{ticket.ticket_number}</span>
+                  <span className="text-xs font-mono text-zinc-400">{String(ticket.ticket_number).padStart(8, '0')}</span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1.5 ${st.bg} ${st.text}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>{st.label}
                   </span>
@@ -161,7 +208,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             </div>
 
             {/* Resolution Notes */}
-            {(ticket.status === 'resolved' || ticket.status === 'closed') && (
+            {ticket.status === 'closed' && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-emerald-900">Resolution</h3>
@@ -403,7 +450,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   {ticket.sla_resolution_due && (() => {
                     const due = new Date(ticket.sla_resolution_due)
                     const now = new Date()
-                    const resolved = ticket.status === 'resolved' || ticket.status === 'closed'
+                    const resolved = ticket.status === 'closed'
                     const breached = !resolved && now > due
                     return (
                       <div>

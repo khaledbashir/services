@@ -29,7 +29,7 @@ export async function GET(
       query(`SELECT COUNT(*) as total, COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed
              FROM events WHERE venue_id = $1 AND event_date >= $2 AND event_date <= $3
              AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`, [venue.id, startStr, endStr]),
-      query(`SELECT COUNT(*) as total, COUNT(CASE WHEN status IN ('resolved','closed') THEN 1 END) as resolved,
+      query(`SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'closed' THEN 1 END) as resolved,
                     COUNT(CASE WHEN priority = 'critical' THEN 1 END) as critical
              FROM tickets WHERE venue_id = $1 AND created_at >= $2 AND created_at <= $3::date + 1`, [venue.id, startStr, endStr]),
       query(`SELECT DISTINCT s.full_name, s.title FROM staff s

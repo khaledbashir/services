@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
         t.status
       FROM tickets t
       LEFT JOIN venues v ON t.venue_id = v.id
-      WHERE t.status IN ('open', 'in_progress')
+      WHERE t.status IN ('new', 'on_hold', 'in_progress', 'escalated')
       ORDER BY 
         CASE 
           WHEN t.priority = 'critical' THEN 1

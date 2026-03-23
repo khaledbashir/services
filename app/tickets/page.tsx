@@ -40,9 +40,10 @@ const priorityConfig: Record<string, { bg: string; text: string; dot: string; la
 }
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  open: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'Open' },
+  new: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'New' },
+  on_hold: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500', label: 'On Hold' },
   in_progress: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', label: 'In Progress' },
-  resolved: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'Resolved' },
+  escalated: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', label: 'Escalated' },
   closed: { bg: 'bg-zinc-100', text: 'text-zinc-500', dot: 'bg-zinc-400', label: 'Closed' },
 }
 
@@ -102,20 +103,22 @@ export default function TicketsPage() {
   const filteredTickets = tickets.filter(t => {
     const q = search.toLowerCase()
     const matchesSearch = !q || t.title.toLowerCase().includes(q) || t.venue_name.toLowerCase().includes(q) || (t.assigned_to_name || '').toLowerCase().includes(q) || t.category.toLowerCase().includes(q)
-    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && (t.status === 'open' || t.status === 'in_progress')) || t.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && t.status !== 'closed') || t.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
-  const openCount = tickets.filter(t => t.status === 'open').length
+  const newCount = tickets.filter(t => t.status === 'new').length
+  const onHoldCount = tickets.filter(t => t.status === 'on_hold').length
   const inProgressCount = tickets.filter(t => t.status === 'in_progress').length
-  const resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length
+  const escalatedCount = tickets.filter(t => t.status === 'escalated').length
+  const closedCount = tickets.filter(t => t.status === 'closed').length
 
   const CardView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {filteredTickets.map(ticket => {
         const cat = categoryConfig[ticket.category] || categoryConfig.general
         const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-        const st = statusConfig[ticket.status] || statusConfig.open
+        const st = statusConfig[ticket.status] || statusConfig.new
         return (
           <div
             key={ticket.id}
@@ -127,7 +130,7 @@ export default function TicketsPage() {
             <div className="p-5">
               {/* Header: ticket number + status */}
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-zinc-400">#{ticket.ticket_number}</span>
+                <span className="text-xs font-mono text-zinc-400">{String(ticket.ticket_number).padStart(8, '0')}</span>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1.5 ${st.bg} ${st.text}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
                   {st.label}
@@ -190,11 +193,11 @@ export default function TicketsPage() {
           {filteredTickets.map(ticket => {
             const cat = categoryConfig[ticket.category] || categoryConfig.general
             const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-            const st = statusConfig[ticket.status] || statusConfig.open
+            const st = statusConfig[ticket.status] || statusConfig.new
             return (
               <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
                 className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors">
-                <td className="py-3 px-6 text-zinc-400 font-mono text-xs">#{ticket.ticket_number}</td>
+                <td className="py-3 px-6 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(8, '0')}</td>
                 <td className="py-3 px-6 font-medium text-zinc-900 max-w-xs truncate">{ticket.title}</td>
                 <td className="py-3 px-6 text-zinc-600 text-xs">{ticket.venue_name}</td>
                 <td className="py-3 px-6">
@@ -234,22 +237,30 @@ export default function TicketsPage() {
         </div>
 
         {/* Stat pills */}
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => setStatusFilter('active')}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'active' ? 'bg-[#0A52EF] text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Active <span className="ml-1 opacity-75">{openCount + inProgressCount}</span>
+            Active <span className="ml-1 opacity-75">{newCount + onHoldCount + inProgressCount + escalatedCount}</span>
           </button>
-          <button onClick={() => setStatusFilter('open')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'open' ? 'bg-red-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Open <span className="ml-1 opacity-75">{openCount}</span>
+          <button onClick={() => setStatusFilter('new')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'new' ? 'bg-red-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
+            New <span className="ml-1 opacity-75">{newCount}</span>
+          </button>
+          <button onClick={() => setStatusFilter('on_hold')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'on_hold' ? 'bg-violet-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
+            On Hold <span className="ml-1 opacity-75">{onHoldCount}</span>
           </button>
           <button onClick={() => setStatusFilter('in_progress')}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
             In Progress <span className="ml-1 opacity-75">{inProgressCount}</span>
           </button>
-          <button onClick={() => setStatusFilter('resolved')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'resolved' ? 'bg-emerald-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Resolved <span className="ml-1 opacity-75">{resolvedCount}</span>
+          <button onClick={() => setStatusFilter('escalated')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'escalated' ? 'bg-orange-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
+            Escalated <span className="ml-1 opacity-75">{escalatedCount}</span>
+          </button>
+          <button onClick={() => setStatusFilter('closed')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'closed' ? 'bg-zinc-600 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
+            Closed <span className="ml-1 opacity-75">{closedCount}</span>
           </button>
           <button onClick={() => setStatusFilter('all')}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'all' ? 'bg-zinc-700 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
