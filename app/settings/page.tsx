@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [newTask, setNewTask] = useState({ name: '', description: '', schedule: '' })
   const [creating, setCreating] = useState(false)
   const [savingLeague, setSavingLeague] = useState<string | null>(null)
+  const [botName, setBotName] = useState('')
+  const [botNameDraft, setBotNameDraft] = useState('')
+  const [savingBotName, setSavingBotName] = useState(false)
+  const [botNameSaved, setBotNameSaved] = useState(false)
 
   const fetchTasks = async () => {
     try {
@@ -59,7 +63,35 @@ export default function SettingsPage() {
     } catch {} finally { setSavingLeague(null) }
   }
 
-  useEffect(() => { fetchTasks(); fetchLeagues() }, [])
+  const fetchBotName = async () => {
+    try {
+      const res = await fetch('/api/settings/bot-name')
+      const data = await res.json()
+      setBotName(data.botName || 'ANC Bot')
+      setBotNameDraft(data.botName || 'ANC Bot')
+    } catch {}
+  }
+
+  const saveBotName = async () => {
+    if (!botNameDraft.trim() || botNameDraft.trim() === botName) return
+    setSavingBotName(true)
+    try {
+      const res = await fetch('/api/settings/bot-name', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botName: botNameDraft.trim() }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBotName(data.botName)
+        setBotNameDraft(data.botName)
+        setBotNameSaved(true)
+        setTimeout(() => setBotNameSaved(false), 2000)
+      }
+    } catch {} finally { setSavingBotName(false) }
+  }
+
+  useEffect(() => { fetchTasks(); fetchLeagues(); fetchBotName() }, [])
 
   const toggleTask = async (id: string, enabled: boolean) => {
     // Optimistic update
@@ -195,6 +227,37 @@ export default function SettingsPage() {
 
         <div className="border-t border-[#E8E8E8] pt-6"></div>
 
+        {/* Slack Bot Name */}
+        <div>
+          <h2 className="text-xl font-semibold text-zinc-900">Slack Bot Identity</h2>
+          <p className="text-sm text-zinc-500 mt-1">Customize the name displayed for the Slack bot across the platform</p>
+        </div>
+
+        <div className="bg-white rounded-lg border border-[#E8E8E8] shadow-sm p-6">
+          <div className="flex items-end gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-zinc-500 mb-1">Bot Display Name</label>
+              <input
+                type="text"
+                value={botNameDraft}
+                onChange={e => setBotNameDraft(e.target.value)}
+                className="w-full max-w-sm border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
+                placeholder="e.g., ANC Bot"
+              />
+            </div>
+            <button
+              onClick={saveBotName}
+              disabled={savingBotName || !botNameDraft.trim() || botNameDraft.trim() === botName}
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors"
+            >
+              {savingBotName ? 'Saving...' : botNameSaved ? 'Saved!' : 'Update Name'}
+            </button>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2">This name will appear in Slack notifications and throughout the dashboard</p>
+        </div>
+
+        <div className="border-t border-[#E8E8E8] pt-6"></div>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-zinc-900">Automations</h2>
@@ -251,7 +314,7 @@ export default function SettingsPage() {
           <div className="px-6 py-4 border-b border-[#E8E8E8]">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-zinc-900">Slack Bot Automations</h3>
+                <h3 className="text-sm font-semibold text-zinc-900">{botName} Automations</h3>
                 <p className="text-xs text-zinc-400 mt-0.5">Delivering to #external--ai-services</p>
               </div>
             </div>
