@@ -18,6 +18,22 @@ interface LeagueSetting {
   estimated_hours: number
 }
 
+interface ReportSchedule {
+  id: string
+  name: string
+  venue_ids: string[]
+  venue_names: string[] | null
+  frequency: string
+  recipients: string[]
+  enabled: boolean
+  last_sent_at: string | null
+}
+
+interface VenueOption {
+  id: string
+  name: string
+}
+
 export default function SettingsPage() {
   const auth = useAuth('admin')
   const [tasks, setTasks] = useState<AutoTask[]>([])
@@ -31,6 +47,11 @@ export default function SettingsPage() {
   const [botNameDraft, setBotNameDraft] = useState('')
   const [savingBotName, setSavingBotName] = useState(false)
   const [botNameSaved, setBotNameSaved] = useState(false)
+  const [reportSchedules, setReportSchedules] = useState<ReportSchedule[]>([])
+  const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
+  const [showAddSchedule, setShowAddSchedule] = useState(false)
+  const [newSchedule, setNewSchedule] = useState({ name: '', venue_ids: [] as string[], frequency: 'weekly', recipients: '' })
+  const [creatingSchedule, setCreatingSchedule] = useState(false)
 
   const fetchTasks = async () => {
     try {
@@ -91,7 +112,66 @@ export default function SettingsPage() {
     } catch {} finally { setSavingBotName(false) }
   }
 
-  useEffect(() => { fetchTasks(); fetchLeagues(); fetchBotName() }, [])
+  const fetchReportSchedules = async () => {
+    try {
+      const res = await fetch('/api/settings/report-schedules')
+      const data = await res.json()
+      setReportSchedules(data.schedules || [])
+    } catch {}
+  }
+
+  const fetchVenueOptions = async () => {
+    try {
+      const res = await fetch('/api/venues')
+      const data = await res.json()
+      setVenueOptions((data.venues || []).sort((a: VenueOption, b: VenueOption) => a.name.localeCompare(b.name)))
+    } catch {}
+  }
+
+  const toggleSchedule = async (id: string, enabled: boolean) => {
+    setReportSchedules(s => s.map(r => r.id === id ? { ...r, enabled } : r))
+    try {
+      await fetch('/api/settings/report-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, enabled }),
+      })
+    } catch { fetchReportSchedules() }
+  }
+
+  const deleteSchedule = async (id: string) => {
+    if (!confirm('Remove this scheduled report?')) return
+    setReportSchedules(s => s.filter(r => r.id !== id))
+    try {
+      await fetch('/api/settings/report-schedules', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+    } catch { fetchReportSchedules() }
+  }
+
+  const addSchedule = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!newSchedule.name || !newSchedule.recipients.trim()) return
+    setCreatingSchedule(true)
+    try {
+      const recipients = newSchedule.recipients.split(',').map(e => e.trim()).filter(Boolean)
+      const res = await fetch('/api/settings/report-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newSchedule, recipients }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setReportSchedules(data.schedules || [])
+        setNewSchedule({ name: '', venue_ids: [], frequency: 'weekly', recipients: '' })
+        setShowAddSchedule(false)
+      }
+    } catch {} finally { setCreatingSchedule(false) }
+  }
+
+  useEffect(() => { fetchTasks(); fetchLeagues(); fetchBotName(); fetchReportSchedules(); fetchVenueOptions() }, [])
 
   const toggleTask = async (id: string, enabled: boolean) => {
     // Optimistic update
@@ -350,6 +430,133 @@ export default function SettingsPage() {
                     {/* Delete */}
                     <button
                       onClick={() => deleteTask(task.id)}
+                      className="text-zinc-300 hover:text-red-500 transition-colors text-sm"
+                      title="Remove"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#E8E8E8] pt-6"></div>
+
+        {/* Scheduled Report Delivery */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-900">Scheduled Reports</h2>
+            <p className="text-sm text-zinc-500 mt-1">Automatically email operations reports on a recurring schedule</p>
+          </div>
+          <button
+            onClick={() => setShowAddSchedule(!showAddSchedule)}
+            className="bg-[#0A52EF] text-white px-4 py-2 rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
+          >
+            {showAddSchedule ? 'Cancel' : '+ New Schedule'}
+          </button>
+        </div>
+
+        {showAddSchedule && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create Report Schedule</h3>
+            <form onSubmit={addSchedule} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Schedule Name *</label>
+                <input type="text" value={newSchedule.name} onChange={e => setNewSchedule({...newSchedule, name: e.target.value})}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
+                  placeholder="e.g., Weekly Boston Report" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Venues</label>
+                <div className="border border-[#E8E8E8] rounded max-h-36 overflow-y-auto">
+                  <label className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 cursor-pointer text-sm border-b border-[#E8E8E8]">
+                    <input type="checkbox" checked={newSchedule.venue_ids.length === 0}
+                      onChange={() => setNewSchedule({...newSchedule, venue_ids: []})}
+                      className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]" />
+                    <span className="text-zinc-700 font-medium">All Venues</span>
+                  </label>
+                  {venueOptions.map(v => (
+                    <label key={v.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 cursor-pointer text-sm">
+                      <input type="checkbox" checked={newSchedule.venue_ids.includes(v.id)}
+                        onChange={() => {
+                          setNewSchedule(prev => ({
+                            ...prev,
+                            venue_ids: prev.venue_ids.includes(v.id)
+                              ? prev.venue_ids.filter(id => id !== v.id)
+                              : [...prev.venue_ids, v.id],
+                          }))
+                        }}
+                        className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]" />
+                      <span className="text-zinc-700">{v.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">Leave empty for a report covering all venues</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Frequency *</label>
+                  <select value={newSchedule.frequency} onChange={e => setNewSchedule({...newSchedule, frequency: e.target.value})}
+                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none" required>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Recipients * (comma-separated emails)</label>
+                  <input type="text" value={newSchedule.recipients} onChange={e => setNewSchedule({...newSchedule, recipients: e.target.value})}
+                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
+                    placeholder="joe@anc.com, ops@anc.com" required />
+                </div>
+              </div>
+              <button type="submit" disabled={creatingSchedule}
+                className="bg-[#0A52EF] text-white px-5 py-2 rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                {creatingSchedule ? 'Creating...' : 'Create Schedule'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+          <div className="px-6 py-4 border-b border-[#E8E8E8]">
+            <h3 className="text-sm font-semibold text-zinc-900">Active Report Schedules</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">Reports are generated as PDFs and emailed to recipients automatically</p>
+          </div>
+
+          {reportSchedules.length === 0 ? (
+            <div className="p-8 text-center text-zinc-400 text-sm">No scheduled reports configured</div>
+          ) : (
+            <div className="divide-y divide-[#E8E8E8]">
+              {reportSchedules.map(schedule => (
+                <div key={schedule.id} className="px-6 py-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h4 className="text-sm font-medium text-zinc-900">{schedule.name}</h4>
+                      <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${schedule.enabled ? 'bg-emerald-50 text-emerald-600' : 'bg-zinc-100 text-zinc-400'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${schedule.enabled ? 'bg-emerald-500' : 'bg-zinc-300'}`}></span>
+                        {schedule.enabled ? 'Active' : 'Paused'}
+                      </span>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-600 capitalize">{schedule.frequency}</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Venues: {schedule.venue_names && schedule.venue_names.length > 0 ? schedule.venue_names.filter(Boolean).join(', ') : 'All'}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      To: {schedule.recipients.join(', ')}
+                      {schedule.last_sent_at && ` · Last sent: ${new Date(schedule.last_sent_at).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4">
+                    <button
+                      onClick={() => toggleSchedule(schedule.id, !schedule.enabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${schedule.enabled ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${schedule.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <button
+                      onClick={() => deleteSchedule(schedule.id)}
                       className="text-zinc-300 hover:text-red-500 transition-colors text-sm"
                       title="Remove"
                     >
