@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${ANYTHINGLLM_KEY}`,
       },
-      body: JSON.stringify({ message, mode: 'query' }),
+      body: JSON.stringify({ message, mode: 'chat' }),
     })
 
     if (!res.ok) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${ANYTHINGLLM_KEY}`,
         },
-        body: JSON.stringify({ message, mode: 'query' }),
+        body: JSON.stringify({ message, mode: 'chat' }),
       })
 
       if (!fallbackRes.ok) {
