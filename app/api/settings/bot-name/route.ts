@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     // Create table if not exists
