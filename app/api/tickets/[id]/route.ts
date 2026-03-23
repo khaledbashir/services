@@ -183,9 +183,53 @@ export async function PATCH(
       )
     }
 
+    // Auto-email distribution list on status change or resolution
+    if (status && oldTicket && status !== oldTicket.status) {
+      sendDistributionEmails(oldTicket.venue_id, oldTicket.title, oldTicket.ticket_number || result.rows[0]?.ticket_number, `Status updated: ${oldTicket.status} → ${status}`, status === 'closed' ? resolution_notes : undefined)
+    }
+
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {
     console.error('Error updating ticket:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+async function sendDistributionEmails(venueId: string, ticketTitle: string, ticketNumber: number, updateText: string, resolution?: string) {
+  try {
+    const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+    if (!RESEND_API_KEY) return
+
+    const venueRes = await query(
+      `SELECT name, distribution_emails FROM venues WHERE id = $1`,
+      [venueId]
+    )
+    const venue = venueRes.rows[0]
+    if (!venue?.distribution_emails || venue.distribution_emails.length === 0) return
+
+    const caseNum = String(ticketNumber).padStart(8, '0')
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: 'ANC Services <notifications@ancservices.app>',
+        to: venue.distribution_emails,
+        subject: `Case ${caseNum} Update — ${ticketTitle}`,
+        html: `<div style="font-family:sans-serif;max-width:600px">
+          <div style="background:#002C73;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="margin:0;font-size:16px">Case ${caseNum} — ${ticketTitle}</h2>
+            <p style="margin:4px 0 0;opacity:0.7;font-size:13px">${venue.name}</p>
+          </div>
+          <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+            <p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Update:</strong> ${updateText}</p>
+            ${resolution ? `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Resolution:</strong> ${resolution}</p>` : ''}
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+            <p style="margin:0;font-size:12px;color:#94a3b8">This is an automated notification from ANC Sports Operations.</p>
+          </div>
+        </div>`,
+      }),
+    })
+  } catch (err) {
+    console.error('Failed to send distribution emails:', err)
   }
 }

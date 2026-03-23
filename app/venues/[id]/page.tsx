@@ -17,6 +17,7 @@ interface VenueDetail {
   requires_assignment: boolean
   portal_token: string | null
   venue_type: string
+  distribution_emails: string[]
 }
 
 interface VenueService {
@@ -95,6 +96,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [portalCopied, setPortalCopied] = useState(false)
   const [emailingSchedule, setEmailingSchedule] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const [distEmails, setDistEmails] = useState<string[]>([])
+  const [newDistEmail, setNewDistEmail] = useState('')
+  const [savingDist, setSavingDist] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -108,6 +112,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setAssignedStaff(data.assignedStaff || [])
           setVenueServices(data.venueServices || [])
           setSlackChannelId(data.venue.slack_channel_id || '')
+          setDistEmails(data.venue.distribution_emails || [])
 
           // Fetch screens
           const screensRes = await fetch(`/api/venues/${params.id}/screens`)
@@ -488,6 +493,55 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   <button type="submit" disabled={savingSlack}
                     className="w-full px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50">
                     {savingSlack ? 'Saving...' : 'Save'}
+                  </button>
+                </form>
+              </div>
+              {/* Distribution List */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Ticket Distribution List</h3>
+                <p className="text-xs text-zinc-500 mb-3">These contacts receive automatic email updates when tickets are updated, commented on, or resolved</p>
+                <div className="space-y-2 mb-3">
+                  {distEmails.map((email, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-zinc-50 rounded px-3 py-2">
+                      <span className="text-sm text-zinc-700">{email}</span>
+                      <button
+                        onClick={async () => {
+                          const updated = distEmails.filter((_, i) => i !== idx)
+                          setDistEmails(updated)
+                          setSavingDist(true)
+                          try {
+                            await fetch(`/api/venues/${params.id}`, {
+                              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ distribution_emails: updated }),
+                            })
+                          } catch {} finally { setSavingDist(false) }
+                        }}
+                        className="text-zinc-400 hover:text-red-500 text-xs"
+                      >Remove</button>
+                    </div>
+                  ))}
+                  {distEmails.length === 0 && <p className="text-xs text-zinc-400">No distribution contacts added</p>}
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (!newDistEmail.trim() || !newDistEmail.includes('@')) return
+                  const updated = [...distEmails, newDistEmail.trim()]
+                  setDistEmails(updated)
+                  setNewDistEmail('')
+                  setSavingDist(true)
+                  try {
+                    await fetch(`/api/venues/${params.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ distribution_emails: updated }),
+                    })
+                  } catch {} finally { setSavingDist(false) }
+                }} className="flex gap-2">
+                  <input type="email" value={newDistEmail} onChange={e => setNewDistEmail(e.target.value)}
+                    placeholder="email@client.com"
+                    className="flex-1 px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                  <button type="submit" disabled={savingDist}
+                    className="px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50">
+                    {savingDist ? '...' : 'Add'}
                   </button>
                 </form>
               </div>

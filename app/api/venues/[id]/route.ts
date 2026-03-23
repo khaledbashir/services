@@ -22,7 +22,8 @@ export async function GET(
         v.primary_contact_email,
         v.requires_assignment,
         v.portal_token,
-        COALESCE(v.venue_type, 'sports') as venue_type
+        COALESCE(v.venue_type, 'sports') as venue_type,
+        COALESCE(v.distribution_emails, '{}') as distribution_emails
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
@@ -152,6 +153,15 @@ export async function PATCH(
       }
     }
 
+    // Handle distribution_emails
+    if (body.distribution_emails !== undefined) {
+      const emails = Array.isArray(body.distribution_emails) ? body.distribution_emails.filter((e: string) => e && e.includes('@')) : []
+      await query(
+        `UPDATE venues SET distribution_emails = $1 WHERE id = $2`,
+        [emails, venueId]
+      )
+    }
+
     // Fetch full venue data
     const fullVenue = await query(
       `SELECT
@@ -165,7 +175,8 @@ export async function PATCH(
         v.primary_contact_email,
         v.requires_assignment,
         v.portal_token,
-        COALESCE(v.venue_type, 'sports') as venue_type
+        COALESCE(v.venue_type, 'sports') as venue_type,
+        COALESCE(v.distribution_emails, '{}') as distribution_emails
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       WHERE v.id = $1`,
