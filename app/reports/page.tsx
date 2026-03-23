@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
+interface Venue {
+  id: string
+  name: string
+}
+
 interface ReportData {
   period: string
   startDate: string
@@ -32,12 +37,29 @@ export default function ReportsPage() {
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<'week' | 'month'>('week')
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState<string>('')
+
+  useEffect(() => {
+    const fetchVenues = async () => {
+      try {
+        const res = await fetch('/api/venues')
+        if (res.ok) {
+          const data = await res.json()
+          setVenues((data.venues || []).sort((a: Venue, b: Venue) => a.name.localeCompare(b.name)))
+        }
+      } catch {}
+    }
+    fetchVenues()
+  }, [])
 
   useEffect(() => {
     const fetchReport = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`/api/reports?period=${period}`)
+        const params = new URLSearchParams({ period })
+        if (venueId) params.set('venue_id', venueId)
+        const res = await fetch(`/api/reports?${params}`)
         if (res.ok) setData(await res.json())
       } catch (err) {
         console.error('Failed to fetch report:', err)
@@ -46,7 +68,7 @@ export default function ReportsPage() {
       }
     }
     fetchReport()
-  }, [period])
+  }, [period, venueId])
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -75,13 +97,23 @@ export default function ReportsPage() {
             <h1 className="text-2xl font-semibold text-zinc-900">Operations Report</h1>
             <p className="text-zinc-500 text-sm mt-1">{formatDate(data.startDate)} — {formatDate(data.endDate)}</p>
           </div>
-          <div className="flex gap-2 print:hidden">
+          <div className="flex gap-2 items-center print:hidden">
+            <select
+              value={venueId}
+              onChange={e => setVenueId(e.target.value)}
+              className="border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none text-zinc-700 min-w-[180px]"
+            >
+              <option value="">All Venues</option>
+              {venues.map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
             <div className="bg-zinc-100 rounded p-1 flex gap-1">
               <button onClick={() => setPeriod('week')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${period === 'week' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Week</button>
               <button onClick={() => setPeriod('month')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${period === 'month' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Month</button>
             </div>
             <a
-              href={`/api/reports/pdf?period=${period}`}
+              href={`/api/reports/pdf?period=${period}${venueId ? `&venue_id=${venueId}` : ''}`}
               download
               className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors inline-block"
             >

@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'week'
+    const venueId = searchParams.get('venue_id') || ''
 
     const now = new Date()
     let startDate: string
@@ -20,29 +21,36 @@ export async function GET(request: NextRequest) {
       startDate = d.toISOString().split('T')[0]
     }
 
+    // Build venue filter clause
+    const params: any[] = [startDate, endDate]
+    const venueFilter = venueId ? `AND e.venue_id = $3` : ''
+    const venueFilterTickets = venueId ? `AND t.venue_id = $3` : ''
+    if (venueId) params.push(venueId)
+    const p1 = '$1', p2 = '$2'
+
     // Total events in period
     const totalResult = await query(
-      `SELECT COUNT(*) as total FROM events WHERE event_date >= $1 AND event_date <= $2`,
-      [startDate, endDate]
+      `SELECT COUNT(*) as total FROM events e WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+      params
     )
 
     // Events with assignments (coverage)
     const coveredResult = await query(
       `SELECT COUNT(DISTINCT e.id) as covered FROM events e
        JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= $1 AND e.event_date <= $2`,
-      [startDate, endDate]
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+      params
     )
 
     // Workflow completion
     const workflowResult = await query(
       `SELECT
         COUNT(*) as total,
-        COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed
-       FROM events
-       WHERE event_date >= $1 AND event_date <= $2
-         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`,
-      [startDate, endDate]
+        COUNT(CASE WHEN e.workflow_status = 'post_game_submitted' THEN 1 END) as completed
+       FROM events e
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
+      params
     )
 
     // Labor hours
@@ -50,8 +58,8 @@ export async function GET(request: NextRequest) {
       `SELECT COALESCE(SUM(ea.estimated_hours), 0) as total_hours, COUNT(DISTINCT ea.staff_id) as unique_staff
        FROM event_assignments ea
        JOIN events e ON ea.event_id = e.id
-       WHERE e.event_date >= $1 AND e.event_date <= $2`,
-      [startDate, endDate]
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+      params
     )
 
     // By market
@@ -63,10 +71,10 @@ export async function GET(request: NextRequest) {
        JOIN venues v ON e.venue_id = v.id
        JOIN markets m ON v.market_id = m.id
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= $1 AND e.event_date <= $2
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY m.name
        ORDER BY events DESC`,
-      [startDate, endDate]
+      params
     )
 
     // By league
@@ -75,10 +83,10 @@ export async function GET(request: NextRequest) {
               COALESCE(SUM(ea.estimated_hours), 0) as hours
        FROM events e
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= $1 AND e.event_date <= $2
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY e.league
        ORDER BY events DESC`,
-      [startDate, endDate]
+      params
     )
 
     // Top staff by hours
@@ -89,11 +97,11 @@ export async function GET(request: NextRequest) {
        FROM event_assignments ea
        JOIN staff s ON ea.staff_id = s.id
        JOIN events e ON ea.event_id = e.id
-       WHERE e.event_date >= $1 AND e.event_date <= $2
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY s.id, s.full_name, s.role
        ORDER BY hours DESC
        LIMIT 10`,
-      [startDate, endDate]
+      params
     )
 
     // Top venues by events
@@ -104,11 +112,11 @@ export async function GET(request: NextRequest) {
        JOIN venues v ON e.venue_id = v.id
        JOIN markets m ON v.market_id = m.id
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= $1 AND e.event_date <= $2
+       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY v.id, v.name, m.name
        ORDER BY events DESC
        LIMIT 10`,
-      [startDate, endDate]
+      params
     )
 
     const total = parseInt(totalResult.rows[0]?.total || '0')
@@ -116,20 +124,22 @@ export async function GET(request: NextRequest) {
     const wfTotal = parseInt(workflowResult.rows[0]?.total || '0')
     const wfCompleted = parseInt(workflowResult.rows[0]?.completed || '0')
 
-    // SLA compliance
+    // SLA compliance — tickets use 't' alias
+    const ticketParams: any[] = [startDate, endDate]
+    if (venueId) ticketParams.push(venueId)
     const slaResult = await query(
       `SELECT
         COUNT(*) as total_tickets,
-        COUNT(CASE WHEN status IN ('resolved','closed') THEN 1 END) as resolved,
-        COUNT(CASE WHEN sla_response_met = true THEN 1 END) as response_met,
-        COUNT(CASE WHEN sla_response_met = false THEN 1 END) as response_breached,
-        COUNT(CASE WHEN sla_resolution_met = true THEN 1 END) as resolution_met,
-        COUNT(CASE WHEN sla_resolution_met = false THEN 1 END) as resolution_breached,
-        AVG(CASE WHEN first_response_at IS NOT NULL THEN EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600 END) as avg_response_hours,
-        AVG(CASE WHEN resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600 END) as avg_resolution_hours
-       FROM tickets
-       WHERE created_at >= $1 AND created_at <= $2::date + 1`,
-      [startDate, endDate]
+        COUNT(CASE WHEN t.status IN ('resolved','closed') THEN 1 END) as resolved,
+        COUNT(CASE WHEN t.sla_response_met = true THEN 1 END) as response_met,
+        COUNT(CASE WHEN t.sla_response_met = false THEN 1 END) as response_breached,
+        COUNT(CASE WHEN t.sla_resolution_met = true THEN 1 END) as resolution_met,
+        COUNT(CASE WHEN t.sla_resolution_met = false THEN 1 END) as resolution_breached,
+        AVG(CASE WHEN t.first_response_at IS NOT NULL THEN EXTRACT(EPOCH FROM (t.first_response_at - t.created_at)) / 3600 END) as avg_response_hours,
+        AVG(CASE WHEN t.resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600 END) as avg_resolution_hours
+       FROM tickets t
+       WHERE t.created_at >= ${p1} AND t.created_at <= ${p2}::date + 1 ${venueFilterTickets}`,
+      ticketParams
     )
 
     const slaData = slaResult.rows[0]
