@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 
-async function getReportData(period: string) {
+export const dynamic = 'force-dynamic'
+
+async function getReportData(period: string, venueId?: string) {
   const now = new Date()
   let startDate: string
   const endDate = now.toISOString().split('T')[0]
@@ -24,21 +26,30 @@ async function getReportData(period: string) {
     prevEndDate = startDate
   }
 
+  // Build venue filter
+  const vf = venueId ? 'AND e.venue_id = $3' : ''
+  const vfEvents = venueId ? 'AND events.venue_id = $3' : ''
+  const vfTickets = venueId ? 'AND venue_id = $3' : ''
+  const params = venueId ? [startDate, endDate, venueId] : [startDate, endDate]
+  const prevParams = venueId ? [prevStartDate, prevEndDate, venueId] : [prevStartDate, prevEndDate]
+  const endParams = venueId ? [endDate, venueId] : [endDate]
+  const vfEnd = venueId ? 'AND e.venue_id = $2' : ''
+
   const [totalR, coveredR, workflowR, laborR, marketR, topStaffR, topVenuesR, ticketsR, prevTotalR, prevCoveredR, prevWfR, upcomingUnassignedR] = await Promise.all([
-    query(`SELECT COUNT(*) as total FROM events WHERE event_date >= $1 AND event_date <= $2`, [startDate, endDate]),
-    query(`SELECT COUNT(DISTINCT e.id) as covered FROM events e JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2`, [startDate, endDate]),
-    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM events WHERE event_date >= $1 AND event_date <= $2 AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`, [startDate, endDate]),
-    query(`SELECT COALESCE(SUM(ea.estimated_hours), 0) as total_hours, COUNT(DISTINCT ea.staff_id) as unique_staff FROM event_assignments ea JOIN events e ON ea.event_id = e.id WHERE e.event_date >= $1 AND e.event_date <= $2`, [startDate, endDate]),
-    query(`SELECT m.name as market, COUNT(e.id) as events, COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as covered, COALESCE(SUM(ea.estimated_hours), 0) as hours FROM events e JOIN venues v ON e.venue_id = v.id JOIN markets m ON v.market_id = m.id LEFT JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2 GROUP BY m.name ORDER BY events DESC`, [startDate, endDate]),
-    query(`SELECT s.full_name, COUNT(ea.id) as events, COALESCE(SUM(ea.estimated_hours), 0) as hours, COUNT(CASE WHEN e.workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id JOIN events e ON ea.event_id = e.id WHERE e.event_date >= $1 AND e.event_date <= $2 GROUP BY s.id, s.full_name ORDER BY hours DESC LIMIT 5`, [startDate, endDate]),
-    query(`SELECT v.name, m.name as market, COUNT(e.id) as events, COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as covered FROM events e JOIN venues v ON e.venue_id = v.id JOIN markets m ON v.market_id = m.id LEFT JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2 GROUP BY v.id, v.name, m.name ORDER BY events DESC LIMIT 5`, [startDate, endDate]),
-    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN status IN ('resolved','closed') THEN 1 END) as resolved, COUNT(CASE WHEN priority = 'critical' THEN 1 END) as critical, COUNT(CASE WHEN sla_response_met = true THEN 1 END) as sla_met, COUNT(CASE WHEN sla_response_met = false THEN 1 END) as sla_breached, AVG(CASE WHEN resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (resolved_at - created_at))/3600 END) as avg_resolution FROM tickets WHERE created_at >= $1 AND created_at <= $2::date + 1`, [startDate, endDate]),
+    query(`SELECT COUNT(*) as total FROM events e WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf}`, params),
+    query(`SELECT COUNT(DISTINCT e.id) as covered FROM events e JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf}`, params),
+    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN events.workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM events WHERE event_date >= $1 AND event_date <= $2 ${vfEvents} AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`, params),
+    query(`SELECT COALESCE(SUM(ea.estimated_hours), 0) as total_hours, COUNT(DISTINCT ea.staff_id) as unique_staff FROM event_assignments ea JOIN events e ON ea.event_id = e.id WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf}`, params),
+    query(`SELECT m.name as market, COUNT(e.id) as events, COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as covered, COALESCE(SUM(ea.estimated_hours), 0) as hours FROM events e JOIN venues v ON e.venue_id = v.id JOIN markets m ON v.market_id = m.id LEFT JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf} GROUP BY m.name ORDER BY events DESC`, params),
+    query(`SELECT s.full_name, COUNT(ea.id) as events, COALESCE(SUM(ea.estimated_hours), 0) as hours, COUNT(CASE WHEN e.workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id JOIN events e ON ea.event_id = e.id WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf} GROUP BY s.id, s.full_name ORDER BY hours DESC LIMIT 5`, params),
+    query(`SELECT v.name, m.name as market, COUNT(e.id) as events, COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as covered FROM events e JOIN venues v ON e.venue_id = v.id JOIN markets m ON v.market_id = m.id LEFT JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date <= $2 ${vf} GROUP BY v.id, v.name, m.name ORDER BY events DESC LIMIT 5`, params),
+    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN status IN ('resolved','closed') THEN 1 END) as resolved, COUNT(CASE WHEN priority = 'critical' THEN 1 END) as critical, COUNT(CASE WHEN sla_response_met = true THEN 1 END) as sla_met, COUNT(CASE WHEN sla_response_met = false THEN 1 END) as sla_breached, AVG(CASE WHEN resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (resolved_at - created_at))/3600 END) as avg_resolution FROM tickets WHERE created_at >= $1 AND created_at <= $2::date + 1 ${vfTickets}`, params),
     // Previous period for trends
-    query(`SELECT COUNT(*) as total FROM events WHERE event_date >= $1 AND event_date < $2`, [prevStartDate, prevEndDate]),
-    query(`SELECT COUNT(DISTINCT e.id) as covered FROM events e JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date < $2`, [prevStartDate, prevEndDate]),
-    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM events WHERE event_date >= $1 AND event_date < $2 AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`, [prevStartDate, prevEndDate]),
+    query(`SELECT COUNT(*) as total FROM events e WHERE e.event_date >= $1 AND e.event_date < $2 ${vf}`, prevParams),
+    query(`SELECT COUNT(DISTINCT e.id) as covered FROM events e JOIN event_assignments ea ON e.id = ea.event_id WHERE e.event_date >= $1 AND e.event_date < $2 ${vf}`, prevParams),
+    query(`SELECT COUNT(*) as total, COUNT(CASE WHEN events.workflow_status = 'post_game_submitted' THEN 1 END) as completed FROM events WHERE event_date >= $1 AND event_date < $2 ${vfEvents} AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)`, prevParams),
     // Upcoming unassigned (next 7 days)
-    query(`SELECT COUNT(*) as count FROM events e JOIN venues v ON e.venue_id = v.id WHERE e.event_date > $1 AND e.event_date <= $1::date + 7 AND v.requires_assignment = true AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`, [endDate]),
+    query(`SELECT COUNT(*) as count FROM events e JOIN venues v ON e.venue_id = v.id WHERE e.event_date > $1 AND e.event_date <= $1::date + 7 AND v.requires_assignment = true ${vfEnd} AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`, endParams),
   ])
 
   const total = parseInt(totalR.rows[0]?.total || '0')
@@ -252,8 +263,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'week'
+    const venueId = searchParams.get('venue_id') || undefined
 
-    const data = await getReportData(period) as any
+    const data = await getReportData(period, venueId) as any
     const html = buildHTML(data)
 
     const pdfResponse = await fetch(`http://abc_browserless:3000/pdf?token=923fe7f9bc3ff7f94c8337be4c2ee0f2`, {
