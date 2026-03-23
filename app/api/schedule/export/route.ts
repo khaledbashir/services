@@ -68,6 +68,15 @@ tbody td{border-bottom:1px solid #f1f5f9;color:#334155}
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+
+    // Allow access via API key (for bot/server calls) or via authenticated session
+    const apiKey = searchParams.get('key')
+    const token = request.cookies.get('token')?.value
+    const validKey = process.env.JWT_SECRET || 'anc-services-secret-key-change-me'
+    if (!token && apiKey !== validKey) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const venueId = searchParams.get('venue_id')
     const period = searchParams.get('period') || '30' // days
     const action = searchParams.get('action') || 'download' // download or email
