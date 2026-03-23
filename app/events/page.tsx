@@ -35,6 +35,11 @@ const workflowStatusColors: Record<string, { dot: string; label: string }> = {
   post_game_submitted: { dot: 'bg-blue-500', label: 'Complete' },
 }
 
+interface VenueOption {
+  id: string
+  name: string
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([])
@@ -43,6 +48,9 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all'>('week')
   const [search, setSearch] = useState('')
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
+  const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
+  const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
+  const [showVenueFilter, setShowVenueFilter] = useState(false)
   const router = useRouter()
 
   function getWeekStart(date: Date): Date {
@@ -67,6 +75,39 @@ export default function EventsPage() {
       end.setFullYear(end.getFullYear() + 1)
     }
     return [start, end]
+  }
+
+  useEffect(() => {
+    const fetchVenues = async () => {
+      try {
+        const res = await fetch('/api/venues')
+        if (res.ok) {
+          const data = await res.json()
+          setVenueOptions((data.venues || []).sort((a: VenueOption, b: VenueOption) => a.name.localeCompare(b.name)))
+        }
+      } catch {}
+    }
+    fetchVenues()
+  }, [])
+
+  const toggleVenue = (id: string) => {
+    setSelectedVenues(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearVenueFilter = () => setSelectedVenues(new Set())
+
+  // Filter events by selected venues (client-side)
+  const filterByVenue = (list: Event[]) => {
+    if (selectedVenues.size === 0) return list
+    return list.filter(e => {
+      const venueName = e.venue_name || (e as any).venue || ''
+      return venueOptions.some(v => selectedVenues.has(v.id) && v.name === venueName)
+    })
   }
 
   useEffect(() => {
@@ -195,7 +236,7 @@ export default function EventsPage() {
             ) : (
               <div className="grid grid-cols-7">
                 {weekCells.map((cellDate, colIdx) => {
-                  const cellEvents = calendarEvents.filter((e) => {
+                  const cellEvents = filterByVenue(calendarEvents).filter((e) => {
                     const eDate = new Date(e.date || e.event_date)
                     return eDate.toDateString() === cellDate.toDateString()
                   })
@@ -256,7 +297,7 @@ export default function EventsPage() {
               </tr>
             </thead>
             <tbody>
-              {events.filter(e => {
+              {filterByVenue(events).filter(e => {
                 const q = search.toLowerCase()
                 return !q || e.summary.toLowerCase().includes(q) || e.venue_name.toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
               }).map((event) => {
@@ -345,6 +386,65 @@ export default function EventsPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Venue multi-select filter */}
+        <div className="relative">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowVenueFilter(!showVenueFilter)}
+              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
+                selectedVenues.size > 0
+                  ? 'bg-[#0A52EF] text-white border-[#0A52EF]'
+                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Venues {selectedVenues.size > 0 && `(${selectedVenues.size})`}
+            </button>
+            {selectedVenues.size > 0 && (
+              <>
+                {venueOptions.filter(v => selectedVenues.has(v.id)).map(v => (
+                  <span key={v.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                    {v.name}
+                    <button onClick={() => toggleVenue(v.id)} className="hover:text-blue-900">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <button onClick={clearVenueFilter} className="text-xs text-zinc-400 hover:text-zinc-600 underline">
+                  Clear all
+                </button>
+              </>
+            )}
+          </div>
+          {showVenueFilter && (
+            <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-[#E8E8E8] rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+              <div className="p-2 border-b border-[#E8E8E8]">
+                <p className="text-xs font-medium text-zinc-500 px-2">Select venues to filter</p>
+              </div>
+              {venueOptions.map(v => (
+                <label key={v.id} className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedVenues.has(v.id)}
+                    onChange={() => toggleVenue(v.id)}
+                    className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                  />
+                  <span className="text-zinc-700">{v.name}</span>
+                </label>
+              ))}
+              <div className="p-2 border-t border-[#E8E8E8]">
+                <button onClick={() => setShowVenueFilter(false)} className="w-full text-center text-xs text-[#0A52EF] font-medium py-1 hover:underline">
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {view === 'calendar' ? <CalendarView /> : <ListView />}
