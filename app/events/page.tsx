@@ -40,6 +40,11 @@ interface VenueOption {
   name: string
 }
 
+interface StaffOption {
+  id: string
+  full_name: string
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([])
@@ -51,6 +56,13 @@ export default function EventsPage() {
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
   const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
   const [showVenueFilter, setShowVenueFilter] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
+  const [creating, setCreating] = useState(false)
+  const [newEvent, setNewEvent] = useState({
+    summary: '', event_date: '', start_time: '', end_time: '',
+    venue_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
+  })
   const router = useRouter()
 
   function getWeekStart(date: Date): Date {
@@ -87,7 +99,17 @@ export default function EventsPage() {
         }
       } catch {}
     }
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch('/api/staff')
+        if (res.ok) {
+          const data = await res.json()
+          setStaffOptions((data.staff || []).filter((s: any) => s.is_active !== false).sort((a: StaffOption, b: StaffOption) => a.full_name.localeCompare(b.full_name)))
+        }
+      } catch {}
+    }
     fetchVenues()
+    fetchStaff()
   }, [])
 
   const toggleVenue = (id: string) => {
@@ -100,6 +122,34 @@ export default function EventsPage() {
   }
 
   const clearVenueFilter = () => setSelectedVenues(new Set())
+
+  const createEvent = async () => {
+    if (!newEvent.summary || !newEvent.event_date || !newEvent.venue_id) return
+    setCreating(true)
+    try {
+      const res = await fetch('/api/events/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEvent),
+      })
+      if (res.ok) {
+        setNewEvent({ summary: '', event_date: '', start_time: '', end_time: '', venue_id: '', league: '', staff_ids: [], event_type: 'event' })
+        setShowCreate(false)
+        // Refresh events
+        const evRes = await fetch(`/api/events?filter=${filter}`)
+        if (evRes.ok) { const d = await evRes.json(); setEvents(d.events || []) }
+      }
+    } catch {} finally { setCreating(false) }
+  }
+
+  const toggleStaffSelection = (id: string) => {
+    setNewEvent(prev => ({
+      ...prev,
+      staff_ids: prev.staff_ids.includes(id)
+        ? prev.staff_ids.filter(s => s !== id)
+        : [...prev.staff_ids, id],
+    }))
+  }
 
   // Filter events by selected venues (client-side)
   const filterByVenue = (list: Event[]) => {
@@ -343,6 +393,12 @@ export default function EventsPage() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">Events</h1>
           <div className="flex gap-2 items-center">
+            <button
+              onClick={() => setShowCreate(!showCreate)}
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
+            >
+              {showCreate ? 'Cancel' : '+ Create Event'}
+            </button>
             <div className="relative">
               <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -387,6 +443,100 @@ export default function EventsPage() {
             </div>
           </div>
         </div>
+
+        {/* Create Event Form */}
+        {showCreate && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create Event / Shift</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Type</label>
+                <div className="flex gap-2">
+                  {[{ value: 'event', label: 'Event' }, { value: 'shift', label: 'Shift' }].map(opt => (
+                    <button key={opt.value} type="button"
+                      onClick={() => setNewEvent({ ...newEvent, event_type: opt.value })}
+                      className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors ${
+                        newEvent.event_type === opt.value
+                          ? 'bg-[#0A52EF] text-white border-[#0A52EF]'
+                          : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="col-span-2 lg:col-span-2">
+                <label className="block text-xs font-medium text-zinc-500 mb-1">
+                  {newEvent.event_type === 'shift' ? 'Shift Name' : 'Event Name'} *
+                </label>
+                <input type="text" value={newEvent.summary}
+                  onChange={e => setNewEvent({ ...newEvent, summary: e.target.value })}
+                  placeholder={newEvent.event_type === 'shift' ? 'e.g., Morning Setup Shift' : 'e.g., Celtics vs Lakers'}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Date *</label>
+                <input type="date" value={newEvent.event_date}
+                  onChange={e => setNewEvent({ ...newEvent, event_date: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Start Time</label>
+                <input type="time" value={newEvent.start_time}
+                  onChange={e => setNewEvent({ ...newEvent, start_time: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">End Time</label>
+                <input type="time" value={newEvent.end_time}
+                  onChange={e => setNewEvent({ ...newEvent, end_time: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
+                <select value={newEvent.venue_id}
+                  onChange={e => setNewEvent({ ...newEvent, venue_id: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
+                  <option value="">Select venue...</option>
+                  {venueOptions.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">League</label>
+                <select value={newEvent.league}
+                  onChange={e => setNewEvent({ ...newEvent, league: e.target.value })}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                  <option value="">None</option>
+                  {Object.keys(leagueColors).map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Assign Staff</label>
+                <div className="border border-[#E8E8E8] rounded max-h-32 overflow-y-auto">
+                  {staffOptions.map(s => (
+                    <label key={s.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 cursor-pointer text-sm">
+                      <input type="checkbox" checked={newEvent.staff_ids.includes(s.id)}
+                        onChange={() => toggleStaffSelection(s.id)}
+                        className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]" />
+                      <span className="text-zinc-700 text-xs">{s.full_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="col-span-2 lg:col-span-3">
+                <button onClick={createEvent} disabled={creating || !newEvent.summary || !newEvent.event_date || !newEvent.venue_id}
+                  className="px-6 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 transition-colors">
+                  {creating ? 'Creating...' : `Create ${newEvent.event_type === 'shift' ? 'Shift' : 'Event'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Venue multi-select filter */}
         <div className="relative">
