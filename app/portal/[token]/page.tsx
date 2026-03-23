@@ -644,7 +644,7 @@ export default function PortalPage() {
                   {aiResult ? (
                     <div className="space-y-3">
                       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-emerald-900">Ticket #{aiResult.ticket.ticket_number} created</p>
+                        <p className="text-sm font-medium text-emerald-900">Ticket {String(aiResult.ticket.ticket_number).padStart(8, '0')} created</p>
                         <p className="text-xs text-emerald-700 mt-1">{aiResult.parsed?.title || aiResult.ticket.title}</p>
                         <div className="flex gap-2 mt-2">
                           <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.category}</span>
@@ -726,7 +726,7 @@ export default function PortalPage() {
                               <p className="text-sm font-medium text-zinc-900">{ticket.title}</p>
                               <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span>
                             </div>
-                            <p className="text-xs text-zinc-400 mt-1">#{ticket.ticket_number} • {ticket.category} • {ticket.created_at}</p>
+                            <p className="text-xs text-zinc-400 mt-1">{String(ticket.ticket_number).padStart(8, '0')} • {ticket.category} • {ticket.created_at}</p>
                           </div>
                         )
                       })}
@@ -829,7 +829,7 @@ export default function PortalPage() {
               <p className="text-xs opacity-75 mb-4">Describe your problem in plain English — AI will categorize and create your ticket</p>
               {aiResult ? (
                 <div className="bg-white/10 rounded-lg p-4">
-                  <p className="text-sm font-medium">Ticket #{aiResult.ticket.ticket_number} created</p>
+                  <p className="text-sm font-medium">Ticket {String(aiResult.ticket.ticket_number).padStart(8, '0')} created</p>
                   <p className="text-xs opacity-75 mt-1">{aiResult.parsed?.title}</p>
                   <div className="flex gap-2 mt-2">
                     <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.category}</span>
@@ -887,7 +887,7 @@ export default function PortalPage() {
                   return (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-mono text-zinc-400">#{t.ticket_number}</span>
+                        <span className="text-xs font-mono text-zinc-400">{String(t.ticket_number).padStart(8, '0')}</span>
                         <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: sc.color, backgroundColor: sc.bg }}>{t.status.replace('_', ' ')}</span>
                       </div>
                       <h3 className="text-lg font-semibold text-zinc-900">{t.title}</h3>
