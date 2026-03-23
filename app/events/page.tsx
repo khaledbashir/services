@@ -454,7 +454,7 @@ export default function EventsPage() {
                 <div className="flex gap-2">
                   {[{ value: 'event', label: 'Event' }, { value: 'shift', label: 'Shift' }].map(opt => (
                     <button key={opt.value} type="button"
-                      onClick={() => setNewEvent({ ...newEvent, event_type: opt.value })}
+                      onClick={() => setNewEvent(prev => ({ ...prev, event_type: opt.value }))}
                       className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors ${
                         newEvent.event_type === opt.value
                           ? 'bg-[#0A52EF] text-white border-[#0A52EF]'
@@ -471,32 +471,32 @@ export default function EventsPage() {
                   {newEvent.event_type === 'shift' ? 'Shift Name' : 'Event Name'} *
                 </label>
                 <input type="text" value={newEvent.summary}
-                  onChange={e => setNewEvent({ ...newEvent, summary: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, summary: e.target.value }))}
                   placeholder={newEvent.event_type === 'shift' ? 'e.g., Morning Setup Shift' : 'e.g., Celtics vs Lakers'}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Date *</label>
                 <input type="date" value={newEvent.event_date}
-                  onChange={e => setNewEvent({ ...newEvent, event_date: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, event_date: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Start Time</label>
                 <input type="time" value={newEvent.start_time}
-                  onChange={e => setNewEvent({ ...newEvent, start_time: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, start_time: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">End Time</label>
                 <input type="time" value={newEvent.end_time}
-                  onChange={e => setNewEvent({ ...newEvent, end_time: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, end_time: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
                 <select value={newEvent.venue_id}
-                  onChange={e => setNewEvent({ ...newEvent, venue_id: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, venue_id: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
                   <option value="">Select venue...</option>
                   {venueOptions.map(v => (
@@ -507,7 +507,7 @@ export default function EventsPage() {
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">League</label>
                 <select value={newEvent.league}
-                  onChange={e => setNewEvent({ ...newEvent, league: e.target.value })}
+                  onChange={e => setNewEvent(prev => ({ ...prev, league: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                   <option value="">None</option>
                   {Object.keys(leagueColors).map(l => (
