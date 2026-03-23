@@ -113,31 +113,31 @@ export default function VenuesPage() {
             }} className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Venue Name *</label>
-                <input type="text" value={newVenue.name} onChange={e => setNewVenue({ ...newVenue, name: e.target.value })}
+                <input type="text" value={newVenue.name} onChange={e => setNewVenue(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g., Madison Square Garden"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Address</label>
-                <input type="text" value={newVenue.address} onChange={e => setNewVenue({ ...newVenue, address: e.target.value })}
+                <input type="text" value={newVenue.address} onChange={e => setNewVenue(prev => ({ ...prev, address: e.target.value }))}
                   placeholder="e.g., 4 Pennsylvania Plaza, New York, NY"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Contact Name</label>
-                <input type="text" value={newVenue.primary_contact_name} onChange={e => setNewVenue({ ...newVenue, primary_contact_name: e.target.value })}
+                <input type="text" value={newVenue.primary_contact_name} onChange={e => setNewVenue(prev => ({ ...prev, primary_contact_name: e.target.value }))}
                   placeholder="e.g., John Smith"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Contact Email</label>
-                <input type="email" value={newVenue.primary_contact_email} onChange={e => setNewVenue({ ...newVenue, primary_contact_email: e.target.value })}
+                <input type="email" value={newVenue.primary_contact_email} onChange={e => setNewVenue(prev => ({ ...prev, primary_contact_email: e.target.value }))}
                   placeholder="e.g., john@venue.com"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Venue Type</label>
-                <select value={newVenue.venue_type} onChange={e => setNewVenue({ ...newVenue, venue_type: e.target.value })}
+                <select value={newVenue.venue_type} onChange={e => setNewVenue(prev => ({ ...prev, venue_type: e.target.value }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                   <option value="sports">Sports</option>
                   <option value="ooh">OOH (Out-of-Home)</option>
