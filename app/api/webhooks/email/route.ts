@@ -50,8 +50,9 @@ export async function POST(request: NextRequest) {
     let venueId: string | null = null
     let venueName = 'Unknown Venue'
     let channelId = ''
+    let matchMethod = ''
 
-    // Try exact email match
+    // 1. Try exact email match on primary_contact_email
     const venueResult = await query(
       `SELECT id, name, slack_channel_id FROM venues WHERE primary_contact_email ILIKE $1 LIMIT 1`,
       [senderEmail]
@@ -61,10 +62,29 @@ export async function POST(request: NextRequest) {
       venueId = venueResult.rows[0].id
       venueName = venueResult.rows[0].name
       channelId = venueResult.rows[0].slack_channel_id || ''
-    } else {
-      // Try domain match
+      matchMethod = 'primary contact email'
+    }
+
+    // 2. Try match on distribution_emails array
+    if (!venueId) {
+      const distResult = await query(
+        `SELECT id, name, slack_channel_id FROM venues WHERE $1 = ANY(distribution_emails) LIMIT 1`,
+        [senderEmail.toLowerCase()]
+      )
+      if (distResult.rows.length > 0) {
+        venueId = distResult.rows[0].id
+        venueName = distResult.rows[0].name
+        channelId = distResult.rows[0].slack_channel_id || ''
+        matchMethod = 'distribution list'
+      }
+    }
+
+    // 3. Try domain match on primary_contact_email
+    if (!venueId) {
       const domain = senderEmail.split('@')[1]
-      if (domain) {
+      // Skip generic email providers — domain match only makes sense for company domains
+      const genericDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'aol.com', 'live.com', 'msn.com', 'protonmail.com']
+      if (domain && !genericDomains.includes(domain.toLowerCase())) {
         const domainResult = await query(
           `SELECT id, name, slack_channel_id FROM venues WHERE primary_contact_email ILIKE $1 LIMIT 1`,
           [`%@${domain}`]
@@ -73,21 +93,30 @@ export async function POST(request: NextRequest) {
           venueId = domainResult.rows[0].id
           venueName = domainResult.rows[0].name
           channelId = domainResult.rows[0].slack_channel_id || ''
+          matchMethod = 'domain match'
         }
       }
     }
 
-    // Fallback to first venue if no match
+    // 4. No match — notify Slack and skip ticket creation
     if (!venueId) {
-      const fallback = await query(`SELECT id, name FROM venues ORDER BY name LIMIT 1`)
-      if (fallback.rows.length > 0) {
-        venueId = fallback.rows[0].id
-        venueName = fallback.rows[0].name
+      const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (slackChannel) {
+        await sendSlackMessage({
+          channel: slackChannel,
+          text: `⚠️ Inbound email from unknown sender: ${senderEmail}`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `⚠️ *Inbound email — no venue match*` } },
+            { type: 'section', fields: [
+              { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
+              { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
+            ]},
+            { type: 'context', elements: [{ type: 'mrkdwn', text: `Could not match sender to any venue. Add their email to a venue's contact or distribution list to auto-route future emails.` }] },
+          ],
+        })
       }
-    }
-
-    if (!venueId) {
-      return NextResponse.json({ ok: true, message: 'No venue matched' })
+      console.warn(`[email-webhook] No venue match for sender: ${senderEmail}`)
+      return NextResponse.json({ ok: true, message: 'No venue matched — notification sent' })
     }
 
     // SLA + auto-assignment
@@ -146,7 +175,7 @@ export async function POST(request: NextRequest) {
           ] : []),
           {
             type: 'context',
-            elements: [{ type: 'mrkdwn', text: `⏱️ *SLA Response due in ${sla?.response_hours || 4}h* | _Auto-created from inbound email_` }],
+            elements: [{ type: 'mrkdwn', text: `⏱️ *SLA Response due in ${sla?.response_hours || 4}h* | _Auto-created from inbound email (matched via ${matchMethod})_` }],
           },
         ],
       })
