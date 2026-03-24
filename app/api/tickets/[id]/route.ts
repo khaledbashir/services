@@ -4,6 +4,12 @@ import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 
+const statusLabels: Record<string, string> = {
+  new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
+  escalated: 'Escalated', closed: 'Closed',
+}
+function fmtStatus(s: string) { return statusLabels[s] || s }
+
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
   if (!token) return null
@@ -84,7 +90,7 @@ export async function PATCH(
     const { status, priority, assigned_to, category, resolution_notes } = await request.json()
     
     // Get current ticket state for logging
-    const current = await query('SELECT status, priority, assigned_to, title, venue_id, category FROM tickets WHERE id = $1', [params.id])
+    const current = await query('SELECT ticket_number, status, priority, assigned_to, title, venue_id, category FROM tickets WHERE id = $1', [params.id])
     const oldTicket = current.rows[0]
     
     // Get venue name for activity log
@@ -129,8 +135,9 @@ export async function PATCH(
         })]
       )
 
-      // Write notification log for Claw
-      const logEntry = `TICKET|status_changed|${user?.fullName || 'User'}|${oldTicket.title}|${venueName}|from ${oldTicket.status} to ${status}|${new Date().toISOString()}\n`
+      // Write notification log
+      const caseNum = String(oldTicket.ticket_number).padStart(8, '0')
+      const logEntry = `TICKET|status_changed|${user?.fullName || 'User'}|${oldTicket.title}|${venueName}|from ${fmtStatus(oldTicket.status)} to ${fmtStatus(status)}|${new Date().toISOString()}\n`
       fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
 
       // Notify venue's Slack channel
@@ -141,9 +148,9 @@ export async function PATCH(
         const emoji = action === 'resolved' ? ':white_check_mark:' : ':pencil2:'
         sendSlackMessage({
           channel: channelId,
-          text: `${emoji} Ticket #${oldTicket.ticket_number} ${action}: ${oldTicket.title}`,
+          text: `${emoji} Case #${caseNum} ${action}: ${oldTicket.title}`,
           blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Ticket #${oldTicket.ticket_number} ${action}*\n*${oldTicket.title}*\nStatus: ${oldTicket.status} → ${status}` } },
+            { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} ${action}*\n*${oldTicket.title}*\nStatus: ${fmtStatus(oldTicket.status)} → ${fmtStatus(status)}` } },
           ],
         })
       }

@@ -34,6 +34,11 @@ export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
   }
 }
 
+const statusLabels: Record<string, string> = {
+  new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
+  escalated: 'Escalated', closed: 'Closed',
+}
+
 export function formatTicketNotification(ticket: {
   ticket_number: number
   title: string
@@ -56,14 +61,17 @@ export function formatTicketNotification(ticket: {
     critical: ':red_circle:',
   }[ticket.priority] || ':white_circle:'
 
-  const text = `${emoji} Ticket #${ticket.ticket_number} ${action}: ${ticket.title}`
+  const caseNum = String(ticket.ticket_number).padStart(8, '0')
+  const displayStatus = statusLabels[ticket.status || 'new'] || ticket.status || 'New'
+
+  const text = `${emoji} Case #${caseNum} ${action}: ${ticket.title}`
 
   const blocks: any[] = [
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${emoji} *Ticket #${ticket.ticket_number} ${action}*\n*${ticket.title}*`,
+        text: `${emoji} *Case #${caseNum} ${action}*\n*${ticket.title}*`,
       },
     },
     {
@@ -72,7 +80,7 @@ export function formatTicketNotification(ticket: {
         { type: 'mrkdwn', text: `*Venue:*\n${ticket.venue_name}` },
         { type: 'mrkdwn', text: `*Category:*\n${ticket.category}` },
         { type: 'mrkdwn', text: `*Priority:*\n${priorityEmoji} ${ticket.priority}` },
-        { type: 'mrkdwn', text: `*Status:*\n${ticket.status || 'new'}` },
+        { type: 'mrkdwn', text: `*Status:*\n${displayStatus}` },
       ],
     },
   ]
