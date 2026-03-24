@@ -111,7 +111,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     setEditResolution(false)
   }
 
-  const getInitials = (name: string) => { const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
+  const getInitials = (name: string | null | undefined) => { if (!name) return '?'; const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
 
   if (loading) return <DashboardLayout><div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-64 w-full" /></div></DashboardLayout>
   if (!ticket) return <DashboardLayout><div className="bg-white rounded border border-[#E8E8E8] p-12 text-center"><p className="text-zinc-500">Ticket not found</p></div></DashboardLayout>

@@ -176,7 +176,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
-  const getInitials = (name: string) => { const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
+  const getInitials = (name: string | null | undefined) => { if (!name) return '?'; const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
 
   if (loading) {
     return <DashboardLayout><div className="space-y-6"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div></DashboardLayout>
