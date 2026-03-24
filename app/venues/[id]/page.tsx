@@ -399,18 +399,19 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   <h3 className="text-sm font-semibold text-zinc-900">Linked Staff</h3>
                   <p className="text-xs text-zinc-500 mt-0.5">Staff members permanently linked to this venue. Technicians will only see data for their linked venues.</p>
                 </div>
-                <div className="flex flex-wrap gap-2 mb-3">
+                {/* Current linked staff chips */}
+                <div className="flex flex-wrap gap-2 mb-4">
                   {linkedStaff.length === 0 && (
                     <p className="text-xs text-zinc-400">No staff linked to this venue</p>
                   )}
                   {linkedStaff.map(s => (
-                    <span key={s.staff_id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                    <span key={s.staff_id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium group">
                       {s.full_name}
                       <span className="text-blue-400 capitalize">({s.role})</span>
                       <button
-                        onClick={() => unlinkStaff(s.staff_id)}
+                        onClick={(e) => { e.stopPropagation(); unlinkStaff(s.staff_id) }}
                         className="ml-0.5 text-blue-400 hover:text-red-500 transition-colors"
-                        title="Remove"
+                        title={`Remove ${s.full_name}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -419,29 +420,43 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     </span>
                   ))}
                 </div>
+                {/* Add staff search */}
                 <div className="relative">
                   <input
                     type="text"
                     value={staffSearch}
                     onChange={e => { setStaffSearch(e.target.value); setShowStaffDropdown(true) }}
                     onFocus={() => setShowStaffDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowStaffDropdown(false), 150)}
                     placeholder="Search staff to link..."
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
                   />
-                  {showStaffDropdown && filteredStaff.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-48 overflow-y-auto"
+                  {showStaffDropdown && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-60 overflow-y-auto"
                       onMouseDown={e => e.preventDefault()}>
-                      {filteredStaff.slice(0, 10).map(s => (
+                      {filteredStaff.length === 0 ? (
+                        <div className="px-3 py-3 text-xs text-zinc-400">
+                          {allStaff.length === 0 ? 'Loading staff...' : staffSearch ? 'No matching staff found' : 'All staff already linked'}
+                        </div>
+                      ) : (
+                        filteredStaff.slice(0, 20).map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => linkStaff(s.id)}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 transition-colors flex justify-between items-center border-b border-zinc-50 last:border-0"
+                          >
+                            <span className="text-zinc-900 font-medium">{s.full_name}</span>
+                            <span className="text-xs text-zinc-400 capitalize">{s.role}</span>
+                          </button>
+                        ))
+                      )}
+                      {showStaffDropdown && (
                         <button
-                          key={s.id}
-                          onClick={() => linkStaff(s.id)}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 transition-colors flex justify-between items-center"
+                          onClick={() => { setShowStaffDropdown(false); setStaffSearch('') }}
+                          className="w-full text-center px-3 py-2 text-xs text-zinc-400 hover:text-zinc-600 border-t border-[#E8E8E8]"
                         >
-                          <span className="text-zinc-900">{s.full_name}</span>
-                          <span className="text-xs text-zinc-400 capitalize">{s.role}</span>
+                          Close
                         </button>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
