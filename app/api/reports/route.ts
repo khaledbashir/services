@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds } from '@/lib/venue-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +10,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'week'
     const venueId = searchParams.get('venue_id') || ''
+
+    // Get venue-based permissions
+    const user = await getAuthUser(request)
+    const staffVenueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
 
     const now = new Date()
     let startDate: string
@@ -25,9 +31,26 @@ export async function GET(request: NextRequest) {
 
     // Build venue filter clause
     const params: any[] = [startDate, endDate]
-    const venueFilter = venueId ? `AND e.venue_id = $3` : ''
-    const venueFilterTickets = venueId ? `AND t.venue_id = $3` : ''
-    if (venueId) params.push(venueId)
+    let venueFilter = ''
+    let venueFilterTickets = ''
+
+    if (venueId) {
+      // Explicit venue filter from query param
+      venueFilter = `AND e.venue_id = $3`
+      venueFilterTickets = `AND t.venue_id = $3`
+      params.push(venueId)
+    } else if (staffVenueIds !== null) {
+      // Technician venue-based permissions
+      if (staffVenueIds.length === 0) {
+        venueFilter = 'AND FALSE'
+        venueFilterTickets = 'AND FALSE'
+      } else {
+        const placeholders = staffVenueIds.map((_, i) => `$${3 + i}`).join(', ')
+        venueFilter = `AND e.venue_id IN (${placeholders})`
+        venueFilterTickets = `AND t.venue_id IN (${placeholders})`
+        params.push(...staffVenueIds)
+      }
+    }
     const p1 = '$1', p2 = '$2'
 
     // Total events in period
@@ -128,7 +151,11 @@ export async function GET(request: NextRequest) {
 
     // SLA compliance — tickets use 't' alias
     const ticketParams: any[] = [startDate, endDate]
-    if (venueId) ticketParams.push(venueId)
+    if (venueId) {
+      ticketParams.push(venueId)
+    } else if (staffVenueIds !== null && staffVenueIds.length > 0) {
+      ticketParams.push(...staffVenueIds)
+    }
     const slaResult = await query(
       `SELECT
         COUNT(*) as total_tickets,

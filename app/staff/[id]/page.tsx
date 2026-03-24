@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
+import { useAuth } from '@/lib/useAuth'
 
 interface StaffDetail {
   id: string
@@ -45,6 +46,8 @@ interface StaffStats {
 interface Market { market: string; event_count: number }
 interface Venue { id: string; name: string; event_count: number }
 interface Activity { type: string; submitted_at: string; event_name: string; venue_name: string }
+interface LinkedVenue { id: string; venue_id: string; venue_name: string; market_name: string }
+interface AllVenue { id: string; name: string; market: string }
 
 const leagueColors: Record<string, { bg: string; text: string }> = {
   NBA: { bg: 'bg-orange-50', text: 'text-orange-600' },
@@ -89,21 +92,38 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
   const [showEdit, setShowEdit] = useState(false)
   const [editData, setEditData] = useState({ full_name: '', email: '', phone: '', role: '', title: '', city: '', password: '' })
   const [saving, setSaving] = useState(false)
+  const [linkedVenues, setLinkedVenues] = useState<LinkedVenue[]>([])
+  const [allVenues, setAllVenues] = useState<AllVenue[]>([])
+  const [venueSearch, setVenueSearch] = useState('')
+  const [showVenueDropdown, setShowVenueDropdown] = useState(false)
   const router = useRouter()
   const { showToast } = useToast()
+  const auth = useAuth()
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/staff/${params.id}/stats`)
-        if (res.ok) {
-          const data = await res.json()
+        const [statsRes, venuesRes, allVenuesRes] = await Promise.all([
+          fetch(`/api/staff/${params.id}/stats`),
+          fetch(`/api/staff/${params.id}/venues`),
+          fetch(`/api/venues?period=week`),
+        ])
+        if (statsRes.ok) {
+          const data = await statsRes.json()
           setStaff(data.staff)
           setEvents(data.upcomingEvents || [])
           setStats(data.stats)
           setMarkets(data.markets || [])
           setVenues(data.venues || [])
           setRecentActivity(data.recentActivity || [])
+        }
+        if (venuesRes.ok) {
+          const data = await venuesRes.json()
+          setLinkedVenues(data.linkedVenues || [])
+        }
+        if (allVenuesRes.ok) {
+          const data = await allVenuesRes.json()
+          setAllVenues(data.venues || [])
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -179,6 +199,44 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
       }
     } catch { showToast('Error', 'error') }
   }
+
+  const linkVenue = async (venueId: string) => {
+    try {
+      const res = await fetch(`/api/staff/${params.id}/venues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue_id: venueId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedVenues(data.linkedVenues || [])
+        setVenueSearch('')
+        setShowVenueDropdown(false)
+        showToast('Venue linked', 'success')
+      }
+    } catch { showToast('Error linking venue', 'error') }
+  }
+
+  const unlinkVenue = async (venueId: string) => {
+    try {
+      const res = await fetch(`/api/staff/${params.id}/venues`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue_id: venueId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedVenues(data.linkedVenues || [])
+        showToast('Venue unlinked', 'success')
+      }
+    } catch { showToast('Error unlinking venue', 'error') }
+  }
+
+  const linkedVenueIds = new Set(linkedVenues.map(v => v.venue_id.toString()))
+  const filteredVenues = allVenues.filter(
+    v => !linkedVenueIds.has(v.id.toString()) &&
+      (v.name.toLowerCase().includes(venueSearch.toLowerCase()) || v.market?.toLowerCase().includes(venueSearch.toLowerCase()))
+  )
 
   const formatDate = (d: string) => {
     const date = new Date(d)
@@ -301,6 +359,69 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
               <button onClick={() => setShowEdit(false)} className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Linked Venues — Admin only */}
+        {auth.isAdmin && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900">Linked Venues</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Venues this staff member can access. Technicians only see their linked venues.</p>
+              </div>
+            </div>
+            {/* Venue chips */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {linkedVenues.length === 0 && (
+                <p className="text-xs text-zinc-400">No venues linked — {staff.role === 'technician' ? 'this technician won\'t see any venue data' : 'admin/manager roles see all venues regardless'}</p>
+              )}
+              {linkedVenues.map(v => (
+                <span key={v.venue_id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                  {v.venue_name}
+                  {v.market_name && <span className="text-blue-400">({v.market_name})</span>}
+                  <button
+                    onClick={() => unlinkVenue(v.venue_id)}
+                    className="ml-0.5 text-blue-400 hover:text-red-500 transition-colors"
+                    title="Remove"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+            {/* Add venue dropdown */}
+            <div className="relative">
+              <input
+                type="text"
+                value={venueSearch}
+                onChange={e => { setVenueSearch(e.target.value); setShowVenueDropdown(true) }}
+                onFocus={() => setShowVenueDropdown(true)}
+                placeholder="Search venues to link..."
+                className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
+              />
+              {showVenueDropdown && filteredVenues.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-48 overflow-y-auto">
+                  {filteredVenues.slice(0, 10).map(v => (
+                    <button
+                      key={v.id}
+                      onClick={() => linkVenue(v.id)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 transition-colors flex justify-between items-center"
+                    >
+                      <span className="text-zinc-900">{v.name}</span>
+                      {v.market && <span className="text-xs text-zinc-400">{v.market}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showVenueDropdown && venueSearch && filteredVenues.length === 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg p-3 text-xs text-zinc-400">
+                  No unlinked venues match your search
+                </div>
+              )}
             </div>
           </div>
         )}

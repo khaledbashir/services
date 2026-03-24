@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { requireRole, isAuthError } from '@/lib/rbac'
+import { requireRole, isAuthError, getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const venueId = searchParams.get('venue_id')
+
+    const user = await getAuthUser(request)
+    const staffVenueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
 
     let whereClause = ''
     const params: any[] = []
@@ -13,6 +17,14 @@ export async function GET(request: NextRequest) {
     if (venueId) {
       whereClause = 'WHERE i.venue_id = $1'
       params.push(venueId)
+    } else if (staffVenueIds !== null) {
+      if (staffVenueIds.length === 0) {
+        whereClause = 'WHERE FALSE'
+      } else {
+        const placeholders = staffVenueIds.map((_, i) => `$${i + 1}`).join(', ')
+        whereClause = `WHERE i.venue_id IN (${placeholders})`
+        params.push(...staffVenueIds)
+      }
     }
 
     const result = await query(

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const filter = searchParams.get('filter') || 'all'
     const limit = searchParams.get('limit') || '100'
+
+    const user = await getAuthUser(request)
+    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
 
     let whereClause = ''
     const params: any[] = []
@@ -31,9 +36,17 @@ export async function GET(request: NextRequest) {
       params.push(todayStr, monthStr)
     }
 
-    const limitIndex = params.length + 1
+    const vf = buildVenueFilterClause(venueIds, 'e.venue_id', params.length + 1)
+    // If no WHERE clause yet, convert AND to WHERE
+    let venueFilter = vf.clause
+    if (!whereClause && venueFilter) {
+      whereClause = 'WHERE ' + venueFilter.replace(/^AND /, '')
+      venueFilter = ''
+    }
+
+    const limitIndex = params.length + vf.params.length + 1
     const result = await query(
-      `SELECT 
+      `SELECT
         e.id,
         e.summary,
         v.name as venue_name,
@@ -46,11 +59,11 @@ export async function GET(request: NextRequest) {
       LEFT JOIN venues v ON e.venue_id = v.id
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
-      ${whereClause}
+      ${whereClause} ${venueFilter}
       GROUP BY e.id, v.name
       ORDER BY e.start_time ASC
       LIMIT $${limitIndex}`,
-      [...params, parseInt(limit)]
+      [...params, ...vf.params, parseInt(limit)]
     )
 
     return NextResponse.json({ events: result.rows })

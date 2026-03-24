@@ -4,6 +4,8 @@ import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import * as path from 'path'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -17,10 +19,19 @@ async function getUserFromToken(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthUser(request)
+    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    const vf = buildVenueFilterClause(venueIds, 't.venue_id', 1)
+
+    let whereClause = ''
+    if (vf.clause) {
+      whereClause = 'WHERE ' + vf.clause.replace(/^AND /, '')
+    }
+
     const result = await query(
       `SELECT t.id, t.ticket_number, t.title, t.description, t.priority, t.status, t.category,
               t.resolution_notes, t.event_id,
-              v.name as venue_name, 
+              v.name as venue_name,
               e.summary as event_name,
               s1.full_name as created_by_name,
               s2.full_name as assigned_to_name,
@@ -31,7 +42,9 @@ export async function GET(request: NextRequest) {
        LEFT JOIN events e ON t.event_id = e.id
        LEFT JOIN staff s1 ON t.created_by = s1.id
        LEFT JOIN staff s2 ON t.assigned_to = s2.id
-       ORDER BY t.created_at DESC`
+       ${whereClause}
+       ORDER BY t.created_at DESC`,
+      [...vf.params]
     )
     return NextResponse.json({ tickets: result.rows })
   } catch (err) {

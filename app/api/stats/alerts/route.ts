@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthUser(request)
+    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    const vf = buildVenueFilterClause(venueIds, 'e.venue_id', 2)
+
     const today = new Date().toISOString().split('T')[0]
     const now = new Date()
     const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000)
@@ -15,8 +21,8 @@ export async function GET() {
        JOIN venues v ON e.venue_id = v.id
        WHERE e.event_date = $1
          AND v.requires_assignment = true
-         AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
-      [today]
+         AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf.clause}`,
+      [today, ...vf.params]
     )
     const unassigned = parseInt(unassignedResult.rows[0]?.count || '0')
     if (unassigned > 0) {
@@ -30,13 +36,14 @@ export async function GET() {
     }
 
     // 2. Events starting within 2 hours with pending workflow (no check-in)
+    const vf2 = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
     const noCheckinResult = await query(
       `SELECT COUNT(*) as count FROM events e
        WHERE e.event_date = $1
          AND e.start_time <= $2
          AND e.workflow_status = 'pending'
-         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
-      [today, twoHoursFromNow.toISOString()]
+         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf2.clause}`,
+      [today, twoHoursFromNow.toISOString(), ...vf2.params]
     )
     const noCheckin = parseInt(noCheckinResult.rows[0]?.count || '0')
     if (noCheckin > 0) {
@@ -51,12 +58,13 @@ export async function GET() {
 
     // 3. Events today still in checked_in (not game ready) within 1 hour of start
     const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
+    const vf3 = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
     const notReadyResult = await query(
       `SELECT COUNT(*) as count FROM events e
        WHERE e.event_date = $1
          AND e.start_time <= $2
-         AND e.workflow_status = 'checked_in'`,
-      [today, oneHourFromNow.toISOString()]
+         AND e.workflow_status = 'checked_in' ${vf3.clause}`,
+      [today, oneHourFromNow.toISOString(), ...vf3.params]
     )
     const notReady = parseInt(notReadyResult.rows[0]?.count || '0')
     if (notReady > 0) {
@@ -77,8 +85,8 @@ export async function GET() {
       `SELECT COUNT(*) as count FROM events e
        WHERE e.event_date = $1
          AND e.workflow_status != 'post_game_submitted'
-         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
-      [yesterdayStr]
+         AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf.clause}`,
+      [yesterdayStr, ...vf.params]
     )
     const overdue = parseInt(overdueResult.rows[0]?.count || '0')
     if (overdue > 0) {
@@ -95,13 +103,14 @@ export async function GET() {
     const weekEnd = new Date(now)
     weekEnd.setDate(weekEnd.getDate() + 7)
     const weekEndStr = weekEnd.toISOString().split('T')[0]
+    const vf5 = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
     const partialResult = await query(
       `SELECT COUNT(*) as count FROM events e
        JOIN venues v ON e.venue_id = v.id
        WHERE e.event_date > $1 AND e.event_date <= $2
          AND v.requires_assignment = true
-         AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
-      [today, weekEndStr]
+         AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf5.clause}`,
+      [today, weekEndStr, ...vf5.params]
     )
     const upcoming = parseInt(partialResult.rows[0]?.count || '0')
     if (upcoming > 0) {

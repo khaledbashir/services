@@ -19,6 +19,13 @@ async function runMigrations() {
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS distribution_emails TEXT[] DEFAULT '{}'`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'event'`)
     await client.query(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`)
+    await client.query(`CREATE TABLE IF NOT EXISTS staff_venues (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id INTEGER NOT NULL REFERENCES staff(id),
+      venue_id INTEGER NOT NULL REFERENCES venues(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(staff_id, venue_id)
+    )`)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)

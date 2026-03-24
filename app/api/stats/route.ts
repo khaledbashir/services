@@ -1,42 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthUser(request)
+    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    const vf = buildVenueFilterClause(venueIds, 'e.venue_id', 2)
+    const vfTicket = buildVenueFilterClause(venueIds, 't.venue_id', 1)
+
     const today = new Date().toISOString().split('T')[0]
 
     const todaysEventsResult = await query(
-      `SELECT COUNT(*) as count FROM events WHERE event_date = $1`,
-      [today]
+      `SELECT COUNT(*) as count FROM events e WHERE e.event_date = $1 ${vf.clause}`,
+      [today, ...vf.params]
     )
 
     const assignedStaffResult = await query(
-      `SELECT COUNT(DISTINCT staff_id) as count FROM event_assignments 
-       WHERE event_id IN (SELECT id FROM events WHERE event_date = $1)`,
-      [today]
+      `SELECT COUNT(DISTINCT ea.staff_id) as count FROM event_assignments ea
+       JOIN events e ON ea.event_id = e.id
+       WHERE e.event_date = $1 ${vf.clause}`,
+      [today, ...vf.params]
     )
 
     const openTicketsResult = await query(
-      `SELECT COUNT(*) as count FROM tickets WHERE status IN ('new', 'on_hold', 'in_progress', 'escalated')`
+      `SELECT COUNT(*) as count FROM tickets t WHERE t.status IN ('new', 'on_hold', 'in_progress', 'escalated') ${vfTicket.clause}`,
+      [...vfTicket.params]
     )
 
     const pendingWorkflowsResult = await query(
-      `SELECT COUNT(*) as count FROM events
-       WHERE event_date = $1 AND workflow_status = 'pending'`,
-      [today]
+      `SELECT COUNT(*) as count FROM events e
+       WHERE e.event_date = $1 AND e.workflow_status = 'pending' ${vf.clause}`,
+      [today, ...vf.params]
     )
 
     // Estimated labor hours this week
     const weekEnd = new Date()
     weekEnd.setDate(weekEnd.getDate() + 7)
     const weekEndStr = weekEnd.toISOString().split('T')[0]
+    const vfLabor = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
 
     const laborHoursResult = await query(
       `SELECT COALESCE(SUM(ea.estimated_hours), 0) as total_hours
        FROM event_assignments ea
        JOIN events e ON ea.event_id = e.id
-       WHERE e.event_date >= $1 AND e.event_date < $2`,
-      [today, weekEndStr]
+       WHERE e.event_date >= $1 AND e.event_date < $2 ${vfLabor.clause}`,
+      [today, weekEndStr, ...vfLabor.params]
     )
 
     // Labor hours by staff this week
@@ -45,11 +55,11 @@ export async function GET(request: NextRequest) {
        FROM event_assignments ea
        JOIN events e ON ea.event_id = e.id
        JOIN staff s ON ea.staff_id = s.id
-       WHERE e.event_date >= $1 AND e.event_date < $2
+       WHERE e.event_date >= $1 AND e.event_date < $2 ${vfLabor.clause}
        GROUP BY s.id, s.full_name
        ORDER BY total_hours DESC
        LIMIT 10`,
-      [today, weekEndStr]
+      [today, weekEndStr, ...vfLabor.params]
     )
 
     return NextResponse.json({

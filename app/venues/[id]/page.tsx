@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { useAuth } from '@/lib/useAuth'
 
 interface VenueDetail {
   id: string
@@ -76,6 +77,20 @@ const workflowConfig: Record<string, { label: string; dot: string; bg: string; t
   post_game_submitted: { label: 'Complete', dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
 }
 
+interface LinkedStaff {
+  id: string
+  staff_id: string
+  full_name: string
+  role: string
+  email: string
+}
+
+interface AllStaff {
+  id: string
+  full_name: string
+  role: string
+}
+
 const roleColors: Record<string, string> = {
   admin: 'bg-blue-500',
   manager: 'bg-emerald-500',
@@ -99,7 +114,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [distEmails, setDistEmails] = useState<string[]>([])
   const [newDistEmail, setNewDistEmail] = useState('')
   const [savingDist, setSavingDist] = useState(false)
+  const [linkedStaff, setLinkedStaff] = useState<LinkedStaff[]>([])
+  const [allStaff, setAllStaff] = useState<AllStaff[]>([])
+  const [staffSearch, setStaffSearch] = useState('')
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false)
   const router = useRouter()
+  const auth = useAuth()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,11 +134,23 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
 
-          // Fetch screens
-          const screensRes = await fetch(`/api/venues/${params.id}/screens`)
+          // Fetch screens and linked staff
+          const [screensRes, linkedStaffRes, allStaffRes] = await Promise.all([
+            fetch(`/api/venues/${params.id}/screens`),
+            fetch(`/api/venues/${params.id}/staff`),
+            fetch(`/api/staff`),
+          ])
           if (screensRes.ok) {
             const screensData = await screensRes.json()
             setScreens(screensData.screens || [])
+          }
+          if (linkedStaffRes.ok) {
+            const data = await linkedStaffRes.json()
+            setLinkedStaff(data.linkedStaff || [])
+          }
+          if (allStaffRes.ok) {
+            const data = await allStaffRes.json()
+            setAllStaff((data.staff || []).filter((s: any) => s.is_active !== false))
           }
         }
       } catch (err) {
@@ -173,6 +205,42 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
       if (res.ok) { const data = await res.json(); setVenue(data.venue) }
     } catch {}
   }
+
+  const linkStaff = async (staffId: string) => {
+    try {
+      const res = await fetch(`/api/venues/${params.id}/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staff_id: staffId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedStaff(data.linkedStaff || [])
+        setStaffSearch('')
+        setShowStaffDropdown(false)
+      }
+    } catch {}
+  }
+
+  const unlinkStaff = async (staffId: string) => {
+    try {
+      const res = await fetch(`/api/venues/${params.id}/staff`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staff_id: staffId }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedStaff(data.linkedStaff || [])
+      }
+    } catch {}
+  }
+
+  const linkedStaffIds = new Set(linkedStaff.map(s => s.staff_id.toString()))
+  const filteredStaff = allStaff.filter(
+    s => !linkedStaffIds.has(s.id.toString()) &&
+      s.full_name.toLowerCase().includes(staffSearch.toLowerCase())
+  )
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
@@ -323,24 +391,84 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
         {/* STAFF TAB */}
         {activeTab === 'staff' && (
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
-            {assignedStaff.length === 0 ? (
-              <div className="p-12 text-center text-zinc-400 text-sm">No staff assigned to events at this venue</div>
-            ) : (
-              <div className="divide-y divide-[#E8E8E8]">
-                {assignedStaff.map(staff => (
-                  <div key={staff.id} onClick={() => router.push(`/staff/${staff.id}`)} className="px-6 py-4 flex items-center gap-4 hover:bg-zinc-50 cursor-pointer transition-colors">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold ${roleColors[staff.role] || 'bg-zinc-500'}`}>
-                      {getInitials(staff.full_name)}
+          <div className="space-y-6">
+            {/* Linked Staff — Admin only */}
+            {auth.isAdmin && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-zinc-900">Linked Staff</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Staff members permanently linked to this venue. Technicians will only see data for their linked venues.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {linkedStaff.length === 0 && (
+                    <p className="text-xs text-zinc-400">No staff linked to this venue</p>
+                  )}
+                  {linkedStaff.map(s => (
+                    <span key={s.staff_id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                      {s.full_name}
+                      <span className="text-blue-400 capitalize">({s.role})</span>
+                      <button
+                        onClick={() => unlinkStaff(s.staff_id)}
+                        className="ml-0.5 text-blue-400 hover:text-red-500 transition-colors"
+                        title="Remove"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={staffSearch}
+                    onChange={e => { setStaffSearch(e.target.value); setShowStaffDropdown(true) }}
+                    onFocus={() => setShowStaffDropdown(true)}
+                    placeholder="Search staff to link..."
+                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
+                  />
+                  {showStaffDropdown && filteredStaff.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-48 overflow-y-auto">
+                      {filteredStaff.slice(0, 10).map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => linkStaff(s.id)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 transition-colors flex justify-between items-center"
+                        >
+                          <span className="text-zinc-900">{s.full_name}</span>
+                          <span className="text-xs text-zinc-400 capitalize">{s.role}</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-zinc-900">{staff.full_name}</p>
-                      <p className="text-xs text-zinc-500 capitalize">{staff.role}</p>
-                    </div>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
             )}
+
+            {/* Event-based staff (existing) */}
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+              <div className="px-6 py-3 border-b border-[#E8E8E8] bg-zinc-50">
+                <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Staff Assigned via Events</h3>
+              </div>
+              {assignedStaff.length === 0 ? (
+                <div className="p-12 text-center text-zinc-400 text-sm">No staff assigned to events at this venue</div>
+              ) : (
+                <div className="divide-y divide-[#E8E8E8]">
+                  {assignedStaff.map(staff => (
+                    <div key={staff.id} onClick={() => router.push(`/staff/${staff.id}`)} className="px-6 py-4 flex items-center gap-4 hover:bg-zinc-50 cursor-pointer transition-colors">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold ${roleColors[staff.role] || 'bg-zinc-500'}`}>
+                        {getInitials(staff.full_name)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-zinc-900">{staff.full_name}</p>
+                        <p className="text-xs text-zinc-500 capitalize">{staff.role}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

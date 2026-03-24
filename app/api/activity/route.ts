@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser } from '@/lib/rbac'
+import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthUser(request)
+    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    const vfEvent = buildVenueFilterClause(venueIds, 'e.venue_id', 1)
+    const vfTicket = buildVenueFilterClause(venueIds, 't.venue_id', 1)
+
+    let wfWhere = ''
+    if (vfEvent.clause) wfWhere = 'WHERE ' + vfEvent.clause.replace(/^AND /, '')
+    let tkWhere = ''
+    if (vfTicket.clause) tkWhere = 'WHERE ' + vfTicket.clause.replace(/^AND /, '')
+    let cmWhere = ''
+    if (vfTicket.clause) cmWhere = 'WHERE ' + vfTicket.clause.replace(/^AND /, '').replace('t.venue_id', 't2.venue_id')
+
     // Workflow activity
     const workflowResult = await query(
-      `SELECT 
+      `SELECT
         'workflow' as source,
-        ws.type, 
+        ws.type,
         ws.submitted_at as created_at,
         s.full_name as staff_name,
         e.summary as entity_name,
@@ -16,13 +30,15 @@ export async function GET(request: NextRequest) {
       JOIN staff s ON ws.staff_id = s.id
       JOIN events e ON ws.event_id = e.id
       LEFT JOIN venues v ON e.venue_id = v.id
+      ${wfWhere}
       ORDER BY ws.submitted_at DESC
-      LIMIT 15`
+      LIMIT 15`,
+      [...vfEvent.params]
     )
 
     // Ticket creation
     const ticketResult = await query(
-      `SELECT 
+      `SELECT
         'ticket' as source,
         'ticket_created' as type,
         t.created_at,
@@ -32,13 +48,15 @@ export async function GET(request: NextRequest) {
       FROM tickets t
       JOIN staff s ON t.created_by = s.id
       LEFT JOIN venues v ON t.venue_id = v.id
+      ${tkWhere}
       ORDER BY t.created_at DESC
-      LIMIT 10`
+      LIMIT 10`,
+      [...vfTicket.params]
     )
 
     // Ticket comments
     const commentResult = await query(
-      `SELECT 
+      `SELECT
         'comment' as source,
         CASE WHEN tc.is_internal THEN 'internal_comment' ELSE 'external_comment' END as type,
         tc.created_at,
@@ -49,8 +67,10 @@ export async function GET(request: NextRequest) {
       JOIN staff s ON tc.author_id = s.id
       JOIN tickets t ON tc.ticket_id = t.id
       LEFT JOIN venues v ON t.venue_id = v.id
+      ${tkWhere.replace('t.venue_id', 't.venue_id')}
       ORDER BY tc.created_at DESC
-      LIMIT 10`
+      LIMIT 10`,
+      [...vfTicket.params]
     )
 
     // Activity log (status changes, assignments, etc.)
