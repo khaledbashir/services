@@ -236,10 +236,10 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     } catch {}
   }
 
-  const linkedStaffIds = new Set(linkedStaff.map(s => s.staff_id.toString()))
+  const linkedStaffIds = new Set(linkedStaff.map(s => s.staff_id?.toString()))
   const filteredStaff = allStaff.filter(
-    s => !linkedStaffIds.has(s.id.toString()) &&
-      s.full_name.toLowerCase().includes(staffSearch.toLowerCase())
+    s => !linkedStaffIds.has(s.id?.toString()) &&
+      (s.full_name || '').toLowerCase().includes(staffSearch.toLowerCase())
   )
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })

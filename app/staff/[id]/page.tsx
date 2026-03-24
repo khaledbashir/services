@@ -232,10 +232,10 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
     } catch { showToast('Error unlinking venue', 'error') }
   }
 
-  const linkedVenueIds = new Set(linkedVenues.map(v => v.venue_id.toString()))
+  const linkedVenueIds = new Set(linkedVenues.map(v => v.venue_id?.toString()))
   const filteredVenues = allVenues.filter(
-    v => !linkedVenueIds.has(v.id.toString()) &&
-      (v.name.toLowerCase().includes(venueSearch.toLowerCase()) || v.market?.toLowerCase().includes(venueSearch.toLowerCase()))
+    v => !linkedVenueIds.has(v.id?.toString()) &&
+      ((v.name || '').toLowerCase().includes(venueSearch.toLowerCase()) || (v.market || '').toLowerCase().includes(venueSearch.toLowerCase()))
   )
 
   const formatDate = (d: string) => {
