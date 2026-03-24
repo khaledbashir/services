@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
     if (channelId) {
       const ticket = result.rows[0]
       const msg = formatTicketNotification({
+        id: ticket.id,
         ticket_number: ticket.ticket_number,
         title: ticket.title,
         category: ticket.category,

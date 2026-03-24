@@ -39,7 +39,10 @@ const statusLabels: Record<string, string> = {
   escalated: 'Escalated', closed: 'Closed',
 }
 
+const DASHBOARD_URL = 'https://abc-anc-services.izcgmb.easypanel.host'
+
 export function formatTicketNotification(ticket: {
+  id?: string
   ticket_number: number
   title: string
   category: string
@@ -89,6 +92,18 @@ export function formatTicketNotification(ticket: {
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: `> ${ticket.description.substring(0, 200)}${ticket.description.length > 200 ? '...' : ''}` },
+    })
+  }
+
+  if (ticket.id) {
+    blocks.push({
+      type: 'actions',
+      elements: [{
+        type: 'button',
+        text: { type: 'plain_text', text: 'View Ticket' },
+        url: `${DASHBOARD_URL}/tickets/${ticket.id}`,
+        style: 'primary',
+      }],
     })
   }
 

@@ -52,6 +52,7 @@ export async function POST(
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*` } },
             { type: 'section', text: { type: 'mrkdwn', text: `*${user.fullName || 'User'}* ${is_internal ? '_(internal)_' : ''}:\n> ${body.substring(0, 300)}${body.length > 300 ? '...' : ''}` } },
+            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`, style: 'primary' }] },
           ],
         })
       }
