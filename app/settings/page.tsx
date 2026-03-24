@@ -86,10 +86,13 @@ export default function SettingsPage() {
 
   const fetchBotName = async () => {
     try {
-      const res = await fetch('/api/settings/bot-name')
+      const res = await fetch('/api/settings/bot-name', { cache: 'no-store' })
+      if (!res.ok) return
       const data = await res.json()
-      setBotName(data.botName || 'ANC Bot')
-      setBotNameDraft(data.botName || 'ANC Bot')
+      if (data.botName) {
+        setBotName(data.botName)
+        setBotNameDraft(data.botName)
+      }
     } catch {}
   }
 

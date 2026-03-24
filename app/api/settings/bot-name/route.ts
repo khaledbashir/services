@@ -9,10 +9,14 @@ export async function GET() {
     const result = await query(`SELECT value FROM app_settings WHERE key = 'bot_name'`)
     const botName = result.rows[0]?.value || 'ANC Bot'
 
-    return NextResponse.json({ botName })
+    return NextResponse.json({ botName }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    })
   } catch (err) {
     console.error('Error fetching bot name:', err)
-    return NextResponse.json({ botName: 'ANC Bot' })
+    return NextResponse.json({ botName: 'ANC Bot' }, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
   }
 }
 
