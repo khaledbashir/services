@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 
 async function getUserFromToken(request: NextRequest) {
@@ -31,6 +32,30 @@ export async function POST(
        RETURNING id, body, is_internal, created_at`,
       [params.id, user.userId, body, is_internal || false]
     )
+
+    // Slack notification for all comments
+    const ticketInfo = await query(
+      `SELECT t.ticket_number, t.title, t.venue_id, v.name as venue_name, v.slack_channel_id
+       FROM tickets t JOIN venues v ON t.venue_id = v.id WHERE t.id = $1`,
+      [params.id]
+    )
+    const ti = ticketInfo.rows[0]
+    if (ti) {
+      const caseNum = String(ti.ticket_number).padStart(8, '0')
+      const channelId = ti.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (channelId) {
+        const emoji = is_internal ? ':memo:' : ':speech_balloon:'
+        const label = is_internal ? 'Internal Note' : 'Comment'
+        sendSlackMessage({
+          channel: channelId,
+          text: `${emoji} Case #${caseNum} — ${label} by ${user.fullName || 'User'}`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*` } },
+            { type: 'section', text: { type: 'mrkdwn', text: `*${user.fullName || 'User'}* ${is_internal ? '_(internal)_' : ''}:\n> ${body.substring(0, 300)}${body.length > 300 ? '...' : ''}` } },
+          ],
+        })
+      }
+    }
 
     // Track first response for SLA (external comments only)
     if (!is_internal) {
