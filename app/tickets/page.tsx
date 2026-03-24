@@ -295,14 +295,14 @@ export default function TicketsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Title *</label>
-                <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })}
+                <input type="text" value={formData.title} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Brief description of the issue"
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
-                  <select value={formData.venue_id} onChange={e => { setFormData({ ...formData, venue_id: e.target.value, event_id: '' }); setSelectedVenueId(e.target.value) }}
+                  <select value={formData.venue_id} onChange={e => { setFormData(prev => ({ ...prev, venue_id: e.target.value, event_id: '' })); setSelectedVenueId(e.target.value) }}
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
                     <option value="">Select venue...</option>
                     {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -310,7 +310,7 @@ export default function TicketsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 mb-1">Event (optional)</label>
-                  <select value={formData.event_id} onChange={e => setFormData({ ...formData, event_id: e.target.value })}
+                  <select value={formData.event_id} onChange={e => setFormData(prev => ({ ...prev, event_id: e.target.value }))}
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" disabled={!selectedVenueId}>
                     <option value="">No event</option>
                     {events.map(e => <option key={e.id} value={e.id}>{e.summary}</option>)}
@@ -320,7 +320,7 @@ export default function TicketsPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 mb-1">Category</label>
-                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
+                  <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="hardware">Hardware</option>
                     <option value="software">Software</option>
@@ -331,7 +331,7 @@ export default function TicketsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
-                  <select value={formData.priority} onChange={e => setFormData({ ...formData, priority: e.target.value })}
+                  <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value }))}
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -341,7 +341,7 @@ export default function TicketsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 mb-1">Assign To</label>
-                  <select value={formData.assigned_to} onChange={e => setFormData({ ...formData, assigned_to: e.target.value })}
+                  <select value={formData.assigned_to} onChange={e => setFormData(prev => ({ ...prev, assigned_to: e.target.value }))}
                     className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="">Unassigned</option>
                     {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
@@ -350,7 +350,7 @@ export default function TicketsPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
-                <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
+                <textarea value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Provide details..."
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none resize-none" rows={3} />
               </div>
