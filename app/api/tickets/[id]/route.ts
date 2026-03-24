@@ -171,15 +171,57 @@ export async function PATCH(
         })]
       )
 
-      // Write notification log for Claw
+      // Write notification log
       const logEntry = `TICKET|assigned|${user?.fullName || 'User'}|${oldTicket.title}|${venueName}|to ${assignedName}|${new Date().toISOString()}\n`
       fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
+
+      // Slack notification for assignment
+      const assignCaseNum = String(oldTicket.ticket_number).padStart(8, '0')
+      const assignChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
+      const assignChannelId = assignChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (assignChannelId) {
+        sendSlackMessage({
+          channel: assignChannelId,
+          text: `:bust_in_silhouette: Case #${assignCaseNum} assigned to ${assignedName}`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `:bust_in_silhouette: *Case #${assignCaseNum} — Assigned*\n*${oldTicket.title}*\nOwner: ${assignedName}` } },
+          ],
+        })
+      }
+    }
+
+    // Log and notify priority changes
+    if (priority && oldTicket && priority !== oldTicket.priority) {
+      await query(
+        `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+         VALUES ('ticket_priority_change', 'ticket', $1, $2, $3)`,
+        [params.id, user?.userId || null, JSON.stringify({
+          entity_name: oldTicket.title,
+          venue_name: venueName,
+          old_priority: oldTicket.priority,
+          new_priority: priority,
+        })]
+      )
+
+      const priCaseNum = String(oldTicket.ticket_number).padStart(8, '0')
+      const priChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
+      const priChannelId = priChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (priChannelId) {
+        const priEmoji = priority === 'critical' ? ':red_circle:' : priority === 'high' ? ':large_orange_circle:' : ':large_yellow_circle:'
+        sendSlackMessage({
+          channel: priChannelId,
+          text: `${priEmoji} Case #${priCaseNum} priority changed to ${priority}`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `${priEmoji} *Case #${priCaseNum} — Priority Changed*\n*${oldTicket.title}*\n${oldTicket.priority} → ${priority}` } },
+          ],
+        })
+      }
     }
 
     // Log category changes
     if (category && oldTicket && category !== oldTicket.category) {
       await query(
-        `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details) 
+        `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
          VALUES ('ticket_category_change', 'ticket', $1, $2, $3)`,
         [params.id, user?.userId || null, JSON.stringify({
           entity_name: oldTicket.title,
