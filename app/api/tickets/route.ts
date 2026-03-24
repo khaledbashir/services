@@ -6,6 +6,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { sendTicketDistributionEmail } from '@/lib/email'
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -128,6 +129,16 @@ export async function POST(request: NextRequest) {
       msg.channel = channelId
       sendSlackMessage(msg)
     }
+
+    // Email distribution list
+    const ticket = result.rows[0]
+    sendTicketDistributionEmail({
+      venueId: venue_id,
+      ticketTitle: title,
+      ticketNumber: ticket.ticket_number,
+      type: 'created',
+      detail: description || title,
+    }).catch(err => console.error('[email] Ticket creation email failed:', err))
 
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {

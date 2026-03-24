@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
+import { sendTicketDistributionEmail } from '@/lib/email'
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -67,23 +68,19 @@ export async function POST(
       )
 
       // Email distribution list for client-visible comments
-      const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-      if (RESEND_API_KEY) {
-        const ticketRes = await query(`SELECT t.title, t.ticket_number, t.venue_id, v.name as venue_name, v.distribution_emails FROM tickets t JOIN venues v ON t.venue_id = v.id WHERE t.id = $1`, [params.id])
-        const t = ticketRes.rows[0]
-        if (t?.distribution_emails && t.distribution_emails.length > 0) {
-          const caseNum = String(t.ticket_number).padStart(8, '0')
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
-            body: JSON.stringify({
-              from: 'ANC Services <notifications@ancservices.app>',
-              to: t.distribution_emails,
-              subject: `Case ${caseNum} Comment — ${t.title}`,
-              html: `<div style="font-family:sans-serif;max-width:600px"><div style="background:#002C73;color:white;padding:20px 24px;border-radius:8px 8px 0 0"><h2 style="margin:0;font-size:16px">Case ${caseNum} — ${t.title}</h2><p style="margin:4px 0 0;opacity:0.7;font-size:13px">${t.venue_name}</p></div><div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px"><p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>New Comment:</strong></p><p style="margin:0 0 12px;font-size:14px;color:#1e293b;background:#f8fafc;padding:12px;border-radius:6px">${body}</p><hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0"><p style="margin:0;font-size:12px;color:#94a3b8">This is an automated notification from ANC Sports Operations.</p></div></div>`,
-            }),
-          }).catch(() => {})
-        }
+      const ticketRes = await query(
+        `SELECT t.title, t.ticket_number, t.venue_id FROM tickets t WHERE t.id = $1`,
+        [params.id]
+      )
+      const t = ticketRes.rows[0]
+      if (t) {
+        sendTicketDistributionEmail({
+          venueId: t.venue_id,
+          ticketTitle: t.title,
+          ticketNumber: t.ticket_number,
+          type: 'comment',
+          detail: body,
+        }).catch(err => console.error('[email] Comment email failed:', err))
       }
     }
 
