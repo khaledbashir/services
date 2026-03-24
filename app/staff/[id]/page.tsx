@@ -400,11 +400,13 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 value={venueSearch}
                 onChange={e => { setVenueSearch(e.target.value); setShowVenueDropdown(true) }}
                 onFocus={() => setShowVenueDropdown(true)}
+                onBlur={() => setTimeout(() => setShowVenueDropdown(false), 150)}
                 placeholder="Search venues to link..."
                 className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
               />
               {showVenueDropdown && filteredVenues.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-[#E8E8E8] rounded shadow-lg max-h-48 overflow-y-auto"
+                  onMouseDown={e => e.preventDefault()}>
                   {filteredVenues.slice(0, 10).map(v => (
                     <button
                       key={v.id}
