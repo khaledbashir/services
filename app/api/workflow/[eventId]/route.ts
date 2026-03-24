@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage } from '@/lib/slack'
 import { appendFile } from 'fs/promises'
 import { resolve } from 'path'
+
+const workflowLabels: Record<string, { label: string; emoji: string }> = {
+  check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
+  game_ready: { label: 'Game Ready', emoji: ':stadium:' },
+  post_game_report: { label: 'Post-Game Report', emoji: ':clipboard:' },
+}
 
 export async function GET(
   request: NextRequest,
@@ -161,7 +168,31 @@ export async function POST(
       )
     } catch (logErr) {
       console.error('Failed to write notification log:', logErr)
-      // Don't fail the request if logging fails
+    }
+
+    // Slack notification for workflow step
+    const venueSlackRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [eventResult.rows[0]?.venue_id])
+    const slackChannel = venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+    if (slackChannel) {
+      const wf = workflowLabels[dbType] || { label: dbType, emoji: ':gear:' }
+      const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted
+      const dashboardUrl = `https://abc-anc-services.izcgmb.easypanel.host/workflow/${eventId}`
+
+      const blocks: any[] = [
+        { type: 'section', text: { type: 'mrkdwn', text: `${wf.emoji} *Workflow: ${wf.label} completed*\n*${eventName}* @ ${venueName}\nBy: ${staffName}` } },
+      ]
+
+      if (allDone) {
+        blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':tada: *All workflow steps complete for this event*' } })
+      }
+
+      blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Workflow' }, url: dashboardUrl, style: 'primary' }] })
+
+      sendSlackMessage({
+        channel: slackChannel,
+        text: `${wf.emoji} ${wf.label} completed: ${eventName} @ ${venueName} by ${staffName}`,
+        blocks,
+      })
     }
 
     return NextResponse.json({
