@@ -17,9 +17,17 @@ export async function POST(request: NextRequest) {
     const startTimestamp = start_time
       ? `${event_date}T${start_time}:00`
       : `${event_date}T00:00:00`
-    const endTimestamp = end_time
-      ? `${event_date}T${end_time}:00`
-      : null
+    // Default end_time to start + 3 hours if not provided (DB has NOT NULL constraint)
+    let endTimestamp: string
+    if (end_time) {
+      endTimestamp = `${event_date}T${end_time}:00`
+    } else if (start_time) {
+      const [h, m] = start_time.split(':').map(Number)
+      const endH = String((h + 3) % 24).padStart(2, '0')
+      endTimestamp = `${event_date}T${endH}:${String(m).padStart(2, '0')}:00`
+    } else {
+      endTimestamp = `${event_date}T03:00:00`
+    }
 
     const validEventTypes = ['event', 'shift']
     const eType = validEventTypes.includes(event_type) ? event_type : 'event'
