@@ -153,7 +153,7 @@ export async function PATCH(
           text: `${emoji} Case #${caseNum} ${action}: ${oldTicket.title}`,
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} ${action}*\n*${oldTicket.title}*\nStatus: ${fmtStatus(oldTicket.status)} → ${fmtStatus(status)}` } },
-            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: ticketUrl, style: 'primary' }] },
+            { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket>` } },
           ],
         })
       }
@@ -189,7 +189,7 @@ export async function PATCH(
           text: `:bust_in_silhouette: Case #${assignCaseNum} assigned to ${assignedName}`,
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `:bust_in_silhouette: *Case #${assignCaseNum} — Assigned*\n*${oldTicket.title}*\nOwner: ${assignedName}` } },
-            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: assignUrl, style: 'primary' }] },
+            { type: 'section', text: { type: 'mrkdwn', text: `<${assignUrl}|:link: View Ticket>` } },
           ],
         })
       }
@@ -219,7 +219,7 @@ export async function PATCH(
           text: `${priEmoji} Case #${priCaseNum} priority changed to ${priority}`,
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `${priEmoji} *Case #${priCaseNum} — Priority Changed*\n*${oldTicket.title}*\n${oldTicket.priority} → ${priority}` } },
-            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: priUrl, style: 'primary' }] },
+            { type: 'section', text: { type: 'mrkdwn', text: `<${priUrl}|:link: View Ticket>` } },
           ],
         })
       }

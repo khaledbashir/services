@@ -97,13 +97,8 @@ export function formatTicketNotification(ticket: {
 
   if (ticket.id) {
     blocks.push({
-      type: 'actions',
-      elements: [{
-        type: 'button',
-        text: { type: 'plain_text', text: 'View Ticket' },
-        url: `${DASHBOARD_URL}/tickets/${ticket.id}`,
-        style: 'primary',
-      }],
+      type: 'section',
+      text: { type: 'mrkdwn', text: `<${DASHBOARD_URL}/tickets/${ticket.id}|:link: View Ticket>` },
     })
   }
 
