@@ -108,6 +108,19 @@ export async function POST(request: NextRequest) {
     const venueRes = await query('SELECT name FROM venues WHERE id = $1', [venue_id])
     const venueName = venueRes.rows[0]?.name || 'Unknown Venue'
     
+    // Log creation to activity_log
+    const ticket0 = result.rows[0]
+    await query(
+      `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+       VALUES ('ticket_created', 'ticket', $1, $2, $3)`,
+      [ticket0.id, user.userId, JSON.stringify({
+        entity_name: title,
+        venue_name: venueName,
+        priority: priority || 'medium',
+        category: category || 'general',
+      })]
+    )
+
     // Write notification log for Claw
     const logEntry = `TICKET|created|${user.fullName || 'User'}|${title}|${venueName}|${new Date().toISOString()}\n`
     fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)

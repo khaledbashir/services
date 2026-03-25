@@ -268,6 +268,17 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
       [ticket.id, CLAW_STAFF_ID, commentBody]
     )
 
+    // Log to activity
+    await query(
+      `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+       VALUES ('email_reply', 'ticket', $1, $2, $3)`,
+      [ticket.id, CLAW_STAFF_ID, JSON.stringify({
+        entity_name: ticket.title,
+        venue_name: ticket.venue_name,
+        from: `${senderName} (${senderEmail})`,
+      })]
+    )
+
     // Track SLA first response if this is from an external party
     await query(
       `UPDATE tickets SET first_response_at = NOW(), sla_response_met = (NOW() <= sla_response_due), updated_at = NOW()

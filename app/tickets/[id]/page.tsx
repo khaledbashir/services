@@ -463,22 +463,38 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                       const log = item.data as Activity
                       const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
                       const actionIcons: Record<string, string> = {
+                        ticket_created: '🎫',
                         ticket_status_change: '🔄',
                         ticket_assigned: '👤',
                         ticket_category_change: '🏷',
                         ticket_priority_change: '⚡',
+                        email_reply: '📧',
                       }
-                      const desc = log.action === 'ticket_status_change' ? `Status changed: ${details.old_status} → ${details.new_status}`
+                      const actionColors: Record<string, string> = {
+                        ticket_created: 'bg-blue-100 text-blue-600',
+                        ticket_status_change: 'bg-amber-100 text-amber-600',
+                        ticket_assigned: 'bg-violet-100 text-violet-600',
+                        ticket_category_change: 'bg-zinc-100 text-zinc-600',
+                        ticket_priority_change: 'bg-orange-100 text-orange-600',
+                        email_reply: 'bg-blue-100 text-blue-600',
+                      }
+                      const desc = log.action === 'ticket_created' ? `Ticket created — ${details.venue_name || ''} — ${details.priority || ''} priority`
+                        : log.action === 'ticket_status_change' ? `Status changed: ${details.old_status} → ${details.new_status}`
                         : log.action === 'ticket_assigned' ? `Assigned to ${details.assigned_to}`
                         : log.action === 'ticket_category_change' ? `Category changed to ${details.new_category}`
                         : log.action === 'ticket_priority_change' ? `Priority changed to ${details.new_priority}`
                         : 'Updated'
                       const time = new Date(log.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                      const color = actionColors[log.action] || 'bg-zinc-100 text-zinc-500'
                       return (
-                        <div key={`a-${idx}`} className="px-5 py-3 border-b border-[#E8E8E8] last:border-b-0 flex items-center gap-3 bg-zinc-50/50">
-                          <span className="text-sm">{actionIcons[log.action] || '📝'}</span>
-                          <span className="text-xs text-zinc-600">{desc}</span>
-                          <span className="text-[11px] text-zinc-400 ml-auto">{time}</span>
+                        <div key={`a-${idx}`} className="px-5 py-3.5 border-b border-[#E8E8E8] last:border-b-0 flex items-center gap-3">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${color}`}>
+                            {actionIcons[log.action] || '📝'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium text-zinc-700">{desc}</span>
+                          </div>
+                          <span className="text-[11px] text-zinc-400 flex-shrink-0">{time}</span>
                         </div>
                       )
                     }

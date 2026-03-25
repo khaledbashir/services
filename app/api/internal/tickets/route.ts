@@ -86,6 +86,18 @@ export async function POST(request: NextRequest) {
       sendSlackMessage(msg)
     }
 
+    // Log creation to activity_log
+    await query(
+      `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+       VALUES ('ticket_created', 'ticket', $1, $2, $3)`,
+      [ticket.id, CLAW_STAFF_ID, JSON.stringify({
+        entity_name: title,
+        venue_name: venueName,
+        priority: ticketPriority,
+        category: category || 'general',
+      })]
+    )
+
     // Email distribution list
     sendTicketDistributionEmail({
       venueId: venue_id,
