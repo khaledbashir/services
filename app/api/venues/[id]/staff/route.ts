@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 
 export async function GET(
   request: NextRequest,
@@ -42,6 +43,12 @@ export async function POST(
       [staff_id, params.id]
     )
 
+    const names = await query(
+      'SELECT s.full_name, v.name as venue_name, v.slack_channel_id FROM staff s, venues v WHERE s.id = $1 AND v.id = $2',
+      [staff_id, params.id]
+    )
+    if (names.rows[0]) notifyOps(':link:', `*Staff linked to venue:* ${names.rows[0].full_name} → ${names.rows[0].venue_name}`, undefined, names.rows[0].slack_channel_id)
+
     const result = await query(
       `SELECT sv.id, sv.staff_id, s.full_name, s.role, s.email, sv.created_at
        FROM staff_venues sv
@@ -69,6 +76,12 @@ export async function DELETE(
     if (!staff_id) {
       return NextResponse.json({ error: 'staff_id is required' }, { status: 400 })
     }
+
+    const names = await query(
+      'SELECT s.full_name, v.name as venue_name, v.slack_channel_id FROM staff s, venues v WHERE s.id = $1 AND v.id = $2',
+      [staff_id, params.id]
+    )
+    if (names.rows[0]) notifyOps(':broken_heart:', `*Staff unlinked from venue:* ${names.rows[0].full_name} ✕ ${names.rows[0].venue_name}`, undefined, names.rows[0].slack_channel_id)
 
     await query(
       `DELETE FROM staff_venues WHERE staff_id = $1 AND venue_id = $2`,

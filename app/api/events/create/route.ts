@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,6 +63,12 @@ export async function POST(request: NextRequest) {
         )
       }
     }
+
+    const venueRes = await query('SELECT name, slack_channel_id FROM venues WHERE id = $1', [venue_id])
+    const venueName = venueRes.rows[0]?.name || 'Unknown'
+    const venueChannel = venueRes.rows[0]?.slack_channel_id
+    const staffCount = staff_ids?.length || 0
+    notifyOps(':calendar:', `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`, { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` }, venueChannel)
 
     return NextResponse.json({ id: eventId })
   } catch (err) {

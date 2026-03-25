@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 
 export async function GET(
   request: NextRequest,
@@ -197,7 +198,12 @@ export async function PATCH(
       [venueId]
     )
 
-    return NextResponse.json({ venue: fullVenue.rows[0], venueServices: servicesResult.rows })
+    const v = fullVenue.rows[0]
+    const changes = Object.keys(body).filter(k => k !== 'service_type_id' && k !== 'enabled').join(', ')
+    const detail = body.service_type_id ? `service toggled` : changes || 'settings updated'
+    notifyOps(':gear:', `*Venue updated:* ${v.name} — ${detail}`, { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${v.id}` }, v.slack_channel_id)
+
+    return NextResponse.json({ venue: v, venueServices: servicesResult.rows })
   } catch (err) {
     console.error('Error updating venue:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

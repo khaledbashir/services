@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError, getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { notifyOps } from '@/lib/slack'
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +73,9 @@ export async function POST(request: NextRequest) {
       [venue_id, item_name, sku || null, quantity || 0, threshold_low || 5, auth.userId]
     )
 
+    const venueRes = await query('SELECT name, slack_channel_id FROM venues WHERE id = $1', [venue_id])
+    notifyOps(':package:', `*Inventory added:* ${item_name} (qty: ${quantity || 0}) at ${venueRes.rows[0]?.name || 'Unknown'}`, undefined, venueRes.rows[0]?.slack_channel_id)
+
     return NextResponse.json({ id: result.rows[0].id })
   } catch (err) {
     console.error('Error creating inventory item:', err)
@@ -86,10 +90,16 @@ export async function PATCH(request: NextRequest) {
 
     const { id, quantity } = await request.json()
 
+    const itemRes = await query('SELECT i.item_name, v.name as venue_name, v.slack_channel_id, i.quantity as old_qty FROM inventory i JOIN venues v ON i.venue_id = v.id WHERE i.id = $1', [id])
     await query(
       `UPDATE inventory SET quantity = $1, last_updated = NOW(), updated_by = $2 WHERE id = $3`,
       [quantity, auth.userId, id]
     )
+
+    if (itemRes.rows[0]) {
+      const item = itemRes.rows[0]
+      notifyOps(':pencil2:', `*Inventory updated:* ${item.item_name} at ${item.venue_name} — qty: ${item.old_qty} → ${quantity}`, undefined, item.slack_channel_id)
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

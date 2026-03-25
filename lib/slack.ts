@@ -34,12 +34,26 @@ export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
   }
 }
 
+const DASHBOARD_URL_BASE = 'https://abc-anc-services.izcgmb.easypanel.host'
+const DEFAULT_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
+
+/** Fire-and-forget operational notification for any dashboard action */
+export function notifyOps(emoji: string, text: string, link?: { label: string; url: string }, channel?: string) {
+  const blocks: any[] = [
+    { type: 'section', text: { type: 'mrkdwn', text: `${emoji} ${text}` } },
+  ]
+  if (link) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `<${link.url}|:link: ${link.label}>` } })
+  }
+  sendSlackMessage({ channel: channel || DEFAULT_CHANNEL, text: `${emoji} ${text}`, blocks })
+}
+
 const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
   escalated: 'Escalated', closed: 'Closed',
 }
 
-const DASHBOARD_URL = 'https://abc-anc-services.izcgmb.easypanel.host'
+const DASHBOARD_URL = DASHBOARD_URL_BASE
 
 export function formatTicketNotification(ticket: {
   id?: string

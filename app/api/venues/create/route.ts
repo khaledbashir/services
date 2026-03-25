@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +24,9 @@ export async function POST(request: NextRequest) {
       [name, market_id || null, address || null, primary_contact_name || null, primary_contact_email || null, requires_assignment !== false, vType]
     )
 
-    return NextResponse.json({ venue: result.rows[0] })
+    const v = result.rows[0]
+    notifyOps(':stadium:', `*New venue created:* ${v.name}`, { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${v.id}` })
+    return NextResponse.json({ venue: v })
   } catch (err) {
     console.error('Error creating venue:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

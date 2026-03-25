@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 import bcrypt from 'bcryptjs'
 
 export async function GET(request: NextRequest) {
@@ -33,7 +34,9 @@ export async function POST(request: NextRequest) {
       [fullName, email, role, passwordHash]
     )
 
-    return NextResponse.json({ staff: result.rows[0] })
+    const s = result.rows[0]
+    notifyOps(':bust_in_silhouette:', `*New staff added:* ${s.full_name} (${s.role})`, { label: 'View Staff', url: `https://abc-anc-services.izcgmb.easypanel.host/staff/${s.id}` })
+    return NextResponse.json({ staff: s })
   } catch (err) {
     console.error('Error creating staff:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

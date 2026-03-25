@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { notifyOps } from '@/lib/slack'
 import bcrypt from 'bcryptjs'
 
 export async function GET(
@@ -71,7 +72,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ staff: result.rows[0] })
+    const s = result.rows[0]
+    const changes = Object.keys(body).filter(k => k !== 'password').join(', ')
+    notifyOps(':pencil2:', `*Staff updated:* ${s.full_name} — changed: ${changes}`, { label: 'View Staff', url: `https://abc-anc-services.izcgmb.easypanel.host/staff/${s.id}` })
+    return NextResponse.json({ staff: s })
   } catch (err) {
     console.error('Error updating staff:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -91,12 +95,17 @@ export async function DELETE(
       return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
     }
 
+    // Get name before deactivating
+    const staffRes = await query('SELECT full_name FROM staff WHERE id = $1', [params.id])
+    const staffName = staffRes.rows[0]?.full_name || 'Unknown'
+
     // Soft delete — set inactive instead of hard delete to preserve history
     await query(
       `UPDATE staff SET is_active = false WHERE id = $1`,
       [params.id]
     )
 
+    notifyOps(':x:', `*Staff deactivated:* ${staffName}`)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Error deleting staff:', err)

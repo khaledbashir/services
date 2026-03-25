@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { notifyOps } from '@/lib/slack'
 
 export async function POST(
   request: NextRequest,
@@ -36,6 +37,13 @@ export async function POST(
        VALUES ($1, $2, $3, false, NOW())`,
       [ticket_id, CLAW_STAFF_ID, body]
     )
+
+    const ticketInfo = await query('SELECT t.title, t.ticket_number, v.name as venue_name, v.slack_channel_id FROM tickets t JOIN venues v ON t.venue_id = v.id WHERE t.id = $1', [ticket_id])
+    if (ticketInfo.rows[0]) {
+      const t = ticketInfo.rows[0]
+      const caseNum = String(t.ticket_number).padStart(8, '0')
+      notifyOps(':speech_balloon:', `*Portal comment* on Case #${caseNum} (${t.venue_name}):\n> ${body.substring(0, 200)}${body.length > 200 ? '...' : ''}`, { label: 'View Ticket', url: `https://abc-anc-services.izcgmb.easypanel.host/tickets/${ticket_id}` }, t.slack_channel_id)
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
