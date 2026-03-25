@@ -2,14 +2,19 @@ import { query } from '@/lib/db'
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
-// Single place to change the from address once the domain is confirmed
-const FROM_ADDRESS = 'ANC Services <notifications@ancservices.app>'
+// Single place to change addresses once the domain is confirmed
+const FROM_ADDRESS = 'ANC Services <notifications@basheer.app>'
+const REPLY_DOMAIN = 'basheer.app'
 
 /**
  * Send an email via Resend. Returns true on success, false on failure.
- * Logs errors instead of silently swallowing them.
  */
-export async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
+export async function sendEmail(
+  to: string[],
+  subject: string,
+  html: string,
+  replyTo?: string
+): Promise<boolean> {
   const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
   if (!RESEND_API_KEY) {
     console.warn('[email] RESEND_API_KEY not set — skipping email')
@@ -19,13 +24,16 @@ export async function sendEmail(to: string[], subject: string, html: string): Pr
   if (!to || to.length === 0) return false
 
   try {
+    const payload: any = { from: FROM_ADDRESS, to, subject, html }
+    if (replyTo) payload.reply_to = replyTo
+
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RESEND_API_KEY}`,
       },
-      body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
+      body: JSON.stringify(payload),
     })
 
     if (!res.ok) {
@@ -52,9 +60,28 @@ function ticketEmailHtml(caseNum: string, title: string, venueName: string, body
     <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
       ${bodyContent}
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+      <p style="margin:0;font-size:12px;color:#94a3b8">Reply to this email to add a comment to this ticket.</p>
       <p style="margin:0;font-size:12px;color:#94a3b8">This is an automated notification from ANC Sports Operations.</p>
     </div>
   </div>`
+}
+
+/**
+ * Generate the reply-to address for a ticket.
+ */
+export function ticketReplyAddress(ticketNumber: number): string {
+  const caseNum = String(ticketNumber).padStart(8, '0')
+  return `ticket+${caseNum}@${REPLY_DOMAIN}`
+}
+
+/**
+ * Parse a ticket number from a reply-to address.
+ * Returns ticket number or null if not a ticket reply.
+ */
+export function parseTicketReplyAddress(toAddress: string): number | null {
+  const match = toAddress.match(/ticket\+0*(\d+)@/)
+  if (match) return parseInt(match[1])
+  return null
 }
 
 /**
@@ -76,6 +103,7 @@ export async function sendTicketDistributionEmail(opts: {
   if (!venue?.distribution_emails || venue.distribution_emails.length === 0) return
 
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
+  const replyTo = ticketReplyAddress(opts.ticketNumber)
 
   const subjectMap = {
     created: `Case ${caseNum} New — ${opts.ticketTitle}`,
@@ -98,6 +126,7 @@ export async function sendTicketDistributionEmail(opts: {
   await sendEmail(
     venue.distribution_emails,
     subjectMap[opts.type],
-    ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent)
+    ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
+    replyTo
   )
 }

@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import { parseTicketReplyAddress } from '@/lib/email'
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
+
+/**
+ * Strip quoted reply text and email signatures from an email body.
+ */
+function cleanEmailReply(body: string): string {
+  const lines = body.split('\n')
+  const cleaned: string[] = []
+  for (const line of lines) {
+    // Stop at quoted text markers
+    if (line.match(/^On .+ wrote:$/)) break
+    if (line.match(/^>+ /)) break
+    if (line.match(/^-{3,}$/)) break
+    if (line.match(/^_{3,}$/)) break
+    if (line.match(/^From:/i)) break
+    if (line.match(/^Sent:/i)) break
+    // Stop at common signature markers
+    if (line.trim() === '--') break
+    if (line.match(/^Get Outlook for/i)) break
+    if (line.match(/^Sent from my/i)) break
+    cleaned.push(line)
+  }
+  return cleaned.join('\n').trim()
+}
 
 // Resend inbound email webhook
 // Webhook sends metadata only — we call Resend API to get the full email body
@@ -44,6 +69,14 @@ export async function POST(request: NextRequest) {
 
     if (!senderEmail) {
       return NextResponse.json({ ok: true, message: 'No sender, skipping' })
+    }
+
+    // Check if this is a reply to an existing ticket
+    const toAddress = typeof to === 'string' ? to : (Array.isArray(to) ? to[0] : to?.address || to?.email || '')
+    const ticketNumber = parseTicketReplyAddress(toAddress)
+
+    if (ticketNumber) {
+      return await handleTicketReply(ticketNumber, senderEmail, senderName, emailBody, subject)
     }
 
     // Match sender to a venue contact
@@ -188,6 +221,79 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     console.error('Error processing inbound email:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * Handle an email reply to an existing ticket — add as external comment.
+ */
+async function handleTicketReply(ticketNumber: number, senderEmail: string, senderName: string, emailBody: string, subject: string) {
+  try {
+    // Find the ticket
+    const ticketRes = await query(
+      `SELECT t.id, t.title, t.ticket_number, t.venue_id, v.name as venue_name, v.slack_channel_id
+       FROM tickets t
+       LEFT JOIN venues v ON t.venue_id = v.id
+       WHERE t.ticket_number = $1`,
+      [ticketNumber]
+    )
+
+    if (ticketRes.rows.length === 0) {
+      console.warn(`[email-webhook] Ticket reply for #${ticketNumber} — ticket not found`)
+      return NextResponse.json({ ok: true, message: 'Ticket not found' })
+    }
+
+    const ticket = ticketRes.rows[0]
+    const cleanBody = cleanEmailReply(emailBody || subject)
+
+    if (!cleanBody) {
+      return NextResponse.json({ ok: true, message: 'Empty reply body after cleanup' })
+    }
+
+    // Add as external comment
+    const commentBody = `**Email reply from ${senderName} (${senderEmail}):**\n\n${cleanBody}`
+    await query(
+      `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
+       VALUES ($1, $2, $3, false, NOW())`,
+      [ticket.id, CLAW_STAFF_ID, commentBody]
+    )
+
+    // Track SLA first response if this is from an external party
+    await query(
+      `UPDATE tickets SET first_response_at = NOW(), sla_response_met = (NOW() <= sla_response_due), updated_at = NOW()
+       WHERE id = $1 AND first_response_at IS NULL`,
+      [ticket.id]
+    )
+
+    // Slack notification to venue channel
+    const caseNum = String(ticket.ticket_number).padStart(8, '0')
+    const channelId = ticket.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+    if (channelId) {
+      const ticketUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${ticket.id}`
+      await sendSlackMessage({
+        channel: channelId,
+        text: `📧 Email reply on Case #${caseNum} from ${senderName}`,
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: `📧 *Case #${caseNum} — Email Reply*\n*${ticket.title}*` } },
+          { type: 'section', fields: [
+            { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
+            { type: 'mrkdwn', text: `*Venue:*\n${ticket.venue_name}` },
+          ]},
+          { type: 'section', text: { type: 'mrkdwn', text: `> ${cleanBody.substring(0, 300)}${cleanBody.length > 300 ? '...' : ''}` } },
+          { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket>` } },
+        ],
+      })
+    }
+
+    console.log(`[email-webhook] Reply added to ticket #${ticketNumber} from ${senderEmail}`)
+    return NextResponse.json({
+      ok: true,
+      action: 'comment_added',
+      ticket_number: ticketNumber,
+    })
+  } catch (err) {
+    console.error('Error handling ticket reply:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

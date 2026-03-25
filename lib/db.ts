@@ -21,8 +21,8 @@ async function runMigrations() {
     await client.query(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`)
     await client.query(`CREATE TABLE IF NOT EXISTS staff_venues (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      staff_id INTEGER NOT NULL REFERENCES staff(id),
-      venue_id INTEGER NOT NULL REFERENCES venues(id),
+      staff_id UUID NOT NULL REFERENCES staff(id),
+      venue_id UUID NOT NULL REFERENCES venues(id),
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(staff_id, venue_id)
     )`)
