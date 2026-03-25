@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         e.league,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as date,
         TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as time,
-        v.name as venue,
+        v.name as venue, v.name as venue_name,
         e.workflow_status,
         (SELECT count(*) FROM event_assignments ea WHERE ea.event_id = e.id) as assigned_count,
         (SELECT STRING_AGG(s.full_name, ', ') FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id WHERE ea.event_id = e.id) as assigned_techs

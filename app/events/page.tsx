@@ -288,7 +288,10 @@ export default function EventsPage() {
                 {weekCells.map((cellDate, colIdx) => {
                   const cellEvents = filterByVenue(calendarEvents).filter((e) => {
                     const eDate = new Date(e.date || e.event_date)
-                    return eDate.toDateString() === cellDate.toDateString()
+                    if (eDate.toDateString() !== cellDate.toDateString()) return false
+                    if (!search) return true
+                    const q = search.toLowerCase()
+                    return e.summary.toLowerCase().includes(q) || (e.venue_name || '').toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
                   })
 
                   return (
@@ -303,6 +306,7 @@ export default function EventsPage() {
                             style={{ backgroundColor: leagueColor.hex + '20', borderLeft: `3px solid ${leagueColor.hex}` }}
                           >
                             <p className="font-medium text-zinc-900 truncate">{event.summary}</p>
+                            <p className="text-zinc-500 truncate">{event.venue_name || (event as any).venue}</p>
                             <p className="text-zinc-600 truncate">{(event as any).time}</p>
                             {(event as any).assigned_techs && (
                               <p className="text-zinc-500 truncate mt-0.5" title={(event as any).assigned_techs}>
