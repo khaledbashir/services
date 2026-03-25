@@ -155,10 +155,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       <div className="space-y-5">
         {/* Top bar */}
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/tickets')} className="text-zinc-400 hover:text-zinc-700 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            Back to Tickets
           </button>
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 ml-2">
             <div className="bg-[#002C73] text-white px-3 py-1 rounded text-xs font-bold tracking-wide flex-shrink-0">{caseNum}</div>
             <h1 className="text-lg font-bold text-zinc-900 truncate">{ticket.title}</h1>
           </div>
@@ -207,7 +208,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               <div className="p-5 space-y-4 text-xs">
                 {/* Assignee */}
                 <div>
-                  <span className="text-zinc-400 font-medium uppercase tracking-wider text-[10px]">Assignee</span>
+                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Assignee</span>
                   <select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
                     className="w-full mt-1.5 border border-[#E8E8E8] rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-[#0A52EF]/30 outline-none text-zinc-700">
                     <option value="">Unassigned</option>
@@ -216,12 +217,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 </div>
                 {/* Priority */}
                 <div>
-                  <span className="text-zinc-400 font-medium uppercase tracking-wider text-[10px]">Priority</span>
-                  <div className="grid grid-cols-4 gap-1 mt-1.5">
+                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Priority</span>
+                  <div className="flex mt-1.5 border border-[#E8E8E8] rounded-lg overflow-hidden">
                     {Object.entries(priorityConfig).map(([key, cfg]) => (
                       <button key={key} onClick={() => updateField('priority', key)}
-                        className={`text-[11px] font-semibold py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${ticket.priority === key ? `${cfg.bg} ${cfg.text} ring-1 ring-current/20` : 'text-zinc-400 hover:bg-zinc-50'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${ticket.priority === key ? cfg.dot : 'bg-zinc-300'}`}></span>
+                        className={`flex-1 text-[11px] font-semibold py-2 transition-all text-center ${ticket.priority === key ? `${cfg.bg} ${cfg.text}` : 'text-zinc-400 hover:bg-zinc-50 bg-white'} ${key !== 'low' ? 'border-l border-[#E8E8E8]' : ''}`}>
                         {cfg.label}
                       </button>
                     ))}
@@ -229,11 +229,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 </div>
                 {/* Category */}
                 <div>
-                  <span className="text-zinc-400 font-medium uppercase tracking-wider text-[10px]">Category</span>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
+                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Category</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {Object.entries(categoryConfig).map(([key, cfg]) => (
                       <button key={key} onClick={() => updateField('category', key)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-all capitalize ${ticket.category === key ? `${cfg.bg} ${cfg.text} ring-1 ring-current/20` : 'text-zinc-400 hover:bg-zinc-50'}`}>
+                        className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all capitalize border ${ticket.category === key ? `${cfg.bg} ${cfg.text} border-current/20` : 'text-zinc-400 bg-white border-[#E8E8E8] hover:border-zinc-300'}`}>
                         {key}
                       </button>
                     ))}
@@ -341,6 +341,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             {/* Description */}
             {ticket.description && (
               <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Description</p>
+                  <span className="text-[11px] text-zinc-400">by {ticket.created_by_name} &middot; {ticket.created_date}</span>
+                  {ticket.event_name && <Link href={`/events/${ticket.event_id}`} className="text-[11px] text-[#0A52EF] hover:underline ml-auto">{ticket.event_name}</Link>}
+                </div>
                 <p className="text-sm text-zinc-700 leading-relaxed">{ticket.description}</p>
                 {ticket.original_message && ticket.original_message !== ticket.description && (
                   <div className="mt-4 grid grid-cols-2 gap-3">
@@ -407,7 +412,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
               {/* Feed Items */}
               {feedItems.length === 0 ? (
-                <div className="px-6 py-12 text-center text-zinc-400 text-sm">No {feedTab === 'all' ? 'activity' : feedTab} yet</div>
+                <div className="px-6 py-16 text-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                  <p className="text-sm text-zinc-500 font-medium">No {feedTab === 'all' ? 'activity' : feedTab} yet</p>
+                  <p className="text-xs text-zinc-400 mt-1">Post an internal note or send a client-visible comment to get started.</p>
+                </div>
               ) : (
                 <div>
                   {feedItems.map((item, idx) => {
