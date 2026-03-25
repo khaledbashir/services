@@ -31,6 +31,7 @@ export default function VenuesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [newVenue, setNewVenue] = useState({ name: '', address: '', primary_contact_name: '', primary_contact_email: '', venue_type: 'sports' })
   const [submitting, setSubmitting] = useState(false)
+  const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -58,7 +59,8 @@ export default function VenuesPage() {
     const q = search.toLowerCase()
     const matchesSearch = !q || v.name.toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q)
     const matchesType = typeFilter === 'all' || v.venue_type === typeFilter
-    return matchesSearch && matchesType
+    const matchesUnassigned = !showUnassignedOnly || (v.requires_assignment && Number(v.event_count) > 0 && Number(v.assigned_count) < Number(v.event_count))
+    return matchesSearch && matchesType && matchesUnassigned
   })
 
   // Stats
@@ -73,7 +75,7 @@ export default function VenuesPage() {
         <div className="flex justify-between items-start flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">Venues</h1>
-            <p className="text-sm text-zinc-500 mt-1">{venues.length} venues &middot; {totalEvents} events {periodLabel} &middot; {needsAttention > 0 ? <span className="text-orange-600 font-semibold">{needsAttention} need assignment</span> : <span className="text-emerald-600 font-semibold">All covered</span>}</p>
+            <p className="text-sm text-zinc-500 mt-1">{venues.length} venues &middot; {totalEvents} events {periodLabel} &middot; {needsAttention > 0 ? <button onClick={() => setShowUnassignedOnly(!showUnassignedOnly)} className={`font-semibold hover:underline transition-colors ${showUnassignedOnly ? 'text-[#0A52EF]' : 'text-orange-600'}`}>{showUnassignedOnly ? `Showing ${needsAttention} unassigned — click to clear` : `${needsAttention} need assignment`}</button> : <span className="text-emerald-600 font-semibold">All covered</span>}</p>
           </div>
           {auth.isManager && (
             <button onClick={() => setShowAdd(!showAdd)}
