@@ -193,7 +193,7 @@ export default function VenuesPage() {
 
         {/* Venue grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36" />)}
           </div>
         ) : filtered.length === 0 ? (
@@ -205,7 +205,7 @@ export default function VenuesPage() {
             <p className="text-xs text-zinc-400 mt-1">{venues.length === 0 ? 'Click "+ Add Venue" to create your first one.' : 'Try adjusting your search or filter.'}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((venue) => {
               const eventCount = Number(venue.event_count) || 0
               const assignedCount = Number(venue.assigned_count) || 0

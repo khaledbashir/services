@@ -264,7 +264,7 @@ export default function TicketsPage() {
 
         {/* Content */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44" />)}
           </div>
         ) : filteredTickets.length === 0 ? (
@@ -277,7 +277,7 @@ export default function TicketsPage() {
           </div>
         ) : view === 'cards' ? (
           /* CARD VIEW */
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredTickets.map(ticket => {
               const cat = categoryConfig[ticket.category] || categoryConfig.general
               const pri = priorityConfig[ticket.priority] || priorityConfig.medium
@@ -285,47 +285,41 @@ export default function TicketsPage() {
               const caseNum = String(ticket.ticket_number).padStart(8, '0')
               return (
                 <div key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
-                  className="bg-white rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-md transition-all cursor-pointer group overflow-hidden">
-                  {/* Priority strip */}
-                  <div className={`h-1 ${pri.dot}`}></div>
-                  <div className="p-5">
-                    {/* Header: ticket number + status */}
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-[11px] font-mono font-semibold text-zinc-500">{caseNum}</span>
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 ${st.bg} ${st.text}`}>
+                  className="bg-white rounded-lg border border-zinc-200 hover:border-[#0A52EF]/40 hover:shadow-md transition-all cursor-pointer group">
+                  <div className="p-4">
+                    {/* Row 1: Status + Priority + Ticket # */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${st.bg} ${st.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
                         {st.label}
                       </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pri.bg} ${pri.text}`}>{pri.label}</span>
+                      <span className="text-[10px] font-mono text-zinc-400 ml-auto">{caseNum}</span>
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-sm font-bold text-zinc-900 mb-2 line-clamp-2 group-hover:text-[#0A52EF] transition-colors">{ticket.title}</h3>
+                    {/* Row 2: Title */}
+                    <h3 className="text-[13px] font-bold text-zinc-900 mb-1.5 line-clamp-1 group-hover:text-[#0A52EF] transition-colors">{ticket.title}</h3>
 
-                    {/* Venue + Category */}
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-xs font-medium text-zinc-600 truncate">{ticket.venue_name}</span>
+                    {/* Row 3: Venue + Category */}
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <span className="text-[11px] font-medium text-zinc-500 truncate">{ticket.venue_name}</span>
                       <span className="text-zinc-300">&middot;</span>
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md capitalize ${cat.bg} ${cat.text}`}>{ticket.category}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize ${cat.bg} ${cat.text}`}>{ticket.category}</span>
                     </div>
 
-                    {/* Footer */}
-                    <div className="flex items-center justify-between pt-3 border-t border-zinc-100">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 ${pri.bg} ${pri.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${pri.dot}`}></span>
-                        {pri.label}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {ticket.assigned_to_name ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-full bg-[#0A52EF] flex items-center justify-center text-[10px] font-bold text-white">
-                              {getInitials(ticket.assigned_to_name)}
-                            </div>
-                            <span className="text-xs font-medium text-zinc-700 truncate max-w-24">{ticket.assigned_to_name.split(' ')[0]}</span>
+                    {/* Row 4: Assignee + Date */}
+                    <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+                      {ticket.assigned_to_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-[#0A52EF] flex items-center justify-center text-[9px] font-bold text-white">
+                            {getInitials(ticket.assigned_to_name)}
                           </div>
-                        ) : (
-                          <span className="text-xs text-zinc-400 italic">Unassigned</span>
-                        )}
-                      </div>
+                          <span className="text-[11px] font-medium text-zinc-700">{ticket.assigned_to_name.split(' ')[0]}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-zinc-400">Unassigned</span>
+                      )}
+                      <span className="text-[10px] text-zinc-400">{ticket.created_date}</span>
                     </div>
                   </div>
                 </div>
