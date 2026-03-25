@@ -156,7 +156,7 @@ export default function EventDetailPage() {
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">{event.summary}</h1>
           <div className="flex items-center gap-3 mt-2">
-            <p className="text-sm text-zinc-600">{event.venue_name}</p>
+            <Link href={`/venues/${event.venue_id}`} className="text-sm text-[#0A52EF] hover:underline font-medium">{event.venue_name}</Link>
             <span className="inline-block px-2.5 py-1 rounded text-xs font-medium bg-orange-50 text-orange-600">{event.league}</span>
           </div>
           <p className={`text-sm font-medium mt-2 ${countdown.color}`}>{countdown.text}</p>
@@ -309,7 +309,7 @@ export default function EventDetailPage() {
                       <div className="w-6 h-6 rounded-full bg-[#0A52EF]/15 flex items-center justify-center text-[10px] font-semibold text-[#0A52EF]">
                         {tech.full_name.charAt(0)}
                       </div>
-                      <span className="text-zinc-700 flex-1">{tech.full_name}</span>
+                      <Link href={`/staff/${tech.id}`} className="text-[#0A52EF] hover:underline flex-1">{tech.full_name}</Link>
                       <button
                         onClick={async () => {
                           const res = await fetch(`/api/events/${eventId}/assign`, {
@@ -426,6 +426,28 @@ export default function EventDetailPage() {
                 Send Reminder
               </button>
             </div>
+
+            {/* Tickets for This Event */}
+            {openTickets.length > 0 && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-zinc-900">Tickets ({openTickets.length})</h2>
+                  <Link href={`/tickets?venue=${event.venue_id}`} className="text-[10px] text-[#0A52EF] hover:underline font-medium">View All</Link>
+                </div>
+                <div className="space-y-2">
+                  {openTickets.map((t) => {
+                    const priColor = t.priority === 'critical' ? 'bg-red-500' : t.priority === 'high' ? 'bg-orange-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-zinc-400'
+                    return (
+                      <Link key={t.id} href={`/tickets/${t.id}`} className="flex items-center gap-2 text-xs hover:bg-zinc-50 p-2 rounded transition-colors">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${priColor}`} />
+                        <span className="text-zinc-900 font-medium truncate flex-1">{t.title}</span>
+                        <span className="text-zinc-400 capitalize text-[10px]">{t.status.replace('_', ' ')}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Recent Events */}
             {recentEvents.length > 0 && (

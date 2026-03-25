@@ -2,6 +2,7 @@
 
 import { useEffect, useState, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
@@ -96,6 +97,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
   const [allVenues, setAllVenues] = useState<AllVenue[]>([])
   const [venueSearch, setVenueSearch] = useState('')
   const [showVenueDropdown, setShowVenueDropdown] = useState(false)
+  const [assignedTickets, setAssignedTickets] = useState<Array<{ id: string; title: string; ticket_number: number; status: string; priority: string; venue_name: string }>>([])
   const router = useRouter()
   const { showToast } = useToast()
   const auth = useAuth()
@@ -124,6 +126,12 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
         if (allVenuesRes.ok) {
           const data = await allVenuesRes.json()
           setAllVenues(data.venues || [])
+        }
+        // Fetch tickets assigned to this staff
+        const ticketsRes = await fetch(`/api/tickets?staff_id=${params.id}`)
+        if (ticketsRes.ok) {
+          const data = await ticketsRes.json()
+          setAssignedTickets(data.tickets || [])
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -645,6 +653,30 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                       <span className="text-xs text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded">{v.event_count}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Assigned Tickets */}
+            {assignedTickets.length > 0 && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-[#E8E8E8] flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-zinc-900">Assigned Tickets ({assignedTickets.length})</h2>
+                </div>
+                <div className="divide-y divide-[#E8E8E8]">
+                  {assignedTickets.slice(0, 10).map(t => {
+                    const priColor = t.priority === 'critical' ? 'bg-red-500' : t.priority === 'high' ? 'bg-orange-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-zinc-400'
+                    const stColor = t.status === 'closed' ? 'text-zinc-400' : t.status === 'escalated' ? 'text-orange-600' : t.status === 'in_progress' ? 'text-amber-600' : 'text-red-600'
+                    return (
+                      <Link key={t.id} href={`/tickets/${t.id}`} className="flex items-center gap-3 px-6 py-3 hover:bg-zinc-50 transition-colors">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${priColor}`} />
+                        <span className="text-xs font-mono text-zinc-400">{String(t.ticket_number).padStart(8, '0')}</span>
+                        <span className="text-sm font-medium text-zinc-900 truncate flex-1">{t.title}</span>
+                        <span className="text-xs text-zinc-500">{t.venue_name}</span>
+                        <span className={`text-xs font-semibold capitalize ${stColor}`}>{t.status.replace('_', ' ')}</span>
+                      </Link>
+                    )
+                  })}
                 </div>
               </div>
             )}

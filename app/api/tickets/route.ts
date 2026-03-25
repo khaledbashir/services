@@ -20,14 +20,30 @@ async function getUserFromToken(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const venueIdFilter = searchParams.get('venue_id')
+    const staffIdFilter = searchParams.get('staff_id')
+
     const user = await getAuthUser(request)
     const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
     const vf = buildVenueFilterClause(venueIds, 't.venue_id', 1)
 
-    let whereClause = ''
+    const conditions: string[] = []
+    const params: any[] = [...vf.params]
+
     if (vf.clause) {
-      whereClause = 'WHERE ' + vf.clause.replace(/^AND /, '')
+      conditions.push(vf.clause.replace(/^AND /, ''))
     }
+    if (venueIdFilter) {
+      params.push(venueIdFilter)
+      conditions.push(`t.venue_id = $${params.length}`)
+    }
+    if (staffIdFilter) {
+      params.push(staffIdFilter)
+      conditions.push(`t.assigned_to = $${params.length}`)
+    }
+
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
 
     const result = await query(
       `SELECT t.id, t.ticket_number, t.title, t.description, t.priority, t.status, t.category,
@@ -45,7 +61,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN staff s2 ON t.assigned_to = s2.id
        ${whereClause}
        ORDER BY t.created_at DESC`,
-      [...vf.params]
+      params
     )
     return NextResponse.json({ tickets: result.rows })
   } catch (err) {

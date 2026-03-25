@@ -10,7 +10,7 @@ interface TicketDetail {
   id: string; ticket_number: number; title: string; description: string
   priority: string; status: string; category: string; resolution_notes: string | null
   event_id: string | null; event_name: string | null; venue_name: string; venue_id: string
-  created_by_name: string; assigned_to_name: string | null; assigned_to: string | null
+  created_by: string; created_by_name: string; assigned_to_name: string | null; assigned_to: string | null
   created_date: string; updated_date: string; resolved_date: string | null
   sla_response_due: string | null; sla_resolution_due: string | null
   sla_response_met: boolean | null; sla_resolution_met: boolean | null
@@ -206,7 +206,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               <div className="p-5 space-y-4 text-xs">
                 {/* Assignee */}
                 <div>
-                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Assignee</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Assignee</span>
+                    {ticket.assigned_to && <Link href={`/staff/${ticket.assigned_to}`} className="text-[10px] text-[#0A52EF] hover:underline">View Profile</Link>}
+                  </div>
                   <select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
                     className="w-full mt-1.5 border border-[#E8E8E8] rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-[#0A52EF]/30 outline-none text-zinc-700">
                     <option value="">Unassigned</option>
@@ -251,7 +254,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   )}
                   <div className="flex justify-between mb-2">
                     <span className="text-zinc-400">Created by</span>
-                    <span className="text-zinc-700 font-medium">{ticket.created_by_name}</span>
+                    <Link href={`/staff/${ticket.created_by}`} className="text-[#0A52EF] font-medium hover:underline">{ticket.created_by_name}</Link>
                   </div>
                   <div className="flex justify-between mb-2">
                     <span className="text-zinc-400">Created</span>

@@ -104,7 +104,8 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [venueServices, setVenueServices] = useState<VenueService[]>([])
   const [screens, setScreens] = useState<VenueScreen[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'specs' | 'settings'>('events')
+  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'settings'>('events')
+  const [venueTickets, setVenueTickets] = useState<Array<{ id: string; title: string; ticket_number: number; status: string; priority: string; created_at: string; assigned_to_name: string | null }>>([])
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
   const [togglingService, setTogglingService] = useState<string | null>(null)
@@ -134,11 +135,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
 
-          // Fetch screens and linked staff
-          const [screensRes, linkedStaffRes, allStaffRes] = await Promise.all([
+          // Fetch screens, linked staff, and tickets
+          const [screensRes, linkedStaffRes, allStaffRes, ticketsRes] = await Promise.all([
             fetch(`/api/venues/${params.id}/screens`),
             fetch(`/api/venues/${params.id}/staff`),
             fetch(`/api/staff`),
+            fetch(`/api/tickets?venue_id=${params.id}`),
           ])
           if (screensRes.ok) {
             const screensData = await screensRes.json()
@@ -151,6 +153,10 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           if (allStaffRes.ok) {
             const data = await allStaffRes.json()
             setAllStaff((data.staff || []).filter((s: any) => s.is_active !== false))
+          }
+          if (ticketsRes.ok) {
+            const data = await ticketsRes.json()
+            setVenueTickets(data.tickets || [])
           }
         }
       } catch (err) {
@@ -300,11 +306,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
           {/* Tabs */}
           <div className="border-t border-[#E8E8E8] flex px-8">
-            {(['events', 'staff', 'specs', 'settings'] as const).map(tab => (
+            {(['events', 'staff', 'tickets', 'specs', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
                 {tab === 'events' && `Events (${upcomingEvents.length})`}
                 {tab === 'staff' && `Staff (${assignedStaff.length})`}
+                {tab === 'tickets' && `Tickets (${venueTickets.length})`}
                 {tab === 'specs' && `Specs${screens.length > 0 ? ` (${screens.length})` : ''}`}
                 {tab === 'settings' && 'Settings'}
               </button>
@@ -486,6 +493,44 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* TICKETS TAB */}
+        {activeTab === 'tickets' && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+            {venueTickets.length === 0 ? (
+              <div className="p-12 text-center">
+                <p className="text-sm text-zinc-500">No tickets for this venue</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#E8E8E8] bg-zinc-50">
+                    <th className="text-left py-3 px-5 text-xs font-medium text-zinc-500 uppercase tracking-wider">Case #</th>
+                    <th className="text-left py-3 px-5 text-xs font-medium text-zinc-500 uppercase tracking-wider">Title</th>
+                    <th className="text-left py-3 px-5 text-xs font-medium text-zinc-500 uppercase tracking-wider">Status</th>
+                    <th className="text-left py-3 px-5 text-xs font-medium text-zinc-500 uppercase tracking-wider">Priority</th>
+                    <th className="text-left py-3 px-5 text-xs font-medium text-zinc-500 uppercase tracking-wider">Assigned To</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {venueTickets.map(t => {
+                    const priColor = t.priority === 'critical' ? 'bg-red-500' : t.priority === 'high' ? 'bg-orange-500' : t.priority === 'medium' ? 'bg-amber-500' : 'bg-zinc-400'
+                    const stColor = t.status === 'closed' ? 'text-zinc-400' : t.status === 'escalated' ? 'text-orange-600' : t.status === 'in_progress' ? 'text-amber-600' : 'text-red-600'
+                    return (
+                      <tr key={t.id} onClick={() => router.push(`/tickets/${t.id}`)} className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors">
+                        <td className="py-3 px-5 text-xs font-mono text-zinc-500">{String(t.ticket_number).padStart(8, '0')}</td>
+                        <td className="py-3 px-5 font-medium text-zinc-900 max-w-xs truncate">{t.title}</td>
+                        <td className={`py-3 px-5 text-xs font-semibold capitalize ${stColor}`}>{t.status.replace('_', ' ')}</td>
+                        <td className="py-3 px-5"><span className={`inline-block w-2 h-2 rounded-full ${priColor} mr-1.5`} /><span className="text-xs text-zinc-600 capitalize">{t.priority}</span></td>
+                        <td className="py-3 px-5 text-xs text-zinc-600">{t.assigned_to_name || <span className="text-zinc-400">Unassigned</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
