@@ -10,12 +10,12 @@ const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
  * Strip quoted reply text and email signatures from an email body.
  */
 function cleanEmailReply(body: string): string {
+  if (!body) return ''
   const lines = body.split('\n')
   const cleaned: string[] = []
   for (const line of lines) {
     // Stop at quoted text markers
     if (line.match(/^On .+ wrote:$/)) break
-    if (line.match(/^>+ /)) break
     if (line.match(/^-{3,}$/)) break
     if (line.match(/^_{3,}$/)) break
     if (line.match(/^From:/i)) break
@@ -24,9 +24,16 @@ function cleanEmailReply(body: string): string {
     if (line.trim() === '--') break
     if (line.match(/^Get Outlook for/i)) break
     if (line.match(/^Sent from my/i)) break
+    // Skip quoted lines (but don't stop — there might be content after)
+    if (line.match(/^>+ /)) continue
     cleaned.push(line)
   }
-  return cleaned.join('\n').trim()
+  const result = cleaned.join('\n').trim()
+  // If stripping removed everything, fall back to the raw body (first 500 chars)
+  if (!result && body.trim()) {
+    return body.replace(/<[^>]*>/g, '').trim().substring(0, 500)
+  }
+  return result
 }
 
 // Resend inbound email webhook
@@ -245,7 +252,9 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
     }
 
     const ticket = ticketRes.rows[0]
+    console.log(`[email-webhook] Ticket reply raw body (${emailBody.length} chars): ${emailBody.substring(0, 200)}`)
     const cleanBody = cleanEmailReply(emailBody || subject)
+    console.log(`[email-webhook] Cleaned body (${cleanBody.length} chars): ${cleanBody.substring(0, 200)}`)
 
     if (!cleanBody) {
       return NextResponse.json({ ok: true, message: 'Empty reply body after cleanup' })
