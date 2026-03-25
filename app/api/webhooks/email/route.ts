@@ -252,7 +252,7 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
     }
 
     // Add as external comment
-    const commentBody = `**Email reply from ${senderName} (${senderEmail}):**\n\n${cleanBody}`
+    const commentBody = cleanBody
     await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
        VALUES ($1, $2, $3, false, NOW())`,

@@ -252,6 +252,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm font-semibold text-zinc-900">{comment.author_name}</span>
                             {comment.is_internal && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Internal</span>}
+                            {comment.author_name === 'ANC Bot' && !comment.is_internal && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wider">Via Email</span>}
                             <span className="text-[11px] text-zinc-400 ml-auto">{comment.created_date}</span>
                           </div>
                           {comment.body.includes('Q:') && comment.body.includes('A:') ? (
