@@ -52,10 +52,10 @@ export function Sidebar() {
   const sidebarContent = (
     <>
       {/* Logo Area */}
-      <div className="p-6 border-b border-[#0A1628]">
+      <Link href="/dashboard" className="block p-6 border-b border-[#0A1628] hover:bg-[#0A1628]/50 transition-colors">
         <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-8" />
         <p className="text-zinc-500 text-xs mt-2 font-medium">Services</p>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
