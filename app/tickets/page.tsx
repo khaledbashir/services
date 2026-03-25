@@ -24,27 +24,27 @@ interface Venue { id: string; name: string }
 interface Event { id: string; summary: string; event_date: string }
 interface Staff { id: string; full_name: string }
 
-const categoryConfig: Record<string, { bg: string; text: string; icon: string }> = {
-  hardware: { bg: 'bg-red-50', text: 'text-red-600', icon: '🔧' },
-  software: { bg: 'bg-violet-50', text: 'text-violet-600', icon: '💻' },
-  content: { bg: 'bg-amber-50', text: 'text-amber-600', icon: '📺' },
-  operational: { bg: 'bg-blue-50', text: 'text-blue-600', icon: '⚙️' },
-  general: { bg: 'bg-zinc-100', text: 'text-zinc-600', icon: '📋' },
+const categoryConfig: Record<string, { bg: string; text: string }> = {
+  hardware: { bg: 'bg-red-50', text: 'text-red-700' },
+  software: { bg: 'bg-violet-50', text: 'text-violet-700' },
+  content: { bg: 'bg-amber-50', text: 'text-amber-700' },
+  operational: { bg: 'bg-blue-50', text: 'text-blue-700' },
+  general: { bg: 'bg-zinc-100', text: 'text-zinc-700' },
 }
 
 const priorityConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  low: { bg: 'bg-zinc-50', text: 'text-zinc-600', dot: 'bg-zinc-400', label: 'Low' },
-  medium: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', label: 'Medium' },
-  high: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', label: 'High' },
-  critical: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'Critical' },
+  low: { bg: 'bg-zinc-100', text: 'text-zinc-700', dot: 'bg-zinc-400', label: 'Low' },
+  medium: { bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Medium' },
+  high: { bg: 'bg-orange-50', text: 'text-orange-800', dot: 'bg-orange-500', label: 'High' },
+  critical: { bg: 'bg-red-50', text: 'text-red-800', dot: 'bg-red-500', label: 'Critical' },
 }
 
-const statusConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  new: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'New' },
-  on_hold: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500', label: 'On Hold' },
-  in_progress: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', label: 'In Progress' },
-  escalated: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500', label: 'Escalated' },
-  closed: { bg: 'bg-zinc-100', text: 'text-zinc-500', dot: 'bg-zinc-400', label: 'Closed' },
+const statusConfig: Record<string, { bg: string; text: string; dot: string; label: string; activeBg: string }> = {
+  new: { bg: 'bg-red-50', text: 'text-red-800', dot: 'bg-red-500', label: 'New', activeBg: 'bg-red-500' },
+  on_hold: { bg: 'bg-violet-50', text: 'text-violet-800', dot: 'bg-violet-500', label: 'On Hold', activeBg: 'bg-violet-500' },
+  in_progress: { bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500', label: 'In Progress', activeBg: 'bg-amber-500' },
+  escalated: { bg: 'bg-orange-50', text: 'text-orange-800', dot: 'bg-orange-500', label: 'Escalated', activeBg: 'bg-orange-500' },
+  closed: { bg: 'bg-zinc-100', text: 'text-zinc-600', dot: 'bg-zinc-400', label: 'Closed', activeBg: 'bg-zinc-600' },
 }
 
 export default function TicketsPage() {
@@ -107,211 +107,111 @@ export default function TicketsPage() {
     return matchesSearch && matchesStatus
   })
 
-  const newCount = tickets.filter(t => t.status === 'new').length
-  const onHoldCount = tickets.filter(t => t.status === 'on_hold').length
-  const inProgressCount = tickets.filter(t => t.status === 'in_progress').length
-  const escalatedCount = tickets.filter(t => t.status === 'escalated').length
-  const closedCount = tickets.filter(t => t.status === 'closed').length
+  const counts: Record<string, number> = {
+    active: tickets.filter(t => t.status !== 'closed').length,
+    new: tickets.filter(t => t.status === 'new').length,
+    on_hold: tickets.filter(t => t.status === 'on_hold').length,
+    in_progress: tickets.filter(t => t.status === 'in_progress').length,
+    escalated: tickets.filter(t => t.status === 'escalated').length,
+    closed: tickets.filter(t => t.status === 'closed').length,
+    all: tickets.length,
+  }
 
-  const CardView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {filteredTickets.map(ticket => {
-        const cat = categoryConfig[ticket.category] || categoryConfig.general
-        const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-        const st = statusConfig[ticket.status] || statusConfig.new
-        return (
-          <div
-            key={ticket.id}
-            onClick={() => router.push(`/tickets/${ticket.id}`)}
-            className="bg-white rounded border border-[#E8E8E8] shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden"
-          >
-            {/* Priority strip */}
-            <div className={`h-1 ${pri.dot}`}></div>
-            <div className="p-5">
-              {/* Header: ticket number + status */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-zinc-400">{String(ticket.ticket_number).padStart(8, '0')}</span>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1.5 ${st.bg} ${st.text}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
-                  {st.label}
-                </span>
-              </div>
+  const getInitials = (name: string) => {
+    const p = (name || '').split(' ')
+    return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase()
+  }
 
-              {/* Title */}
-              <h3 className="text-sm font-semibold text-zinc-900 mb-2 line-clamp-2">{ticket.title}</h3>
-
-              {/* Venue + Category */}
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs text-zinc-500 truncate">{ticket.venue_name}</span>
-                <span className="text-zinc-300">•</span>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded ${cat.bg} ${cat.text}`}>
-                  {ticket.category}
-                </span>
-              </div>
-
-              {/* Footer: priority + assigned + date */}
-              <div className="flex items-center justify-between pt-3 border-t border-[#E8E8E8]">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${pri.bg} ${pri.text}`}>{pri.label}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {ticket.assigned_to_name ? (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-[#0A52EF]/15 flex items-center justify-center text-[9px] font-semibold text-[#0A52EF]">
-                        {ticket.assigned_to_name.charAt(0)}
-                      </div>
-                      <span className="text-xs text-zinc-600 truncate max-w-20">{ticket.assigned_to_name.split(' ')[0]}</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-zinc-400">Unassigned</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-
-  const ListView = () => (
-    <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[#E8E8E8] bg-zinc-50">
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">#</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Title</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Venue</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Category</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Priority</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Status</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Assigned</th>
-            <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredTickets.map(ticket => {
-            const cat = categoryConfig[ticket.category] || categoryConfig.general
-            const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-            const st = statusConfig[ticket.status] || statusConfig.new
-            return (
-              <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
-                className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors">
-                <td className="py-3 px-6 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(8, '0')}</td>
-                <td className="py-3 px-6 font-medium text-zinc-900 max-w-xs truncate">{ticket.title}</td>
-                <td className="py-3 px-6 text-zinc-600 text-xs">{ticket.venue_name}</td>
-                <td className="py-3 px-6">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${cat.bg} ${cat.text}`}>{ticket.category}</span>
-                </td>
-                <td className="py-3 px-6">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${pri.dot}`}></span>
-                    <span className="text-xs text-zinc-700">{pri.label}</span>
-                  </div>
-                </td>
-                <td className="py-3 px-6">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.bg} ${st.text}`}>{st.label}</span>
-                </td>
-                <td className="py-3 px-6 text-zinc-600 text-xs">{ticket.assigned_to_name || <span className="text-zinc-400">—</span>}</td>
-                <td className="py-3 px-6 text-zinc-500 text-xs whitespace-nowrap">{ticket.created_date}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
+  const filterButtons = [
+    { key: 'active', label: 'Active', color: 'bg-[#0A52EF]' },
+    { key: 'new', label: 'New', color: 'bg-red-500' },
+    { key: 'on_hold', label: 'On Hold', color: 'bg-violet-500' },
+    { key: 'in_progress', label: 'In Progress', color: 'bg-amber-500' },
+    { key: 'escalated', label: 'Escalated', color: 'bg-orange-500' },
+    { key: 'closed', label: 'Closed', color: 'bg-zinc-500' },
+    { key: 'all', label: 'All', color: 'bg-zinc-700' },
+  ]
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Header */}
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-semibold text-zinc-900">Tickets</h1>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
-          >
+          <h1 className="text-2xl font-bold text-zinc-900">Tickets</h1>
+          <button onClick={() => setShowForm(!showForm)}
+            className="px-5 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-semibold hover:bg-[#0840C0] transition-colors shadow-sm">
             {showForm ? 'Cancel' : '+ New Ticket'}
           </button>
         </div>
 
-        {/* Stat pills */}
+        {/* Status filter pills */}
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setStatusFilter('active')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'active' ? 'bg-[#0A52EF] text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Active <span className="ml-1 opacity-75">{newCount + onHoldCount + inProgressCount + escalatedCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('new')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'new' ? 'bg-red-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            New <span className="ml-1 opacity-75">{newCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('on_hold')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'on_hold' ? 'bg-violet-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            On Hold <span className="ml-1 opacity-75">{onHoldCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('in_progress')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            In Progress <span className="ml-1 opacity-75">{inProgressCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('escalated')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'escalated' ? 'bg-orange-500 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Escalated <span className="ml-1 opacity-75">{escalatedCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('closed')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'closed' ? 'bg-zinc-600 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            Closed <span className="ml-1 opacity-75">{closedCount}</span>
-          </button>
-          <button onClick={() => setStatusFilter('all')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${statusFilter === 'all' ? 'bg-zinc-700 text-white' : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:border-zinc-300'}`}>
-            All <span className="ml-1 opacity-75">{tickets.length}</span>
-          </button>
+          {filterButtons.map(btn => {
+            const isActive = statusFilter === btn.key
+            return (
+              <button key={btn.key} onClick={() => setStatusFilter(btn.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+                  isActive
+                    ? `${btn.color} text-white shadow-sm`
+                    : 'bg-white border border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50'
+                }`}>
+                {btn.label}
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-500'
+                }`}>
+                  {counts[btn.key]}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Search + View toggle */}
         <div className="flex gap-3 items-center">
           <div className="flex-1 relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <input
-              type="text"
-              placeholder="Search tickets, venues, assignees..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
-            />
+            <input type="text" placeholder="Search tickets, venues, assignees..."
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] text-zinc-900 placeholder:text-zinc-400" />
           </div>
-          <div className="bg-zinc-100 rounded p-1 flex gap-1">
-            <button onClick={() => setView('cards')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'cards' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>Cards</button>
-            <button onClick={() => setView('list')} className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'}`}>List</button>
+          <div className="bg-zinc-100 rounded-lg p-1 flex gap-0.5 border border-zinc-200">
+            <button onClick={() => setView('cards')}
+              className={`px-3.5 py-2 rounded-md text-sm font-semibold transition-all ${view === 'cards' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+              Cards
+            </button>
+            <button onClick={() => setView('list')}
+              className={`px-3.5 py-2 rounded-md text-sm font-semibold transition-all ${view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+              List
+            </button>
           </div>
         </div>
 
         {/* Create form */}
         {showForm && (
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-zinc-900 mb-4">New Ticket</h3>
+          <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6">
+            <h3 className="text-sm font-bold text-zinc-900 mb-4">New Ticket</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Title *</label>
+                <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Title *</label>
                 <input type="text" value={formData.title} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Brief description of the issue"
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none" required />
+                  className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
+                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Venue *</label>
                   <select value={formData.venue_id} onChange={e => { setFormData(prev => ({ ...prev, venue_id: e.target.value, event_id: '' })); setSelectedVenueId(e.target.value) }}
-                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
                     <option value="">Select venue...</option>
                     {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Event (optional)</label>
+                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Event (optional)</label>
                   <select value={formData.event_id} onChange={e => setFormData(prev => ({ ...prev, event_id: e.target.value }))}
-                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" disabled={!selectedVenueId}>
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" disabled={!selectedVenueId}>
                     <option value="">No event</option>
                     {events.map(e => <option key={e.id} value={e.id}>{e.summary}</option>)}
                   </select>
@@ -319,9 +219,9 @@ export default function TicketsPage() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Category</label>
+                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Category</label>
                   <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="hardware">Hardware</option>
                     <option value="software">Software</option>
                     <option value="content">Content</option>
@@ -330,9 +230,9 @@ export default function TicketsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Priority</label>
+                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Priority</label>
                   <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -340,22 +240,22 @@ export default function TicketsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-500 mb-1">Assign To</label>
+                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Assign To</label>
                   <select value={formData.assigned_to} onChange={e => setFormData(prev => ({ ...prev, assigned_to: e.target.value }))}
-                    className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                    className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                     <option value="">Unassigned</option>
                     {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Description</label>
+                <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Description</label>
                 <textarea value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Provide details..."
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none resize-none" rows={3} />
+                  className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none resize-none" rows={3} />
               </div>
               <button type="submit" disabled={submitting}
-                className="px-6 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50">
+                className="px-6 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-semibold hover:bg-[#0840C0] transition-colors disabled:opacity-50 shadow-sm">
                 {submitting ? 'Creating...' : 'Create Ticket'}
               </button>
             </form>
@@ -365,16 +265,120 @@ export default function TicketsPage() {
         {/* Content */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-40" />)}
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44" />)}
           </div>
         ) : filteredTickets.length === 0 ? (
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-12 text-center">
-            <p className="text-zinc-500 text-sm">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your filter'}</p>
+          <div className="bg-white rounded-xl border border-zinc-200 p-16 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <p className="text-sm font-medium text-zinc-500">{tickets.length === 0 ? 'No tickets yet' : 'No tickets match your filter'}</p>
+            <p className="text-xs text-zinc-400 mt-1">{tickets.length === 0 ? 'Click "+ New Ticket" to create your first one.' : 'Try adjusting your search or filter.'}</p>
           </div>
         ) : view === 'cards' ? (
-          <CardView />
+          /* CARD VIEW */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredTickets.map(ticket => {
+              const cat = categoryConfig[ticket.category] || categoryConfig.general
+              const pri = priorityConfig[ticket.priority] || priorityConfig.medium
+              const st = statusConfig[ticket.status] || statusConfig.new
+              const caseNum = String(ticket.ticket_number).padStart(8, '0')
+              return (
+                <div key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
+                  className="bg-white rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-md transition-all cursor-pointer group overflow-hidden">
+                  {/* Priority strip */}
+                  <div className={`h-1 ${pri.dot}`}></div>
+                  <div className="p-5">
+                    {/* Header: ticket number + status */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[11px] font-mono font-semibold text-zinc-500">{caseNum}</span>
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 ${st.bg} ${st.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
+                        {st.label}
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-sm font-bold text-zinc-900 mb-2 line-clamp-2 group-hover:text-[#0A52EF] transition-colors">{ticket.title}</h3>
+
+                    {/* Venue + Category */}
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-xs font-medium text-zinc-600 truncate">{ticket.venue_name}</span>
+                      <span className="text-zinc-300">&middot;</span>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md capitalize ${cat.bg} ${cat.text}`}>{ticket.category}</span>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-3 border-t border-zinc-100">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 ${pri.bg} ${pri.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${pri.dot}`}></span>
+                        {pri.label}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {ticket.assigned_to_name ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-6 h-6 rounded-full bg-[#0A52EF] flex items-center justify-center text-[10px] font-bold text-white">
+                              {getInitials(ticket.assigned_to_name)}
+                            </div>
+                            <span className="text-xs font-medium text-zinc-700 truncate max-w-24">{ticket.assigned_to_name.split(' ')[0]}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-400 italic">Unassigned</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         ) : (
-          <ListView />
+          /* LIST VIEW */
+          <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50">
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">#</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Title</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Venue</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Category</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Priority</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Status</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Assigned</th>
+                  <th className="text-left py-3 px-5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTickets.map(ticket => {
+                  const cat = categoryConfig[ticket.category] || categoryConfig.general
+                  const pri = priorityConfig[ticket.priority] || priorityConfig.medium
+                  const st = statusConfig[ticket.status] || statusConfig.new
+                  return (
+                    <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
+                      className="border-b border-zinc-100 hover:bg-blue-50/40 cursor-pointer transition-colors group">
+                      <td className="py-3.5 px-5 text-zinc-500 font-mono text-xs font-semibold">{String(ticket.ticket_number).padStart(8, '0')}</td>
+                      <td className="py-3.5 px-5 font-semibold text-zinc-900 max-w-xs truncate group-hover:text-[#0A52EF] transition-colors">{ticket.title}</td>
+                      <td className="py-3.5 px-5 text-zinc-600 text-xs font-medium">{ticket.venue_name}</td>
+                      <td className="py-3.5 px-5">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md capitalize ${cat.bg} ${cat.text}`}>{ticket.category}</span>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${pri.dot}`}></span>
+                          <span className="text-xs font-medium text-zinc-700">{pri.label}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md ${st.bg} ${st.text}`}>{st.label}</span>
+                      </td>
+                      <td className="py-3.5 px-5 text-zinc-700 text-xs font-medium">{ticket.assigned_to_name || <span className="text-zinc-400 italic">—</span>}</td>
+                      <td className="py-3.5 px-5 text-zinc-500 text-xs whitespace-nowrap">{ticket.created_date}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </DashboardLayout>
