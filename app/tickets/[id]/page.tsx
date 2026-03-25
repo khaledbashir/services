@@ -154,14 +154,14 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     <DashboardLayout>
       <div className="space-y-5">
         {/* Top bar */}
-        <div className="flex items-center gap-4">
+        <div className="space-y-2">
           <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Back to Tickets
           </button>
-          <div className="flex items-center gap-3 min-w-0 ml-2">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="bg-[#002C73] text-white px-3 py-1 rounded text-xs font-bold tracking-wide flex-shrink-0">{caseNum}</div>
-            <h1 className="text-lg font-bold text-zinc-900 truncate">{ticket.title}</h1>
+            <h1 className="text-base lg:text-lg font-bold text-zinc-900 line-clamp-2">{ticket.title}</h1>
           </div>
         </div>
 
@@ -196,10 +196,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
         </div>
 
-        {/* Two-column: Details left, Feed right */}
-        <div className="flex gap-6">
+        {/* Two-column: Details left, Feed right — stacks on mobile */}
+        <div className="flex flex-col lg:flex-row gap-5">
           {/* LEFT: Details sidebar */}
-          <div className="space-y-4 lg:sticky lg:top-4 self-start" style={{ flex: '3', minWidth: '280px', maxWidth: '340px' }}>
+          <div className="space-y-4 lg:sticky lg:top-4 self-start w-full lg:w-80 lg:min-w-[280px] lg:max-w-[340px] flex-shrink-0">
             {/* Details Card */}
             <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
               <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
@@ -218,10 +218,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 {/* Priority */}
                 <div>
                   <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Priority</span>
-                  <div className="flex mt-1.5 border border-[#E8E8E8] rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-1 mt-1.5">
                     {Object.entries(priorityConfig).map(([key, cfg]) => (
                       <button key={key} onClick={() => updateField('priority', key)}
-                        className={`flex-1 text-[11px] font-semibold py-2 transition-all text-center ${ticket.priority === key ? `${cfg.bg} ${cfg.text}` : 'text-zinc-400 hover:bg-zinc-50 bg-white'} ${key !== 'low' ? 'border-l border-[#E8E8E8]' : ''}`}>
+                        className={`text-[11px] font-semibold py-2 rounded-md transition-all text-center border ${ticket.priority === key ? `${cfg.bg} ${cfg.text} border-current/20` : 'text-zinc-400 hover:bg-zinc-50 bg-white border-[#E8E8E8]'}`}>
                         {cfg.label}
                       </button>
                     ))}
@@ -505,7 +505,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     placeholder={isInternal ? 'Add an internal note...' : 'Add a client-visible comment...'}
                     className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none shadow-sm ${isInternal ? 'border-amber-300 bg-amber-50/30 focus:ring-amber-400/40' : 'border-[#E8E8E8] bg-white focus:ring-[#0A52EF]/30'}`}
                     rows={3} />
-                  <div className="flex items-center justify-between mt-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-3">
                     <div className="inline-flex bg-white border border-[#E8E8E8] rounded-lg overflow-hidden shadow-sm">
                       <button type="button" onClick={() => setShowCanned(!showCanned)}
                         className={`text-xs font-medium px-3 py-2 transition-colors border-r border-[#E8E8E8] ${showCanned ? 'bg-violet-500 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
