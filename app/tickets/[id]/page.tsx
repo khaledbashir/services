@@ -46,7 +46,7 @@ const categoryConfig: Record<string, { bg: string; text: string }> = {
   general: { bg: 'bg-zinc-100', text: 'text-zinc-600' },
 }
 
-type FeedTab = 'all' | 'comments' | 'emails' | 'activity'
+type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -61,7 +61,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
   const [showCanned, setShowCanned] = useState(false)
-  const [feedTab, setFeedTab] = useState<FeedTab>('all')
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
   const router = useRouter()
 
   const fetchData = async () => {
@@ -124,30 +124,28 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const cat = categoryConfig[ticket.category] || categoryConfig.general
   const caseNum = String(ticket.ticket_number).padStart(8, '0')
 
-  // Filter feed items
+  // Build unified timeline — everything in one stream
   const emailComments = comments.filter(c => c.author_name === 'ANC Bot' && !c.is_internal)
   const regularComments = comments.filter(c => c.author_name !== 'ANC Bot' || c.is_internal)
-  const filteredComments = feedTab === 'comments' ? regularComments
-    : feedTab === 'emails' ? emailComments
-    : feedTab === 'activity' ? []
-    : comments
-  const showActivity = feedTab === 'all' || feedTab === 'activity'
 
-  // Build unified timeline for "all" tab
-  const feedItems: Array<{ type: 'comment' | 'activity'; data: any; time: Date }> = []
-  if (feedTab === 'all' || feedTab === 'comments' || feedTab === 'emails') {
-    filteredComments.forEach(c => feedItems.push({ type: 'comment', data: c, time: new Date(c.created_date) }))
-  }
-  if (showActivity) {
-    activity.forEach(a => feedItems.push({ type: 'activity', data: a, time: new Date(a.created_at) }))
-  }
-  feedItems.sort((a, b) => b.time.getTime() - a.time.getTime())
+  const allTimelineItems: Array<{ type: 'comment' | 'email' | 'change'; data: any; time: Date }> = []
+  comments.forEach(c => {
+    const isEmail = c.author_name === 'ANC Bot' && !c.is_internal
+    allTimelineItems.push({ type: isEmail ? 'email' : 'comment', data: c, time: new Date(c.created_date) })
+  })
+  activity.forEach(a => allTimelineItems.push({ type: 'change', data: a, time: new Date(a.created_at) }))
+  allTimelineItems.sort((a, b) => a.time.getTime() - b.time.getTime()) // oldest first for timeline
 
-  const tabCounts = {
-    all: comments.length + activity.length,
+  const filteredTimeline = timelineFilter === 'all' ? allTimelineItems
+    : timelineFilter === 'comments' ? allTimelineItems.filter(i => i.type === 'comment')
+    : timelineFilter === 'emails' ? allTimelineItems.filter(i => i.type === 'email')
+    : allTimelineItems.filter(i => i.type === 'change')
+
+  const filterCounts = {
+    all: allTimelineItems.length,
     comments: regularComments.length,
     emails: emailComments.length,
-    activity: activity.length,
+    changes: activity.length,
   }
 
   return (
@@ -387,117 +385,136 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               </div>
             )}
 
-            {/* Tabbed Feed */}
+            {/* Unified Timeline */}
             <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
-              {/* Tabs */}
-              <div className="border-b border-[#E8E8E8] flex px-5">
-                {([
-                  { key: 'all', label: 'All', icon: '≡' },
-                  { key: 'comments', label: 'Comments', icon: '💬' },
-                  { key: 'emails', label: 'Emails', icon: '✉' },
-                  { key: 'activity', label: 'Activity', icon: '🕐' },
-                ] as const).map(tab => (
-                  <button key={tab.key} onClick={() => setFeedTab(tab.key)}
-                    className={`px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${feedTab === tab.key ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
-                    <span>{tab.icon}</span>
-                    {tab.label}
-                    {tabCounts[tab.key] > 0 && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${feedTab === tab.key ? 'bg-[#0A52EF]/10 text-[#0A52EF]' : 'bg-zinc-100 text-zinc-500'}`}>
-                        {tabCounts[tab.key]}
-                      </span>
-                    )}
-                  </button>
-                ))}
+              {/* Header with filter chips */}
+              <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
+                <h3 className="text-sm font-bold text-zinc-900">Timeline</h3>
+                <div className="flex items-center gap-1">
+                  {([
+                    { key: 'all', label: 'All' },
+                    { key: 'comments', label: 'Notes' },
+                    { key: 'emails', label: 'Emails' },
+                    { key: 'changes', label: 'Changes' },
+                  ] as const).map(f => (
+                    <button key={f.key} onClick={() => setTimelineFilter(f.key)}
+                      className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${timelineFilter === f.key ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}>
+                      {f.label}
+                      {filterCounts[f.key] > 0 && <span className="ml-1 opacity-70">{filterCounts[f.key]}</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Feed Items */}
-              {feedItems.length === 0 ? (
+              {/* Timeline stream */}
+              {filteredTimeline.length === 0 ? (
                 <div className="px-6 py-16 text-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                  <p className="text-sm text-zinc-500 font-medium">No {feedTab === 'all' ? 'activity' : feedTab} yet</p>
-                  <p className="text-xs text-zinc-400 mt-1">Post an internal note or send a client-visible comment to get started.</p>
+                  <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  <p className="text-sm text-zinc-500 font-medium">No activity yet</p>
+                  <p className="text-xs text-zinc-400 mt-1">Post a note or send a comment to get started.</p>
                 </div>
               ) : (
-                <div>
-                  {feedItems.map((item, idx) => {
-                    if (item.type === 'comment') {
-                      const comment = item.data as Comment
-                      const isEmail = comment.author_name === 'ANC Bot' && !comment.is_internal
-                      return (
-                        <div key={`c-${comment.id}`} className={`px-5 py-4 border-b border-[#E8E8E8] last:border-b-0 ${comment.is_internal ? 'bg-amber-50/30' : ''}`}>
-                          <div className="flex items-start gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                              isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-[#0A52EF]/10 text-[#0A52EF]'
-                            }`}>
-                              {isEmail ? '✉' : getInitials(comment.author_name)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-semibold text-zinc-900">{comment.author_name}</span>
-                                {comment.is_internal && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Internal</span>}
-                                {isEmail && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wider">Via Email</span>}
-                                <span className="text-[11px] text-zinc-400 ml-auto">{comment.created_date}</span>
-                              </div>
-                              {comment.body.includes('Q:') && comment.body.includes('A:') ? (
-                                <div className="mt-2 space-y-2">
-                                  {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
-                                    const lines = block.split('\n')
-                                    const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
-                                    const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
-                                    return q ? (
-                                      <div key={bi} className="bg-zinc-50 rounded-lg p-3">
-                                        <p className="text-xs font-medium text-zinc-500">{q}</p>
-                                        <p className="text-sm text-zinc-900 mt-1 font-medium">{a}</p>
-                                      </div>
-                                    ) : null
-                                  })}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    } else {
+                <div className="relative">
+                  {/* Vertical timeline line */}
+                  <div className="absolute left-[29px] top-0 bottom-0 w-px bg-zinc-200" />
+
+                  {filteredTimeline.map((item, idx) => {
+                    const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                    const isLast = idx === filteredTimeline.length - 1
+
+                    if (item.type === 'change') {
+                      // System change — compact inline entry
                       const log = item.data as Activity
                       const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
-                      const actionIcons: Record<string, string> = {
-                        ticket_created: '🎫',
-                        ticket_status_change: '🔄',
-                        ticket_assigned: '👤',
-                        ticket_category_change: '🏷',
-                        ticket_priority_change: '⚡',
-                        email_reply: '📧',
+                      const actionConfig: Record<string, { icon: string; color: string; dotColor: string }> = {
+                        ticket_created: { icon: '+', color: 'text-blue-600', dotColor: 'bg-blue-500' },
+                        ticket_status_change: { icon: '\u2192', color: 'text-amber-600', dotColor: 'bg-amber-500' },
+                        ticket_assigned: { icon: '\u2192', color: 'text-violet-600', dotColor: 'bg-violet-500' },
+                        ticket_category_change: { icon: '#', color: 'text-zinc-600', dotColor: 'bg-zinc-400' },
+                        ticket_priority_change: { icon: '!', color: 'text-orange-600', dotColor: 'bg-orange-500' },
+                        email_reply: { icon: '@', color: 'text-blue-600', dotColor: 'bg-blue-500' },
                       }
-                      const actionColors: Record<string, string> = {
-                        ticket_created: 'bg-blue-100 text-blue-600',
-                        ticket_status_change: 'bg-amber-100 text-amber-600',
-                        ticket_assigned: 'bg-violet-100 text-violet-600',
-                        ticket_category_change: 'bg-zinc-100 text-zinc-600',
-                        ticket_priority_change: 'bg-orange-100 text-orange-600',
-                        email_reply: 'bg-blue-100 text-blue-600',
-                      }
-                      const desc = log.action === 'ticket_created' ? `Ticket created — ${details.venue_name || ''} — ${details.priority || ''} priority`
-                        : log.action === 'ticket_status_change' ? `Status changed: ${details.old_status} → ${details.new_status}`
+                      const cfg = actionConfig[log.action] || { icon: '\u00B7', color: 'text-zinc-500', dotColor: 'bg-zinc-400' }
+                      const desc = log.action === 'ticket_created' ? `Ticket created \u2014 ${details.venue_name || ''} \u2014 ${details.priority || ''} priority`
+                        : log.action === 'ticket_status_change' ? `Status changed from ${details.old_status?.replace('_', ' ')} to ${details.new_status?.replace('_', ' ')}`
                         : log.action === 'ticket_assigned' ? `Assigned to ${details.assigned_to}`
                         : log.action === 'ticket_category_change' ? `Category changed to ${details.new_category}`
                         : log.action === 'ticket_priority_change' ? `Priority changed to ${details.new_priority}`
                         : 'Updated'
-                      const time = new Date(log.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-                      const color = actionColors[log.action] || 'bg-zinc-100 text-zinc-500'
+
                       return (
-                        <div key={`a-${idx}`} className="px-5 py-3.5 border-b border-[#E8E8E8] last:border-b-0 flex items-center gap-3">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${color}`}>
-                            {actionIcons[log.action] || '📝'}
+                        <div key={`a-${idx}`} className="relative flex items-center gap-3 px-5 py-2.5">
+                          {/* Timeline dot */}
+                          <div className="relative z-10 flex-shrink-0">
+                            <div className={`w-[18px] h-[18px] rounded-full border-2 border-white ${cfg.dotColor} flex items-center justify-center`}>
+                              <span className="text-[9px] font-bold text-white leading-none">{cfg.icon}</span>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs font-medium text-zinc-700">{desc}</span>
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <span className={`text-xs font-medium ${cfg.color}`}>{desc}</span>
                           </div>
-                          <span className="text-[11px] text-zinc-400 flex-shrink-0">{time}</span>
+                          <span className="text-[10px] text-zinc-400 flex-shrink-0 tabular-nums">{timeStr}</span>
                         </div>
                       )
                     }
+
+                    // Comment or email — full card entry
+                    const comment = item.data as Comment
+                    const isEmail = item.type === 'email'
+                    const dotColor = isEmail ? 'bg-blue-500' : comment.is_internal ? 'bg-amber-500' : 'bg-[#0A52EF]'
+
+                    return (
+                      <div key={`c-${comment.id}`} className="relative px-5 py-3">
+                        {/* Timeline dot */}
+                        <div className="absolute left-5 top-5 z-10">
+                          <div className={`w-[18px] h-[18px] rounded-full border-2 border-white ${dotColor} flex items-center justify-center`}>
+                            {isEmail ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            ) : comment.is_internal ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card */}
+                        <div className={`ml-8 rounded-lg border p-4 ${
+                          isEmail ? 'bg-blue-50/40 border-blue-200' : comment.is_internal ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-[#E8E8E8]'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                              isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-[#0A52EF]/10 text-[#0A52EF]'
+                            }`}>
+                              {getInitials(comment.author_name)}
+                            </div>
+                            <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                            {comment.is_internal && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Internal</span>}
+                            {isEmail && <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Email</span>}
+                            <span className="text-[10px] text-zinc-400 ml-auto tabular-nums">{timeStr}</span>
+                          </div>
+                          {comment.body.includes('Q:') && comment.body.includes('A:') ? (
+                            <div className="space-y-2">
+                              {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
+                                const lines = block.split('\n')
+                                const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
+                                const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
+                                return q ? (
+                                  <div key={bi} className="bg-white/60 rounded-lg p-2.5">
+                                    <p className="text-[11px] font-medium text-zinc-500">{q}</p>
+                                    <p className="text-xs text-zinc-900 mt-0.5 font-medium">{a}</p>
+                                  </div>
+                                ) : null
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
                   })}
                 </div>
               )}
