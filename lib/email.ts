@@ -2,9 +2,10 @@ import { query } from '@/lib/db'
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
-// Single place to change addresses once the domain is confirmed
-const FROM_ADDRESS = 'ANC Services <notifications@basheer.app>'
-const REPLY_DOMAIN = 'basheer.app'
+// Domain config — set EMAIL_DOMAIN env var to change (default: ancsports.net)
+const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'ancsports.net'
+const FROM_ADDRESS = `ANC Services <notifications@${EMAIL_DOMAIN}>`
+const REPLY_DOMAIN = EMAIL_DOMAIN
 
 /**
  * Send an email via Resend. Returns true on success, false on failure.
