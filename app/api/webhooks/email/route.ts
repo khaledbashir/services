@@ -169,46 +169,25 @@ export async function POST(request: NextRequest) {
       console.log(`[email-webhook] Auto-added ${senderEmail} to ${venueName} distribution list (${matchMethod})`)
     }
 
-    // 5. No match — notify Slack with the email body so nothing is lost
-    if (!venueId) {
-      const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
-      if (slackChannel) {
-        const bodyPreview = emailBody ? `\n\n> ${emailBody.substring(0, 300).replace(/\n/g, '\n> ')}${emailBody.length > 300 ? '...' : ''}` : ''
-        await sendSlackMessage({
-          channel: slackChannel,
-          text: `⚠️ Inbound email from unknown sender: ${senderEmail}`,
-          blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `⚠️ *Inbound email — no venue match*` } },
-            { type: 'section', fields: [
-              { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
-              { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
-            ]},
-            ...(emailBody ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Message:*${bodyPreview}` } }] : []),
-            { type: 'context', elements: [{ type: 'mrkdwn', text: `Domain: \`${senderDomain}\` — no venue matched. Add their email to a venue's contact or distribution list to auto-route future emails.` }] },
-          ],
-        })
-      }
-      console.warn(`[email-webhook] No venue match for sender: ${senderEmail} (domain: ${senderDomain})`)
-      return NextResponse.json({ ok: true, message: 'No venue matched — notification sent' })
-    }
-
-    // SLA + auto-assignment
+    // SLA + auto-assignment (works for matched and unmatched)
     const slaResult = await query(`SELECT response_hours, resolution_hours FROM sla_policies WHERE priority = 'medium' LIMIT 1`)
     const sla = slaResult.rows[0]
     const now = new Date()
     const slaResponseDue = sla ? new Date(now.getTime() + sla.response_hours * 3600000) : null
     const slaResolutionDue = sla ? new Date(now.getTime() + sla.resolution_hours * 3600000) : null
 
-    const ruleResult = await query(
-      `SELECT assign_to FROM assignment_rules WHERE is_active = true
-       AND (category IS NULL OR category = 'general') AND (venue_id IS NULL OR venue_id = $1)
-       ORDER BY CASE WHEN venue_id IS NOT NULL THEN 1 ELSE 2 END LIMIT 1`,
-      [venueId]
-    )
-    const autoAssign = ruleResult.rows[0]?.assign_to || null
+    let autoAssign: string | null = null
+    if (venueId) {
+      const ruleResult = await query(
+        `SELECT assign_to FROM assignment_rules WHERE is_active = true
+         AND (category IS NULL OR category = 'general') AND (venue_id IS NULL OR venue_id = $1)
+         ORDER BY CASE WHEN venue_id IS NOT NULL THEN 1 ELSE 2 END LIMIT 1`,
+        [venueId]
+      )
+      autoAssign = ruleResult.rows[0]?.assign_to || null
+    }
 
-    // Create ticket
-    const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
+    // Always create ticket — matched or not
     const description = emailBody
       ? `Email from ${senderName} (${senderEmail}):\n\n${emailBody.substring(0, 2000)}`
       : `Email received from ${senderName} (${senderEmail}). Subject: ${subject}`
@@ -221,8 +200,34 @@ export async function POST(request: NextRequest) {
     )
 
     const ticket = result.rows[0]
+    const caseNum = String(ticket.ticket_number).padStart(8, '0')
 
-    // Slack notification
+    // 5. Unmatched — Slack warning with email body + ticket link (ticket was still created)
+    if (!venueId) {
+      const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (slackChannel) {
+        const bodyPreview = emailBody ? `\n\n> ${emailBody.substring(0, 300).replace(/\n/g, '\n> ')}${emailBody.length > 300 ? '...' : ''}` : ''
+        const ticketUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/tickets/${ticket.id}`
+        await sendSlackMessage({
+          channel: slackChannel,
+          text: `⚠️ Inbound email from unknown sender: ${senderEmail} — ticket #${caseNum} created`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `⚠️ *Inbound email — no venue match* (ticket created anyway)` } },
+            { type: 'section', fields: [
+              { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
+              { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
+            ]},
+            ...(emailBody ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Message:*${bodyPreview}` } }] : []),
+            { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket #${caseNum}>` } },
+            { type: 'context', elements: [{ type: 'mrkdwn', text: `Domain: \`${senderDomain}\` — assign this ticket to a venue to auto-route future emails from this domain.` }] },
+          ],
+        })
+      }
+      console.warn(`[email-webhook] No venue match for ${senderEmail} — ticket #${caseNum} created without venue`)
+      return NextResponse.json({ ok: true, ticket_number: ticket.ticket_number, venue: null, message: 'Ticket created without venue match' })
+    }
+
+    // Slack notification for matched venue
     const slackChannel = channelId || process.env.SLACK_DEFAULT_CHANNEL || ''
     if (slackChannel) {
       await sendSlackMessage({
