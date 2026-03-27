@@ -53,20 +53,24 @@ export async function POST(request: NextRequest) {
     const to = data.to || ''
     const subject = data.subject || 'No subject'
 
-    // If we have an email ID and API key, fetch the full email body
+    // Webhook payload does NOT include email body — must fetch via Receiving API
     let emailBody = data.text || data.body || ''
 
     if (emailId && RESEND_API_KEY && !emailBody) {
       try {
-        const emailRes = await fetch(`https://api.resend.com/emails/${emailId}`, {
+        // Use the Receiving API endpoint (not /emails/{id} which is for outbound only)
+        const emailRes = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
           headers: { 'Authorization': `Bearer ${RESEND_API_KEY}` },
         })
         if (emailRes.ok) {
           const emailData = await emailRes.json()
           emailBody = emailData.text || emailData.html?.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || ''
+          console.log(`[email-webhook] Fetched email body (${emailBody.length} chars) via Receiving API`)
+        } else {
+          console.error(`[email-webhook] Receiving API returned ${emailRes.status} for email ${emailId}`)
         }
       } catch (e) {
-        console.error('Failed to fetch email body from Resend:', e)
+        console.error('[email-webhook] Failed to fetch email body from Resend:', e)
       }
     }
 
