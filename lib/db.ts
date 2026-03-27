@@ -26,6 +26,8 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(staff_id, venue_id)
     )`)
+    await client.query(`ALTER TABLE event_assignments ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`)
+    await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)

@@ -2,21 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 
-// Called every 15-30 min by Claw cron or external scheduler
+// Called every 15 min by EasyPanel cron or external scheduler
 // Sends reminders to techs who haven't checked in before their events
+//
+// Scheduler setup (EasyPanel or system cron):
+//   */15 * * * * curl -s https://abc-anc-services.izcgmb.easypanel.host/api/cron/reminders
+
+const DEDUP_WINDOW_MS = 2 * 3600000 // 2 hours — don't re-remind within this window
 
 export async function GET() {
   try {
     // Check if tech-reminders automation is enabled
     const jobResult = await query(`SELECT enabled FROM automation_jobs WHERE id = 'tech-reminders'`)
     if (jobResult.rows.length > 0 && !jobResult.rows[0].enabled) {
-      return NextResponse.json({ ok: true, message: 'Tech reminders are disabled', reminders: { tier1: 0, tier2: 0, tier3: 0 } })
+      return NextResponse.json({ ok: true, message: 'Tech reminders are disabled', reminders: { tier1: 0, tier2: 0, tier3: 0 }, skipped: { tier1: 0, tier2: 0, tier3: 0 } })
     }
 
     const now = new Date()
     const today = now.toISOString().split('T')[0]
+    const dedupCutoff = new Date(now.getTime() - DEDUP_WINDOW_MS).toISOString()
 
-    // TIER 1: 3 hours before — friendly reminder to the tech
+    // TIER 1: 3 hours before — friendly reminder to the tech (per tech/event)
     const threeHoursFromNow = new Date(now.getTime() + 3 * 3600000)
     const twoHoursFromNow = new Date(now.getTime() + 2 * 3600000)
 
@@ -24,7 +30,8 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary, e.start_time,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
-              s.id as staff_id, s.full_name, s.email
+              s.id as staff_id, s.full_name, s.email,
+              ea.id as assignment_id, ea.last_reminder_sent_at
        FROM events e
        JOIN venues v ON e.venue_id = v.id
        JOIN event_assignments ea ON e.id = ea.event_id
@@ -41,11 +48,18 @@ export async function GET() {
     )
 
     let tier1Sent = 0
+    let tier1Skipped = 0
     for (const row of tier1Result.rows) {
+      // Dedup: skip if already reminded within window
+      if (row.last_reminder_sent_at && new Date(row.last_reminder_sent_at) > new Date(dedupCutoff)) {
+        tier1Skipped++
+        continue
+      }
+
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      await sendSlackMessage({
+      const sent = await sendSlackMessage({
         channel,
         text: `Reminder: ${row.full_name} — ${row.summary} at ${row.venue_name}`,
         blocks: [
@@ -68,14 +82,18 @@ export async function GET() {
           },
         ],
       })
-      tier1Sent++
+
+      if (sent) {
+        await query(`UPDATE event_assignments SET last_reminder_sent_at = NOW() WHERE id = $1`, [row.assignment_id])
+        tier1Sent++
+      }
     }
 
-    // TIER 2: 1 hour before — escalation to managers
+    // TIER 2: 1 hour before — escalation to managers (per event)
     const oneHourFromNow = new Date(now.getTime() + 1 * 3600000)
 
     const tier2Result = await query(
-      `SELECT e.id as event_id, e.summary,
+      `SELECT e.id as event_id, e.summary, e.last_escalation_sent_at,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
               string_agg(s.full_name, ', ') as missing_techs,
@@ -92,16 +110,23 @@ export async function GET() {
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
          )
-       GROUP BY e.id, e.summary, e.start_time, v.name, v.slack_channel_id`,
+       GROUP BY e.id, e.summary, e.start_time, e.last_escalation_sent_at, v.name, v.slack_channel_id`,
       [today, oneHourFromNow.toISOString()]
     )
 
     let tier2Sent = 0
+    let tier2Skipped = 0
     for (const row of tier2Result.rows) {
+      // Dedup: skip if already escalated within window
+      if (row.last_escalation_sent_at && new Date(row.last_escalation_sent_at) > new Date(dedupCutoff)) {
+        tier2Skipped++
+        continue
+      }
+
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      await sendSlackMessage({
+      const sent = await sendSlackMessage({
         channel,
         text: `🚨 ESCALATION: ${row.missing_count} tech(s) not checked in — ${row.summary} at ${row.venue_name}`,
         blocks: [
@@ -114,12 +139,16 @@ export async function GET() {
           },
         ],
       })
-      tier2Sent++
+
+      if (sent) {
+        await query(`UPDATE events SET last_escalation_sent_at = NOW() WHERE id = $1`, [row.event_id])
+        tier2Sent++
+      }
     }
 
-    // TIER 3: Events already started — still no check-in (post-start alert)
+    // TIER 3: Events already started — still no check-in (post-start alert, per event)
     const tier3Result = await query(
-      `SELECT e.id as event_id, e.summary,
+      `SELECT e.id as event_id, e.summary, e.last_escalation_sent_at,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
               string_agg(s.full_name, ', ') as missing_techs,
@@ -136,16 +165,23 @@ export async function GET() {
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
          )
-       GROUP BY e.id, e.summary, e.start_time, v.name, v.slack_channel_id`,
+       GROUP BY e.id, e.summary, e.start_time, e.last_escalation_sent_at, v.name, v.slack_channel_id`,
       [today]
     )
 
     let tier3Sent = 0
+    let tier3Skipped = 0
     for (const row of tier3Result.rows) {
+      // Dedup: skip if already sent critical alert within window
+      if (row.last_escalation_sent_at && new Date(row.last_escalation_sent_at) > new Date(dedupCutoff)) {
+        tier3Skipped++
+        continue
+      }
+
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      await sendSlackMessage({
+      const sent = await sendSlackMessage({
         channel,
         text: `🔴 CRITICAL: Game started, no check-in — ${row.summary} at ${row.venue_name}`,
         blocks: [
@@ -158,13 +194,18 @@ export async function GET() {
           },
         ],
       })
-      tier3Sent++
+
+      if (sent) {
+        await query(`UPDATE events SET last_escalation_sent_at = NOW() WHERE id = $1`, [row.event_id])
+        tier3Sent++
+      }
     }
 
     return NextResponse.json({
       ok: true,
       reminders: { tier1: tier1Sent, tier2: tier2Sent, tier3: tier3Sent },
-      message: `Sent ${tier1Sent} reminders, ${tier2Sent} escalations, ${tier3Sent} critical alerts`,
+      skipped: { tier1: tier1Skipped, tier2: tier2Skipped, tier3: tier3Skipped },
+      message: `Sent ${tier1Sent} reminders, ${tier2Sent} escalations, ${tier3Sent} critical. Skipped ${tier1Skipped + tier2Skipped + tier3Skipped} (already notified).`,
     })
   } catch (err) {
     console.error('Error running reminders:', err)
