@@ -256,6 +256,10 @@ export async function POST(request: NextRequest) {
             { type: 'context', elements: [{ type: 'mrkdwn', text: `💬 *Email body:* _"${emailBody.substring(0, 300)}${emailBody.length > 300 ? '...' : ''}"_` }] },
           ] : []),
           {
+            type: 'section',
+            text: { type: 'mrkdwn', text: `<${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/tickets/${ticket.id}|:link: View Ticket #${caseNum}>` },
+          },
+          {
             type: 'context',
             elements: [{ type: 'mrkdwn', text: `⏱️ *SLA Response due in ${sla?.response_hours || 4}h* | _Auto-created from inbound email (matched via ${matchMethod})_` }],
           },
