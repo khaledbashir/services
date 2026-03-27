@@ -1,9 +1,13 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 const EMBED_MODEL = 'gemini-embedding-2-preview'
-const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${GEMINI_API_KEY}`
+
+function getEmbedUrl() {
+  const key = process.env.GEMINI_API_KEY || ''
+  if (!key) throw new Error('GEMINI_API_KEY not set')
+  return `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${key}`
+}
 
 export async function getTextEmbedding(text: string): Promise<number[]> {
-  const res = await fetch(EMBED_URL, {
+  const res = await fetch(getEmbedUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -11,7 +15,11 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
       content: { parts: [{ text }] },
     }),
   })
-  if (!res.ok) throw new Error(`Embedding API error: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text()
+    console.error(`[embedding] Gemini API ${res.status}: ${body}`)
+    throw new Error(`Embedding API error: ${res.status} — ${body.substring(0, 200)}`)
+  }
   const data = await res.json()
   return data.embedding.values
 }
@@ -20,7 +28,7 @@ export async function getImageEmbedding(base64Data: string, mimeType: string): P
   // Strip data URL prefix if present
   const raw = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data
 
-  const res = await fetch(EMBED_URL, {
+  const res = await fetch(getEmbedUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -32,7 +40,11 @@ export async function getImageEmbedding(base64Data: string, mimeType: string): P
       },
     }),
   })
-  if (!res.ok) throw new Error(`Embedding API error: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text()
+    console.error(`[embedding] Gemini API ${res.status}: ${body}`)
+    throw new Error(`Embedding API error: ${res.status} — ${body.substring(0, 200)}`)
+  }
   const data = await res.json()
   return data.embedding.values
 }
@@ -40,7 +52,7 @@ export async function getImageEmbedding(base64Data: string, mimeType: string): P
 export async function getMultimodalEmbedding(text: string, base64Data: string, mimeType: string): Promise<number[]> {
   const raw = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data
 
-  const res = await fetch(EMBED_URL, {
+  const res = await fetch(getEmbedUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -53,7 +65,11 @@ export async function getMultimodalEmbedding(text: string, base64Data: string, m
       },
     }),
   })
-  if (!res.ok) throw new Error(`Embedding API error: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text()
+    console.error(`[embedding] Gemini API ${res.status}: ${body}`)
+    throw new Error(`Embedding API error: ${res.status} — ${body.substring(0, 200)}`)
+  }
   const data = await res.json()
   return data.embedding.values
 }
