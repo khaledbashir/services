@@ -28,6 +28,36 @@ async function runMigrations() {
     )`)
     await client.query(`ALTER TABLE event_assignments ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
+    await client.query(`CREATE TABLE IF NOT EXISTS kb_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      description TEXT,
+      issue_type TEXT,
+      venue_id UUID REFERENCES venues(id),
+      suggested_fix TEXT,
+      image_url TEXT,
+      embedding float8[],
+      created_by UUID REFERENCES staff(id),
+      created_at TIMESTAMP DEFAULT NOW()
+    )`)
+    await client.query(`
+      CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
+      DECLARE
+        dot float8 := 0;
+        norm_a float8 := 0;
+        norm_b float8 := 0;
+        i int;
+      BEGIN
+        FOR i IN 1..array_length(a, 1) LOOP
+          dot := dot + a[i] * b[i];
+          norm_a := norm_a + a[i] * a[i];
+          norm_b := norm_b + b[i] * b[i];
+        END LOOP;
+        IF norm_a = 0 OR norm_b = 0 THEN RETURN 0; END IF;
+        RETURN dot / (sqrt(norm_a) * sqrt(norm_b));
+      END;
+      $$ LANGUAGE plpgsql IMMUTABLE;
+    `)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)
