@@ -119,29 +119,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Try domain match on primary_contact_email
-    if (!venueId) {
-      const domain = senderEmail.split('@')[1]
-      // Skip generic email providers — domain match only makes sense for company domains
-      const genericDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'aol.com', 'live.com', 'msn.com', 'protonmail.com']
-      if (domain && !genericDomains.includes(domain.toLowerCase())) {
-        const domainResult = await query(
-          `SELECT id, name, slack_channel_id FROM venues WHERE primary_contact_email ILIKE $1 LIMIT 1`,
-          [`%@${domain}`]
+    // 3. Try domain match on primary_contact_email or distribution_emails
+    const senderDomain = senderEmail.split('@')[1]?.toLowerCase() || ''
+    const genericDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'aol.com', 'live.com', 'msn.com', 'protonmail.com', 'anc.com']
+    if (!venueId && senderDomain && !genericDomains.includes(senderDomain)) {
+      const domainResult = await query(
+        `SELECT id, name, slack_channel_id FROM venues
+         WHERE primary_contact_email ILIKE $1
+            OR EXISTS (SELECT 1 FROM unnest(distribution_emails) AS e WHERE e ILIKE $1)
+         LIMIT 1`,
+        [`%@${senderDomain}`]
+      )
+      if (domainResult.rows.length > 0) {
+        venueId = domainResult.rows[0].id
+        venueName = domainResult.rows[0].name
+        channelId = domainResult.rows[0].slack_channel_id || ''
+        matchMethod = 'domain match'
+      }
+    }
+
+    // 4. Fuzzy match — check if the email domain contains a venue name or vice versa
+    //    e.g. "orlandomagic.com" won't match "Kia Center" but "prucenter.com" matches "Prudential Center"
+    if (!venueId && senderDomain && !genericDomains.includes(senderDomain)) {
+      const domainBase = senderDomain.split('.')[0].toLowerCase() // e.g. "orlandomagic", "prucenter"
+      if (domainBase.length >= 4) {
+        const fuzzyResult = await query(
+          `SELECT id, name, slack_channel_id FROM venues
+           WHERE LOWER(REPLACE(REPLACE(name, ' ', ''), '-', '')) LIKE '%' || $1 || '%'
+              OR $1 LIKE '%' || LOWER(REPLACE(REPLACE(REPLACE(REPLACE(name, ' ', ''), '-', ''), 'The ', ''), 'Center', '')) || '%'
+           LIMIT 1`,
+          [domainBase]
         )
-        if (domainResult.rows.length > 0) {
-          venueId = domainResult.rows[0].id
-          venueName = domainResult.rows[0].name
-          channelId = domainResult.rows[0].slack_channel_id || ''
-          matchMethod = 'domain match'
+        if (fuzzyResult.rows.length > 0) {
+          venueId = fuzzyResult.rows[0].id
+          venueName = fuzzyResult.rows[0].name
+          channelId = fuzzyResult.rows[0].slack_channel_id || ''
+          matchMethod = 'fuzzy domain match'
         }
       }
     }
 
-    // 4. No match — notify Slack and skip ticket creation
+    // Auto-learn: if we matched by domain or fuzzy, add sender to distribution list for faster future matches
+    if (venueId && (matchMethod === 'domain match' || matchMethod === 'fuzzy domain match')) {
+      await query(
+        `UPDATE venues SET distribution_emails = array_append(COALESCE(distribution_emails, '{}'), $1)
+         WHERE id = $2 AND NOT ($1 = ANY(COALESCE(distribution_emails, '{}')))`,
+        [senderEmail.toLowerCase(), venueId]
+      )
+      console.log(`[email-webhook] Auto-added ${senderEmail} to ${venueName} distribution list (${matchMethod})`)
+    }
+
+    // 5. No match — notify Slack with the email body so nothing is lost
     if (!venueId) {
       const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
       if (slackChannel) {
+        const bodyPreview = emailBody ? `\n\n> ${emailBody.substring(0, 300).replace(/\n/g, '\n> ')}${emailBody.length > 300 ? '...' : ''}` : ''
         await sendSlackMessage({
           channel: slackChannel,
           text: `⚠️ Inbound email from unknown sender: ${senderEmail}`,
@@ -151,11 +183,12 @@ export async function POST(request: NextRequest) {
               { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
               { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
             ]},
-            { type: 'context', elements: [{ type: 'mrkdwn', text: `Could not match sender to any venue. Add their email to a venue's contact or distribution list to auto-route future emails.` }] },
+            ...(emailBody ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Message:*${bodyPreview}` } }] : []),
+            { type: 'context', elements: [{ type: 'mrkdwn', text: `Domain: \`${senderDomain}\` — no venue matched. Add their email to a venue's contact or distribution list to auto-route future emails.` }] },
           ],
         })
       }
-      console.warn(`[email-webhook] No venue match for sender: ${senderEmail}`)
+      console.warn(`[email-webhook] No venue match for sender: ${senderEmail} (domain: ${senderDomain})`)
       return NextResponse.json({ ok: true, message: 'No venue matched — notification sent' })
     }
 
