@@ -1,30 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// POST — AI diagnoses an uploaded image of an LED issue
-// Uses Gemini's vision capability to analyze the photo and describe the problem
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { image, context } = body
+const MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash-001']
 
-    if (!image?.data) {
-      return NextResponse.json({ error: 'Image required' }, { status: 400 })
-    }
-
-    const key = process.env.GEMINI_API_KEY || ''
-    if (!key) return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
-
-    // Strip data URL prefix
-    const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text: `You are an LED display diagnostics expert for ANC Sports, a company that installs and maintains large LED displays in sports arenas and entertainment venues.
+const PROMPT = (context?: string) => `You are an LED display diagnostics expert for ANC Sports, a company that installs and maintains large LED displays in sports arenas and entertainment venues.
 
 Analyze this photo of an LED display issue. Provide:
 
@@ -46,39 +24,62 @@ Respond in this exact JSON format:
   "suggested_fix": "...",
   "urgency": "..."
 }`
-            },
-            {
-              inline_data: {
-                mime_type: image.mimeType || 'image/jpeg',
-                data: raw,
-              },
-            },
-          ],
-        }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 1000,
-        },
-      }),
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { image, context } = body
+
+    if (!image?.data) {
+      return NextResponse.json({ error: 'Image required' }, { status: 400 })
+    }
+
+    const key = process.env.GEMINI_API_KEY || ''
+    if (!key) return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
+
+    const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
+
+    const payload = JSON.stringify({
+      contents: [{
+        parts: [
+          { text: PROMPT(context) },
+          { inline_data: { mime_type: image.mimeType || 'image/jpeg', data: raw } },
+        ],
+      }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1000 },
     })
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error(`[kb-diagnose] Gemini API error ${res.status}: ${err}`)
-      return NextResponse.json({ error: `AI diagnosis failed: ${res.status}` }, { status: 500 })
+    // Try models in order — fallback if one is overloaded or unavailable
+    let lastError = ''
+    for (const model of MODELS) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload }
+        )
+
+        if (res.ok) {
+          const data = await res.json()
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (!jsonMatch) {
+            return NextResponse.json({ error: 'AI response could not be parsed', raw: text }, { status: 500 })
+          }
+          const diagnosis = JSON.parse(jsonMatch[0])
+          console.log(`[kb-diagnose] Success with ${model}: ${diagnosis.title}`)
+          return NextResponse.json({ ok: true, diagnosis, model })
+        }
+
+        lastError = await res.text()
+        console.warn(`[kb-diagnose] ${model} returned ${res.status}, trying next...`)
+      } catch (err: any) {
+        lastError = err.message
+        console.warn(`[kb-diagnose] ${model} failed: ${err.message}, trying next...`)
+      }
     }
 
-    const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-
-    // Parse JSON from response (handle markdown code blocks)
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'AI response could not be parsed', raw: text }, { status: 500 })
-    }
-
-    const diagnosis = JSON.parse(jsonMatch[0])
-    return NextResponse.json({ ok: true, diagnosis })
+    console.error(`[kb-diagnose] All models failed. Last error: ${lastError}`)
+    return NextResponse.json({ error: `All AI models unavailable. Last: ${lastError.substring(0, 200)}` }, { status: 503 })
   } catch (err) {
     console.error('KB diagnose error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
