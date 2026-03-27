@@ -1,6 +1,6 @@
 # ANC Service Dashboard — Technical Audit
 
-**Date:** March 26, 2026
+**Date:** March 27, 2026 (updated)
 **Auditor:** Ahmad Basheer
 **Codebase:** github.com/khaledbashir/services
 **Live URL:** https://abc-anc-services.izcgmb.easypanel.host
@@ -212,10 +212,15 @@ PDF generation uses Browserless (headless Chrome) running as a Docker service.
 - **Per-venue channels:** Each venue has a configurable `slack_channel_id`, falls back to default channel
 - **Claw bot (internal API):** Can create and update tickets via `/api/internal/tickets` with API key auth
 
-#### Email (Resend) — CONNECTED, CONDITIONAL
+#### Email (Resend) — CONNECTED, LIVE
+- **Domain:** `ancsports.net` (configurable via `EMAIL_DOMAIN` env var)
 - **Outbound:** Ticket notifications emailed to venue distribution lists. Reply-to address is `ticket+XXXXX@ancsports.net` so client replies become ticket comments.
-- **Inbound webhook:** `/api/webhooks/email` — receives forwarded emails, matches sender to venue (by email, distribution list, or domain), creates ticket or adds comment.
-- **From address:** `notifications@ancsports.net` (configurable via `EMAIL_DOMAIN` env var)
+- **Inbound webhook:** `/api/webhooks/email` — receives emails at `inbound@ancsports.net`, matches sender to venue, creates ticket.
+- **Inbound forwarding:** `support@anc.com` BCC rule forwards all client emails to `inbound@ancsports.net` via Exchange mailflow rule (set up by Charlie Dinh 2026-03-27).
+- **Email body retrieval:** Uses Resend Receiving API (`GET /emails/receiving/{id}`) to fetch full email body from webhook events.
+- **5-tier venue matching:** (1) exact email on primary contact, (2) distribution list match, (3) domain match on primary/distribution, (4) fuzzy domain-to-venue-name match, (5) no match → ticket created anyway (venue_id=NULL).
+- **Auto-learn:** On domain or fuzzy match, sender is automatically added to venue's distribution_emails for faster future matching.
+- **All emails create tickets** — unmatched emails create tickets without a venue and post to Slack with the email body + ticket link.
 - **Dependency:** Requires `RESEND_API_KEY` env var. If not set, emails silently skip with a console warning.
 
 #### Google Calendar — CONNECTED, MANUAL TRIGGER
@@ -267,24 +272,30 @@ PDF generation uses Browserless (headless Chrome) running as a Docker service.
 | `/knowledge` | Embeds Outline wiki in an iframe | Direct URL only — not in sidebar |
 | `/presentation` | 15-slide marketing presentation about the platform | Direct URL only — not in sidebar |
 
-### Cron Jobs Defined But Not Running
+### Cron Jobs
 
-`claw-config.json` defines 5 automation jobs — **all disabled** (`enabled: false`):
+**Tech Check-in Reminders — LIVE**
+- 3-tier escalation system at `/api/cron/reminders`: friendly reminder (3h before), manager escalation (1h before), critical alert (game started, no check-in)
+- System cron runs every 15 minutes (`/etc/cron.d/anc-reminders`)
+- Dedup logic prevents repeat notifications within 2-hour window (tracked via `last_reminder_sent_at` on event_assignments and `last_escalation_sent_at` on events)
+- Toggle on/off via Settings → automation job `tech-reminders` (currently **enabled**)
+
+**Other automation jobs — NOT RUNNING**
+`claw-config.json` defines 4 more jobs, all `enabled: false`:
 - Daily Event Digest
-- Escalation Alerts
 - Post-Game Summaries
 - Weekly Digest
-- Workflow Completion Report (marked `enabled: true` in config but no scheduler is actually executing it)
+- Workflow Completion Report
 
-**Impact:** No automated daily digests, no automatic escalation alerts, no post-game summary messages. All of these would need an external scheduler (cron, EasyPanel scheduled task, or similar) calling the appropriate endpoints.
+These would need endpoints built and scheduled to be functional.
 
 ### Calendar Sync Not Automated
 
 Google Calendar sync exists and works, but must be triggered manually by an admin hitting `/api/calendar-sync`. There is no cron job or scheduler calling it automatically. The "every 15 minutes" sync mentioned in marketing materials is not currently running.
 
-### Email Domain
+### Email Domain — RESOLVED
 
-Updated to `ancsports.net`. From address is `notifications@ancsports.net`, reply-to is `ticket+XXXXX@ancsports.net`. Domain is configurable via `EMAIL_DOMAIN` env var.
+Domain is `ancsports.net`. From address is `notifications@ancsports.net`, reply-to is `ticket+XXXXX@ancsports.net`. Configurable via `EMAIL_DOMAIN` env var. DNS verified, Resend configured, `support@anc.com` forwarding active.
 
 ### Security Items to Address
 
@@ -303,7 +314,8 @@ Updated to `ancsports.net`. From address is `notifications@ancsports.net`, reply
 | `JWT_SECRET` | Set (should verify it's not default) | Falls back to predictable default |
 | `SLACK_BOT_TOKEN` | Set | All Slack notifications silently skip |
 | `SLACK_DEFAULT_CHANNEL` | Set | No fallback channel for venues without one |
-| `RESEND_API_KEY` | **Needs verification** | All emails silently skip |
+| `RESEND_API_KEY` | Set (verified working 2026-03-27) | All emails silently skip |
+| `EMAIL_DOMAIN` | Optional (defaults to `ancsports.net`) | Controls from/reply-to domain |
 | `AI_API_KEY` | Set | Portal ticket AI falls back to basic parsing |
 | `GOOGLE_SA_KEY_PATH` | Set (file must exist) | Calendar sync won't work |
 | `INTERNAL_API_KEY` | Not set (defaults to predictable value) | Claw bot API uses weak auth |
@@ -400,9 +412,10 @@ Updated to `ancsports.net`. From address is `notifications@ancsports.net`, reply
 
 **What needs attention before go-live:**
 1. Calendar sync needs an automated scheduler (not just manual trigger)
-2. Cron jobs (daily digest, escalation alerts, etc.) are defined but not running
-3. ~~Email from address~~ — updated to `@ancsports.net`
-4. `RESEND_API_KEY` needs verification in production env
-5. JWT secret and internal API key should not fall back to defaults
-6. "Send Reminder" button on event detail page does nothing
-7. "Run Now" on settings cron jobs is a stub
+2. ~~Cron jobs~~ — tech reminders are live (every 15 min). Other automations (daily digest, post-game, weekly) still need building.
+3. ~~Email from address~~ — `@ancsports.net`, DNS verified, Resend configured
+4. ~~`RESEND_API_KEY`~~ — verified working (2026-03-27)
+5. ~~Email forwarding~~ — `support@anc.com` BCC rule active, forwarding to `inbound@ancsports.net`
+6. JWT secret and internal API key should not fall back to defaults
+7. "Send Reminder" button on event detail page does nothing
+8. "Run Now" on settings cron jobs is a stub
