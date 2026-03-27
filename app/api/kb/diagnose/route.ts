@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     // Strip data URL prefix
     const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
