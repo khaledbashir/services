@@ -65,11 +65,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Format embedding as PostgreSQL float8[] literal
+    const embeddingStr = '{' + embedding.join(',') + '}'
     const result = await query(
       `INSERT INTO kb_entries (title, description, issue_type, venue_id, suggested_fix, image_url, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::float8[])
        RETURNING id, title, issue_type, created_at`,
-      [title, description, issue_type, venue_id || null, suggested_fix, imageUrl, embedding]
+      [title, description, issue_type, venue_id || null, suggested_fix, imageUrl, embeddingStr]
     )
 
     return NextResponse.json({ ok: true, entry: result.rows[0] })

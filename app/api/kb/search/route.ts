@@ -24,15 +24,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Search by cosine similarity
+    // Cast the parameter explicitly to float8[] for PostgreSQL
+    const embeddingStr = '{' + queryEmbedding.join(',') + '}'
     const result = await query(
       `SELECT id, title, description, issue_type, venue_id, suggested_fix, image_url, created_at,
-              cosine_similarity(embedding, $1) as similarity
+              cosine_similarity(embedding, $1::float8[]) as similarity
        FROM kb_entries
        WHERE embedding IS NOT NULL
-       ORDER BY cosine_similarity(embedding, $1) DESC
+       ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
        LIMIT $2`,
-      [queryEmbedding, limit]
+      [embeddingStr, limit]
     )
+
+    console.log(`[kb-search] Found ${result.rows.length} results, top similarity: ${result.rows[0]?.similarity || 'none'}`)
 
     // Filter out low-quality matches
     const matches = result.rows
