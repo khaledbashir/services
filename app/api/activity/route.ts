@@ -44,7 +44,9 @@ export async function GET(request: NextRequest) {
         t.created_at,
         s.full_name as staff_name,
         t.title as entity_name,
-        v.name as venue_name
+        v.name as venue_name,
+        t.id as entity_id,
+        t.priority as priority
       FROM tickets t
       JOIN staff s ON t.created_by = s.id
       LEFT JOIN venues v ON t.venue_id = v.id
@@ -62,7 +64,8 @@ export async function GET(request: NextRequest) {
         tc.created_at,
         s.full_name as staff_name,
         t.title as entity_name,
-        v.name as venue_name
+        v.name as venue_name,
+        t.id as entity_id
       FROM ticket_comments tc
       JOIN staff s ON tc.author_id = s.id
       JOIN tickets t ON tc.ticket_id = t.id

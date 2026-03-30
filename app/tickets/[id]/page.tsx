@@ -40,6 +40,7 @@ const categoryLabels: Record<string, string> = {
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
+type ContentTab = 'timeline' | 'description' | 'emails' | 'notes'
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -55,6 +56,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
   const [showCanned, setShowCanned] = useState(false)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
+  const [activeTab, setActiveTab] = useState<ContentTab>('timeline')
   const router = useRouter()
 
   const fetchData = async () => {
@@ -325,206 +327,250 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             )}
           </div>
 
-          {/* ── RIGHT CONTENT ── */}
-          <div className="flex-1 min-w-0 space-y-6">
-
-            {/* Description */}
-            <div className="space-y-4">
-              {ticket.description && (
-                <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
-                  <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-4">Description</h3>
-                  <div className="max-w-prose">
-                    <TicketContent content={ticket.description} variant="description" />
-                  </div>
-                </div>
-              )}
-
-              {ticket.original_message && ticket.original_message !== ticket.description && (
-                <div className="bg-zinc-50/50 rounded-xl border border-zinc-200/60 p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                    <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Email</h3>
-                  </div>
-                  <div className="max-w-prose">
-                    <TicketContent content={ticket.original_message} variant="email" />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Resolution */}
-            {ticket.status === 'closed' && (
-              <div className="bg-emerald-50/50 rounded-xl border border-emerald-200/60 p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    <h3 className="text-sm font-semibold text-emerald-900">Resolution</h3>
-                  </div>
-                  {!editResolution && <button onClick={() => setEditResolution(true)} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Edit</button>}
-                </div>
-                {editResolution ? (
-                  <div className="space-y-3">
-                    <textarea value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)}
-                      className="w-full border border-emerald-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white" rows={3} />
-                    <div className="flex gap-2">
-                      <button onClick={saveResolution} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">Save</button>
-                      <button onClick={() => setEditResolution(false)} className="text-xs text-zinc-500 px-4 py-2 hover:text-zinc-700">Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-emerald-800/80 leading-relaxed">{resolutionNotes || 'No resolution notes yet.'}</p>
-                )}
-              </div>
-            )}
-
-            {/* ── Timeline ── */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-zinc-900">Timeline</h3>
-                <div className="flex items-center gap-0.5 bg-zinc-100/80 rounded-lg p-0.5">
-                  {([
-                    { key: 'all', label: 'All' },
-                    { key: 'comments', label: 'Notes' },
-                    { key: 'emails', label: 'Emails' },
-                    { key: 'changes', label: 'Changes' },
-                  ] as const).map(f => (
-                    <button key={f.key} onClick={() => setTimelineFilter(f.key)}
-                      className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${timelineFilter === f.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                      {f.label}
-                      {filterCounts[f.key] > 0 && <span className="ml-1 text-zinc-400">{filterCounts[f.key]}</span>}
-                    </button>
-                  ))}
-                </div>
+          {/* ── RIGHT: Tabbed Content Card ── */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-white rounded-xl border border-zinc-200/80 overflow-hidden">
+              {/* Tab bar */}
+              <div className="flex items-center border-b border-zinc-100 px-1">
+                {([
+                  { key: 'timeline', label: 'Timeline', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+                  { key: 'description', label: 'Description', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+                  { key: 'emails', label: 'Emails', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+                  { key: 'notes', label: 'Notes', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+                ] as const).map(tab => (
+                  <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                    className={`flex items-center gap-1.5 px-4 py-3 text-[12px] font-medium border-b-2 transition-colors ${
+                      activeTab === tab.key
+                        ? 'border-zinc-900 text-zinc-900'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                    }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                    </svg>
+                    {tab.label}
+                    {tab.key === 'emails' && filterCounts.emails > 0 && <span className="text-[10px] text-zinc-300">{filterCounts.emails}</span>}
+                    {tab.key === 'notes' && filterCounts.comments > 0 && <span className="text-[10px] text-zinc-300">{filterCounts.comments}</span>}
+                  </button>
+                ))}
               </div>
 
-              {filteredTimeline.length === 0 ? (
-                <div className="py-16 text-center">
-                  <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  </div>
-                  <p className="text-sm text-zinc-400">No activity yet</p>
-                </div>
-              ) : (
-                <div className="relative space-y-0">
-                  <div className="absolute left-[15px] top-2 bottom-2 w-px bg-zinc-100" />
+              {/* Tab content */}
+              <div className="min-h-[300px]">
 
-                  {filteredTimeline.map((item, idx) => {
-                    const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-
-                    if (item.type === 'change') {
-                      const log = item.data as Activity
-                      const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
-                      const desc = log.action === 'ticket_created' ? `Ticket created`
-                        : log.action === 'ticket_status_change' ? `Status: ${details.old_status?.replace('_', ' ')} → ${details.new_status?.replace('_', ' ')}`
-                        : log.action === 'ticket_assigned' ? `Assigned to ${details.assigned_to}`
-                        : log.action === 'ticket_category_change' ? `Category → ${details.new_category}`
-                        : log.action === 'ticket_priority_change' ? `Priority → ${details.new_priority}`
-                        : 'Updated'
-
-                      return (
-                        <div key={`a-${idx}`} className="relative flex items-center gap-3 py-2 pl-0">
-                          <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center">
-                            <div className="w-2 h-2 rounded-full bg-zinc-300" />
+                {/* ── Timeline Tab ── */}
+                {activeTab === 'timeline' && (
+                  <div>
+                    {/* Resolution banner */}
+                    {ticket.status === 'closed' && (
+                      <div className="px-6 py-4 bg-emerald-50/50 border-b border-emerald-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            <span className="text-sm font-medium text-emerald-900">Resolved</span>
                           </div>
-                          <span className="text-xs text-zinc-400 flex-1">{desc}</span>
-                          <span className="text-[10px] text-zinc-300 flex-shrink-0 tabular-nums">{timeStr}</span>
+                          {!editResolution && <button onClick={() => setEditResolution(true)} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Edit</button>}
                         </div>
-                      )
-                    }
-
-                    const comment = item.data as Comment
-                    const isEmail = item.type === 'email'
-
-                    return (
-                      <div key={`c-${comment.id}`} className="relative flex gap-3 py-3 pl-0">
-                        <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center pt-1">
-                          <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                            isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'
-                          }`}>
-                            {getInitials(comment.author_name)}
+                        {editResolution ? (
+                          <div className="mt-3 space-y-2">
+                            <textarea value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)}
+                              className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white" rows={2} />
+                            <div className="flex gap-2">
+                              <button onClick={saveResolution} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-700">Save</button>
+                              <button onClick={() => setEditResolution(false)} className="text-xs text-zinc-500 px-3 py-1.5">Cancel</button>
+                            </div>
                           </div>
+                        ) : resolutionNotes ? (
+                          <p className="text-sm text-emerald-800/70 mt-1">{resolutionNotes}</p>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {allTimelineItems.length === 0 ? (
+                      <div className="py-20 text-center">
+                        <div className="w-10 h-10 rounded-full bg-zinc-50 flex items-center justify-center mx-auto mb-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
-                            {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
-                            {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Email</span>}
-                            <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
-                          </div>
-                          <div className={`rounded-lg p-4 ${
-                            isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-amber-50/40 border border-amber-100' : 'bg-zinc-50/50 border border-zinc-100'
-                          }`}>
-                            {comment.body.includes('Q:') && comment.body.includes('A:') ? (
-                              <div className="space-y-2">
-                                {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
-                                  const lines = block.split('\n')
-                                  const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
-                                  const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
-                                  return q ? (
-                                    <div key={bi}>
-                                      <p className="text-[11px] text-zinc-400">{q}</p>
-                                      <p className="text-[13px] text-zinc-700 mt-0.5">{a}</p>
-                                    </div>
-                                  ) : null
-                                })}
+                        <p className="text-sm text-zinc-400">No activity yet</p>
+                      </div>
+                    ) : (
+                      <div className="px-6 py-4">
+                        <div className="relative space-y-0">
+                          <div className="absolute left-[15px] top-2 bottom-2 w-px bg-zinc-100" />
+                          {allTimelineItems.map((item, idx) => {
+                            const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                            if (item.type === 'change') {
+                              const log = item.data as Activity
+                              const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
+                              const desc = log.action === 'ticket_created' ? `Ticket created`
+                                : log.action === 'ticket_status_change' ? `Status: ${details.old_status?.replace('_', ' ')} \u2192 ${details.new_status?.replace('_', ' ')}`
+                                : log.action === 'ticket_assigned' ? `Assigned to ${details.assigned_to}`
+                                : log.action === 'ticket_category_change' ? `Category \u2192 ${details.new_category}`
+                                : log.action === 'ticket_priority_change' ? `Priority \u2192 ${details.new_priority}`
+                                : 'Updated'
+                              return (
+                                <div key={`a-${idx}`} className="relative flex items-center gap-3 py-2">
+                                  <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center">
+                                    <div className="w-2 h-2 rounded-full bg-zinc-300" />
+                                  </div>
+                                  <span className="text-xs text-zinc-400 flex-1">{desc}</span>
+                                  <span className="text-[10px] text-zinc-300 flex-shrink-0 tabular-nums">{timeStr}</span>
+                                </div>
+                              )
+                            }
+                            const comment = item.data as Comment
+                            const isEmail = item.type === 'email'
+                            return (
+                              <div key={`c-${comment.id}`} className="relative flex gap-3 py-3">
+                                <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center pt-1">
+                                  <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-semibold ${
+                                    isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'
+                                  }`}>{getInitials(comment.author_name)}</div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                                    {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
+                                    {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Email</span>}
+                                    <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
+                                  </div>
+                                  <div className={`rounded-lg p-4 ${
+                                    isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-amber-50/40 border border-amber-100' : 'bg-zinc-50/50 border border-zinc-100'
+                                  }`}>
+                                    {isEmail ? (
+                                      <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
+                                    ) : (
+                                      <div className="max-w-prose"><CommentContent content={comment.body} /></div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            ) : isEmail ? (
-                              <div className="max-w-prose">
-                                <TicketContent content={comment.body} variant="email" />
-                              </div>
-                            ) : (
-                              <div className="max-w-prose">
-                                <CommentContent content={comment.body} />
-                              </div>
-                            )}
-                          </div>
+                            )
+                          })}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                    )}
 
-              {/* Comment composer */}
-              <div className="mt-6 pt-6 border-t border-zinc-100">
-                <form onSubmit={addComment}>
-                  {showCanned && cannedResponses.length > 0 && (
-                    <div className="mb-3 border border-zinc-200 rounded-lg bg-white divide-y divide-zinc-100 max-h-48 overflow-y-auto">
-                      {cannedResponses.map(cr => (
-                        <button key={cr.id} type="button"
-                          onClick={() => { setNewComment(cr.body); setIsInternal(false); setShowCanned(false) }}
-                          className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors">
-                          <p className="text-xs font-medium text-zinc-900">{cr.title}</p>
-                          <p className="text-xs text-zinc-400 truncate mt-0.5">{cr.body}</p>
-                        </button>
-                      ))}
+                    {/* Comment composer */}
+                    <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100">
+                      <form onSubmit={addComment}>
+                        {showCanned && cannedResponses.length > 0 && (
+                          <div className="mb-3 border border-zinc-200 rounded-lg bg-white divide-y divide-zinc-100 max-h-40 overflow-y-auto">
+                            {cannedResponses.map(cr => (
+                              <button key={cr.id} type="button"
+                                onClick={() => { setNewComment(cr.body); setIsInternal(false); setShowCanned(false) }}
+                                className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors">
+                                <p className="text-xs font-medium text-zinc-900">{cr.title}</p>
+                                <p className="text-xs text-zinc-400 truncate mt-0.5">{cr.body}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
+                          placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible comment...'}
+                          className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-amber-200 bg-amber-50/20 focus:ring-amber-400/20 placeholder:text-amber-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
+                          rows={2} />
+                        <div className="flex items-center justify-between gap-3 mt-2">
+                          <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
+                            <button type="button" onClick={() => setShowCanned(!showCanned)}
+                              className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${showCanned ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                              Quick Replies
+                            </button>
+                            <button type="button" onClick={() => setIsInternal(false)}
+                              className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                              Client
+                            </button>
+                            <button type="button" onClick={() => setIsInternal(true)}
+                              className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                              Internal
+                            </button>
+                          </div>
+                          <button type="submit" disabled={submitting || !newComment.trim()}
+                            className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
+                            {submitting ? 'Posting...' : 'Post'}
+                          </button>
+                        </div>
+                      </form>
                     </div>
-                  )}
-                  <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
-                    placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible comment...'}
-                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-amber-200 bg-amber-50/20 focus:ring-amber-400/20 placeholder:text-amber-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
-                    rows={3} />
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-3">
-                    <div className="inline-flex bg-zinc-100/80 rounded-lg p-0.5">
-                      <button type="button" onClick={() => setShowCanned(!showCanned)}
-                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${showCanned ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                        Quick Replies
-                      </button>
-                      <button type="button" onClick={() => setIsInternal(false)}
-                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                        Client-visible
-                      </button>
-                      <button type="button" onClick={() => setIsInternal(true)}
-                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                        Internal
-                      </button>
-                    </div>
-                    <button type="submit" disabled={submitting || !newComment.trim()}
-                      className="bg-zinc-900 text-white px-5 py-2 rounded-lg text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
-                      {submitting ? 'Posting...' : 'Post'}
-                    </button>
                   </div>
-                </form>
+                )}
+
+                {/* ── Description Tab ── */}
+                {activeTab === 'description' && (
+                  <div className="p-6">
+                    {ticket.description ? (
+                      <div className="max-w-prose">
+                        <TicketContent content={ticket.description} variant="description" />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-zinc-400 py-10 text-center">No description</p>
+                    )}
+
+                    {ticket.original_message && ticket.original_message !== ticket.description && (
+                      <div className="mt-6 pt-6 border-t border-zinc-100">
+                        <div className="flex items-center gap-2 mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                          <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Email</h3>
+                        </div>
+                        <div className="max-w-prose">
+                          <TicketContent content={ticket.original_message} variant="email" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Emails Tab ── */}
+                {activeTab === 'emails' && (
+                  <div className="p-6">
+                    {filterCounts.emails === 0 ? (
+                      <p className="text-sm text-zinc-400 py-10 text-center">No emails on this ticket</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {allTimelineItems.filter(i => i.type === 'email').map((item, idx) => {
+                          const comment = item.data as Comment
+                          const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                          return (
+                            <div key={idx} className="border border-blue-100 rounded-lg p-4 bg-blue-50/20">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">{getInitials(comment.author_name)}</div>
+                                <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                                <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
+                              </div>
+                              <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Notes Tab ── */}
+                {activeTab === 'notes' && (
+                  <div className="p-6">
+                    {filterCounts.comments === 0 ? (
+                      <p className="text-sm text-zinc-400 py-10 text-center">No notes yet</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {allTimelineItems.filter(i => i.type === 'comment').map((item, idx) => {
+                          const comment = item.data as Comment
+                          const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                          return (
+                            <div key={idx} className={`border rounded-lg p-4 ${comment.is_internal ? 'border-amber-100 bg-amber-50/20' : 'border-zinc-100 bg-zinc-50/30'}`}>
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'}`}>{getInitials(comment.author_name)}</div>
+                                <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                                {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                                <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
+                              </div>
+                              <div className="max-w-prose"><CommentContent content={comment.body} /></div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
