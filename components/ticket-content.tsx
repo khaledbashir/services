@@ -19,8 +19,11 @@ interface EmailBlock {
 function parseEmailContent(raw: string): EmailBlock[] {
   if (!raw) return []
 
+  // Strip "Email from name (email@domain.com):" prefix added by import script
+  let cleaned = raw.replace(/^Email from\s+[^:]+:\s*/i, '')
+
   const blocks: EmailBlock[] = []
-  const lines = raw.split('\n')
+  const lines = cleaned.split('\n')
 
   let currentBody: string[] = []
   let inReplyChain = false
