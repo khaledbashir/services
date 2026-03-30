@@ -504,28 +504,30 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     ) : (
                       <p className="text-sm text-zinc-400 py-10 text-center">No description</p>
                     )}
-
-                    {ticket.original_message && ticket.original_message !== ticket.description && (
-                      <div className="mt-6 pt-6 border-t border-zinc-100">
-                        <div className="flex items-center gap-2 mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                          <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Email</h3>
-                        </div>
-                        <div className="max-w-prose">
-                          <TicketContent content={ticket.original_message} variant="email" />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
                 {/* ── Emails Tab ── */}
                 {activeTab === 'emails' && (
                   <div className="p-6">
-                    {filterCounts.emails === 0 ? (
+                    {filterCounts.emails === 0 && !ticket.original_message ? (
                       <p className="text-sm text-zinc-400 py-10 text-center">No emails on this ticket</p>
                     ) : (
                       <div className="space-y-4">
+                        {/* Original email from ticket creation */}
+                        {ticket.original_message && (
+                          <div className="border border-blue-100 rounded-lg p-4 bg-blue-50/20">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                              </div>
+                              <span className="text-xs font-semibold text-zinc-900">Original Email</span>
+                              <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{ticket.created_date}</span>
+                            </div>
+                            <div className="max-w-prose"><TicketContent content={ticket.original_message} variant="email" /></div>
+                          </div>
+                        )}
+                        {/* Email comments from timeline */}
                         {allTimelineItems.filter(i => i.type === 'email').map((item, idx) => {
                           const comment = item.data as Comment
                           const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
