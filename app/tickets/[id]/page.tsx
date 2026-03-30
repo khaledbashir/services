@@ -356,31 +356,22 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           {/* ── RIGHT CONTENT ── */}
           <div className="flex-1 min-w-0 space-y-6">
 
-            {/* Description + AI Summary + Original Message */}
+            {/* Description + Original Message */}
             <div className="space-y-4">
               {ticket.description && (
                 <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
                   <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
-                  <p className="text-sm text-zinc-700 leading-relaxed max-w-prose">{ticket.description}</p>
+                  <p className="text-sm text-zinc-700 leading-relaxed max-w-prose">{cleanEmailText(ticket.description)}</p>
                 </div>
               )}
 
               {ticket.original_message && ticket.original_message !== ticket.description && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                      <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Message</h3>
-                    </div>
-                    <CollapsibleText text={cleanEmailText(ticket.original_message)} previewLength={250} />
+                <div className="bg-zinc-50/50 rounded-xl border border-zinc-200/60 p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Email</h3>
                   </div>
-                  <div className="bg-blue-50/30 rounded-xl border border-blue-100 p-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                      <h3 className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">AI Summary</h3>
-                    </div>
-                    <p className="text-[13px] text-blue-900/80 leading-relaxed">{ticket.description}</p>
-                  </div>
+                  <CollapsibleText text={cleanEmailText(ticket.original_message)} previewLength={300} />
                 </div>
               )}
             </div>
