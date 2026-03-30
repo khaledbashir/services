@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { TicketContent, CommentContent } from '@/components/ticket-content'
 import Link from 'next/link'
 
 interface TicketDetail {
@@ -39,35 +40,6 @@ const categoryLabels: Record<string, string> = {
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
-
-function cleanEmailText(text: string): string {
-  return text
-    .replace(/^(From|To|Sent|Subject|Date|CC|Cc|Bcc):.*$/gm, '')
-    .replace(/From:\s*[^]*?(?=Subject:|From:|$)/gi, '')
-    .replace(/Get Outlook for iOS.*$/gm, '')
-    .replace(/Sent from my.*$/gm, '')
-    .replace(/https?:\/\/[^\s<>"]+/g, '')
-    .replace(/<[^>]*@[^>]*>/g, '')
-    .replace(/[_-]{3,}/g, '')
-    .replace(/Please use this ticket for.*$/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim() || text.substring(0, 300)
-}
-
-function CollapsibleText({ text, previewLength = 200 }: { text: string; previewLength?: number }) {
-  const [expanded, setExpanded] = useState(false)
-  if (text.length <= previewLength) return <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-line">{text}</p>
-  return (
-    <div>
-      <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-line">
-        {expanded ? text : text.substring(0, previewLength) + '...'}
-      </p>
-      <button onClick={() => setExpanded(!expanded)} className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-2">
-        {expanded ? 'Show less' : 'Read more'}
-      </button>
-    </div>
-  )
-}
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -356,22 +328,26 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           {/* ── RIGHT CONTENT ── */}
           <div className="flex-1 min-w-0 space-y-6">
 
-            {/* Description + Original Message */}
+            {/* Description */}
             <div className="space-y-4">
               {ticket.description && (
                 <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
-                  <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
-                  <p className="text-sm text-zinc-700 leading-relaxed max-w-prose">{cleanEmailText(ticket.description)}</p>
+                  <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-4">Description</h3>
+                  <div className="max-w-prose">
+                    <TicketContent content={ticket.description} variant="description" />
+                  </div>
                 </div>
               )}
 
               {ticket.original_message && ticket.original_message !== ticket.description && (
                 <div className="bg-zinc-50/50 rounded-xl border border-zinc-200/60 p-6">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                     <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Email</h3>
                   </div>
-                  <CollapsibleText text={cleanEmailText(ticket.original_message)} previewLength={300} />
+                  <div className="max-w-prose">
+                    <TicketContent content={ticket.original_message} variant="email" />
+                  </div>
                 </div>
               )}
             </div>
@@ -492,8 +468,14 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                   ) : null
                                 })}
                               </div>
+                            ) : isEmail ? (
+                              <div className="max-w-prose">
+                                <TicketContent content={comment.body} variant="email" />
+                              </div>
                             ) : (
-                              <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+                              <div className="max-w-prose">
+                                <CommentContent content={comment.body} />
+                              </div>
                             )}
                           </div>
                         </div>
