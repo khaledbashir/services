@@ -423,18 +423,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               <div key={`c-${comment.id}`} className="relative flex gap-3 py-3">
                                 <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center pt-1">
                                   <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                                    isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'
+                                    isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'
                                   }`}>{getInitials(comment.author_name)}</div>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
-                                    {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
+                                    {comment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
                                     {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Email</span>}
                                     <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
                                   </div>
                                   <div className={`rounded-lg p-4 ${
-                                    isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-amber-50/40 border border-amber-100' : 'bg-zinc-50/50 border border-zinc-100'
+                                    isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-indigo-50/40 border border-indigo-100' : 'bg-zinc-50/50 border border-zinc-100'
                                   }`}>
                                     {isEmail ? (
                                       <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
@@ -467,7 +467,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         )}
                         <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
                           placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible comment...'}
-                          className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-amber-200 bg-amber-50/20 focus:ring-amber-400/20 placeholder:text-amber-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
+                          className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
                           rows={2} />
                         <div className="flex items-center justify-between gap-3 mt-2">
                           <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
@@ -549,28 +549,55 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
                 {/* ── Notes Tab ── */}
                 {activeTab === 'notes' && (
-                  <div className="p-6">
-                    {filterCounts.comments === 0 ? (
-                      <p className="text-sm text-zinc-400 py-10 text-center">No notes yet</p>
-                    ) : (
-                      <div className="space-y-4">
-                        {allTimelineItems.filter(i => i.type === 'comment').map((item, idx) => {
-                          const comment = item.data as Comment
-                          const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-                          return (
-                            <div key={idx} className={`border rounded-lg p-4 ${comment.is_internal ? 'border-amber-100 bg-amber-50/20' : 'border-zinc-100 bg-zinc-50/30'}`}>
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'}`}>{getInitials(comment.author_name)}</div>
-                                <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
-                                {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
-                                <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
+                  <div>
+                    <div className="p-6">
+                      {filterCounts.comments === 0 ? (
+                        <p className="text-sm text-zinc-400 py-10 text-center">No notes yet — add one below</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {allTimelineItems.filter(i => i.type === 'comment').map((item, idx) => {
+                            const comment = item.data as Comment
+                            const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                            return (
+                              <div key={idx} className={`border rounded-lg p-4 ${comment.is_internal ? 'border-indigo-100 bg-indigo-50/20' : 'border-zinc-100 bg-zinc-50/30'}`}>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${comment.is_internal ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'}`}>{getInitials(comment.author_name)}</div>
+                                  <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                                  {comment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                                  <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
+                                </div>
+                                <div className="max-w-prose"><CommentContent content={comment.body} /></div>
                               </div>
-                              <div className="max-w-prose"><CommentContent content={comment.body} /></div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Note composer */}
+                    <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100">
+                      <form onSubmit={addComment}>
+                        <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
+                          placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible note...'}
+                          className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
+                          rows={2} />
+                        <div className="flex items-center justify-between gap-3 mt-2">
+                          <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
+                            <button type="button" onClick={() => setIsInternal(false)}
+                              className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                              Client
+                            </button>
+                            <button type="button" onClick={() => setIsInternal(true)}
+                              className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                              Internal
+                            </button>
+                          </div>
+                          <button type="submit" disabled={submitting || !newComment.trim()}
+                            className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
+                            {submitting ? 'Posting...' : 'Add Note'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                 )}
               </div>
