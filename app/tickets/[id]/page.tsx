@@ -21,32 +21,53 @@ interface Comment { id: string; body: string; is_internal: boolean; author_name:
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
 interface Staff { id: string; full_name: string }
 
-const priorityConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
-  low: { dot: 'bg-zinc-400', bg: 'bg-zinc-50', text: 'text-zinc-600', label: 'Low' },
-  medium: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Medium' },
-  high: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700', label: 'High' },
-  critical: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Critical' },
+const priorityConfig: Record<string, { color: string; label: string }> = {
+  low: { color: 'text-zinc-500 bg-zinc-50 border-zinc-200', label: 'Low' },
+  medium: { color: 'text-amber-700 bg-amber-50 border-amber-200', label: 'Medium' },
+  high: { color: 'text-orange-700 bg-orange-50 border-orange-200', label: 'High' },
+  critical: { color: 'text-red-700 bg-red-50 border-red-200', label: 'Critical' },
 }
-const statusConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
-  new: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'New' },
-  on_hold: { dot: 'bg-violet-500', bg: 'bg-violet-50', text: 'text-violet-700', label: 'On Hold' },
-  in_progress: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'In Progress' },
-  escalated: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700', label: 'Escalated' },
-  closed: { dot: 'bg-zinc-400', bg: 'bg-zinc-100', text: 'text-zinc-500', label: 'Closed' },
-}
-const statusFlow = ['new', 'on_hold', 'in_progress', 'escalated', 'closed']
-const statusFlowColors: Record<string, string> = {
-  new: '#0A52EF', on_hold: '#7c3aed', in_progress: '#d97706', escalated: '#ea580c', closed: '#64748b',
-}
-const categoryConfig: Record<string, { bg: string; text: string }> = {
-  hardware: { bg: 'bg-red-50', text: 'text-red-600' },
-  software: { bg: 'bg-violet-50', text: 'text-violet-600' },
-  content: { bg: 'bg-amber-50', text: 'text-amber-600' },
-  operational: { bg: 'bg-blue-50', text: 'text-blue-600' },
-  general: { bg: 'bg-zinc-100', text: 'text-zinc-600' },
+const statusSteps = [
+  { key: 'new', label: 'New', color: '#3b82f6' },
+  { key: 'on_hold', label: 'On Hold', color: '#8b5cf6' },
+  { key: 'in_progress', label: 'In Progress', color: '#f59e0b' },
+  { key: 'escalated', label: 'Escalated', color: '#ef4444' },
+  { key: 'closed', label: 'Closed', color: '#6b7280' },
+]
+const categoryLabels: Record<string, string> = {
+  hardware: 'Hardware', software: 'Software', content: 'Content', operational: 'Operational', general: 'General',
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
+
+function cleanEmailText(text: string): string {
+  return text
+    .replace(/^(From|To|Sent|Subject|Date|CC|Cc|Bcc):.*$/gm, '')
+    .replace(/From:\s*[^]*?(?=Subject:|From:|$)/gi, '')
+    .replace(/Get Outlook for iOS.*$/gm, '')
+    .replace(/Sent from my.*$/gm, '')
+    .replace(/https?:\/\/[^\s<>"]+/g, '')
+    .replace(/<[^>]*@[^>]*>/g, '')
+    .replace(/[_-]{3,}/g, '')
+    .replace(/Please use this ticket for.*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim() || text.substring(0, 300)
+}
+
+function CollapsibleText({ text, previewLength = 200 }: { text: string; previewLength?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  if (text.length <= previewLength) return <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-line">{text}</p>
+  return (
+    <div>
+      <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-line">
+        {expanded ? text : text.substring(0, previewLength) + '...'}
+      </p>
+      <button onClick={() => setExpanded(!expanded)} className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-2">
+        {expanded ? 'Show less' : 'Read more'}
+      </button>
+    </div>
+  )
+}
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -113,20 +134,32 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     setEditResolution(false)
   }
 
-  const getInitials = (name: string | null | undefined) => { if (!name) return '?'; const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '?'
+    const p = name.split(' ')
+    return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase()
+  }
 
-  if (loading) return <DashboardLayout><div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-64 w-full" /></div></DashboardLayout>
-  if (!ticket) return <DashboardLayout><div className="bg-white rounded border border-[#E8E8E8] p-12 text-center"><p className="text-zinc-500">Ticket not found</p></div></DashboardLayout>
+  if (loading) return (
+    <DashboardLayout>
+      <div className="max-w-6xl mx-auto space-y-6 py-2">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-14 w-full" />
+        <div className="flex gap-8"><Skeleton className="h-96 w-80" /><Skeleton className="h-96 flex-1" /></div>
+      </div>
+    </DashboardLayout>
+  )
+  if (!ticket) return (
+    <DashboardLayout>
+      <div className="max-w-6xl mx-auto py-20 text-center">
+        <p className="text-zinc-400 text-sm">Ticket not found</p>
+      </div>
+    </DashboardLayout>
+  )
 
   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
-  const st = statusConfig[ticket.status] || statusConfig.new
-  const currentStepIdx = statusFlow.indexOf(ticket.status)
-  const cat = categoryConfig[ticket.category] || categoryConfig.general
-  const caseNum = String(ticket.ticket_number).padStart(8, '0')
-
-  // Build unified timeline — everything in one stream
-  const emailComments = comments.filter(c => c.author_name === 'ANC Bot' && !c.is_internal)
-  const regularComments = comments.filter(c => c.author_name !== 'ANC Bot' || c.is_internal)
+  const currentStepIdx = statusSteps.findIndex(s => s.key === ticket.status)
+  const caseNum = `T-${ticket.ticket_number}`
 
   const allTimelineItems: Array<{ type: 'comment' | 'email' | 'change'; data: any; time: Date }> = []
   comments.forEach(c => {
@@ -134,7 +167,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     allTimelineItems.push({ type: isEmail ? 'email' : 'comment', data: c, time: new Date(c.created_date) })
   })
   activity.forEach(a => allTimelineItems.push({ type: 'change', data: a, time: new Date(a.created_at) }))
-  allTimelineItems.sort((a, b) => a.time.getTime() - b.time.getTime()) // oldest first for timeline
+  allTimelineItems.sort((a, b) => a.time.getTime() - b.time.getTime())
 
   const filteredTimeline = timelineFilter === 'all' ? allTimelineItems
     : timelineFilter === 'comments' ? allTimelineItems.filter(i => i.type === 'comment')
@@ -143,257 +176,245 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   const filterCounts = {
     all: allTimelineItems.length,
-    comments: regularComments.length,
-    emails: emailComments.length,
+    comments: comments.filter(c => c.author_name !== 'ANC Bot' || c.is_internal).length,
+    emails: comments.filter(c => c.author_name === 'ANC Bot' && !c.is_internal).length,
     changes: activity.length,
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
-        {/* Top bar */}
-        <div className="space-y-2">
-          <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-            Back to Tickets
+      <div className="max-w-6xl mx-auto space-y-8 py-2">
+
+        {/* ── Header ── */}
+        <div className="space-y-4">
+          <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors flex items-center gap-1.5 group">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            Tickets
           </button>
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-[#002C73] text-white px-3 py-1 rounded text-xs font-bold tracking-wide flex-shrink-0">{caseNum}</div>
-            <h1 className="text-base lg:text-lg font-bold text-zinc-900 line-clamp-2">{ticket.title}</h1>
-          </div>
-        </div>
-
-        {/* Status Stepper */}
-        <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
-          <div className="flex">
-            {statusFlow.map((step, idx) => {
-              const isActive = step === ticket.status
-              const isPast = idx < currentStepIdx
-              const color = statusFlowColors[step]
-              const cfg = statusConfig[step]
-              return (
-                <button key={step} onClick={() => updateField('status', step)}
-                  className="flex-1 relative transition-all hover:brightness-95"
-                  title={`Set status to ${cfg?.label}`}>
-                  <div className="py-3 px-2 text-center text-xs font-bold tracking-wide transition-colors flex items-center justify-center gap-1.5"
-                    style={{
-                      backgroundColor: isActive ? color : isPast ? `${color}18` : '#f8fafc',
-                      color: isActive ? '#fff' : isPast ? color : '#cbd5e1',
-                      clipPath: idx === statusFlow.length - 1
-                        ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)'
-                        : idx === 0
-                        ? 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)'
-                        : 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)',
-                    }}>
-                    {isPast && <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                    {cfg?.label || step}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Two-column: Details left, Feed right — stacks on mobile */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* LEFT: Details sidebar */}
-          <div className="space-y-4 lg:sticky lg:top-4 self-start w-full lg:w-80 lg:min-w-[280px] lg:max-w-[340px] flex-shrink-0">
-            {/* Details Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
-              <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900">Details</h3>
+          <div className="flex items-start gap-4">
+            <span className="text-xs font-mono font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1.5 rounded-md mt-0.5 flex-shrink-0">{caseNum}</span>
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold text-zinc-900 leading-tight">{ticket.title}</h1>
+              <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
+                <span>Opened by <span className="text-zinc-600 font-medium">{ticket.created_by_name}</span></span>
+                <span>&middot;</span>
+                <span>{ticket.created_date}</span>
+                {ticket.venue_name && (
+                  <>
+                    <span>&middot;</span>
+                    <Link href={`/venues/${ticket.venue_id}`} className="text-blue-600 hover:text-blue-800 font-medium">{ticket.venue_name}</Link>
+                  </>
+                )}
               </div>
-              <div className="p-5 space-y-4 text-xs">
-                {/* Assignee */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Assignee</span>
-                    {ticket.assigned_to && <Link href={`/staff/${ticket.assigned_to}`} className="text-[10px] text-[#0A52EF] hover:underline">View Profile</Link>}
-                  </div>
-                  <select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
-                    className="w-full mt-1.5 border border-[#E8E8E8] rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-[#0A52EF]/30 outline-none text-zinc-700">
-                    <option value="">Unassigned</option>
-                    {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                  </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Status Steps ── */}
+        <div className="flex items-center gap-1">
+          {statusSteps.map((step, idx) => {
+            const isActive = step.key === ticket.status
+            const isPast = idx < currentStepIdx
+            return (
+              <button key={step.key} onClick={() => updateField('status', step.key)}
+                className="flex-1 group" title={`Set to ${step.label}`}>
+                <div className={`h-1.5 rounded-full transition-all ${isActive ? 'scale-y-150' : 'group-hover:scale-y-125'}`}
+                  style={{ backgroundColor: isActive ? step.color : isPast ? step.color + '60' : '#e4e4e7' }} />
+                <p className={`text-[10px] font-medium mt-1.5 text-center transition-colors ${isActive ? 'text-zinc-900' : isPast ? 'text-zinc-500' : 'text-zinc-300'}`}>
+                  {step.label}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Two Column Layout ── */}
+        <div className="flex flex-col lg:flex-row gap-8">
+
+          {/* ── LEFT SIDEBAR ── */}
+          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start">
+
+            {/* Details */}
+            <div className="space-y-5">
+              <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Details</h3>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 font-medium block mb-1.5">Assignee</label>
+                <select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
+                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none bg-white transition-colors">
+                  <option value="">Unassigned</option>
+                  {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 font-medium block mb-1.5">Priority</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {Object.entries(priorityConfig).map(([key, cfg]) => (
+                    <button key={key} onClick={() => updateField('priority', key)}
+                      className={`text-[11px] font-medium py-1.5 rounded-md transition-all text-center border ${ticket.priority === key ? cfg.color : 'text-zinc-400 bg-white border-zinc-200 hover:border-zinc-300'}`}>
+                      {cfg.label}
+                    </button>
+                  ))}
                 </div>
-                {/* Priority */}
-                <div>
-                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Priority</span>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-1 mt-1.5">
-                    {Object.entries(priorityConfig).map(([key, cfg]) => (
-                      <button key={key} onClick={() => updateField('priority', key)}
-                        className={`text-[11px] font-semibold py-2 rounded-md transition-all text-center border ${ticket.priority === key ? `${cfg.bg} ${cfg.text} border-current/20` : 'text-zinc-400 hover:bg-zinc-50 bg-white border-[#E8E8E8]'}`}>
-                        {cfg.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Category */}
-                <div>
-                  <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Category</span>
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {Object.entries(categoryConfig).map(([key, cfg]) => (
-                      <button key={key} onClick={() => updateField('category', key)}
-                        className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all capitalize border ${ticket.category === key ? `${cfg.bg} ${cfg.text} border-current/20` : 'text-zinc-400 bg-white border-[#E8E8E8] hover:border-zinc-300'}`}>
-                        {key}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Venue */}
-                <div className="border-t border-[#E8E8E8] pt-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-zinc-400">Venue</span>
-                    <Link href={`/venues/${ticket.venue_id}`} className="text-[#0A52EF] font-medium hover:underline">{ticket.venue_name}</Link>
-                  </div>
-                  {ticket.event_name && (
-                    <div className="flex justify-between mb-2">
-                      <span className="text-zinc-400">Event</span>
-                      <Link href={`/events/${ticket.event_id}`} className="text-[#0A52EF] font-medium hover:underline truncate ml-2">{ticket.event_name}</Link>
-                    </div>
-                  )}
-                  <div className="flex justify-between mb-2">
-                    <span className="text-zinc-400">Created by</span>
-                    <Link href={`/staff/${ticket.created_by}`} className="text-[#0A52EF] font-medium hover:underline">{ticket.created_by_name}</Link>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-zinc-400">Created</span>
-                    <span className="text-zinc-700">{ticket.created_date}</span>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-zinc-400">Updated</span>
-                    <span className="text-zinc-700">{ticket.updated_date}</span>
-                  </div>
-                  {ticket.resolved_date && (
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Closed</span>
-                      <span className="text-zinc-700">{ticket.resolved_date}</span>
-                    </div>
-                  )}
+              </div>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 font-medium block mb-1.5">Category</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(categoryLabels).map(([key, label]) => (
+                    <button key={key} onClick={() => updateField('category', key)}
+                      className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all border ${ticket.category === key ? 'text-zinc-900 bg-zinc-100 border-zinc-300' : 'text-zinc-400 bg-white border-zinc-200 hover:border-zinc-300'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
-            {/* SLA Card */}
+            {/* Metadata */}
+            <div className="space-y-3 pt-5 border-t border-zinc-100">
+              <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Info</h3>
+              {[
+                { label: 'Venue', value: ticket.venue_name, href: `/venues/${ticket.venue_id}` },
+                ticket.event_name ? { label: 'Event', value: ticket.event_name, href: `/events/${ticket.event_id}` } : null,
+                { label: 'Created by', value: ticket.created_by_name, href: `/staff/${ticket.created_by}` },
+                { label: 'Created', value: ticket.created_date },
+                { label: 'Updated', value: ticket.updated_date },
+                ticket.resolved_date ? { label: 'Closed', value: ticket.resolved_date } : null,
+              ].filter(Boolean).map((item: any, i) => (
+                <div key={i} className="flex justify-between items-center text-xs">
+                  <span className="text-zinc-400">{item.label}</span>
+                  {item.href ? (
+                    <Link href={item.href} className="text-blue-600 hover:text-blue-800 font-medium truncate ml-4">{item.value}</Link>
+                  ) : (
+                    <span className="text-zinc-600 truncate ml-4">{item.value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* SLA */}
             {(ticket.sla_response_due || ticket.sla_resolution_due) && (
-              <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
-                <div className="px-5 py-3 border-b border-[#E8E8E8]">
-                  <h3 className="text-sm font-bold text-zinc-900">SLA Compliance</h3>
-                </div>
-                <div className="p-5 space-y-4">
-                  {ticket.sla_response_due && (() => {
-                    const due = new Date(ticket.sla_response_due)
-                    const now = new Date()
-                    const met = ticket.sla_response_met
-                    const responded = !!ticket.first_response_at
-                    const breached = !responded && now > due
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-zinc-600">Response Time</span>
-                          {responded ? (
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${met ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{met ? 'Met' : 'Breached'}</span>
-                          ) : breached ? (
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 animate-pulse">Overdue</span>
-                          ) : (
-                            <span className="text-[11px] text-zinc-500">Due {due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-                          )}
-                        </div>
-                        {!responded && !breached && (
-                          <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mt-1">
-                            <div className="h-full bg-[#0A52EF] rounded-full transition-all" style={{ width: `${Math.max(5, Math.min(95, ((now.getTime() - (new Date(ticket.created_date).getTime())) / (due.getTime() - (new Date(ticket.created_date).getTime()))) * 100))}%` }} />
-                          </div>
+              <div className="space-y-4 pt-5 border-t border-zinc-100">
+                <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">SLA</h3>
+                {ticket.sla_response_due && (() => {
+                  const due = new Date(ticket.sla_response_due)
+                  const now = new Date()
+                  const responded = !!ticket.first_response_at
+                  const breached = !responded && now > due
+                  const met = ticket.sla_response_met
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-500">Response</span>
+                        {responded ? (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${met ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{met ? 'Met' : 'Breached'}</span>
+                        ) : breached ? (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Overdue</span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-400">{due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                         )}
                       </div>
-                    )
-                  })()}
-                  {ticket.sla_resolution_due && (() => {
-                    const due = new Date(ticket.sla_resolution_due)
-                    const now = new Date()
-                    const resolved = ticket.status === 'closed'
-                    const breached = !resolved && now > due
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-zinc-600">Resolution Time</span>
-                          {resolved ? (
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${ticket.sla_resolution_met ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{ticket.sla_resolution_met ? 'Met' : 'Breached'}</span>
-                          ) : breached ? (
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 animate-pulse">Overdue</span>
-                          ) : (
-                            <span className="text-[11px] text-zinc-500">Due {due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-                          )}
+                      {!responded && !breached && (
+                        <div className="h-1 bg-zinc-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.max(5, Math.min(95, ((now.getTime() - new Date(ticket.created_date).getTime()) / (due.getTime() - new Date(ticket.created_date).getTime())) * 100))}%` }} />
                         </div>
-                        {!resolved && !breached && (
-                          <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden mt-1">
-                            <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${Math.max(5, Math.min(95, ((now.getTime() - (new Date(ticket.created_date).getTime())) / (due.getTime() - (new Date(ticket.created_date).getTime()))) * 100))}%` }} />
-                          </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                {ticket.sla_resolution_due && (() => {
+                  const due = new Date(ticket.sla_resolution_due)
+                  const now = new Date()
+                  const resolved = ticket.status === 'closed'
+                  const breached = !resolved && now > due
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-500">Resolution</span>
+                        {resolved ? (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ticket.sla_resolution_met ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>{ticket.sla_resolution_met ? 'Met' : 'Breached'}</span>
+                        ) : breached ? (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Overdue</span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-400">{due.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                         )}
                       </div>
-                    )
-                  })()}
-                </div>
+                      {!resolved && !breached && (
+                        <div className="h-1 bg-zinc-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${Math.max(5, Math.min(95, ((now.getTime() - new Date(ticket.created_date).getTime()) / (due.getTime() - new Date(ticket.created_date).getTime())) * 100))}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
 
-          {/* RIGHT: Tabbed Feed (70%) */}
-          <div className="flex-1 min-w-0 space-y-5">
-            {/* Description */}
-            {ticket.description && (
-              <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Description</p>
-                  <span className="text-[11px] text-zinc-400">by {ticket.created_by_name} &middot; {ticket.created_date}</span>
-                  {ticket.event_name && <Link href={`/events/${ticket.event_id}`} className="text-[11px] text-[#0A52EF] hover:underline ml-auto">{ticket.event_name}</Link>}
+          {/* ── RIGHT CONTENT ── */}
+          <div className="flex-1 min-w-0 space-y-6">
+
+            {/* Description + AI Summary + Original Message */}
+            <div className="space-y-4">
+              {ticket.description && (
+                <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
+                  <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">Description</h3>
+                  <p className="text-sm text-zinc-700 leading-relaxed max-w-prose">{ticket.description}</p>
                 </div>
-                <p className="text-sm text-zinc-700 leading-relaxed">{ticket.description}</p>
-                {ticket.original_message && ticket.original_message !== ticket.description && (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Original Message</p>
-                      <p className="text-xs text-zinc-600 italic leading-relaxed">"{ticket.original_message}"</p>
+              )}
+
+              {ticket.original_message && ticket.original_message !== ticket.description && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-xl border border-zinc-200/80 p-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                      <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Original Message</h3>
                     </div>
-                    <div className="bg-blue-50/60 border border-blue-200 rounded-lg p-4">
-                      <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">AI Summary</p>
-                      <p className="text-xs text-blue-900 leading-relaxed">{ticket.description}</p>
-                    </div>
+                    <CollapsibleText text={cleanEmailText(ticket.original_message)} previewLength={250} />
                   </div>
-                )}
-              </div>
-            )}
+                  <div className="bg-blue-50/30 rounded-xl border border-blue-100 p-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                      <h3 className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">AI Summary</h3>
+                    </div>
+                    <p className="text-[13px] text-blue-900/80 leading-relaxed">{ticket.description}</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Resolution */}
             {ticket.status === 'closed' && (
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    Resolution
-                  </h3>
-                  {!editResolution && <button onClick={() => setEditResolution(true)} className="text-xs text-emerald-700 hover:underline font-medium">Edit</button>}
+              <div className="bg-emerald-50/50 rounded-xl border border-emerald-200/60 p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <h3 className="text-sm font-semibold text-emerald-900">Resolution</h3>
+                  </div>
+                  {!editResolution && <button onClick={() => setEditResolution(true)} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Edit</button>}
                 </div>
                 {editResolution ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <textarea value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)}
-                      className="w-full border border-emerald-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white" rows={3} />
+                      className="w-full border border-emerald-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white" rows={3} />
                     <div className="flex gap-2">
-                      <button onClick={saveResolution} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">Save</button>
-                      <button onClick={() => setEditResolution(false)} className="text-xs text-zinc-500 px-4 py-2">Cancel</button>
+                      <button onClick={saveResolution} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">Save</button>
+                      <button onClick={() => setEditResolution(false)} className="text-xs text-zinc-500 px-4 py-2 hover:text-zinc-700">Cancel</button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-emerald-800">{resolutionNotes || 'No resolution notes yet'}</p>
+                  <p className="text-sm text-emerald-800/80 leading-relaxed">{resolutionNotes || 'No resolution notes yet.'}</p>
                 )}
               </div>
             )}
 
-            {/* Unified Timeline */}
-            <div className="bg-white rounded-xl shadow-sm border border-[#E8E8E8] overflow-hidden">
-              {/* Header with filter chips */}
-              <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900">Timeline</h3>
-                <div className="flex items-center gap-1">
+            {/* ── Timeline ── */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-zinc-900">Timeline</h3>
+                <div className="flex items-center gap-0.5 bg-zinc-100/80 rounded-lg p-0.5">
                   {([
                     { key: 'all', label: 'All' },
                     { key: 'comments', label: 'Notes' },
@@ -401,120 +422,89 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     { key: 'changes', label: 'Changes' },
                   ] as const).map(f => (
                     <button key={f.key} onClick={() => setTimelineFilter(f.key)}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors ${timelineFilter === f.key ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}>
+                      className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${timelineFilter === f.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
                       {f.label}
-                      {filterCounts[f.key] > 0 && <span className="ml-1 opacity-70">{filterCounts[f.key]}</span>}
+                      {filterCounts[f.key] > 0 && <span className="ml-1 text-zinc-400">{filterCounts[f.key]}</span>}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Timeline stream */}
               {filteredTimeline.length === 0 ? (
-                <div className="px-6 py-16 text-center">
-                  <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div className="py-16 text-center">
+                  <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center mx-auto mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </div>
-                  <p className="text-sm text-zinc-500 font-medium">No activity yet</p>
-                  <p className="text-xs text-zinc-400 mt-1">Post a note or send a comment to get started.</p>
+                  <p className="text-sm text-zinc-400">No activity yet</p>
                 </div>
               ) : (
-                <div className="relative">
-                  {/* Vertical timeline line */}
-                  <div className="absolute left-[29px] top-0 bottom-0 w-px bg-zinc-200" />
+                <div className="relative space-y-0">
+                  <div className="absolute left-[15px] top-2 bottom-2 w-px bg-zinc-100" />
 
                   {filteredTimeline.map((item, idx) => {
                     const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-                    const isLast = idx === filteredTimeline.length - 1
 
                     if (item.type === 'change') {
-                      // System change — compact inline entry
                       const log = item.data as Activity
                       const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details
-                      const actionConfig: Record<string, { icon: string; color: string; dotColor: string }> = {
-                        ticket_created: { icon: '+', color: 'text-blue-600', dotColor: 'bg-blue-500' },
-                        ticket_status_change: { icon: '\u2192', color: 'text-amber-600', dotColor: 'bg-amber-500' },
-                        ticket_assigned: { icon: '\u2192', color: 'text-violet-600', dotColor: 'bg-violet-500' },
-                        ticket_category_change: { icon: '#', color: 'text-zinc-600', dotColor: 'bg-zinc-400' },
-                        ticket_priority_change: { icon: '!', color: 'text-orange-600', dotColor: 'bg-orange-500' },
-                        email_reply: { icon: '@', color: 'text-blue-600', dotColor: 'bg-blue-500' },
-                      }
-                      const cfg = actionConfig[log.action] || { icon: '\u00B7', color: 'text-zinc-500', dotColor: 'bg-zinc-400' }
-                      const desc = log.action === 'ticket_created' ? `Ticket created \u2014 ${details.venue_name || ''} \u2014 ${details.priority || ''} priority`
-                        : log.action === 'ticket_status_change' ? `Status changed from ${details.old_status?.replace('_', ' ')} to ${details.new_status?.replace('_', ' ')}`
+                      const desc = log.action === 'ticket_created' ? `Ticket created`
+                        : log.action === 'ticket_status_change' ? `Status: ${details.old_status?.replace('_', ' ')} → ${details.new_status?.replace('_', ' ')}`
                         : log.action === 'ticket_assigned' ? `Assigned to ${details.assigned_to}`
-                        : log.action === 'ticket_category_change' ? `Category changed to ${details.new_category}`
-                        : log.action === 'ticket_priority_change' ? `Priority changed to ${details.new_priority}`
+                        : log.action === 'ticket_category_change' ? `Category → ${details.new_category}`
+                        : log.action === 'ticket_priority_change' ? `Priority → ${details.new_priority}`
                         : 'Updated'
 
                       return (
-                        <div key={`a-${idx}`} className="relative flex items-center gap-3 px-5 py-2.5">
-                          {/* Timeline dot */}
-                          <div className="relative z-10 flex-shrink-0">
-                            <div className={`w-[18px] h-[18px] rounded-full border-2 border-white ${cfg.dotColor} flex items-center justify-center`}>
-                              <span className="text-[9px] font-bold text-white leading-none">{cfg.icon}</span>
-                            </div>
+                        <div key={`a-${idx}`} className="relative flex items-center gap-3 py-2 pl-0">
+                          <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center">
+                            <div className="w-2 h-2 rounded-full bg-zinc-300" />
                           </div>
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <span className={`text-xs font-medium ${cfg.color}`}>{desc}</span>
-                          </div>
-                          <span className="text-[10px] text-zinc-400 flex-shrink-0 tabular-nums">{timeStr}</span>
+                          <span className="text-xs text-zinc-400 flex-1">{desc}</span>
+                          <span className="text-[10px] text-zinc-300 flex-shrink-0 tabular-nums">{timeStr}</span>
                         </div>
                       )
                     }
 
-                    // Comment or email — full card entry
                     const comment = item.data as Comment
                     const isEmail = item.type === 'email'
-                    const dotColor = isEmail ? 'bg-blue-500' : comment.is_internal ? 'bg-amber-500' : 'bg-[#0A52EF]'
 
                     return (
-                      <div key={`c-${comment.id}`} className="relative px-5 py-3">
-                        {/* Timeline dot */}
-                        <div className="absolute left-5 top-5 z-10">
-                          <div className={`w-[18px] h-[18px] rounded-full border-2 border-white ${dotColor} flex items-center justify-center`}>
-                            {isEmail ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                            ) : comment.is_internal ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                            )}
+                      <div key={`c-${comment.id}`} className="relative flex gap-3 py-3 pl-0">
+                        <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center pt-1">
+                          <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-semibold ${
+                            isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-600'
+                          }`}>
+                            {getInitials(comment.author_name)}
                           </div>
                         </div>
-
-                        {/* Card */}
-                        <div className={`ml-8 rounded-lg border p-4 ${
-                          isEmail ? 'bg-blue-50/40 border-blue-200' : comment.is_internal ? 'bg-amber-50/40 border-amber-200' : 'bg-white border-[#E8E8E8]'
-                        }`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                              isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-amber-100 text-amber-700' : 'bg-[#0A52EF]/10 text-[#0A52EF]'
-                            }`}>
-                              {getInitials(comment.author_name)}
-                            </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
                             <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
-                            {comment.is_internal && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Internal</span>}
-                            {isEmail && <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Email</span>}
-                            <span className="text-[10px] text-zinc-400 ml-auto tabular-nums">{timeStr}</span>
+                            {comment.is_internal && <span className="text-[9px] font-semibold bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
+                            {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Email</span>}
+                            <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
                           </div>
-                          {comment.body.includes('Q:') && comment.body.includes('A:') ? (
-                            <div className="space-y-2">
-                              {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
-                                const lines = block.split('\n')
-                                const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
-                                const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
-                                return q ? (
-                                  <div key={bi} className="bg-white/60 rounded-lg p-2.5">
-                                    <p className="text-[11px] font-medium text-zinc-500">{q}</p>
-                                    <p className="text-xs text-zinc-900 mt-0.5 font-medium">{a}</p>
-                                  </div>
-                                ) : null
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
-                          )}
+                          <div className={`rounded-lg p-4 ${
+                            isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-amber-50/40 border border-amber-100' : 'bg-zinc-50/50 border border-zinc-100'
+                          }`}>
+                            {comment.body.includes('Q:') && comment.body.includes('A:') ? (
+                              <div className="space-y-2">
+                                {comment.body.split('\n\n').filter(Boolean).map((block: string, bi: number) => {
+                                  const lines = block.split('\n')
+                                  const q = lines.find((l: string) => l.startsWith('Q:'))?.replace('Q: ', '') || ''
+                                  const a = lines.find((l: string) => l.startsWith('A:'))?.replace('A: ', '') || ''
+                                  return q ? (
+                                    <div key={bi}>
+                                      <p className="text-[11px] text-zinc-400">{q}</p>
+                                      <p className="text-[13px] text-zinc-700 mt-0.5">{a}</p>
+                                    </div>
+                                  ) : null
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-[13px] text-zinc-600 leading-relaxed whitespace-pre-wrap">{comment.body}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )
@@ -523,42 +513,42 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               )}
 
               {/* Comment composer */}
-              <div className="px-5 py-4 bg-zinc-50/80 border-t border-[#E8E8E8]">
+              <div className="mt-6 pt-6 border-t border-zinc-100">
                 <form onSubmit={addComment}>
                   {showCanned && cannedResponses.length > 0 && (
-                    <div className="mb-3 border border-[#E8E8E8] rounded-lg bg-white divide-y divide-[#E8E8E8] max-h-48 overflow-y-auto shadow-sm">
+                    <div className="mb-3 border border-zinc-200 rounded-lg bg-white divide-y divide-zinc-100 max-h-48 overflow-y-auto">
                       {cannedResponses.map(cr => (
                         <button key={cr.id} type="button"
                           onClick={() => { setNewComment(cr.body); setIsInternal(false); setShowCanned(false) }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors">
-                          <p className="text-xs font-semibold text-zinc-900">{cr.title}</p>
-                          <p className="text-xs text-zinc-500 truncate mt-0.5">{cr.body}</p>
+                          className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors">
+                          <p className="text-xs font-medium text-zinc-900">{cr.title}</p>
+                          <p className="text-xs text-zinc-400 truncate mt-0.5">{cr.body}</p>
                         </button>
                       ))}
                     </div>
                   )}
                   <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
-                    placeholder={isInternal ? 'Add an internal note...' : 'Add a client-visible comment...'}
-                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none shadow-sm ${isInternal ? 'border-amber-300 bg-amber-50/30 focus:ring-amber-400/40' : 'border-[#E8E8E8] bg-white focus:ring-[#0A52EF]/30'}`}
+                    placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible comment...'}
+                    className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-amber-200 bg-amber-50/20 focus:ring-amber-400/20 placeholder:text-amber-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
                     rows={3} />
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-3">
-                    <div className="inline-flex bg-white border border-[#E8E8E8] rounded-lg overflow-hidden shadow-sm">
+                    <div className="inline-flex bg-zinc-100/80 rounded-lg p-0.5">
                       <button type="button" onClick={() => setShowCanned(!showCanned)}
-                        className={`text-xs font-medium px-3 py-2 transition-colors border-r border-[#E8E8E8] ${showCanned ? 'bg-violet-500 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${showCanned ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
                         Quick Replies
                       </button>
                       <button type="button" onClick={() => setIsInternal(false)}
-                        className={`text-xs font-medium px-3 py-2 transition-colors border-r border-[#E8E8E8] ${!isInternal ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
                         Client-visible
                       </button>
                       <button type="button" onClick={() => setIsInternal(true)}
-                        className={`text-xs font-medium px-3 py-2 transition-colors ${isInternal ? 'bg-amber-500 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
-                        Internal only
+                        className={`text-[11px] font-medium px-3 py-1.5 rounded-md transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+                        Internal
                       </button>
                     </div>
                     <button type="submit" disabled={submitting || !newComment.trim()}
-                      className="bg-[#0A52EF] text-white px-5 py-2 rounded-lg text-xs font-bold hover:bg-[#0840C0] disabled:opacity-40 transition-colors shadow-sm">
-                      {submitting ? 'Posting...' : 'Post Comment'}
+                      className="bg-zinc-900 text-white px-5 py-2 rounded-lg text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
+                      {submitting ? 'Posting...' : 'Post'}
                     </button>
                   </div>
                 </form>
