@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return CLAW_ID
     }
 
-    let imported = 0, skipped = 0, noVenue = 0, errors = 0
+    let imported = 0, skipped = 0, noVenue = 0, errors = 0, venuesCreated = 0
 
     for (const c of cases) {
       try {
@@ -82,7 +82,34 @@ export async function POST(request: NextRequest) {
         const contact = c.Contact || {}
         const owner = c.Owner || {}
 
-        const venueId = matchVenue(account.Name)
+        let venueId = matchVenue(account.Name)
+        if (!venueId && account.Name) {
+          // Auto-create venue
+          const nameLower = account.Name.toLowerCase()
+          let vtype = 'sports'
+          if (/university|college|school|academy|prep/i.test(nameLower)) vtype = 'facility'
+          else if (/media|outdoor|transit|station|airport|metro|mta|led|display|sign/i.test(nameLower)) vtype = 'ooh'
+
+          const newVenue = await query(
+            `INSERT INTO venues (name, venue_type, requires_assignment, portal_token)
+             VALUES ($1, $2, false, encode(gen_random_bytes(16), 'hex'))
+             ON CONFLICT DO NOTHING
+             RETURNING id`,
+            [account.Name, vtype]
+          )
+          if (newVenue.rows.length > 0) {
+            venueId = newVenue.rows[0].id
+            venueMap.set(account.Name.toLowerCase().trim(), venueId)
+            venuesCreated++
+          } else {
+            // Might have been created in a parallel request, try matching again
+            const retry = await query('SELECT id FROM venues WHERE name = $1', [account.Name])
+            if (retry.rows.length > 0) {
+              venueId = retry.rows[0].id
+              venueMap.set(account.Name.toLowerCase().trim(), venueId)
+            }
+          }
+        }
         if (!venueId) { noVenue++; skipped++; continue }
 
         const assignedTo = matchStaff(owner.Name)
@@ -104,7 +131,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ imported, skipped, noVenue, errors, total: cases.length })
+    return NextResponse.json({ imported, skipped, noVenue, errors, venuesCreated, total: cases.length })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
