@@ -22,6 +22,7 @@ interface TicketDetail {
   contact_name: string | null; contact_email: string | null; contact_phone: string | null
   parent_ticket_id: string | null; parent_ticket_number: number | null; parent_ticket_title: string | null
   sf_case_number: string | null
+  image_url: string | null
 }
 interface Comment { id: string; body: string; is_internal: boolean; author_name: string; created_date: string }
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
@@ -192,6 +193,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 <span>&middot;</span>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-medium">{(ticket.source || 'web').toUpperCase()}</span>
               </div>
+              {ticket.image_url && (
+                <div className="mt-2">
+                  <img src={ticket.image_url} alt="Issue" className="h-20 w-32 object-cover rounded-lg border border-zinc-200 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.open(ticket.image_url!, '_blank')} />
+                </div>
+              )}
             </div>
             {/* Action buttons — SF style */}
             <div className="flex items-center gap-2 flex-shrink-0">

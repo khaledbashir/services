@@ -64,6 +64,7 @@ export function formatTicketNotification(ticket: {
   venue_name: string
   description?: string
   status?: string
+  image_url?: string
 }, action: 'created' | 'updated' | 'resolved'): SlackMessage & { text: string; blocks: any[] } {
   const emoji = {
     created: ':ticket:',
@@ -106,6 +107,15 @@ export function formatTicketNotification(ticket: {
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: `> ${ticket.description.substring(0, 200)}${ticket.description.length > 200 ? '...' : ''}` },
+    })
+  }
+
+  if (ticket.image_url) {
+    const fullUrl = ticket.image_url.startsWith('http') ? ticket.image_url : `${DASHBOARD_URL}${ticket.image_url}`
+    blocks.push({
+      type: 'image',
+      image_url: fullUrl,
+      alt_text: ticket.title,
     })
   }
 

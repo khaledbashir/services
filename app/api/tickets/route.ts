@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const user = await getUserFromToken(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { venue_id, event_id, title, description, priority, assigned_to, category, resolution_notes, source, ticket_type, contact_name, contact_email, contact_phone, parent_ticket_id } = await request.json()
+    const { venue_id, event_id, title, description, priority, assigned_to, category, resolution_notes, source, ticket_type, contact_name, contact_email, contact_phone, parent_ticket_id, image } = await request.json()
     if (!venue_id || !title) {
       return NextResponse.json({ error: 'venue_id and title are required' }, { status: 400 })
     }
@@ -120,6 +120,23 @@ export async function POST(request: NextRequest) {
       [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue, source || 'web', ticket_type || 'support', contact_name || null, contact_email || null, contact_phone || null, parent_ticket_id || null]
     )
 
+    // Save image if provided (base64 data URL)
+    let imageUrl: string | null = null
+    if (image?.data) {
+      try {
+        const { writeFile, mkdir } = require('fs/promises')
+        const path = require('path')
+        const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
+        const ext = (image.mimeType || 'image/jpeg').split('/')[1] || 'jpg'
+        const filename = `${result.rows[0].id}-${Date.now()}.${ext}`
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'tickets')
+        await mkdir(uploadDir, { recursive: true })
+        await writeFile(path.join(uploadDir, filename), Buffer.from(raw, 'base64'))
+        imageUrl = `/uploads/tickets/${filename}`
+        await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [imageUrl, result.rows[0].id])
+      } catch (err) { console.error('Image save failed:', err) }
+    }
+
     // Get venue info for notification log
     const venueRes = await query('SELECT name FROM venues WHERE id = $1', [venue_id])
     const venueName = venueRes.rows[0]?.name || 'Unknown Venue'
@@ -154,6 +171,7 @@ export async function POST(request: NextRequest) {
         priority: ticket.priority,
         venue_name: venueName,
         description: description || undefined,
+        image_url: imageUrl || undefined,
       }, 'created')
       msg.channel = channelId
       sendSlackMessage(msg)

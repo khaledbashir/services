@@ -34,6 +34,7 @@ async function runMigrations() {
       recommendation TEXT,
       generated_at TIMESTAMP DEFAULT NOW()
     )`)
+    await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS image_url TEXT`)
     // Ticket fields to match Salesforce
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'web'`) // email, slack, web, phone, portal
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_type TEXT DEFAULT 'support'`) // support, dev_ticket

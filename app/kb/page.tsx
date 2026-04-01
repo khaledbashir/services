@@ -222,6 +222,7 @@ export default function KBPage() {
           priority: diagnosis.urgency === 'Critical' ? 'critical' : diagnosis.urgency === 'High' ? 'high' : diagnosis.urgency === 'Medium' ? 'medium' : 'low',
           category: diagnosis.issue_type.toLowerCase().includes('hardware') || diagnosis.issue_type.includes('Module') || diagnosis.issue_type.includes('Cable') || diagnosis.issue_type.includes('Power') ? 'hardware' : 'general',
           source: 'web',
+          image: inputImage ? { data: inputImage.data, mimeType: inputImage.mimeType } : undefined,
         }),
       })
       if (res.ok) {

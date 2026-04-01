@@ -42,7 +42,7 @@ export async function GET(
               COALESCE(t.source, 'web') as source,
               COALESCE(t.ticket_type, 'support') as ticket_type,
               t.contact_name, t.contact_email, t.contact_phone,
-              t.parent_ticket_id, t.sf_case_number,
+              t.parent_ticket_id, t.sf_case_number, t.image_url,
               pt.ticket_number as parent_ticket_number, pt.title as parent_ticket_title
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
