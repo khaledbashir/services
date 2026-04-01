@@ -58,7 +58,7 @@ export default function VenuesPage() {
 
   const filtered = venues.filter(v => {
     const q = search.toLowerCase()
-    const matchesSearch = !q || v.name.toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q)
+    const matchesSearch = !q || (v.name || '').toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q)
     const matchesType = typeFilter === 'all' || v.venue_type === typeFilter
     const matchesUnassigned = !showUnassignedOnly || (v.requires_assignment && Number(v.event_count) > 0 && Number(v.assigned_count) < Number(v.event_count))
     return matchesSearch && matchesType && matchesUnassigned
@@ -247,7 +247,7 @@ export default function VenuesPage() {
                             <img src={venue.logo_url} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
-                              <span className="text-white font-bold text-[10px]">{venue.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                              <span className="text-white font-bold text-[10px]">{(venue.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
                             </div>
                           )}
                         </div>
