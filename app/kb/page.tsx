@@ -204,7 +204,7 @@ export default function KBPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        router.push(`/tickets/${data.id}`)
+        router.push(`/tickets/${data.ticket?.id || data.id}`)
       }
     } catch {} finally { setCreatingTicket(false); setTicketVenue('') }
   }
