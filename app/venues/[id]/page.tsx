@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useState, FormEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { DropZone } from '@/components/drop-zone'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
 
@@ -780,24 +781,25 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   <div>
                     <label className="text-xs font-medium text-zinc-500 block mb-2">Logo</label>
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center overflow-hidden border border-[#E8E8E8]">
-                        {venue.logo_url ? (
-                          <img src={venue.logo_url} alt="Logo" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-zinc-400 text-xs">None</span>
-                        )}
-                      </div>
-                      <label className={`px-3 py-1.5 bg-white border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 cursor-pointer ${uploadingLogo ? 'opacity-50' : ''}`}>
-                        {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
-                        <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={async (e) => {
-                          const file = e.target.files?.[0]; if (!file) return
+                      <DropZone
+                        accept="image/*"
+                        disabled={uploadingLogo}
+                        onFile={async (file) => {
                           setUploadingLogo(true)
                           const fd = new FormData(); fd.append('file', file); fd.append('type', 'logo')
                           const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
                           if (res.ok) { const d = await res.json(); setVenue({ ...venue, logo_url: d.url }) }
-                          setUploadingLogo(false); e.target.value = ''
-                        }} />
-                      </label>
+                          setUploadingLogo(false)
+                        }}
+                        className="w-16 h-16 rounded-lg bg-zinc-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-zinc-200 hover:border-zinc-300"
+                        activeClassName="ring-2 ring-[#0A52EF] border-[#0A52EF] bg-blue-50"
+                      >
+                        {venue.logo_url ? (
+                          <img src={venue.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-zinc-300 text-[10px] text-center leading-tight">{uploadingLogo ? '...' : 'Drop\nlogo'}</span>
+                        )}
+                      </DropZone>
                       {venue.logo_url && (
                         <button onClick={async () => {
                           await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'logo' }) })
@@ -809,32 +811,31 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   {/* Cover */}
                   <div>
                     <label className="text-xs font-medium text-zinc-500 block mb-2">Cover Image</label>
-                    <div className="relative w-full h-20 rounded-lg bg-zinc-100 flex items-center justify-center overflow-hidden border border-[#E8E8E8]">
+                    <DropZone
+                      accept="image/*"
+                      disabled={uploadingCover}
+                      onFile={async (file) => {
+                        setUploadingCover(true)
+                        const fd = new FormData(); fd.append('file', file); fd.append('type', 'cover')
+                        const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
+                        if (res.ok) { const d = await res.json(); setVenue({ ...venue, cover_image_url: d.url }) }
+                        setUploadingCover(false)
+                      }}
+                      className="relative w-full h-24 rounded-lg bg-zinc-50 flex items-center justify-center overflow-hidden border-2 border-dashed border-zinc-200 hover:border-zinc-300"
+                      activeClassName="ring-2 ring-[#0A52EF] border-[#0A52EF] bg-blue-50"
+                    >
                       {venue.cover_image_url ? (
                         <img src={venue.cover_image_url} alt="Cover" className="w-full h-full object-cover" />
                       ) : (
-                        <span className="text-zinc-400 text-xs">No cover image</span>
+                        <span className="text-zinc-300 text-xs">{uploadingCover ? 'Uploading...' : 'Drop cover image here or click'}</span>
                       )}
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <label className={`px-3 py-1.5 bg-white border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 cursor-pointer ${uploadingCover ? 'opacity-50' : ''}`}>
-                        {uploadingCover ? 'Uploading...' : 'Upload Cover'}
-                        <input type="file" accept="image/*" className="hidden" disabled={uploadingCover} onChange={async (e) => {
-                          const file = e.target.files?.[0]; if (!file) return
-                          setUploadingCover(true)
-                          const fd = new FormData(); fd.append('file', file); fd.append('type', 'cover')
-                          const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
-                          if (res.ok) { const d = await res.json(); setVenue({ ...venue, cover_image_url: d.url }) }
-                          setUploadingCover(false); e.target.value = ''
-                        }} />
-                      </label>
-                      {venue.cover_image_url && (
-                        <button onClick={async () => {
-                          await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover' }) })
-                          setVenue({ ...venue, cover_image_url: null })
-                        }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                      )}
-                    </div>
+                    </DropZone>
+                    {venue.cover_image_url && (
+                      <button onClick={async () => {
+                        await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover' }) })
+                        setVenue({ ...venue, cover_image_url: null })
+                      }} className="text-xs text-red-500 hover:text-red-700 mt-1">Remove</button>
+                    )}
                   </div>
                 </div>
               </div>

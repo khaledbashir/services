@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
+import { useEffect, useState, FormEvent, ChangeEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { useAuth } from '@/lib/useAuth'
+import { DropZone } from '@/components/drop-zone'
 
 interface Staff {
   id: string
@@ -182,10 +183,7 @@ export default function StaffPage() {
     URL.revokeObjectURL(url)
   }
 
-  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const importFile = useCallback(async (file: File) => {
     setImporting(true)
     setImportResult(null)
     setImportPreview(null)
@@ -194,7 +192,6 @@ export default function StaffPage() {
       const fd = new FormData()
       fd.append('file', file)
 
-      // Preview first
       const res = await fetch('/api/staff/import?preview=true', {
         method: 'POST',
         body: fd,
@@ -211,8 +208,13 @@ export default function StaffPage() {
       showToast('Error reading file', 'error')
     } finally {
       setImporting(false)
-      e.target.value = ''
     }
+  }, [showToast])
+
+  const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) importFile(file)
+    e.target.value = ''
   }
 
   const commitImport = async () => {
@@ -434,16 +436,15 @@ export default function StaffPage() {
             >
               Download Template
             </button>
-            <label className={`px-4 py-2 bg-white text-zinc-700 border border-[#E8E8E8] rounded text-sm font-medium hover:border-zinc-300 transition-colors cursor-pointer ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
-              {importing ? 'Importing...' : 'Import'}
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleImport}
-                className="hidden"
-                disabled={importing}
-              />
-            </label>
+            <DropZone
+              onFile={importFile}
+              accept=".csv,.xlsx,.xls"
+              disabled={importing}
+              className="px-4 py-2 bg-white text-zinc-700 border border-[#E8E8E8] rounded text-sm font-medium hover:border-zinc-300 transition-colors border-dashed"
+              activeClassName="ring-2 ring-[#0A52EF] bg-blue-50 border-[#0A52EF]"
+            >
+              {importing ? 'Reading...' : 'Drop CSV or Click'}
+            </DropZone>
             <button
               onClick={() => setShowForm(!showForm)}
               className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
