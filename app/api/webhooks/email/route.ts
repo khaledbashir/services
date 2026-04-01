@@ -163,6 +163,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 5. No match — auto-create venue from domain
+    if (!venueId && senderDomain && !genericDomains.includes(senderDomain)) {
+      // Derive venue name from domain: "wmata.com" → "WMATA", "orlandomagic.com" → "Orlando Magic"
+      const domainBase = senderDomain.split('.')[0]
+      // Smart name: split camelCase and add spaces, uppercase abbreviations
+      let venueName_ = domainBase
+        .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase → spaces
+        .replace(/([A-Z]+)/g, (m) => m.length <= 4 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()) // Short = acronym, long = capitalize
+        .trim()
+      if (venueName_.length <= 5) venueName_ = venueName_.toUpperCase() // Short domains are usually acronyms
+
+      // Determine type from domain/subject
+      const context = `${senderDomain} ${subject}`.toLowerCase()
+      let vtype = 'sports'
+      if (/transit|metro|mta|rail|bus|transport|airport|station|dot\b/.test(context)) vtype = 'ooh'
+      else if (/university|college|school|edu/.test(context)) vtype = 'facility'
+      else if (/media|outdoor|billboard|sign|display|digital/.test(context)) vtype = 'ooh'
+
+      const newVenue = await query(
+        `INSERT INTO venues (name, venue_type, requires_assignment, portal_token, distribution_emails)
+         VALUES ($1, $2, false, encode(gen_random_bytes(16), 'hex'), ARRAY[$3::text])
+         RETURNING id, name`,
+        [venueName_, vtype, senderEmail.toLowerCase()]
+      )
+      if (newVenue.rows.length > 0) {
+        venueId = newVenue.rows[0].id
+        venueName = newVenue.rows[0].name
+        matchMethod = 'auto-created from domain'
+        console.log(`[email-webhook] Auto-created venue "${venueName_}" (${vtype}) from domain ${senderDomain}`)
+      }
+    }
+
     // Auto-learn: if we matched by domain or fuzzy, add sender to distribution list for faster future matches
     if (venueId && (matchMethod === 'domain match' || matchMethod === 'fuzzy domain match')) {
       await query(
