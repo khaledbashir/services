@@ -66,35 +66,50 @@ export async function POST(request: NextRequest) {
             if (jsonMatch) jsonStr = jsonMatch[0]
           }
 
-          if (!jsonStr) {
-            // Model returned plain text — construct a diagnosis from it
-            console.warn(`[kb-diagnose] ${model} returned non-JSON, constructing from text`)
-            return NextResponse.json({ ok: true, diagnosis: {
-              title: 'AI Analysis',
-              issue_type: 'Other',
-              description: text.substring(0, 500),
-              likely_cause: 'See description',
-              suggested_fix: 'Review the AI analysis above',
-              urgency: 'Medium',
-            }, model })
+          // Try to parse — if truncated, extract what we can
+          function extractDiagnosis(str: string) {
+            // Try direct parse first
+            try { return JSON.parse(str) } catch {}
+            // Try cleaning
+            try { return JSON.parse(str.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']')) } catch {}
+            // Try closing truncated JSON
+            let attempt = str
+            const openBraces = (attempt.match(/{/g) || []).length
+            const closeBraces = (attempt.match(/}/g) || []).length
+            if (openBraces > closeBraces) {
+              // Close any open string
+              if ((attempt.match(/"/g) || []).length % 2 !== 0) attempt += '"'
+              for (let i = 0; i < openBraces - closeBraces; i++) attempt += '}'
+              try { return JSON.parse(attempt) } catch {}
+            }
+            // Extract individual fields with regex
+            const title = str.match(/"title"\s*:\s*"([^"]*)"/)
+            const issue = str.match(/"issue_type"\s*:\s*"([^"]*)"/)
+            const desc = str.match(/"description"\s*:\s*"([^"]*)"/)
+            const cause = str.match(/"likely_cause"\s*:\s*"([^"]*)"/)
+            const fix = str.match(/"suggested_fix"\s*:\s*"([^"]*)"/)
+            const urg = str.match(/"urgency"\s*:\s*"([^"]*)"/)
+            if (title) {
+              return {
+                title: title[1],
+                issue_type: issue?.[1] || 'Other',
+                description: desc?.[1] || '',
+                likely_cause: cause?.[1] || 'See description',
+                suggested_fix: fix?.[1] || 'Refer to the diagnosis description',
+                urgency: urg?.[1] || 'Medium',
+              }
+            }
+            return null
           }
 
-          try {
-            const diagnosis = JSON.parse(jsonStr)
-            console.log(`[kb-diagnose] Success with ${model}: ${diagnosis.title}`)
-            return NextResponse.json({ ok: true, diagnosis, model })
-          } catch (parseErr) {
-            console.warn(`[kb-diagnose] ${model} JSON parse failed, trying cleanup`)
-            // Try cleaning common issues: trailing commas, single quotes
-            const cleaned = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']')
-            try {
-              const diagnosis = JSON.parse(cleaned)
-              return NextResponse.json({ ok: true, diagnosis, model })
-            } catch {
-              lastError = `JSON parse failed: ${jsonStr.substring(0, 200)}`
-              console.warn(`[kb-diagnose] ${model} parse failed completely, trying next...`)
-            }
+          const parsed = extractDiagnosis(jsonStr || text)
+          if (parsed) {
+            console.log(`[kb-diagnose] Success with ${model}: ${parsed.title}`)
+            return NextResponse.json({ ok: true, diagnosis: parsed, model })
           }
+
+          lastError = `Could not parse: ${(jsonStr || text).substring(0, 200)}`
+          console.warn(`[kb-diagnose] ${model} parse failed, trying next...`)
         }
 
         lastError = await res.text()
