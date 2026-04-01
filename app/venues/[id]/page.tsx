@@ -285,89 +285,84 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         {/* Back */}
         <button onClick={() => router.push('/venues')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">← Back to Venues</button>
 
-        {/* Header with Cover + Branding */}
+        {/* Header */}
         <div className="bg-white rounded-lg border border-[#E8E8E8] shadow-sm overflow-hidden">
-          {/* Cover Image */}
-          <div className="relative h-36 bg-gradient-to-br from-[#0A1628] via-[#0A52EF]/80 to-[#0A1628] overflow-hidden">
-            {venue.cover_image_url && (
-              <img src={venue.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-            {/* Stats overlay on cover */}
-            <div className="absolute bottom-3 right-4 flex gap-4">
+          {/* Cover — only show if uploaded */}
+          {venue.cover_image_url && (
+            <div className="relative h-32 overflow-hidden">
+              <img src={venue.cover_image_url} alt="" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+            </div>
+          )}
+
+          {/* Venue Info */}
+          <div className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4">
+                {/* Logo */}
+                <div className="w-14 h-14 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 border border-zinc-200 shadow-sm">
+                  {venue.logo_url ? (
+                    <img src={venue.logo_url} alt={venue.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
+                      <span className="text-white font-bold text-base">{venue.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Name + meta */}
+                <div>
+                  <h1 className="text-lg font-bold text-zinc-900">{venue.name}</h1>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-zinc-500">{venue.market_name}</span>
+                    {venue.address && <><span className="text-zinc-300">•</span><span className="text-xs text-zinc-400">{venue.address}</span></>}
+                  </div>
+                  {/* Tags row */}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${venue.requires_assignment ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-zinc-50 text-zinc-500 border-zinc-200'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
+                      {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
+                    </span>
+                    {enabledServices.length > 0 && enabledServices.map(svc => (
+                      <span key={svc.service_type_id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {svc.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Stats */}
+              <div className="flex gap-5 flex-shrink-0">
+                {[
+                  { val: upcomingEvents.length, label: 'Upcoming' },
+                  { val: assignedStaff.length, label: 'Staff' },
+                  { val: upcomingEvents.filter(e => e.assigned_techs).length, label: 'Assigned' },
+                ].map(s => (
+                  <div key={s.label} className="text-center">
+                    <p className="text-2xl font-bold text-zinc-900">{s.val}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* People row */}
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-zinc-100">
               {[
-                { val: upcomingEvents.length, label: 'Upcoming' },
-                { val: assignedStaff.length, label: 'Staff' },
-                { val: upcomingEvents.filter(e => e.assigned_techs).length, label: 'Assigned' },
-              ].map(s => (
-                <div key={s.label} className="text-center">
-                  <p className="text-xl font-bold text-white drop-shadow-sm">{s.val}</p>
-                  <p className="text-[10px] text-white/70 uppercase tracking-wider">{s.label}</p>
+                { label: 'Venue Manager', name: venue.venue_manager_name, color: 'amber' },
+                { label: 'Lead Field Rep', name: venue.lead_field_rep_name, color: 'indigo' },
+              ].map(role => (
+                <div key={role.label} className="flex items-center gap-2">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    role.name ? `bg-${role.color}-100 text-${role.color}-700` : 'bg-zinc-100 text-zinc-400'
+                  }`}>
+                    {role.name ? role.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2) : '?'}
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-400 leading-none">{role.label}</p>
+                    <p className={`text-xs font-medium leading-tight ${role.name ? 'text-zinc-800' : 'text-zinc-300'}`}>{role.name || 'Unassigned'}</p>
+                  </div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Venue Info Card */}
-          <div className="px-6 pb-4 -mt-8 relative z-10">
-            <div className="flex items-end gap-4">
-              {/* Logo */}
-              <div className="w-16 h-16 rounded-xl bg-white border-2 border-white shadow-md flex items-center justify-center overflow-hidden flex-shrink-0">
-                {venue.logo_url ? (
-                  <img src={venue.logo_url} alt={venue.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">{venue.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
-                  </div>
-                )}
-              </div>
-              {/* Name + meta */}
-              <div className="flex-1 min-w-0 pb-1">
-                <h1 className="text-xl font-bold text-zinc-900 truncate">{venue.name}</h1>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-xs text-zinc-500">{venue.market_name}</span>
-                  {venue.address && <><span className="text-zinc-300 text-xs">•</span><span className="text-xs text-zinc-400 truncate">{venue.address}</span></>}
-                </div>
-              </div>
-            </div>
-
-            {/* Info Row: status + roles + services */}
-            <div className="mt-3 flex items-center gap-3 flex-wrap">
-              <div className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${venue.requires_assignment ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-zinc-100 text-zinc-500 border border-zinc-200'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
-                {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
-              </div>
-              {/* Manager */}
-              <div className="flex items-center gap-1.5">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${venue.venue_manager_name ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                  {venue.venue_manager_name ? venue.venue_manager_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2) : '?'}
-                </div>
-                <span className="text-[11px] text-zinc-400">Mgr:</span>
-                <span className={`text-[11px] font-medium ${venue.venue_manager_name ? 'text-zinc-700' : 'text-zinc-300 italic'}`}>
-                  {venue.venue_manager_name || 'Unassigned'}
-                </span>
-              </div>
-              {/* Lead Rep */}
-              <div className="flex items-center gap-1.5">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${venue.lead_field_rep_name ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                  {venue.lead_field_rep_name ? venue.lead_field_rep_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2) : '?'}
-                </div>
-                <span className="text-[11px] text-zinc-400">Lead:</span>
-                <span className={`text-[11px] font-medium ${venue.lead_field_rep_name ? 'text-zinc-700' : 'text-zinc-300 italic'}`}>
-                  {venue.lead_field_rep_name || 'Unassigned'}
-                </span>
-              </div>
-            </div>
-
-            {/* Services pills */}
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {enabledServices.length > 0 ? enabledServices.map(svc => (
-                <span key={svc.service_type_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {svc.name}
-                </span>
-              )) : (
-                <span className="text-[10px] text-zinc-300 italic">No contracted services</span>
-              )}
             </div>
           </div>
 
