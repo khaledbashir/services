@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
           const existing = await query('SELECT id FROM venues WHERE LOWER(name) = LOWER($1)', [account.Name])
           if (existing.rows.length > 0) {
             venueId = existing.rows[0].id
-            venueMap.set(account.Name.toLowerCase().trim(), venueId)
+            venueMap.set(account.Name.toLowerCase().trim(), venueId as string)
           } else {
             const newVenue = await query(
               `INSERT INTO venues (name, venue_type, requires_assignment, portal_token)
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
               [account.Name, vtype]
             )
             venueId = newVenue.rows[0].id
-            venueMap.set(account.Name.toLowerCase().trim(), venueId)
+            venueMap.set(account.Name.toLowerCase().trim(), venueId as string)
             venuesCreated++
           }
         }
