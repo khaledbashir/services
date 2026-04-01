@@ -49,12 +49,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'calendar' | 'list'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('events-view') as 'calendar' | 'list') || 'calendar'
-    }
-    return 'calendar'
-  })
+  const [view, setView] = useState<'calendar' | 'list'>('calendar')
   const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all'>('week')
   const [search, setSearch] = useState('')
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
@@ -92,6 +87,17 @@ export default function EventsPage() {
       end.setFullYear(end.getFullYear() + 1)
     }
     return [start, end]
+  }
+
+  useEffect(() => {
+    fetch('/api/preferences?key=events-view').then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.value === 'calendar' || data?.value === 'list') setView(data.value)
+    }).catch(() => {})
+  }, [])
+
+  const saveViewPreference = (v: 'calendar' | 'list') => {
+    setView(v)
+    fetch('/api/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'events-view', value: v }) }).catch(() => {})
   }
 
   useEffect(() => {
@@ -422,13 +428,13 @@ export default function EventsPage() {
             </div>
             <div className="bg-zinc-100 rounded p-1 flex gap-1">
               <button
-                onClick={() => { setView('calendar'); localStorage.setItem('events-view', 'calendar') }}
+                onClick={() => saveViewPreference('calendar')}
                 className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'calendar' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
               >
                 Calendar
               </button>
               <button
-                onClick={() => { setView('list'); localStorage.setItem('events-view', 'list') }}
+                onClick={() => saveViewPreference('list')}
                 className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
               >
                 List

@@ -26,6 +26,13 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(staff_id, venue_id)
     )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id UUID NOT NULL REFERENCES staff(id),
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY(user_id, key)
+    )`)
     await client.query(`ALTER TABLE event_assignments ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
     await client.query(`CREATE TABLE IF NOT EXISTS kb_entries (
