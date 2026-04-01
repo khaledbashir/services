@@ -281,31 +281,37 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 <span className="text-sm text-zinc-500">{venue.market_name}</span>
                 {venue.address && <><span className="text-zinc-300">•</span><span className="text-sm text-zinc-500">{venue.address}</span></>}
               </div>
-              <div className="flex items-center gap-4 mt-3">
+              <div className="flex items-center gap-3 mt-3">
                 <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded ${venue.requires_assignment ? 'bg-blue-50 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
                   {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
                 </div>
-                {enabledServices.length > 0 && (
-                  <span className="text-xs text-zinc-400">{enabledServices.length} active service{enabledServices.length !== 1 ? 's' : ''}</span>
+                <span className="text-zinc-200">|</span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-zinc-400">Venue Manager:</span>
+                  {venue.venue_manager_name
+                    ? <span className="font-medium text-zinc-700">{venue.venue_manager_name}</span>
+                    : <span className="text-zinc-300 italic">Not assigned</span>}
+                </div>
+                <span className="text-zinc-200">|</span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-zinc-400">Lead Field Rep:</span>
+                  {venue.lead_field_rep_name
+                    ? <span className="font-medium text-zinc-700">{venue.lead_field_rep_name}</span>
+                    : <span className="text-zinc-300 italic">Not assigned</span>}
+                </div>
+              </div>
+              {/* Contracted Services */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {enabledServices.length > 0 ? enabledServices.map(svc => (
+                  <span key={svc.service_type_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
+                    {svc.name}
+                  </span>
+                )) : (
+                  <span className="text-xs text-zinc-300 italic">No contracted services configured</span>
                 )}
               </div>
-              {(venue.venue_manager_name || venue.lead_field_rep_name) && (
-                <div className="flex items-center gap-4 mt-2">
-                  {venue.venue_manager_name && (
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <span className="text-zinc-400">Manager:</span>
-                      <span className="font-medium text-zinc-700">{venue.venue_manager_name}</span>
-                    </div>
-                  )}
-                  {venue.lead_field_rep_name && (
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <span className="text-zinc-400">Lead Field Rep:</span>
-                      <span className="font-medium text-zinc-700">{venue.lead_field_rep_name}</span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             {/* Quick stats */}
             <div className="flex gap-6 text-center">

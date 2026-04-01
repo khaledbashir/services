@@ -44,7 +44,9 @@ export default function StaffPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null)
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: number; updated?: number } | null>(null)
+  const [importPreview, setImportPreview] = useState<{ rows: any[]; summary: any; file: File } | null>(null)
+  const [committing, setCommitting] = useState(false)
   const [uploadingImage, setUploadingImage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
@@ -164,9 +166,13 @@ export default function StaffPage() {
   }
 
   const downloadTemplate = () => {
-    const headers = ['Full Name', 'Email', 'Phone', 'Role']
-    const example = ['John Doe', 'john@example.com', '(555) 123-4567', 'technician']
-    const csv = [headers.join(','), example.join(',')].join('\n')
+    const headers = ['Venue', 'Full Name', 'Email', 'Phone', 'Role']
+    const examples = [
+      ['Amerant Bank Arena', 'Nick Delia', 'nick@anc.com', '(555) 123-4567', 'Technician'],
+      ['Amerant Bank Arena', 'Chris D', 'chris@anc.com', '(555) 234-5678', 'Manager'],
+      ['TD Garden', 'John Smith', 'john@anc.com', '(555) 345-6789', 'Lead Field Rep'],
+    ]
+    const csv = [headers.join(','), ...examples.map(r => r.join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -182,20 +188,51 @@ export default function StaffPage() {
 
     setImporting(true)
     setImportResult(null)
+    setImportPreview(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
+      const fd = new FormData()
+      fd.append('file', file)
 
-      const res = await fetch('/api/staff/import', {
+      // Preview first
+      const res = await fetch('/api/staff/import?preview=true', {
         method: 'POST',
-        body: formData,
+        body: fd,
       })
 
       if (res.ok) {
         const data = await res.json()
-        setImportResult({ imported: data.imported, skipped: data.skipped, errors: data.errors })
-        showToast(`Imported ${data.imported} staff members`, 'success')
+        setImportPreview({ rows: data.rows, summary: data.summary, file })
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Import failed', 'error')
+      }
+    } catch {
+      showToast('Error reading file', 'error')
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
+  }
+
+  const commitImport = async () => {
+    if (!importPreview?.file) return
+    setCommitting(true)
+
+    try {
+      const fd = new FormData()
+      fd.append('file', importPreview.file)
+
+      const res = await fetch('/api/staff/import', {
+        method: 'POST',
+        body: fd,
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setImportResult({ imported: data.imported, updated: data.updated, skipped: data.skipped, errors: data.errors })
+        setImportPreview(null)
+        showToast(`Imported ${data.imported} new, updated ${data.updated} existing`, 'success')
 
         const staffRes = await fetch('/api/staff')
         if (staffRes.ok) {
@@ -207,10 +244,9 @@ export default function StaffPage() {
         showToast(data.error || 'Import failed', 'error')
       }
     } catch {
-      showToast('Error importing file', 'error')
+      showToast('Error importing', 'error')
     } finally {
-      setImporting(false)
-      e.target.value = ''
+      setCommitting(false)
     }
   }
 
@@ -417,10 +453,87 @@ export default function StaffPage() {
           </div>
         </div>
 
+        {/* Import Preview */}
+        {importPreview && (
+          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#E8E8E8] flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900">Import Preview</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {importPreview.summary.total} rows: <span className="text-emerald-600 font-medium">{importPreview.summary.new} new</span>, <span className="text-blue-600 font-medium">{importPreview.summary.existing} existing</span>, <span className="text-red-600 font-medium">{importPreview.summary.errors} errors</span>
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setImportPreview(null)} className="px-3 py-1.5 text-sm text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300">Cancel</button>
+                <button
+                  onClick={commitImport}
+                  disabled={committing || importPreview.summary.new + importPreview.summary.existing === 0}
+                  className="px-4 py-1.5 text-sm bg-[#0A52EF] text-white rounded font-medium hover:bg-[#0840C0] disabled:opacity-50"
+                >
+                  {committing ? 'Importing...' : `Import ${importPreview.summary.new + importPreview.summary.existing} Staff`}
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Row</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Status</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Venue</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Name</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Email</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Role</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-zinc-500">Venue Role</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.rows.map((row: any, idx: number) => (
+                    <tr key={idx} className={`border-t border-[#E8E8E8] ${row.status === 'error' ? 'bg-red-50' : ''}`}>
+                      <td className="px-4 py-2 text-xs text-zinc-400 font-mono">{row.row}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                          row.status === 'new' ? 'bg-emerald-50 text-emerald-700' :
+                          row.status === 'exists' ? 'bg-blue-50 text-blue-700' :
+                          'bg-red-50 text-red-700'
+                        }`}>
+                          {row.status === 'new' ? 'New' : row.status === 'exists' ? 'Exists' : 'Error'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {row.venue_matched ? (
+                          <span className="text-zinc-900">{row.venue_matched}</span>
+                        ) : row.venue ? (
+                          <span className="text-red-500">{row.venue} (not found)</span>
+                        ) : (
+                          <span className="text-zinc-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-xs font-medium text-zinc-900">{row.name || <span className="text-red-500">Missing</span>}</td>
+                      <td className="px-4 py-2 text-xs text-zinc-600">{row.email || '—'}</td>
+                      <td className="px-4 py-2 text-xs text-zinc-600 capitalize">{row.role}</td>
+                      <td className="px-4 py-2 text-xs">
+                        {row.is_manager && <span className="text-amber-600 font-medium">Venue Manager</span>}
+                        {row.is_lead_rep && <span className="text-indigo-600 font-medium">Lead Field Rep</span>}
+                        {!row.is_manager && !row.is_lead_rep && <span className="text-zinc-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {importPreview.rows.some((r: any) => r.status === 'error') && (
+              <div className="px-6 py-3 border-t border-[#E8E8E8] bg-red-50">
+                <p className="text-xs text-red-700">Rows with errors will be skipped during import.</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {importResult && (
           <div className="bg-blue-50 border border-blue-200 rounded p-4 flex items-center justify-between">
             <div className="text-sm text-blue-900">
-              Import complete: <span className="font-semibold">{importResult.imported}</span> imported, <span className="font-semibold">{importResult.skipped}</span> skipped, <span className="font-semibold">{importResult.errors}</span> errors
+              Import complete: <span className="font-semibold">{importResult.imported}</span> created, <span className="font-semibold">{importResult.updated || 0}</span> updated, <span className="font-semibold">{importResult.errors}</span> errors
             </div>
             <button onClick={() => setImportResult(null)} className="text-blue-500 hover:text-blue-700 text-sm font-medium">Dismiss</button>
           </div>
