@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuth } from '@/lib/useAuth'
+import { useToast } from '@/components/toast'
 
 interface ShiftTemplate {
   id: string
@@ -58,6 +59,7 @@ function formatTime(t: string) {
 
 export default function ShiftTemplatesPage() {
   const auth = useAuth('manager')
+  const { showToast } = useToast()
   const [templates, setTemplates] = useState<ShiftTemplate[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
   const [staffList, setStaffList] = useState<StaffMember[]>([])
@@ -168,7 +170,7 @@ export default function ShiftTemplatesPage() {
         const data = await res.json()
         setGenerating(null)
         setPreview(null)
-        alert(`Created ${data.created} shifts${data.skipped ? `, ${data.skipped} already existed` : ''}`)
+        showToast(`Created ${data.created} shifts${data.skipped ? `, ${data.skipped} already existed` : ''}`, 'success')
       }
     } catch {} finally { setCommitting(false) }
   }
