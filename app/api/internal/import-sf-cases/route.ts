@@ -90,24 +90,21 @@ export async function POST(request: NextRequest) {
           if (/university|college|school|academy|prep/i.test(nameLower)) vtype = 'facility'
           else if (/media|outdoor|transit|station|airport|metro|mta|led|display|sign/i.test(nameLower)) vtype = 'ooh'
 
-          const newVenue = await query(
-            `INSERT INTO venues (name, venue_type, requires_assignment, portal_token)
-             VALUES ($1, $2, false, encode(gen_random_bytes(16), 'hex'))
-             ON CONFLICT DO NOTHING
-             RETURNING id`,
-            [account.Name, vtype]
-          )
-          if (newVenue.rows.length > 0) {
+          // Check if already exists first
+          const existing = await query('SELECT id FROM venues WHERE LOWER(name) = LOWER($1)', [account.Name])
+          if (existing.rows.length > 0) {
+            venueId = existing.rows[0].id
+            venueMap.set(account.Name.toLowerCase().trim(), venueId)
+          } else {
+            const newVenue = await query(
+              `INSERT INTO venues (name, venue_type, requires_assignment, portal_token)
+               VALUES ($1, $2, false, encode(gen_random_bytes(16), 'hex'))
+               RETURNING id`,
+              [account.Name, vtype]
+            )
             venueId = newVenue.rows[0].id
             venueMap.set(account.Name.toLowerCase().trim(), venueId)
             venuesCreated++
-          } else {
-            // Might have been created in a parallel request, try matching again
-            const retry = await query('SELECT id FROM venues WHERE name = $1', [account.Name])
-            if (retry.rows.length > 0) {
-              venueId = retry.rows[0].id
-              venueMap.set(account.Name.toLowerCase().trim(), venueId)
-            }
           }
         }
         if (!venueId) { noVenue++; skipped++; continue }
