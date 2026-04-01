@@ -44,7 +44,7 @@ const categoryLabels: Record<string, string> = {
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
-type ContentTab = 'timeline' | 'description' | 'emails' | 'notes'
+type ContentTab = 'timeline' | 'details' | 'description' | 'emails' | 'notes'
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -467,8 +467,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               {/* Tab bar */}
               <div className="flex items-center border-b border-zinc-100 px-1">
                 {([
-                  { key: 'timeline', label: 'Timeline', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-                  { key: 'description', label: 'Description', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+                  { key: 'timeline', label: 'Feed', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+                  { key: 'details', label: 'Details', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
                   { key: 'emails', label: 'Emails', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
                   { key: 'notes', label: 'Notes', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
                 ] as const).map(tab => (
@@ -628,16 +628,88 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   </div>
                 )}
 
-                {/* ── Description Tab ── */}
-                {activeTab === 'description' && (
+                {/* ── Details Tab (SF-style two-column field grid) ── */}
+                {activeTab === 'details' && (
                   <div className="p-6">
-                    {ticket.description ? (
-                      <div className="max-w-prose">
-                        <TicketContent content={ticket.description} variant="description" />
+                    {/* Case Information */}
+                    <div className="mb-6">
+                      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span className="w-4 h-px bg-zinc-200"></span>Case Information
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                        {[
+                          ['Case Number', caseNum],
+                          ['Case Owner', ticket.assigned_to_name || 'Unassigned'],
+                          ['Case Type', (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())],
+                          ['Case Origin', (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())],
+                          ['Account Name', ticket.venue_name],
+                          ['Category', (ticket.category || 'general').replace(/\b\w/g, (c: string) => c.toUpperCase())],
+                          ['Contact Name', ticket.contact_name || '—'],
+                          ['Parent Case', ticket.parent_ticket_number ? `T-${String(ticket.parent_ticket_number).padStart(5, '0')}` : '—'],
+                          ['Contact Phone', ticket.contact_phone || '—'],
+                          ['Contact Email', ticket.contact_email || '—'],
+                          ...(ticket.sf_case_number ? [['SF Case #', ticket.sf_case_number]] : []),
+                        ].map(([label, value], i) => (
+                          <div key={i} className="flex flex-col">
+                            <span className="text-[11px] text-zinc-400">{label}</span>
+                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{value}</span>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <p className="text-sm text-zinc-400 py-10 text-center">No description</p>
-                    )}
+                    </div>
+
+                    {/* Subject + Description */}
+                    <div className="mb-6">
+                      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span className="w-4 h-px bg-zinc-200"></span>Description Information
+                      </h3>
+                      <div className="space-y-3">
+                        <div>
+                          <span className="text-[11px] text-zinc-400 block">Subject</span>
+                          <span className="text-sm text-zinc-800 font-medium">{ticket.title}</span>
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-zinc-400 block mb-1">Description</span>
+                          {ticket.description ? (
+                            <div className="text-sm text-zinc-700 bg-zinc-50 rounded-lg p-4 border border-zinc-100">
+                              <TicketContent content={ticket.description} variant="description" />
+                            </div>
+                          ) : (
+                            <span className="text-sm text-zinc-300 italic">No description</span>
+                          )}
+                        </div>
+                        {ticket.resolution_notes && (
+                          <div>
+                            <span className="text-[11px] text-zinc-400 block mb-1">Resolution Notes</span>
+                            <div className="text-sm text-zinc-700 bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                              {ticket.resolution_notes}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Additional Information */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span className="w-4 h-px bg-zinc-200"></span>Additional Information
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                        {[
+                          ['Status', ticket.status.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())],
+                          ['Priority', ticket.priority.replace(/\b\w/g, (c: string) => c.toUpperCase())],
+                          ['Date/Time Opened', ticket.created_date],
+                          ['Date/Time Closed', ticket.resolved_date || '—'],
+                          ['Last Modified', ticket.updated_date],
+                          ['Created By', ticket.created_by_name],
+                        ].map(([label, value], i) => (
+                          <div key={i} className="flex flex-col">
+                            <span className="text-[11px] text-zinc-400">{label}</span>
+                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
