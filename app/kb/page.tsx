@@ -56,6 +56,11 @@ export default function KBPage() {
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [browseFilter, setBrowseFilter] = useState('')
 
+  // Venues for ticket creation
+  const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([])
+  const [ticketVenue, setTicketVenue] = useState('')
+  const [showVenuePicker, setShowVenuePicker] = useState(false)
+
   // Manual add accordion
   const [showManualAdd, setShowManualAdd] = useState(false)
   const [addForm, setAddForm] = useState({ title: '', description: '', issue_type: '', suggested_fix: '' })
@@ -67,8 +72,11 @@ export default function KBPage() {
   // Trending counts
   const [trending, setTrending] = useState<Array<{ type: string; count: number }>>([])
 
-  // Load entries + trending on mount
+  // Load entries + trending + venues on mount
   useEffect(() => {
+    fetch('/api/venues').then(r => r.json()).then(d => {
+      setVenues((d.venues || []).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')))
+    }).catch(() => {})
     fetch('/api/kb').then(r => r.json()).then(d => {
       const ents = d.entries || []
       setEntries(ents)
@@ -178,12 +186,15 @@ export default function KBPage() {
 
   const handleCreateTicket = async () => {
     if (!diagnosis) return
+    if (!ticketVenue) { setShowVenuePicker(true); return }
     setCreatingTicket(true)
+    setShowVenuePicker(false)
     try {
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          venue_id: ticketVenue,
           title: diagnosis.title,
           description: `${diagnosis.description}\n\nLikely Cause: ${diagnosis.likely_cause}\n\nSuggested Fix: ${diagnosis.suggested_fix}`,
           priority: diagnosis.urgency === 'Critical' ? 'critical' : diagnosis.urgency === 'High' ? 'high' : diagnosis.urgency === 'Medium' ? 'medium' : 'low',
@@ -195,7 +206,7 @@ export default function KBPage() {
         const data = await res.json()
         router.push(`/tickets/${data.id}`)
       }
-    } catch {} finally { setCreatingTicket(false) }
+    } catch {} finally { setCreatingTicket(false); setTicketVenue('') }
   }
 
   const handleManualAdd = async () => {
@@ -386,13 +397,39 @@ export default function KBPage() {
                 >
                   {saved ? '✓ Saved to KB' : 'Save to KB'}
                 </button>
-                <button
-                  onClick={handleCreateTicket}
-                  disabled={creatingTicket}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0A52EF] text-white hover:bg-[#0840C0] transition-colors flex items-center gap-1.5"
-                >
-                  {creatingTicket ? 'Creating...' : '+ Create Ticket'}
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={handleCreateTicket}
+                    disabled={creatingTicket}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#0A52EF] text-white hover:bg-[#0840C0] transition-colors flex items-center gap-1.5"
+                  >
+                    {creatingTicket ? 'Creating...' : '+ Create Ticket'}
+                  </button>
+                  {showVenuePicker && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowVenuePicker(false)} />
+                      <div className="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-xl shadow-xl border border-zinc-200 p-3 z-50">
+                        <p className="text-[11px] font-semibold text-zinc-500 mb-2">Select venue for this ticket</p>
+                        <select
+                          value={ticketVenue}
+                          onChange={e => setTicketVenue(e.target.value)}
+                          className="w-full border border-zinc-200 rounded-lg px-2.5 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/20"
+                          autoFocus
+                        >
+                          <option value="">Choose venue...</option>
+                          {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                        <button
+                          onClick={handleCreateTicket}
+                          disabled={!ticketVenue}
+                          className="w-full px-3 py-1.5 bg-[#0A52EF] text-white text-xs font-medium rounded-lg hover:bg-[#0840C0] disabled:opacity-40 transition-colors"
+                        >
+                          Create Ticket
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
