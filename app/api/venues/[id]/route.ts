@@ -116,6 +116,13 @@ export async function PATCH(
     const venueId = params.id
     const body = await request.json()
 
+    // Direct field updates
+    for (const field of ['name', 'address', 'primary_contact_name', 'primary_contact_email']) {
+      if (body[field] !== undefined) {
+        await query(`UPDATE venues SET ${field} = $1 WHERE id = $2`, [body[field], venueId])
+      }
+    }
+
     // Handle service toggle
     if (body.service_type_id !== undefined) {
       if (body.enabled) {

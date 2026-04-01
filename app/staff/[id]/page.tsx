@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { useAuth } from '@/lib/useAuth'
+import { InlineEdit } from '@/components/inline-edit'
 
 interface StaffDetail {
   id: string
@@ -101,6 +102,19 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
   const router = useRouter()
   const { showToast } = useToast()
   const auth = useAuth()
+
+  const updateStaffField = async (field: string, value: any) => {
+    try {
+      const res = await fetch(`/api/staff/${params.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.staff) setStaff(data.staff)
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -466,40 +480,46 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
             {/* Info */}
             <div className="flex-1">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-semibold text-zinc-900">{staff.full_name}</h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${rc.bg} ${rc.text}`}>{staff.role}</span>
+                <h1 className="text-2xl font-semibold text-zinc-900">
+                  <InlineEdit value={staff.full_name} onSave={v => updateStaffField('full_name', v)} displayClassName="text-2xl font-semibold text-zinc-900" />
+                </h1>
+                <InlineEdit
+                  value={staff.role}
+                  type="select"
+                  options={[{ value: 'technician', label: 'Technician' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }]}
+                  onSave={v => updateStaffField('role', v)}
+                  displayClassName={`px-2.5 py-0.5 rounded-full text-xs font-medium ${rc.bg} ${rc.text}`}
+                />
                 <div className={`flex items-center gap-1.5 ${staff.is_active ? 'text-emerald-600' : 'text-zinc-400'}`}>
                   <div className={`w-2 h-2 rounded-full ${staff.is_active ? 'bg-emerald-500' : 'bg-zinc-300'}`}></div>
-                  <span className="text-xs">{staff.is_active ? 'Active' : 'Inactive'}</span>
+                  <span className="text-xs cursor-pointer hover:underline" onClick={() => updateStaffField('is_active', !staff.is_active)}>
+                    {staff.is_active ? 'Active' : 'Inactive'}
+                  </span>
                 </div>
               </div>
-              {staff.title && <p className="text-zinc-500 mt-1">{staff.title}</p>}
+              <div className="mt-1">
+                <InlineEdit value={staff.title || ''} onSave={v => updateStaffField('title', v)} placeholder="Add title..." emptyText="No title" displayClassName="text-zinc-500" />
+              </div>
               <div className="flex gap-6 mt-3 text-sm text-zinc-600">
-                {staff.email && (
-                  <div className="flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    {staff.email}
-                  </div>
-                )}
-                {staff.phone && (
-                  <div className="flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    {staff.phone}
-                  </div>
-                )}
-                {staff.city && (
-                  <div className="flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    {staff.city}
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <InlineEdit value={staff.email || ''} onSave={v => updateStaffField('email', v)} placeholder="Add email" emptyText="No email" displayClassName="text-sm text-zinc-600" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  <InlineEdit value={staff.phone || ''} onSave={v => updateStaffField('phone', v)} placeholder="Add phone" emptyText="No phone" displayClassName="text-sm text-zinc-600" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <InlineEdit value={staff.city || ''} onSave={v => updateStaffField('city', v)} placeholder="Add city" emptyText="No city" displayClassName="text-sm text-zinc-600" />
+                </div>
               </div>
             </div>
 

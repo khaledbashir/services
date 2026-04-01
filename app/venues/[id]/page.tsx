@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DropZone } from '@/components/drop-zone'
+import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
 
@@ -219,6 +220,16 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     } catch {}
   }
 
+  const updateVenueField = async (field: string, value: any) => {
+    try {
+      const res = await fetch(`/api/venues/${params.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (res.ok) { const data = await res.json(); setVenue(data.venue) }
+    } catch {}
+  }
+
   const updateVenueType = async (venueType: string) => {
     try {
       const res = await fetch(`/api/venues/${params.id}`, {
@@ -311,10 +322,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 </div>
                 {/* Name + meta */}
                 <div>
-                  <h1 className="text-lg font-bold text-zinc-900">{venue.name}</h1>
+                  <h1 className="text-lg font-bold text-zinc-900">
+                    <InlineEdit value={venue.name} onSave={v => updateVenueField('name', v)} displayClassName="text-lg font-bold text-zinc-900" />
+                  </h1>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-zinc-500">{venue.market_name}</span>
-                    {venue.address && <><span className="text-zinc-300">•</span><span className="text-xs text-zinc-400">{venue.address}</span></>}
+                    <span className="text-zinc-300">•</span>
+                    <InlineEdit value={venue.address || ''} onSave={v => updateVenueField('address', v)} placeholder="Add address" emptyText="No address" displayClassName="text-xs text-zinc-400" />
                   </div>
                   {/* Tags row */}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
