@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 
@@ -45,12 +45,20 @@ interface StaffOption {
   full_name: string
 }
 
-export default function EventsPage() {
+export default function EventsPageWrapper() {
+  return <Suspense><EventsPageInner /></Suspense>
+}
+
+function EventsPageInner() {
   const [events, setEvents] = useState<Event[]>([])
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
-  const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all'>('week')
+  const searchParams = useSearchParams()
+  const initialFilter = (['today', 'week', 'month', 'all', 'pending_workflow'] as const).includes(searchParams.get('filter') as any)
+    ? (searchParams.get('filter') as 'today' | 'week' | 'month' | 'all' | 'pending_workflow')
+    : 'week'
+  const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all' | 'pending_workflow'>(initialFilter)
   const [search, setSearch] = useState('')
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
@@ -441,7 +449,7 @@ export default function EventsPage() {
               </button>
             </div>
             <div className="flex gap-2">
-              {(['today', 'week', 'month', 'all'] as const).map((f) => (
+              {(['today', 'week', 'month', 'all', 'pending_workflow'] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -453,6 +461,7 @@ export default function EventsPage() {
                   {f === 'week' && 'Week'}
                   {f === 'month' && 'Month'}
                   {f === 'all' && 'All'}
+                  {f === 'pending_workflow' && 'Pending Workflow'}
                 </button>
               ))}
             </div>

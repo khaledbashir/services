@@ -19,6 +19,10 @@ interface VenueDetail {
   portal_token: string | null
   venue_type: string
   distribution_emails: string[]
+  venue_manager_id: string | null
+  lead_field_rep_id: string | null
+  venue_manager_name: string | null
+  lead_field_rep_name: string | null
 }
 
 interface VenueService {
@@ -286,6 +290,22 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   <span className="text-xs text-zinc-400">{enabledServices.length} active service{enabledServices.length !== 1 ? 's' : ''}</span>
                 )}
               </div>
+              {(venue.venue_manager_name || venue.lead_field_rep_name) && (
+                <div className="flex items-center gap-4 mt-2">
+                  {venue.venue_manager_name && (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-zinc-400">Manager:</span>
+                      <span className="font-medium text-zinc-700">{venue.venue_manager_name}</span>
+                    </div>
+                  )}
+                  {venue.lead_field_rep_name && (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-zinc-400">Lead Field Rep:</span>
+                      <span className="font-medium text-zinc-700">{venue.lead_field_rep_name}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             {/* Quick stats */}
             <div className="flex gap-6 text-center">
@@ -761,6 +781,52 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Venue Roles */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Venue Roles</h3>
+                <p className="text-xs text-zinc-500 mb-4">Assign key personnel for this venue</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-1">Venue Manager</label>
+                    <select
+                      value={venue.venue_manager_id || ''}
+                      onChange={async (e) => {
+                        const val = e.target.value || null
+                        await fetch(`/api/venues/${params.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ venue_manager_id: val }),
+                        })
+                        const res = await fetch(`/api/venues/${params.id}`)
+                        if (res.ok) { const d = await res.json(); setVenue(d.venue) }
+                      }}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    >
+                      <option value="">Not assigned</option>
+                      {allStaff.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-1">Lead Field Representative</label>
+                    <select
+                      value={venue.lead_field_rep_id || ''}
+                      onChange={async (e) => {
+                        const val = e.target.value || null
+                        await fetch(`/api/venues/${params.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ lead_field_rep_id: val }),
+                        })
+                        const res = await fetch(`/api/venues/${params.id}`)
+                        if (res.ok) { const d = await res.json(); setVenue(d.venue) }
+                      }}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    >
+                      <option value="">Not assigned</option>
+                      {allStaff.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Contact Info */}

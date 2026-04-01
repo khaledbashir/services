@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
-import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
       const monthStr = monthFromNow.toISOString().split('T')[0]
       whereClause = 'WHERE e.event_date >= $1 AND e.event_date <= $2'
       params.push(todayStr, monthStr)
+    } else if (filter === 'pending_workflow') {
+      whereClause = "WHERE (e.workflow_status IS NULL OR e.workflow_status = 'pending') AND e.event_date >= $1"
+      params.push(todayStr)
     }
 
     const vf = buildVenueFilterClause(venueIds, 'e.venue_id', params.length + 1)
@@ -44,7 +47,17 @@ export async function GET(request: NextRequest) {
       venueFilter = ''
     }
 
-    const limitIndex = params.length + vf.params.length + 1
+    // Technicians only see events they are personally assigned to
+    const af = user
+      ? buildAssignmentFilterClause(user.role, user.userId, 'e.id', params.length + vf.params.length + 1)
+      : { clause: '', params: [], nextIdx: params.length + vf.params.length + 1 }
+    let assignmentFilter = af.clause
+    if (!whereClause && assignmentFilter) {
+      whereClause = 'WHERE ' + assignmentFilter.replace(/^AND /, '')
+      assignmentFilter = ''
+    }
+
+    const limitIndex = params.length + vf.params.length + af.params.length + 1
     const result = await query(
       `SELECT
         e.id,
@@ -59,11 +72,11 @@ export async function GET(request: NextRequest) {
       LEFT JOIN venues v ON e.venue_id = v.id
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
-      ${whereClause} ${venueFilter}
+      ${whereClause} ${venueFilter} ${assignmentFilter}
       GROUP BY e.id, v.name
       ORDER BY e.start_time ASC
       LIMIT $${limitIndex}`,
-      [...params, ...vf.params, parseInt(limit)]
+      [...params, ...vf.params, ...af.params, parseInt(limit)]
     )
 
     return NextResponse.json({ events: result.rows })

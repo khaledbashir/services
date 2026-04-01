@@ -26,6 +26,8 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(staff_id, venue_id)
     )`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_manager_id UUID REFERENCES staff(id)`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS lead_field_rep_id UUID REFERENCES staff(id)`)
     await client.query(`CREATE TABLE IF NOT EXISTS user_preferences (
       user_id UUID NOT NULL REFERENCES staff(id),
       key TEXT NOT NULL,

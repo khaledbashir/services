@@ -173,7 +173,7 @@ export default function DashboardPage() {
           <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" />
           <StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" />
           <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" />
-          <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=today" />
+          <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=pending_workflow" />
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all">
             <div className="flex items-start justify-between">
               <div>

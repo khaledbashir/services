@@ -24,9 +24,15 @@ export async function GET(
         v.requires_assignment,
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
-        COALESCE(v.distribution_emails, '{}') as distribution_emails
+        COALESCE(v.distribution_emails, '{}') as distribution_emails,
+        v.venue_manager_id,
+        v.lead_field_rep_id,
+        sm.full_name as venue_manager_name,
+        sl.full_name as lead_field_rep_name
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
+      LEFT JOIN staff sm ON v.venue_manager_id = sm.id
+      LEFT JOIN staff sl ON v.lead_field_rep_id = sl.id
       WHERE v.id = $1`,
       [venueId]
     )
@@ -163,6 +169,22 @@ export async function PATCH(
       )
     }
 
+    // Handle venue_manager_id
+    if (body.venue_manager_id !== undefined) {
+      await query(
+        `UPDATE venues SET venue_manager_id = $1 WHERE id = $2`,
+        [body.venue_manager_id, venueId]
+      )
+    }
+
+    // Handle lead_field_rep_id
+    if (body.lead_field_rep_id !== undefined) {
+      await query(
+        `UPDATE venues SET lead_field_rep_id = $1 WHERE id = $2`,
+        [body.lead_field_rep_id, venueId]
+      )
+    }
+
     // Fetch full venue data
     const fullVenue = await query(
       `SELECT
@@ -177,9 +199,15 @@ export async function PATCH(
         v.requires_assignment,
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
-        COALESCE(v.distribution_emails, '{}') as distribution_emails
+        COALESCE(v.distribution_emails, '{}') as distribution_emails,
+        v.venue_manager_id,
+        v.lead_field_rep_id,
+        sm.full_name as venue_manager_name,
+        sl.full_name as lead_field_rep_name
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
+      LEFT JOIN staff sm ON v.venue_manager_id = sm.id
+      LEFT JOIN staff sl ON v.lead_field_rep_id = sl.id
       WHERE v.id = $1`,
       [venueId]
     )

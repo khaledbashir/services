@@ -19,6 +19,33 @@ export async function getStaffVenueIds(
 }
 
 /**
+ * Builds a SQL WHERE clause fragment for event-level assignment filtering.
+ * Technicians only see events they are personally assigned to.
+ * Returns { clause, params, nextIdx } where clause is empty string for admin/manager.
+ *
+ * @param role - user role
+ * @param staffId - staff member's ID
+ * @param eventColumn - SQL column reference for the event ID (e.g., 'e.id')
+ * @param startIdx - parameter index to start from
+ */
+export function buildAssignmentFilterClause(
+  role: string,
+  staffId: string,
+  eventColumn: string,
+  startIdx: number
+): { clause: string; params: string[]; nextIdx: number } {
+  if (role === 'admin' || role === 'manager') {
+    return { clause: '', params: [], nextIdx: startIdx }
+  }
+
+  return {
+    clause: `AND ${eventColumn} IN (SELECT event_id FROM event_assignments WHERE staff_id = $${startIdx})`,
+    params: [staffId],
+    nextIdx: startIdx + 1,
+  }
+}
+
+/**
  * Builds a SQL WHERE clause fragment for venue filtering.
  * Returns { clause, params, nextIdx } where clause is empty string for admin/manager.
  *
