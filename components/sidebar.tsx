@@ -35,20 +35,21 @@ export function Sidebar() {
   const isAdmin = userRole === 'admin'
   const isManager = userRole === 'manager' || isAdmin
 
-  const navItems = [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/events', label: 'Events' },
-    { href: '/venues', label: 'Venues' },
-    ...(isManager ? [{ href: '/shifts', label: 'Shift Templates' }] : []),
-    ...(isManager ? [{ href: '/tickets', label: 'Tickets' }] : []),
-    ...(isManager ? [{ href: '/reports', label: 'Reports' }] : []),
-  ]
+  const linkClass = (path: string) =>
+    isActive(path)
+      ? 'block px-4 py-2 rounded text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3 transition-all'
+      : 'block px-4 py-2 rounded text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-all'
 
-  const adminItems = isAdmin ? [
-    { href: '/staff', label: 'Staff' },
-    { href: '/inventory', label: 'Inventory' },
-    { href: '/settings', label: 'Settings' },
-  ] : []
+  const subLinkClass = (path: string) =>
+    isActive(path)
+      ? 'block pl-9 pr-4 py-1.5 rounded text-[12px] font-medium text-white bg-[#0A52EF]/10 transition-all'
+      : 'block pl-9 pr-4 py-1.5 rounded text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all'
+
+  const sectionLabel = (text: string) => (
+    <div className="pt-4 pb-1">
+      <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">{text}</p>
+    </div>
+  )
 
   const sidebarContent = (
     <>
@@ -59,45 +60,45 @@ export function Sidebar() {
       </Link>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={isActive(item.href) ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
-          >
-            {item.label}
-          </Link>
-        ))}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        <Link href="/dashboard" className={linkClass('/dashboard')}>Dashboard</Link>
 
-        {userRole === 'admin' && (
+        {/* Operations */}
+        {sectionLabel('Operations')}
+        <Link href="/events" className={linkClass('/events')}>Events</Link>
+        {isManager && <Link href="/shifts" className={subLinkClass('/shifts')}>Shift Templates</Link>}
+        <Link href="/venues" className={linkClass('/venues')}>Venues</Link>
+
+        {/* Support */}
+        {isManager && (
           <>
-            <div className="py-2">
-              <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">Admin</p>
-            </div>
-            {adminItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={isActive(item.href) ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {sectionLabel('Support')}
+            <Link href="/tickets" className={linkClass('/tickets')}>Tickets</Link>
+            <Link href="/reports" className={linkClass('/reports')}>Reports</Link>
           </>
         )}
 
-        {isManager && (
+        {/* People */}
+        {isAdmin && (
           <>
-            <div className="py-2">
-              <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">External</p>
-            </div>
-            <Link
-              href="/portals"
-              className={isActive('/portals') ? 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3' : 'block px-4 py-2.5 rounded transition-all text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}
-            >
-              Client Portals
-            </Link>
+            {sectionLabel('People')}
+            <Link href="/staff" className={linkClass('/staff')}>Staff</Link>
+            <Link href="/portals" className={linkClass('/portals')}>Client Portals</Link>
+          </>
+        )}
+        {isManager && !isAdmin && (
+          <>
+            {sectionLabel('External')}
+            <Link href="/portals" className={linkClass('/portals')}>Client Portals</Link>
+          </>
+        )}
+
+        {/* System */}
+        {isAdmin && (
+          <>
+            {sectionLabel('System')}
+            <Link href="/inventory" className={linkClass('/inventory')}>Inventory</Link>
+            <Link href="/settings" className={linkClass('/settings')}>Settings</Link>
           </>
         )}
       </nav>
