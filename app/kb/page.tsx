@@ -47,6 +47,8 @@ export default function KBPage() {
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
   const [similarResults, setSimilarResults] = useState<KBEntry[]>([])
   const [searchingKB, setSearchingKB] = useState(false)
+  const [resolvedTickets, setResolvedTickets] = useState<Array<{ id: string; ticket_number: number; title: string; venue_name: string; resolution_notes: string; resolved_date: string; category: string }>>([])
+  const [searchingTickets, setSearchingTickets] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [creatingTicket, setCreatingTicket] = useState(false)
@@ -114,6 +116,7 @@ export default function KBPage() {
     setDiagnosing(true)
     setDiagnosis(null)
     setSimilarResults([])
+    setResolvedTickets([])
     setError('')
     setSaved(false)
 
@@ -133,33 +136,52 @@ export default function KBPage() {
         if (data.diagnosis) {
           setDiagnosis(data.diagnosis)
           // Auto-search KB for similar
+          // Search KB + resolved tickets in parallel
           setSearchingKB(true)
+          setSearchingTickets(true)
+          const searchText = `${data.diagnosis.title}. ${data.diagnosis.issue_type}. ${data.diagnosis.description}`
           try {
-            const searchRes = await fetch('/api/kb/search', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: `${data.diagnosis.title}. ${data.diagnosis.description}`,
-                image: { data: inputImage.data, mimeType: inputImage.mimeType },
-              }),
-            })
-            const searchData = await searchRes.json()
-            setSimilarResults(searchData.matches || [])
-          } catch {} finally { setSearchingKB(false) }
+            const [kbRes, ticketRes] = await Promise.all([
+              fetch('/api/kb/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: searchText,
+                  image: { data: inputImage.data, mimeType: inputImage.mimeType },
+                }),
+              }).then(r => r.json()).catch(() => ({ matches: [] })),
+              fetch('/api/tickets/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: searchText, limit: 5 }),
+              }).then(r => r.json()).catch(() => ({ matches: [] })),
+            ])
+            setSimilarResults(kbRes.matches || [])
+            setResolvedTickets(ticketRes.matches || [])
+          } catch {} finally { setSearchingKB(false); setSearchingTickets(false) }
         } else {
           setError(data.error || 'No diagnosis returned')
         }
       } else {
-        // Text-only search
+        // Text-only search — KB + resolved tickets
         setSearchingKB(true)
-        const res = await fetch('/api/kb/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: inputText }),
-        })
-        const data = await res.json()
-        setSimilarResults(data.matches || [])
-        setSearchingKB(false)
+        setSearchingTickets(true)
+        try {
+          const [kbRes, ticketRes] = await Promise.all([
+            fetch('/api/kb/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: inputText }),
+            }).then(r => r.json()).catch(() => ({ matches: [] })),
+            fetch('/api/tickets/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: inputText, limit: 5 }),
+            }).then(r => r.json()).catch(() => ({ matches: [] })),
+          ])
+          setSimilarResults(kbRes.matches || [])
+          setResolvedTickets(ticketRes.matches || [])
+        } catch {} finally { setSearchingKB(false); setSearchingTickets(false) }
       }
     } catch (err: any) {
       setError(err.message || 'Network error')
@@ -465,6 +487,57 @@ export default function KBPage() {
                     <div className="mt-2 pt-2 border-t border-zinc-100">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-0.5">Fix</p>
                       <p className="text-xs text-zinc-700 line-clamp-2">{r.suggested_fix}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ RESOLVED TICKETS — "How we fixed this before" ═══ */}
+        {searchingTickets && (
+          <div className="text-center py-4">
+            <p className="text-xs text-zinc-400">Searching resolved tickets...</p>
+          </div>
+        )}
+
+        {resolvedTickets.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-emerald-600 text-[10px]">✓</span>
+              </div>
+              <h3 className="text-sm font-semibold text-zinc-700">How we fixed this before</h3>
+            </div>
+            <div className="space-y-2">
+              {resolvedTickets.map(t => (
+                <div
+                  key={t.id}
+                  onClick={() => router.push(`/tickets/${t.id}`)}
+                  className="bg-white border border-zinc-200 rounded-xl p-4 hover:shadow-md hover:border-zinc-300 transition-all cursor-pointer group"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-mono text-zinc-400">T-{String(t.ticket_number).padStart(5, '0')}</span>
+                        <span className="text-[10px] text-zinc-300">•</span>
+                        <span className="text-[10px] text-zinc-400">{t.venue_name}</span>
+                        {t.resolved_date && (
+                          <>
+                            <span className="text-[10px] text-zinc-300">•</span>
+                            <span className="text-[10px] text-zinc-400">Resolved {t.resolved_date}</span>
+                          </>
+                        )}
+                      </div>
+                      <h4 className="text-[13px] font-semibold text-zinc-900 group-hover:text-[#0A52EF] transition-colors">{t.title}</h4>
+                    </div>
+                    <span className="text-[10px] text-zinc-300 group-hover:text-[#0A52EF] flex-shrink-0 mt-1">View →</span>
+                  </div>
+                  {t.resolution_notes && (
+                    <div className="mt-2 pt-2 border-t border-zinc-100">
+                      <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-0.5">Resolution</p>
+                      <p className="text-xs text-zinc-700 line-clamp-2">{t.resolution_notes}</p>
                     </div>
                   )}
                 </div>
