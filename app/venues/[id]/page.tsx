@@ -21,6 +21,8 @@ interface VenueDetail {
   distribution_emails: string[]
   venue_manager_id: string | null
   lead_field_rep_id: string | null
+  logo_url: string | null
+  cover_image_url: string | null
   venue_manager_name: string | null
   lead_field_rep_name: string | null
 }
@@ -123,6 +125,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
   const [staffSearch, setStaffSearch] = useState('')
   const [showStaffDropdown, setShowStaffDropdown] = useState(false)
+  const [briefing, setBriefing] = useState<{ alerts: Array<{ level: string; icon: string; message: string }>; stats: any; recommendation: string; generated_at: string } | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -138,6 +143,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setVenueServices(data.venueServices || [])
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
+
+          // Fetch briefing
+          fetch(`/api/venues/${params.id}/briefing`).then(r => r.ok ? r.json() : null).then(d => { if (d) setBriefing(d) }).catch(() => {})
 
           // Fetch screens, linked staff, and tickets
           const [screensRes, linkedStaffRes, allStaffRes, ticketsRes] = await Promise.all([
@@ -272,66 +280,150 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         {/* Back */}
         <button onClick={() => router.push('/venues')} className="text-sm text-zinc-500 hover:text-zinc-900 transition-colors">← Back to Venues</button>
 
-        {/* Header */}
-        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
-          <div className="p-8 flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-zinc-900">{venue.name}</h1>
-              <div className="flex items-center gap-3 mt-2">
-                <span className="text-sm text-zinc-500">{venue.market_name}</span>
-                {venue.address && <><span className="text-zinc-300">•</span><span className="text-sm text-zinc-500">{venue.address}</span></>}
-              </div>
-              <div className="flex items-center gap-3 mt-3">
-                <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded ${venue.requires_assignment ? 'bg-blue-50 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
-                  {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
+        {/* Header with Cover + Branding */}
+        <div className="bg-white rounded-lg border border-[#E8E8E8] shadow-sm overflow-hidden">
+          {/* Cover Image */}
+          <div className="relative h-36 bg-gradient-to-br from-[#0A1628] via-[#0A52EF]/80 to-[#0A1628] overflow-hidden">
+            {venue.cover_image_url && (
+              <img src={venue.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+            {/* Stats overlay on cover */}
+            <div className="absolute bottom-3 right-4 flex gap-4">
+              {[
+                { val: upcomingEvents.length, label: 'Upcoming' },
+                { val: assignedStaff.length, label: 'Staff' },
+                { val: upcomingEvents.filter(e => e.assigned_techs).length, label: 'Assigned' },
+              ].map(s => (
+                <div key={s.label} className="text-center">
+                  <p className="text-xl font-bold text-white drop-shadow-sm">{s.val}</p>
+                  <p className="text-[10px] text-white/70 uppercase tracking-wider">{s.label}</p>
                 </div>
-                <span className="text-zinc-200">|</span>
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-zinc-400">Venue Manager:</span>
-                  {venue.venue_manager_name
-                    ? <span className="font-medium text-zinc-700">{venue.venue_manager_name}</span>
-                    : <span className="text-zinc-300 italic">Not assigned</span>}
-                </div>
-                <span className="text-zinc-200">|</span>
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-zinc-400">Lead Field Rep:</span>
-                  {venue.lead_field_rep_name
-                    ? <span className="font-medium text-zinc-700">{venue.lead_field_rep_name}</span>
-                    : <span className="text-zinc-300 italic">Not assigned</span>}
-                </div>
-              </div>
-              {/* Contracted Services */}
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                {enabledServices.length > 0 ? enabledServices.map(svc => (
-                  <span key={svc.service_type_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
-                    {svc.name}
-                  </span>
-                )) : (
-                  <span className="text-xs text-zinc-300 italic">No contracted services configured</span>
-                )}
-              </div>
-            </div>
-            {/* Quick stats */}
-            <div className="flex gap-6 text-center">
-              <div>
-                <p className="text-2xl font-semibold text-zinc-900">{upcomingEvents.length}</p>
-                <p className="text-xs text-zinc-500">Upcoming</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-zinc-900">{assignedStaff.length}</p>
-                <p className="text-xs text-zinc-500">Staff</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-zinc-900">{upcomingEvents.filter(e => e.assigned_techs).length}</p>
-                <p className="text-xs text-zinc-500">Assigned</p>
-              </div>
+              ))}
             </div>
           </div>
 
+          {/* Venue Info Card */}
+          <div className="px-6 pb-4 -mt-8 relative z-10">
+            <div className="flex items-end gap-4">
+              {/* Logo */}
+              <div className="w-16 h-16 rounded-xl bg-white border-2 border-white shadow-md flex items-center justify-center overflow-hidden flex-shrink-0">
+                {venue.logo_url ? (
+                  <img src={venue.logo_url} alt={venue.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">{venue.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                  </div>
+                )}
+              </div>
+              {/* Name + meta */}
+              <div className="flex-1 min-w-0 pb-1">
+                <h1 className="text-xl font-bold text-zinc-900 truncate">{venue.name}</h1>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span className="text-xs text-zinc-500">{venue.market_name}</span>
+                  {venue.address && <><span className="text-zinc-300 text-xs">•</span><span className="text-xs text-zinc-400 truncate">{venue.address}</span></>}
+                </div>
+              </div>
+            </div>
+
+            {/* Info Row: status + roles + services */}
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              <div className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${venue.requires_assignment ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-zinc-100 text-zinc-500 border border-zinc-200'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
+                {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
+              </div>
+              {/* Manager */}
+              <div className="flex items-center gap-1.5">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${venue.venue_manager_name ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                  {venue.venue_manager_name ? venue.venue_manager_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2) : '?'}
+                </div>
+                <span className="text-[11px] text-zinc-400">Mgr:</span>
+                <span className={`text-[11px] font-medium ${venue.venue_manager_name ? 'text-zinc-700' : 'text-zinc-300 italic'}`}>
+                  {venue.venue_manager_name || 'Unassigned'}
+                </span>
+              </div>
+              {/* Lead Rep */}
+              <div className="flex items-center gap-1.5">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${venue.lead_field_rep_name ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                  {venue.lead_field_rep_name ? venue.lead_field_rep_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2) : '?'}
+                </div>
+                <span className="text-[11px] text-zinc-400">Lead:</span>
+                <span className={`text-[11px] font-medium ${venue.lead_field_rep_name ? 'text-zinc-700' : 'text-zinc-300 italic'}`}>
+                  {venue.lead_field_rep_name || 'Unassigned'}
+                </span>
+              </div>
+            </div>
+
+            {/* Services pills */}
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {enabledServices.length > 0 ? enabledServices.map(svc => (
+                <span key={svc.service_type_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {svc.name}
+                </span>
+              )) : (
+                <span className="text-[10px] text-zinc-300 italic">No contracted services</span>
+              )}
+            </div>
+          </div>
+
+          {/* AI Briefing */}
+          {briefing && (
+            <div className="mx-6 mb-4 rounded-lg overflow-hidden border border-[#E8E8E8]">
+              <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 px-4 py-2.5 flex items-center justify-between border-b border-[#E8E8E8]">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">✨</span>
+                  <span className="text-xs font-semibold text-zinc-700">AI Venue Briefing</span>
+                </div>
+                <span className="text-[10px] text-zinc-400">Updated just now</span>
+              </div>
+              <div className="px-4 py-3 space-y-1.5 bg-white">
+                {briefing.alerts.map((alert, idx) => (
+                  <div key={idx} className={`flex items-start gap-2 px-3 py-2 rounded-md text-xs ${
+                    alert.level === 'urgent' ? 'bg-red-50 text-red-800' :
+                    alert.level === 'warning' ? 'bg-amber-50 text-amber-800' :
+                    alert.level === 'good' ? 'bg-emerald-50 text-emerald-800' :
+                    'bg-zinc-50 text-zinc-700'
+                  }`}>
+                    <span className="flex-shrink-0 mt-0.5">{alert.icon}</span>
+                    <span>{alert.message}</span>
+                  </div>
+                ))}
+                {/* Stats bar */}
+                {(briefing.stats.coverage_rate !== null || briefing.stats.workflow_rate !== null) && (
+                  <div className="flex gap-3 pt-1">
+                    {briefing.stats.coverage_rate !== null && (
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <div className="w-16 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${briefing.stats.coverage_rate >= 80 ? 'bg-emerald-500' : briefing.stats.coverage_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                            style={{ width: `${briefing.stats.coverage_rate}%` }}></div>
+                        </div>
+                        <span className="text-zinc-500">Coverage: <span className="font-semibold text-zinc-700">{briefing.stats.coverage_rate}%</span></span>
+                      </div>
+                    )}
+                    {briefing.stats.workflow_rate !== null && (
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <div className="w-16 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${briefing.stats.workflow_rate >= 80 ? 'bg-emerald-500' : briefing.stats.workflow_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                            style={{ width: `${briefing.stats.workflow_rate}%` }}></div>
+                        </div>
+                        <span className="text-zinc-500">Workflows: <span className="font-semibold text-zinc-700">{briefing.stats.workflow_rate}%</span></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Recommendation */}
+                {briefing.recommendation && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-blue-50/50 border border-blue-100 text-xs text-blue-800 mt-1">
+                    <span className="flex-shrink-0">💡</span>
+                    <span className="italic">{briefing.recommendation}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Tabs */}
-          <div className="border-t border-[#E8E8E8] flex px-8">
+          <div className="border-t border-[#E8E8E8] flex px-6">
             {(['events', 'staff', 'tickets', 'specs', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
@@ -642,6 +734,74 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column */}
             <div className="space-y-6">
+              {/* Branding */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Branding</h3>
+                <p className="text-xs text-zinc-500 mb-4">Customize the venue profile with a logo and cover image</p>
+                <div className="space-y-4">
+                  {/* Logo */}
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-2">Logo</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg bg-zinc-100 flex items-center justify-center overflow-hidden border border-[#E8E8E8]">
+                        {venue.logo_url ? (
+                          <img src={venue.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-zinc-400 text-xs">None</span>
+                        )}
+                      </div>
+                      <label className={`px-3 py-1.5 bg-white border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 cursor-pointer ${uploadingLogo ? 'opacity-50' : ''}`}>
+                        {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                        <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return
+                          setUploadingLogo(true)
+                          const fd = new FormData(); fd.append('file', file); fd.append('type', 'logo')
+                          const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
+                          if (res.ok) { const d = await res.json(); setVenue({ ...venue, logo_url: d.url }) }
+                          setUploadingLogo(false); e.target.value = ''
+                        }} />
+                      </label>
+                      {venue.logo_url && (
+                        <button onClick={async () => {
+                          await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'logo' }) })
+                          setVenue({ ...venue, logo_url: null })
+                        }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Cover */}
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-2">Cover Image</label>
+                    <div className="relative w-full h-20 rounded-lg bg-zinc-100 flex items-center justify-center overflow-hidden border border-[#E8E8E8]">
+                      {venue.cover_image_url ? (
+                        <img src={venue.cover_image_url} alt="Cover" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-zinc-400 text-xs">No cover image</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <label className={`px-3 py-1.5 bg-white border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 cursor-pointer ${uploadingCover ? 'opacity-50' : ''}`}>
+                        {uploadingCover ? 'Uploading...' : 'Upload Cover'}
+                        <input type="file" accept="image/*" className="hidden" disabled={uploadingCover} onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return
+                          setUploadingCover(true)
+                          const fd = new FormData(); fd.append('file', file); fd.append('type', 'cover')
+                          const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
+                          if (res.ok) { const d = await res.json(); setVenue({ ...venue, cover_image_url: d.url }) }
+                          setUploadingCover(false); e.target.value = ''
+                        }} />
+                      </label>
+                      {venue.cover_image_url && (
+                        <button onClick={async () => {
+                          await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover' }) })
+                          setVenue({ ...venue, cover_image_url: null })
+                        }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Client Portal */}
               {venue.portal_token && (
                 <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">

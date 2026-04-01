@@ -28,7 +28,9 @@ export async function GET(
         v.venue_manager_id,
         v.lead_field_rep_id,
         sm.full_name as venue_manager_name,
-        sl.full_name as lead_field_rep_name
+        sl.full_name as lead_field_rep_name,
+        v.logo_url,
+        v.cover_image_url
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
@@ -203,7 +205,9 @@ export async function PATCH(
         v.venue_manager_id,
         v.lead_field_rep_id,
         sm.full_name as venue_manager_name,
-        sl.full_name as lead_field_rep_name
+        sl.full_name as lead_field_rep_name,
+        v.logo_url,
+        v.cover_image_url
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
