@@ -14,6 +14,7 @@ interface Venue {
   assigned_count: number
   requires_assignment: boolean
   venue_type: string
+  logo_url: string | null
 }
 
 const venueTypeConfig: Record<string, { label: string; badge: string; dot: string }> = {
@@ -238,9 +239,20 @@ export default function VenuesPage() {
                   {/* Health strip */}
                   <div className={`h-1 ${healthColors[health]}`}></div>
                   <div className="p-5">
-                    {/* Row 1: Name + Type badge */}
+                    {/* Row 1: Logo + Name + Type badge */}
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-bold text-zinc-900 group-hover:text-[#0A52EF] transition-colors leading-tight">{venue.name}</h3>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center border border-zinc-200">
+                          {venue.logo_url ? (
+                            <img src={venue.logo_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
+                              <span className="text-white font-bold text-[10px]">{venue.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-zinc-900 group-hover:text-[#0A52EF] transition-colors leading-tight">{venue.name}</h3>
+                      </div>
                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border flex-shrink-0 ${typeConf.badge}`}>
                         {typeConf.label}
                       </span>

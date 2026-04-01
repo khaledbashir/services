@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
         v.primary_contact_name,
         v.primary_contact_email,
         COALESCE(v.venue_type, 'sports') as venue_type,
+        v.logo_url,
         COUNT(e.id) as event_count,
         COUNT(CASE WHEN ea.event_id IS NOT NULL THEN 1 END) as assigned_count
       FROM venues v
