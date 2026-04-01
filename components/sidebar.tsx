@@ -75,6 +75,7 @@ export function Sidebar() {
             {sectionLabel('Support')}
             <Link href="/tickets" className={linkClass('/tickets')}>Tickets</Link>
             <Link href="/kb" className={subLinkClass('/kb')}>Knowledge Base</Link>
+            <Link href="/gallery" className={subLinkClass('/gallery')}>Visual Gallery</Link>
             <Link href="/reports" className={linkClass('/reports')}>Reports</Link>
           </>
         )}
