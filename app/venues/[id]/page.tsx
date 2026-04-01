@@ -125,7 +125,8 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
   const [staffSearch, setStaffSearch] = useState('')
   const [showStaffDropdown, setShowStaffDropdown] = useState(false)
-  const [briefing, setBriefing] = useState<{ alerts: Array<{ level: string; icon: string; message: string }>; stats: any; recommendation: string; ai_summary: string | null; generated_at: string } | null>(null)
+  const [briefing, setBriefing] = useState<{ content: string; alerts: Array<{ level: string; icon: string; message: string }>; stats: any; recommendation: string; generated_at: string } | null>(null)
+  const [refreshingBriefing, setRefreshingBriefing] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const router = useRouter()
@@ -371,62 +372,89 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
           {/* AI Briefing */}
           {briefing && (
-            <div className="mx-6 mb-4 rounded-lg overflow-hidden border border-[#E8E8E8]">
-              <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 px-4 py-2.5 flex items-center justify-between border-b border-[#E8E8E8]">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">✨</span>
-                  <span className="text-xs font-semibold text-zinc-700">AI Venue Briefing</span>
+            <div className="mx-6 mb-4">
+              <div className="rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/50 overflow-hidden shadow-sm">
+                {/* Header */}
+                <div className="px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center">
+                      <span className="text-white text-xs">✦</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-zinc-800">AI Venue Intel</span>
+                      <span className="text-[10px] text-zinc-400 ml-2">
+                        {new Date(briefing.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setRefreshingBriefing(true)
+                      const res = await fetch(`/api/venues/${params.id}/briefing`, { method: 'POST' })
+                      if (res.ok) setBriefing(await res.json())
+                      setRefreshingBriefing(false)
+                    }}
+                    disabled={refreshingBriefing}
+                    className="text-[10px] text-zinc-400 hover:text-[#0A52EF] transition-colors flex items-center gap-1"
+                  >
+                    <svg className={`w-3 h-3 ${refreshingBriefing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    {refreshingBriefing ? 'Updating...' : 'Refresh'}
+                  </button>
                 </div>
-                <span className="text-[10px] text-zinc-400">Updated just now</span>
-              </div>
-              <div className="px-4 py-3 space-y-1.5 bg-white">
-                {/* AI Summary */}
-                {briefing.ai_summary && (
-                  <div className="px-3 py-2.5 rounded-md bg-gradient-to-r from-slate-50 to-blue-50/50 border border-slate-200/60 text-xs text-zinc-800 leading-relaxed mb-1">
-                    {briefing.ai_summary}
-                  </div>
-                )}
-                {briefing.alerts.map((alert, idx) => (
-                  <div key={idx} className={`flex items-start gap-2 px-3 py-2 rounded-md text-xs ${
-                    alert.level === 'urgent' ? 'bg-red-50 text-red-800' :
-                    alert.level === 'warning' ? 'bg-amber-50 text-amber-800' :
-                    alert.level === 'good' ? 'bg-emerald-50 text-emerald-800' :
-                    'bg-zinc-50 text-zinc-700'
-                  }`}>
-                    <span className="flex-shrink-0 mt-0.5">{alert.icon}</span>
-                    <span>{alert.message}</span>
-                  </div>
-                ))}
-                {/* Stats bar */}
-                {(briefing.stats.coverage_rate !== null || briefing.stats.workflow_rate !== null) && (
-                  <div className="flex gap-3 pt-1">
+
+                {/* Content — flowing text like an AI response */}
+                <div className="px-5 pb-4">
+                  <p className="text-[13px] text-zinc-700 leading-relaxed" dangerouslySetInnerHTML={{
+                    __html: briefing.content
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-900">$1</strong>')
+                  }} />
+
+                  {/* Stats pills */}
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
                     {briefing.stats.coverage_rate !== null && (
-                      <div className="flex items-center gap-1.5 text-[10px]">
-                        <div className="w-16 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${briefing.stats.coverage_rate >= 80 ? 'bg-emerald-500' : briefing.stats.coverage_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                            style={{ width: `${briefing.stats.coverage_rate}%` }}></div>
-                        </div>
-                        <span className="text-zinc-500">Coverage: <span className="font-semibold text-zinc-700">{briefing.stats.coverage_rate}%</span></span>
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                        briefing.stats.coverage_rate >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        briefing.stats.coverage_rate >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        'bg-red-50 text-red-700 border-red-200'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          briefing.stats.coverage_rate >= 80 ? 'bg-emerald-500' :
+                          briefing.stats.coverage_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}></span>
+                        Coverage {briefing.stats.coverage_rate}%
                       </div>
                     )}
                     {briefing.stats.workflow_rate !== null && (
-                      <div className="flex items-center gap-1.5 text-[10px]">
-                        <div className="w-16 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${briefing.stats.workflow_rate >= 80 ? 'bg-emerald-500' : briefing.stats.workflow_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                            style={{ width: `${briefing.stats.workflow_rate}%` }}></div>
-                        </div>
-                        <span className="text-zinc-500">Workflows: <span className="font-semibold text-zinc-700">{briefing.stats.workflow_rate}%</span></span>
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                        briefing.stats.workflow_rate >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        briefing.stats.workflow_rate >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        'bg-red-50 text-red-700 border-red-200'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          briefing.stats.workflow_rate >= 80 ? 'bg-emerald-500' :
+                          briefing.stats.workflow_rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}></span>
+                        Workflows {briefing.stats.workflow_rate}%
+                      </div>
+                    )}
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-50 text-zinc-600 border border-zinc-200">
+                      {briefing.stats.upcoming_events} events
+                    </div>
+                    {briefing.stats.open_tickets > 0 && (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-50 text-zinc-600 border border-zinc-200">
+                        {briefing.stats.open_tickets} tickets
                       </div>
                     )}
                   </div>
-                )}
-                {/* Recommendation */}
-                {briefing.recommendation && (
-                  <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-blue-50/50 border border-blue-100 text-xs text-blue-800 mt-1">
-                    <span className="flex-shrink-0">💡</span>
-                    <span className="italic">{briefing.recommendation}</span>
-                  </div>
-                )}
+
+                  {/* Recommendation */}
+                  {briefing.recommendation && (
+                    <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-blue-50/80 to-violet-50/40 border border-blue-100/60">
+                      <span className="text-xs mt-0.5">💡</span>
+                      <p className="text-xs text-blue-800 leading-relaxed">{briefing.recommendation}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
