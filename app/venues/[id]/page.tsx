@@ -145,7 +145,10 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setDistEmails(data.venue.distribution_emails || [])
 
           // Fetch briefing
-          fetch(`/api/venues/${params.id}/briefing`).then(r => r.ok ? r.json() : null).then(d => { if (d) setBriefing(d) }).catch(() => {})
+          fetch(`/api/venues/${params.id}/briefing`).then(r => {
+            if (!r.ok) { console.warn('Briefing fetch failed:', r.status); return null }
+            return r.json()
+          }).then(d => { if (d) setBriefing(d) }).catch(err => console.warn('Briefing error:', err))
 
           // Fetch screens, linked staff, and tickets
           const [screensRes, linkedStaffRes, allStaffRes, ticketsRes] = await Promise.all([

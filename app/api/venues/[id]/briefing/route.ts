@@ -63,14 +63,13 @@ export async function GET(
          WHERE venue_id = $1 AND status = 'closed' AND resolved_at >= $2::date - INTERVAL '7 days'`,
         [venueId, today]
       ),
-      // Recent activity for AI context
+      // Recent activity for AI context (safe — may not exist)
       query(
         `SELECT action, details, created_at FROM activity_log
          WHERE entity_id IN (SELECT id FROM tickets WHERE venue_id = $1)
-            OR entity_id IN (SELECT id FROM events WHERE venue_id = $1)
          ORDER BY created_at DESC LIMIT 5`,
         [venueId]
-      ),
+      ).catch(() => ({ rows: [] })),
     ])
 
     const venue = venueRes.rows[0]
@@ -248,8 +247,8 @@ Output EXACTLY this JSON format, nothing else:
       recommendation: aiRecommendation,
       generated_at: now.toISOString(),
     })
-  } catch (err) {
-    console.error('Error generating venue briefing:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } catch (err: any) {
+    console.error('Error generating venue briefing:', err?.message || err)
+    return NextResponse.json({ error: err?.message || 'Internal server error' }, { status: 500 })
   }
 }
