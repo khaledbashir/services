@@ -120,19 +120,11 @@ export async function POST(request: NextRequest) {
       [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue, source || 'web', ticket_type || 'support', contact_name || null, contact_email || null, contact_phone || null, parent_ticket_id || null]
     )
 
-    // Save image if provided (base64 data URL)
+    // Save image if provided (store data URL directly — works in Docker)
     let imageUrl: string | null = null
     if (image?.data) {
       try {
-        const { writeFile, mkdir } = require('fs/promises')
-        const path = require('path')
-        const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
-        const ext = (image.mimeType || 'image/jpeg').split('/')[1] || 'jpg'
-        const filename = `${result.rows[0].id}-${Date.now()}.${ext}`
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'tickets')
-        await mkdir(uploadDir, { recursive: true })
-        await writeFile(path.join(uploadDir, filename), Buffer.from(raw, 'base64'))
-        imageUrl = `/uploads/tickets/${filename}`
+        imageUrl = image.data.startsWith('data:') ? image.data : `data:${image.mimeType || 'image/jpeg'};base64,${image.data}`
         await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [imageUrl, result.rows[0].id])
       } catch (err) { console.error('Image save failed:', err) }
     }

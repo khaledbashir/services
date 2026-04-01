@@ -111,12 +111,18 @@ export function formatTicketNotification(ticket: {
   }
 
   if (ticket.image_url) {
-    const fullUrl = ticket.image_url.startsWith('http') ? ticket.image_url : `${DASHBOARD_URL}${ticket.image_url}`
-    blocks.push({
-      type: 'image',
-      image_url: fullUrl,
-      alt_text: ticket.title,
-    })
+    if (ticket.image_url.startsWith('http')) {
+      blocks.push({
+        type: 'image',
+        image_url: ticket.image_url,
+        alt_text: ticket.title,
+      })
+    } else {
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: ':camera: _Photo attached — view on dashboard_' },
+      })
+    }
   }
 
   if (ticket.id) {
