@@ -52,11 +52,11 @@ const leagueColors: Record<string, { bg: string; text: string }> = {
   MiLB: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
 }
 
-const workflowStatusColors: Record<string, { dot: string; bg: string; text: string }> = {
-  pending: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-700' },
-  checked_in: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
-  game_ready: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  post_game_submitted: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
+const workflowStatusColors: Record<string, { dot: string; bg: string; text: string; label: string; border: string }> = {
+  pending: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-700', label: 'Pending', border: '#f43f5e' },
+  checked_in: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Checked In', border: '#f59e0b' },
+  game_ready: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Game Ready', border: '#10b981' },
+  post_game_submitted: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', label: 'Submitted', border: '#3b82f6' },
 }
 
 export default function DashboardPage() {
@@ -171,7 +171,7 @@ export default function DashboardPage() {
         {/* SECTION 2: Stat Cards (5-column grid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" />
-          <StatCard key="staff" title="Staff Assigned" value={stats.assignedStaff} color="#10b981" href="/staff" />
+          <StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" />
           <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" />
           <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=today" />
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all">
@@ -244,9 +244,9 @@ export default function DashboardPage() {
                           key={event.id}
                           onClick={() => router.push(`/events/${event.id}`)}
                           className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors hover:bg-zinc-50 border-l-4 ${statusColor.bg}`}
-                          style={{ borderColor: statusColor.dot.replace('bg-', '').split('-')[0] }}
+                          style={{ borderLeftColor: statusColor.border }}
                         >
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor.dot }}></div>
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor.dot}`}></div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-zinc-900 truncate">{event.summary}</p>
                             <p className="text-xs text-zinc-500">{event.venue_name}</p>
@@ -298,7 +298,7 @@ export default function DashboardPage() {
                             <td className="py-3 px-6">
                               <div className="flex items-center gap-2">
                                 <span className={`inline-block w-2 h-2 rounded-full ${statusColor.dot}`}></span>
-                                <span className="text-zinc-700 text-xs">{statusColor.dot.replace('bg-', '')}</span>
+                                <span className="text-zinc-700 text-xs">{statusColor.label}</span>
                               </div>
                             </td>
                           </tr>
