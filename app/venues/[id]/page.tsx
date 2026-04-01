@@ -125,7 +125,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
   const [staffSearch, setStaffSearch] = useState('')
   const [showStaffDropdown, setShowStaffDropdown] = useState(false)
-  const [briefing, setBriefing] = useState<{ alerts: Array<{ level: string; icon: string; message: string }>; stats: any; recommendation: string; generated_at: string } | null>(null)
+  const [briefing, setBriefing] = useState<{ alerts: Array<{ level: string; icon: string; message: string }>; stats: any; recommendation: string; ai_summary: string | null; generated_at: string } | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const router = useRouter()
@@ -377,6 +377,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 <span className="text-[10px] text-zinc-400">Updated just now</span>
               </div>
               <div className="px-4 py-3 space-y-1.5 bg-white">
+                {/* AI Summary */}
+                {briefing.ai_summary && (
+                  <div className="px-3 py-2.5 rounded-md bg-gradient-to-r from-slate-50 to-blue-50/50 border border-slate-200/60 text-xs text-zinc-800 leading-relaxed mb-1">
+                    {briefing.ai_summary}
+                  </div>
+                )}
                 {briefing.alerts.map((alert, idx) => (
                   <div key={idx} className={`flex items-start gap-2 px-3 py-2 rounded-md text-xs ${
                     alert.level === 'urgent' ? 'bg-red-50 text-red-800' :
