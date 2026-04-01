@@ -44,6 +44,7 @@ export default function KBPage() {
   const [diagSearching, setDiagSearching] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [diagError, setDiagError] = useState('')
 
   // Search state
   const [searchText, setSearchText] = useState('')
@@ -94,6 +95,7 @@ export default function KBPage() {
     setDiagnosis(null)
     setDiagResults([])
     setSaved(false)
+    setDiagError('')
     try {
       const res = await fetch('/api/kb/diagnose', {
         method: 'POST',
@@ -104,24 +106,31 @@ export default function KBPage() {
         }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        setDiagError(data.error || `Failed (${res.status})`)
+        return
+      }
       if (data.diagnosis) {
         setDiagnosis(data.diagnosis)
         // Auto-search for similar past issues
         setDiagSearching(true)
-        const searchRes = await fetch('/api/kb/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: `${data.diagnosis.title}. ${data.diagnosis.description}`,
-            image: { data: diagImage.data, mimeType: diagImage.mimeType },
-          }),
-        })
-        const searchData = await searchRes.json()
-        setDiagResults(searchData.matches || [])
-        setDiagSearching(false)
+        try {
+          const searchRes = await fetch('/api/kb/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: `${data.diagnosis.title}. ${data.diagnosis.description}`,
+              image: { data: diagImage.data, mimeType: diagImage.mimeType },
+            }),
+          })
+          const searchData = await searchRes.json()
+          setDiagResults(searchData.matches || [])
+        } catch {} finally { setDiagSearching(false) }
+      } else {
+        setDiagError(data.error || 'No diagnosis returned')
       }
-    } catch (err) {
-      console.error('Diagnosis failed:', err)
+    } catch (err: any) {
+      setDiagError(err.message || 'Network error')
     } finally {
       setDiagnosing(false)
     }
@@ -338,6 +347,13 @@ export default function KBPage() {
                 </div>
               )}
             </div>
+
+            {/* Diagnosis error */}
+            {diagError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                <span className="font-medium">Diagnosis failed:</span> {diagError}
+              </div>
+            )}
 
             {/* Diagnosis loading */}
             {diagnosing && (
