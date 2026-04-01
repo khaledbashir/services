@@ -61,13 +61,47 @@ export async function POST(request: NextRequest) {
         if (res.ok) {
           const data = await res.json()
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-          const jsonMatch = text.match(/\{[\s\S]*\}/)
-          if (!jsonMatch) {
-            return NextResponse.json({ error: 'AI response could not be parsed', raw: text }, { status: 500 })
+          console.log(`[kb-diagnose] ${model} raw response (first 500):`, text.substring(0, 500))
+
+          // Try to extract JSON from response — handle markdown code blocks, loose text, etc.
+          let jsonStr = ''
+          const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+          if (codeBlock) {
+            jsonStr = codeBlock[1].trim()
+          } else {
+            const jsonMatch = text.match(/\{[\s\S]*\}/)
+            if (jsonMatch) jsonStr = jsonMatch[0]
           }
-          const diagnosis = JSON.parse(jsonMatch[0])
-          console.log(`[kb-diagnose] Success with ${model}: ${diagnosis.title}`)
-          return NextResponse.json({ ok: true, diagnosis, model })
+
+          if (!jsonStr) {
+            // Model returned plain text — construct a diagnosis from it
+            console.warn(`[kb-diagnose] ${model} returned non-JSON, constructing from text`)
+            return NextResponse.json({ ok: true, diagnosis: {
+              title: 'AI Analysis',
+              issue_type: 'Other',
+              description: text.substring(0, 500),
+              likely_cause: 'See description',
+              suggested_fix: 'Review the AI analysis above',
+              urgency: 'Medium',
+            }, model })
+          }
+
+          try {
+            const diagnosis = JSON.parse(jsonStr)
+            console.log(`[kb-diagnose] Success with ${model}: ${diagnosis.title}`)
+            return NextResponse.json({ ok: true, diagnosis, model })
+          } catch (parseErr) {
+            console.warn(`[kb-diagnose] ${model} JSON parse failed, trying cleanup`)
+            // Try cleaning common issues: trailing commas, single quotes
+            const cleaned = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']')
+            try {
+              const diagnosis = JSON.parse(cleaned)
+              return NextResponse.json({ ok: true, diagnosis, model })
+            } catch {
+              lastError = `JSON parse failed: ${jsonStr.substring(0, 200)}`
+              console.warn(`[kb-diagnose] ${model} parse failed completely, trying next...`)
+            }
+          }
         }
 
         lastError = await res.text()
