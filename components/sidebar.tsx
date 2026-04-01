@@ -39,6 +39,7 @@ export function Sidebar() {
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/events', label: 'Events' },
     { href: '/venues', label: 'Venues' },
+    ...(isManager ? [{ href: '/shifts', label: 'Shift Templates' }] : []),
     ...(isManager ? [{ href: '/tickets', label: 'Tickets' }] : []),
     ...(isManager ? [{ href: '/reports', label: 'Reports' }] : []),
   ]

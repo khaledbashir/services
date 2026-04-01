@@ -28,6 +28,19 @@ async function runMigrations() {
     )`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_manager_id UUID REFERENCES staff(id)`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS lead_field_rep_id UUID REFERENCES staff(id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS shift_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      venue_id UUID NOT NULL REFERENCES venues(id),
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      required_staff INT DEFAULT 1,
+      recurrence TEXT NOT NULL DEFAULT 'weekdays',
+      custom_days INT[] DEFAULT '{}',
+      is_active BOOLEAN DEFAULT true,
+      created_by UUID REFERENCES staff(id),
+      created_at TIMESTAMP DEFAULT NOW()
+    )`)
     await client.query(`CREATE TABLE IF NOT EXISTS user_preferences (
       user_id UUID NOT NULL REFERENCES staff(id),
       key TEXT NOT NULL,
