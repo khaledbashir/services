@@ -38,12 +38,18 @@ export async function GET(
               TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_date,
               t.sla_response_due, t.sla_resolution_due,
               t.sla_response_met, t.sla_resolution_met, t.first_response_at,
-              t.original_message
+              t.original_message,
+              COALESCE(t.source, 'web') as source,
+              COALESCE(t.ticket_type, 'support') as ticket_type,
+              t.contact_name, t.contact_email, t.contact_phone,
+              t.parent_ticket_id, t.sf_case_number,
+              pt.ticket_number as parent_ticket_number, pt.title as parent_ticket_title
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        LEFT JOIN events e ON t.event_id = e.id
        LEFT JOIN staff s1 ON t.created_by = s1.id
        LEFT JOIN staff s2 ON t.assigned_to = s2.id
+       LEFT JOIN tickets pt ON t.parent_ticket_id = pt.id
        WHERE t.id = $1`,
       [params.id]
     )
@@ -71,10 +77,23 @@ export async function GET(
       [params.id]
     )
 
+    // Related tickets (children + siblings)
+    const relatedResult = await query(
+      `SELECT id, ticket_number, title, status, priority,
+              CASE WHEN parent_ticket_id = $1 THEN 'child' ELSE 'related' END as relation
+       FROM tickets
+       WHERE parent_ticket_id = $1
+          OR (parent_ticket_id IS NOT NULL AND parent_ticket_id = (SELECT parent_ticket_id FROM tickets WHERE id = $1) AND id != $1)
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [params.id]
+    )
+
     return NextResponse.json({
       ticket: ticketResult.rows[0],
       comments: commentsResult.rows,
-      activity: activityResult.rows || []
+      activity: activityResult.rows || [],
+      related_tickets: relatedResult.rows || []
     })
   } catch (err) {
     console.error('Error fetching ticket:', err)

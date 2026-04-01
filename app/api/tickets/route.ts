@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const user = await getUserFromToken(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { venue_id, event_id, title, description, priority, assigned_to, category, resolution_notes } = await request.json()
+    const { venue_id, event_id, title, description, priority, assigned_to, category, resolution_notes, source, ticket_type, contact_name, contact_email, contact_phone, parent_ticket_id } = await request.json()
     if (!venue_id || !title) {
       return NextResponse.json({ error: 'venue_id and title are required' }, { status: 400 })
     }
@@ -114,10 +114,10 @@ export async function POST(request: NextRequest) {
     const slaResolutionDue = sla ? new Date(now.getTime() + sla.resolution_hours * 3600000) : null
 
     const result = await query(
-      `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes, sla_response_due, sla_resolution_due)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11)
-       RETURNING id, ticket_number, title, priority, status, category`,
-      [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue]
+      `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes, sla_response_due, sla_resolution_due, source, ticket_type, contact_name, contact_email, contact_phone, parent_ticket_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       RETURNING id, ticket_number, title, priority, status, category, source, ticket_type`,
+      [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue, source || 'web', ticket_type || 'support', contact_name || null, contact_email || null, contact_phone || null, parent_ticket_id || null]
     )
 
     // Get venue info for notification log

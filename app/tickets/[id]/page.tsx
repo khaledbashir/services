@@ -17,6 +17,10 @@ interface TicketDetail {
   sla_response_met: boolean | null; sla_resolution_met: boolean | null
   first_response_at: string | null
   original_message: string | null
+  source: string; ticket_type: string
+  contact_name: string | null; contact_email: string | null; contact_phone: string | null
+  parent_ticket_id: string | null; parent_ticket_number: number | null; parent_ticket_title: string | null
+  sf_case_number: string | null
 }
 interface Comment { id: string; body: string; is_internal: boolean; author_name: string; created_date: string }
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
@@ -46,6 +50,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [activity, setActivity] = useState<Activity[]>([])
+  const [relatedTickets, setRelatedTickets] = useState<any[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
@@ -70,6 +75,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       setTicket(ticketData.ticket)
       setComments(ticketData.comments || [])
       setActivity(ticketData.activity || [])
+      setRelatedTickets(ticketData.related_tickets || [])
       setStaffList(staffData.staff || [])
       setResolutionNotes(ticketData.ticket?.resolution_notes || '')
       const cannedRes = await fetch('/api/tickets/canned')
@@ -252,6 +258,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               {[
                 { label: 'Venue', value: ticket.venue_name, href: `/venues/${ticket.venue_id}` },
                 ticket.event_name ? { label: 'Event', value: ticket.event_name, href: `/events/${ticket.event_id}` } : null,
+                { label: 'Source', value: (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
+                { label: 'Type', value: (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
+                ticket.contact_name ? { label: 'Contact', value: ticket.contact_name } : null,
+                ticket.contact_email ? { label: 'Contact Email', value: ticket.contact_email } : null,
+                ticket.contact_phone ? { label: 'Contact Phone', value: ticket.contact_phone } : null,
+                ticket.parent_ticket_number ? { label: 'Parent Case', value: `T-${String(ticket.parent_ticket_number).padStart(5, '0')} ${ticket.parent_ticket_title}`, href: `/tickets/${ticket.parent_ticket_id}` } : null,
+                ticket.sf_case_number ? { label: 'SF Case #', value: ticket.sf_case_number } : null,
                 { label: 'Created by', value: ticket.created_by_name, href: `/staff/${ticket.created_by}` },
                 { label: 'Created', value: ticket.created_date },
                 { label: 'Updated', value: ticket.updated_date },
@@ -323,6 +336,25 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     </div>
                   )
                 })()}
+              </div>
+            )}
+
+            {/* Related Tickets */}
+            {relatedTickets.length > 0 && (
+              <div className="space-y-2 pt-5 border-t border-zinc-100">
+                <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Related Cases</h3>
+                {relatedTickets.map((rt: any) => (
+                  <Link key={rt.id} href={`/tickets/${rt.id}`} className="flex items-center justify-between text-xs py-1.5 hover:bg-zinc-50 rounded px-1 -mx-1 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        rt.priority === 'critical' ? 'bg-red-500' : rt.priority === 'high' ? 'bg-orange-500' : rt.priority === 'medium' ? 'bg-amber-400' : 'bg-zinc-300'
+                      }`}></span>
+                      <span className="text-zinc-500 font-mono">T-{String(rt.ticket_number).padStart(5, '0')}</span>
+                      <span className="text-zinc-700 truncate">{rt.title}</span>
+                    </div>
+                    <span className={`text-[10px] font-medium flex-shrink-0 ml-2 ${rt.status === 'closed' ? 'text-zinc-400' : 'text-zinc-600'}`}>{rt.status}</span>
+                  </Link>
+                ))}
               </div>
             )}
           </div>
