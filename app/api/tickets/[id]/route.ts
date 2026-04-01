@@ -107,8 +107,21 @@ export async function PATCH(
 ) {
   try {
     const user = await getUserFromToken(request)
-    const { status, priority, assigned_to, category, resolution_notes } = await request.json()
-    
+    const body = await request.json()
+    const { status, priority, assigned_to, category, resolution_notes } = body
+
+    // Handle direct field updates (title, source, ticket_type, contact info, venue)
+    const directFields: Record<string, string> = {
+      title: 'title', source: 'source', ticket_type: 'ticket_type',
+      contact_name: 'contact_name', contact_email: 'contact_email', contact_phone: 'contact_phone',
+      venue_id: 'venue_id', description: 'description',
+    }
+    for (const [key, col] of Object.entries(directFields)) {
+      if (body[key] !== undefined) {
+        await query(`UPDATE tickets SET ${col} = $1, updated_at = NOW() WHERE id = $2`, [body[key], params.id])
+      }
+    }
+
     // Get current ticket state for logging
     const current = await query('SELECT ticket_number, status, priority, assigned_to, title, venue_id, category FROM tickets WHERE id = $1', [params.id])
     const oldTicket = current.rows[0]

@@ -3,6 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { TicketContent, CommentContent } from '@/components/ticket-content'
 import Link from 'next/link'
@@ -175,7 +176,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           <div className="flex items-start gap-4">
             <span className="text-xs font-mono font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1.5 rounded-md mt-0.5 flex-shrink-0">{caseNum}</span>
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-semibold text-zinc-900 leading-tight">{ticket.title}</h1>
+              <h1 className="text-xl font-semibold text-zinc-900 leading-tight">
+                <InlineEdit value={ticket.title} onSave={v => updateField('title', v)} displayClassName="text-xl font-semibold text-zinc-900" />
+              </h1>
               <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
                 <span>Opened by <span className="text-zinc-600 font-medium">{ticket.created_by_name}</span></span>
                 <span>&middot;</span>
@@ -357,30 +360,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             {/* Contact Details — SF style */}
             <div className="space-y-3 pt-5 border-t border-zinc-100">
               <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Contact Details</h3>
-              {ticket.contact_name || ticket.contact_email || ticket.contact_phone ? (
-                <div className="space-y-2">
-                  {ticket.contact_name && (
-                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
-                      <span className="text-zinc-400">Name</span>
-                      <span className="text-zinc-700 font-medium">{ticket.contact_name}</span>
-                    </div>
-                  )}
-                  {ticket.contact_email && (
-                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
-                      <span className="text-zinc-400">Email</span>
-                      <a href={`mailto:${ticket.contact_email}`} className="text-blue-600 hover:text-blue-800">{ticket.contact_email}</a>
-                    </div>
-                  )}
-                  {ticket.contact_phone && (
-                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
-                      <span className="text-zinc-400">Phone</span>
-                      <span className="text-zinc-700">{ticket.contact_phone}</span>
-                    </div>
-                  )}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs py-1 px-2 rounded hover:bg-zinc-50">
+                  <span className="text-zinc-400 flex-shrink-0">Name</span>
+                  <InlineEdit value={ticket.contact_name || ''} onSave={v => updateField('contact_name', v)} emptyText="Add name" displayClassName="text-xs text-zinc-700 font-medium" />
                 </div>
-              ) : (
-                <p className="text-xs text-zinc-300 italic px-2">No contact linked</p>
-              )}
+                <div className="flex justify-between items-center text-xs py-1 px-2 rounded hover:bg-zinc-50">
+                  <span className="text-zinc-400 flex-shrink-0">Email</span>
+                  <InlineEdit value={ticket.contact_email || ''} onSave={v => updateField('contact_email', v)} emptyText="Add email" displayClassName="text-xs text-zinc-700" />
+                </div>
+                <div className="flex justify-between items-center text-xs py-1 px-2 rounded hover:bg-zinc-50">
+                  <span className="text-zinc-400 flex-shrink-0">Phone</span>
+                  <InlineEdit value={ticket.contact_phone || ''} onSave={v => updateField('contact_phone', v)} emptyText="Add phone" displayClassName="text-xs text-zinc-700" />
+                </div>
+              </div>
             </div>
 
             {/* SLA */}
@@ -637,24 +630,90 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         <span className="w-4 h-px bg-zinc-200"></span>Case Information
                       </h3>
                       <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-                        {[
-                          ['Case Number', caseNum],
-                          ['Case Owner', ticket.assigned_to_name || 'Unassigned'],
-                          ['Case Type', (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())],
-                          ['Case Origin', (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())],
-                          ['Account Name', ticket.venue_name],
-                          ['Category', (ticket.category || 'general').replace(/\b\w/g, (c: string) => c.toUpperCase())],
-                          ['Contact Name', ticket.contact_name || '—'],
-                          ['Parent Case', ticket.parent_ticket_number ? `T-${String(ticket.parent_ticket_number).padStart(5, '0')}` : '—'],
-                          ['Contact Phone', ticket.contact_phone || '—'],
-                          ['Contact Email', ticket.contact_email || '—'],
-                          ...(ticket.sf_case_number ? [['SF Case #', ticket.sf_case_number]] : []),
-                        ].map(([label, value], i) => (
-                          <div key={i} className="flex flex-col">
-                            <span className="text-[11px] text-zinc-400">{label}</span>
-                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{value}</span>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Case Number</span>
+                          <span className="text-sm text-zinc-800 font-medium mt-0.5">{caseNum}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Case Owner</span>
+                          <InlineEdit
+                            value={ticket.assigned_to || ''}
+                            type="select"
+                            options={[{ value: '', label: 'Unassigned' }, ...staffList.map(s => ({ value: s.id, label: s.full_name }))]}
+                            onSave={v => updateField('assigned_to', v || null)}
+                            displayClassName="text-sm text-zinc-800 font-medium"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Case Type</span>
+                          <InlineEdit
+                            value={ticket.ticket_type || 'support'}
+                            type="select"
+                            options={[{ value: 'support', label: 'Support' }, { value: 'dev_ticket', label: 'Dev Ticket' }]}
+                            onSave={v => updateField('ticket_type', v)}
+                            displayClassName="text-sm text-zinc-800 font-medium"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Case Origin</span>
+                          <InlineEdit
+                            value={ticket.source || 'web'}
+                            type="select"
+                            options={[{ value: 'web', label: 'Web' }, { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }, { value: 'slack', label: 'Slack' }, { value: 'portal', label: 'Portal' }]}
+                            onSave={v => updateField('source', v)}
+                            displayClassName="text-sm text-zinc-800 font-medium"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Account Name</span>
+                          <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.venue_name}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Category</span>
+                          <InlineEdit
+                            value={ticket.category || 'general'}
+                            type="select"
+                            options={[{ value: 'hardware', label: 'Hardware' }, { value: 'software', label: 'Software' }, { value: 'content', label: 'Content' }, { value: 'operational', label: 'Operational' }, { value: 'general', label: 'General' }]}
+                            onSave={v => updateField('category', v)}
+                            displayClassName="text-sm text-zinc-800 font-medium"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Contact Name</span>
+                          <InlineEdit value={ticket.contact_name || ''} onSave={v => updateField('contact_name', v)} placeholder="Add contact name" emptyText="Not set" displayClassName="text-sm text-zinc-800 font-medium" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Contact Email</span>
+                          <InlineEdit value={ticket.contact_email || ''} onSave={v => updateField('contact_email', v)} placeholder="email@example.com" emptyText="Not set" displayClassName="text-sm text-zinc-800 font-medium" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Contact Phone</span>
+                          <InlineEdit value={ticket.contact_phone || ''} onSave={v => updateField('contact_phone', v)} placeholder="(555) 123-4567" emptyText="Not set" displayClassName="text-sm text-zinc-800 font-medium" />
+                        </div>
+                        {ticket.sf_case_number && (
+                          <div className="flex flex-col">
+                            <span className="text-[11px] text-zinc-400">SF Case #</span>
+                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.sf_case_number}</span>
                           </div>
-                        ))}
+                        )}
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Created</span>
+                          <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.created_date}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Last Modified</span>
+                          <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.updated_date}</span>
+                        </div>
+                        {ticket.resolved_date && (
+                          <div className="flex flex-col">
+                            <span className="text-[11px] text-zinc-400">Closed</span>
+                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.resolved_date}</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-400">Created By</span>
+                          <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.created_by_name}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -666,17 +725,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                       <div className="space-y-3">
                         <div>
                           <span className="text-[11px] text-zinc-400 block">Subject</span>
-                          <span className="text-sm text-zinc-800 font-medium">{ticket.title}</span>
+                          <InlineEdit value={ticket.title} onSave={v => updateField('title', v)} displayClassName="text-sm text-zinc-800 font-medium" />
                         </div>
                         <div>
                           <span className="text-[11px] text-zinc-400 block mb-1">Description</span>
-                          {ticket.description ? (
-                            <div className="text-sm text-zinc-700 bg-zinc-50 rounded-lg p-4 border border-zinc-100">
-                              <TicketContent content={ticket.description} variant="description" />
-                            </div>
-                          ) : (
-                            <span className="text-sm text-zinc-300 italic">No description</span>
-                          )}
+                          <InlineEdit
+                            value={ticket.description || ''}
+                            type="textarea"
+                            onSave={v => updateField('description', v)}
+                            placeholder="Add description..."
+                            emptyText="No description"
+                            displayClassName="text-sm text-zinc-700"
+                          />
                         </div>
                         {ticket.resolution_notes && (
                           <div>
