@@ -52,6 +52,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [activity, setActivity] = useState<Activity[]>([])
   const [relatedTickets, setRelatedTickets] = useState<any[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [showActions, setShowActions] = useState(false)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [isInternal, setIsInternal] = useState(true)
@@ -189,7 +190,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-medium">{(ticket.source || 'web').toUpperCase()}</span>
               </div>
             </div>
-            {/* Action buttons */}
+            {/* Action buttons — SF style */}
             <div className="flex items-center gap-2 flex-shrink-0">
               {ticket.status !== 'closed' && (
                 <button
@@ -200,6 +201,63 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   Mark Complete
                 </button>
               )}
+              {/* Send to Slack + Actions dropdown */}
+              <div className="relative">
+                <div className="flex">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await fetch(`/api/tickets/${params.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: ticket.status }),
+                        })
+                      } catch {}
+                    }}
+                    className="px-3 py-1.5 bg-[#0A52EF] text-white text-xs font-medium rounded-l-lg hover:bg-[#0840C0] transition-colors"
+                  >
+                    Send to Slack
+                  </button>
+                  <button
+                    onClick={() => setShowActions(!showActions)}
+                    className="px-1.5 py-1.5 bg-[#0A52EF] text-white rounded-r-lg hover:bg-[#0840C0] transition-colors border-l border-blue-400/30"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                </div>
+                {showActions && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowActions(false)} />
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-zinc-200 py-1 z-50">
+                      {[
+                        { label: 'Change Owner', action: () => { document.querySelector<HTMLSelectElement>('[data-assignee-select]')?.focus(); setShowActions(false) } },
+                        { label: 'Clone Ticket', action: async () => {
+                          const res = await fetch('/api/tickets', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ venue_id: ticket.venue_id, title: `[Clone] ${ticket.title}`, description: ticket.description, priority: ticket.priority, category: ticket.category, source: ticket.source, ticket_type: ticket.ticket_type, parent_ticket_id: ticket.id }),
+                          })
+                          if (res.ok) { const d = await res.json(); router.push(`/tickets/${d.id}`) }
+                          setShowActions(false)
+                        }},
+                        { label: 'Create Dev Ticket', action: async () => {
+                          const res = await fetch('/api/tickets', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ venue_id: ticket.venue_id, title: `[Dev] ${ticket.title}`, description: ticket.description, priority: ticket.priority, category: ticket.category, ticket_type: 'dev_ticket', parent_ticket_id: ticket.id }),
+                          })
+                          if (res.ok) { const d = await res.json(); router.push(`/tickets/${d.id}`) }
+                          setShowActions(false)
+                        }},
+                        { label: 'Print View', action: () => { window.print(); setShowActions(false) } },
+                      ].map((item, i) => (
+                        <button key={i} onClick={item.action}
+                          className="w-full text-left px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors">
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -234,7 +292,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
               <div>
                 <label className="text-[11px] text-zinc-400 font-medium block mb-1.5">Assignee</label>
-                <select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
+                <select data-assignee-select value={ticket.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
                   className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none bg-white transition-colors">
                   <option value="">Unassigned</option>
                   {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
