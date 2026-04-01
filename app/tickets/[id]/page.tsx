@@ -173,7 +173,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </button>
           <div className="flex items-start gap-4">
             <span className="text-xs font-mono font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1.5 rounded-md mt-0.5 flex-shrink-0">{caseNum}</span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="text-xl font-semibold text-zinc-900 leading-tight">{ticket.title}</h1>
               <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
                 <span>Opened by <span className="text-zinc-600 font-medium">{ticket.created_by_name}</span></span>
@@ -185,7 +185,21 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     <Link href={`/venues/${ticket.venue_id}`} className="text-blue-600 hover:text-blue-800 font-medium">{ticket.venue_name}</Link>
                   </>
                 )}
+                <span>&middot;</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-medium">{(ticket.source || 'web').toUpperCase()}</span>
               </div>
+            </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {ticket.status !== 'closed' && (
+                <button
+                  onClick={() => updateField('status', 'closed')}
+                  className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600 transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  Mark Complete
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -252,33 +266,63 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               </div>
             </div>
 
-            {/* Metadata */}
+            {/* Case Information — SF-style two-column grid */}
             <div className="space-y-3 pt-5 border-t border-zinc-100">
-              <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Info</h3>
-              {[
-                { label: 'Venue', value: ticket.venue_name, href: `/venues/${ticket.venue_id}` },
-                ticket.event_name ? { label: 'Event', value: ticket.event_name, href: `/events/${ticket.event_id}` } : null,
-                { label: 'Source', value: (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
-                { label: 'Type', value: (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
-                ticket.contact_name ? { label: 'Contact', value: ticket.contact_name } : null,
-                ticket.contact_email ? { label: 'Contact Email', value: ticket.contact_email } : null,
-                ticket.contact_phone ? { label: 'Contact Phone', value: ticket.contact_phone } : null,
-                ticket.parent_ticket_number ? { label: 'Parent Case', value: `T-${String(ticket.parent_ticket_number).padStart(5, '0')} ${ticket.parent_ticket_title}`, href: `/tickets/${ticket.parent_ticket_id}` } : null,
-                ticket.sf_case_number ? { label: 'SF Case #', value: ticket.sf_case_number } : null,
-                { label: 'Created by', value: ticket.created_by_name, href: `/staff/${ticket.created_by}` },
-                { label: 'Created', value: ticket.created_date },
-                { label: 'Updated', value: ticket.updated_date },
-                ticket.resolved_date ? { label: 'Closed', value: ticket.resolved_date } : null,
-              ].filter(Boolean).map((item: any, i) => (
-                <div key={i} className="flex justify-between items-center text-xs">
-                  <span className="text-zinc-400">{item.label}</span>
-                  {item.href ? (
-                    <Link href={item.href} className="text-blue-600 hover:text-blue-800 font-medium truncate ml-4">{item.value}</Link>
-                  ) : (
-                    <span className="text-zinc-600 truncate ml-4">{item.value}</span>
+              <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Case Information</h3>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { label: 'Venue', value: ticket.venue_name, href: `/venues/${ticket.venue_id}` },
+                  ticket.event_name ? { label: 'Event', value: ticket.event_name, href: `/events/${ticket.event_id}` } : null,
+                  { label: 'Source', value: (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
+                  { label: 'Type', value: (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
+                  ticket.sf_case_number ? { label: 'SF Case #', value: ticket.sf_case_number } : null,
+                  ticket.parent_ticket_number ? { label: 'Parent Case', value: `T-${String(ticket.parent_ticket_number).padStart(5, '0')}`, href: `/tickets/${ticket.parent_ticket_id}` } : null,
+                  { label: 'Created by', value: ticket.created_by_name, href: `/staff/${ticket.created_by}` },
+                  { label: 'Created', value: ticket.created_date },
+                  { label: 'Updated', value: ticket.updated_date },
+                  ticket.resolved_date ? { label: 'Closed', value: ticket.resolved_date } : null,
+                ].filter(Boolean).map((item: any, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50 group transition-colors">
+                    <span className="text-zinc-400 flex-shrink-0">{item.label}</span>
+                    <div className="flex items-center gap-1.5 ml-4 min-w-0">
+                      {item.href ? (
+                        <Link href={item.href} className="text-blue-600 hover:text-blue-800 font-medium truncate">{item.value}</Link>
+                      ) : (
+                        <span className="text-zinc-700 truncate">{item.value}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Contact Details — SF style */}
+            <div className="space-y-3 pt-5 border-t border-zinc-100">
+              <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Contact Details</h3>
+              {ticket.contact_name || ticket.contact_email || ticket.contact_phone ? (
+                <div className="space-y-2">
+                  {ticket.contact_name && (
+                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
+                      <span className="text-zinc-400">Name</span>
+                      <span className="text-zinc-700 font-medium">{ticket.contact_name}</span>
+                    </div>
+                  )}
+                  {ticket.contact_email && (
+                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
+                      <span className="text-zinc-400">Email</span>
+                      <a href={`mailto:${ticket.contact_email}`} className="text-blue-600 hover:text-blue-800">{ticket.contact_email}</a>
+                    </div>
+                  )}
+                  {ticket.contact_phone && (
+                    <div className="flex justify-between items-center text-xs py-1.5 px-2 rounded hover:bg-zinc-50">
+                      <span className="text-zinc-400">Phone</span>
+                      <span className="text-zinc-700">{ticket.contact_phone}</span>
+                    </div>
                   )}
                 </div>
-              ))}
+              ) : (
+                <p className="text-xs text-zinc-300 italic px-2">No contact linked</p>
+              )}
             </div>
 
             {/* SLA */}
