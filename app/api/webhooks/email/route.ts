@@ -90,6 +90,40 @@ export async function POST(request: NextRequest) {
       return await handleTicketReply(ticketNumber, senderEmail, senderName, emailBody, subject)
     }
 
+    // Subject-line thread detection — "Re:" or "Fwd:" means this is likely a reply to an existing ticket
+    const isReplyOrForward = /^(Re|Fwd|Fw)\s*:/i.test(subject)
+    const normalizedSubject = subject.replace(/^(Re|Fwd|Fw)\s*:\s*/gi, '').trim()
+
+    if (normalizedSubject) {
+      // Look for an existing open ticket with the same base subject
+      const threadMatch = await query(
+        `SELECT t.id, t.ticket_number, t.title, t.venue_id, v.name as venue_name, v.slack_channel_id
+         FROM tickets t
+         LEFT JOIN venues v ON t.venue_id = v.id
+         WHERE (
+           REPLACE(REPLACE(t.title, 'Re: ', ''), 'Fwd: ', '') ILIKE $1
+           OR t.title ILIKE $2
+         )
+         AND t.status != 'closed'
+         ORDER BY t.created_at DESC
+         LIMIT 1`,
+        [normalizedSubject, normalizedSubject]
+      )
+
+      if (threadMatch.rows.length > 0) {
+        const existing = threadMatch.rows[0]
+        console.log(`[email-webhook] Thread match — adding reply to ticket #${existing.ticket_number} (subject: "${normalizedSubject}")`)
+        return await handleTicketReply(existing.ticket_number, senderEmail, senderName, emailBody, subject)
+      }
+    }
+
+    // Internal ANC emails that don't match any thread — skip ticket creation
+    const senderDomainCheck = senderEmail.split('@')[1]?.toLowerCase() || ''
+    if (senderDomainCheck === 'anc.com' && isReplyOrForward) {
+      console.log(`[email-webhook] Skipping ticket creation for internal ANC reply from ${senderEmail} — no matching thread found`)
+      return NextResponse.json({ ok: true, message: 'Internal ANC reply with no matching thread — skipped' })
+    }
+
     // Match sender to a venue contact
     let venueId: string | null = null
     let venueName = 'Unknown Venue'
