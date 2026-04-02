@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
+import { sendTicketDistributionEmail } from '@/lib/email'
+import fs from 'fs'
 
 // Get ticket detail with external comments
 export async function GET(
@@ -84,11 +87,44 @@ export async function POST(
     const result = await query(
       `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by)
        VALUES ($1, $2, $3, $4, $5, 'new', $6)
-       RETURNING id, ticket_number, title, status`,
+       RETURNING id, ticket_number, title, category, priority, status`,
       [venueId, title, description || '', category || 'general', priority || 'medium', CLAW_STAFF_ID]
     )
 
-    return NextResponse.json({ ticket: result.rows[0] })
+    const ticket = result.rows[0]
+    const venueName = venueResult.rows[0].name
+
+    // Write notification log for Claw
+    const logEntry = `TICKET|portal_created|Portal User|${title}|${venueName}|${new Date().toISOString()}\n`
+    fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
+
+    // Notify venue's Slack channel (fallback to default channel)
+    const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [venueId])
+    const channelId = slackChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+    if (channelId) {
+      const msg = formatTicketNotification({
+        id: ticket.id,
+        ticket_number: ticket.ticket_number,
+        title: ticket.title,
+        category: category || 'general',
+        priority: priority || 'medium',
+        venue_name: venueName,
+        description: description || undefined,
+      }, 'created')
+      msg.channel = channelId
+      sendSlackMessage(msg)
+    }
+
+    // Email distribution list
+    sendTicketDistributionEmail({
+      venueId,
+      ticketTitle: title,
+      ticketNumber: ticket.ticket_number,
+      type: 'created',
+      detail: description || title,
+    }).catch(err => console.error('[email] Portal ticket creation email failed:', err))
+
+    return NextResponse.json({ ticket })
   } catch (err) {
     console.error('Error creating ticket:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
