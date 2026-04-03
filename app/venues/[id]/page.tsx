@@ -135,6 +135,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docType, setDocType] = useState('document')
   const [docDescription, setDocDescription] = useState('')
+  // Event discovery state
+  const [discovering, setDiscovering] = useState(false)
+  const [discoveredEvents, setDiscoveredEvents] = useState<Array<{ summary: string; event_date: string; start_time: string | null; end_time: string | null; event_type: string; league: string | null; teams: string | null; selected: boolean }>>([])
+  const [discoverStats, setDiscoverStats] = useState<{ total_found: number; duplicates_skipped: number; existing_count: number } | null>(null)
+  const [showDiscoverModal, setShowDiscoverModal] = useState(false)
+  const [importing, setImporting] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -498,6 +504,33 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         {activeTab === 'events' && (
           <div className="space-y-3">
             <div className="flex justify-end gap-2">
+              <button
+                onClick={async () => {
+                  setDiscovering(true)
+                  setDiscoveredEvents([])
+                  setDiscoverStats(null)
+                  try {
+                    const res = await fetch('/api/events/discover', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ venue_id: params.id }),
+                    })
+                    if (res.ok) {
+                      const data = await res.json()
+                      setDiscoveredEvents((data.discovered || []).map((e: any) => ({ ...e, selected: true })))
+                      setDiscoverStats({ total_found: data.total_found, duplicates_skipped: data.duplicates_skipped, existing_count: data.existing_count })
+                      setShowDiscoverModal(true)
+                    }
+                  } catch {} finally { setDiscovering(false) }
+                }}
+                disabled={discovering}
+                className="px-3 py-1.5 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {discovering ? 'Searching...' : 'Discover Events'}
+              </button>
               <a
                 href={`/api/schedule/export?venue_id=${params.id}&period=30`}
                 download
@@ -568,6 +601,148 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
               </table>
             )}
           </div>
+
+          {/* Event Discovery Modal */}
+          {showDiscoverModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDiscoverModal(false)}>
+              <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="p-6 border-b border-[#E8E8E8]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-zinc-900">Discovered Events</h3>
+                      {discoverStats && (
+                        <p className="text-sm text-zinc-500 mt-1">
+                          Found {discoverStats.total_found} events
+                          {discoverStats.duplicates_skipped > 0 && ` (${discoverStats.duplicates_skipped} already in database)`}
+                          {' '}&middot; {discoverStats.existing_count} existing events
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => setShowDiscoverModal(false)} className="text-zinc-400 hover:text-zinc-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-4">
+                  {discoveredEvents.length === 0 ? (
+                    <div className="text-center py-12 text-zinc-400">No new events found for this venue in the next 60 days.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-2 mb-3">
+                        <label className="flex items-center gap-2 text-sm text-zinc-600">
+                          <input
+                            type="checkbox"
+                            checked={discoveredEvents.every(e => e.selected)}
+                            onChange={e => setDiscoveredEvents(prev => prev.map(ev => ({ ...ev, selected: e.target.checked })))}
+                            className="rounded border-zinc-300"
+                          />
+                          Select all ({discoveredEvents.filter(e => e.selected).length}/{discoveredEvents.length})
+                        </label>
+                      </div>
+                      {discoveredEvents.map((event, idx) => {
+                        const typeColors: Record<string, string> = {
+                          game: 'bg-blue-50 text-blue-700 border-blue-200',
+                          concert: 'bg-purple-50 text-purple-700 border-purple-200',
+                          other: 'bg-zinc-50 text-zinc-600 border-zinc-200',
+                        }
+                        return (
+                          <label
+                            key={idx}
+                            className={`flex items-start gap-3 p-3 rounded border transition-colors cursor-pointer ${
+                              event.selected ? 'border-[#0A52EF] bg-blue-50/30' : 'border-[#E8E8E8] bg-white hover:border-zinc-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={event.selected}
+                              onChange={() => setDiscoveredEvents(prev => prev.map((e, i) => i === idx ? { ...e, selected: !e.selected } : e))}
+                              className="mt-1 rounded border-zinc-300"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm text-zinc-900">{event.summary}</span>
+                                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${typeColors[event.event_type] || typeColors.other}`}>
+                                  {event.event_type}
+                                </span>
+                                {event.league && (
+                                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">
+                                    {event.league}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-zinc-500 mt-1">
+                                {new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                {event.start_time && ` at ${event.start_time}`}
+                              </div>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {discoveredEvents.length > 0 && (
+                  <div className="p-4 border-t border-[#E8E8E8] flex items-center justify-between bg-zinc-50">
+                    <span className="text-sm text-zinc-500">
+                      {discoveredEvents.filter(e => e.selected).length} events selected for import
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowDiscoverModal(false)}
+                        className="px-4 py-2 text-sm font-medium text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const selected = discoveredEvents.filter(e => e.selected)
+                          if (selected.length === 0) return
+                          setImporting(true)
+                          try {
+                            const res = await fetch('/api/events/discover/import', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                venue_id: params.id,
+                                events: selected.map(({ selected: _, ...e }) => e),
+                              }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              setShowDiscoverModal(false)
+                              setDiscoveredEvents([])
+                              // Refresh venue data to show new events
+                              const venueRes = await fetch(`/api/venues/${params.id}`)
+                              if (venueRes.ok) {
+                                const vData = await venueRes.json()
+                                setUpcomingEvents(vData.upcomingEvents || [])
+                              }
+                            }
+                          } catch {} finally { setImporting(false) }
+                        }}
+                        disabled={importing || discoveredEvents.filter(e => e.selected).length === 0}
+                        className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded hover:bg-[#0941bf] transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                      >
+                        {importing ? (
+                          <>
+                            <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Importing...
+                          </>
+                        ) : (
+                          `Import ${discoveredEvents.filter(e => e.selected).length} Events`
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           </div>
         )}
 
