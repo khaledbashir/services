@@ -15,6 +15,8 @@ interface EventDetail {
   workflow_status: string
   venue_id: string
   venue_name: string
+  requires_staffing: boolean | null
+  venue_requires_assignment: boolean
 }
 
 interface Technician {
@@ -57,7 +59,7 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
-  const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number }>>([])
+  const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number; linked_to_venue: boolean }>>([])
   const [assigning, setAssigning] = useState(false)
   const [staffSearch, setStaffSearch] = useState('')
 
@@ -365,7 +367,12 @@ export default function EventDetailPage() {
                           className="w-full text-left px-3 py-2 hover:bg-zinc-50 transition-colors flex items-center justify-between"
                         >
                           <div>
-                            <p className="text-xs font-medium text-zinc-900">{s.full_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-medium text-zinc-900">{s.full_name}</p>
+                              {s.linked_to_venue && (
+                                <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">venue</span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-zinc-500">{s.role}</p>
                           </div>
                           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${Number(s.week_hours) > 40 ? 'bg-rose-50 text-rose-600' : Number(s.week_hours) > 30 ? 'bg-amber-50 text-amber-600' : 'bg-zinc-100 text-zinc-500'}`}>
@@ -384,7 +391,7 @@ export default function EventDetailPage() {
                   onClick={async () => {
                     setShowAssignDropdown(true)
                     if (allStaff.length === 0) {
-                      const res = await fetch('/api/staff/available')
+                      const res = await fetch(`/api/staff/available${event?.venue_id ? `?venue_id=${event.venue_id}` : ''}`)
                       if (res.ok) {
                         const data = await res.json()
                         setAllStaff(data.staff || [])
@@ -411,6 +418,60 @@ export default function EventDetailPage() {
                 {copied ? 'Copied!' : 'Copy Link'}
               </button>
               <p className="text-xs text-zinc-500 mt-3">Share this with the assigned technician</p>
+            </div>
+
+            {/* Staffing Requirement */}
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+              <h2 className="text-sm font-semibold text-zinc-900 mb-2">Staffing Requirement</h2>
+              <p className="text-xs text-zinc-500 mb-3">
+                Venue default: <span className="font-medium text-zinc-700">{event.venue_requires_assignment ? 'Requires staffing' : 'Warranty only'}</span>
+              </p>
+              {(() => {
+                const effective = event.requires_staffing !== null && event.requires_staffing !== undefined
+                  ? event.requires_staffing
+                  : event.venue_requires_assignment
+                const isOverridden = event.requires_staffing !== null && event.requires_staffing !== undefined
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={async () => {
+                          const newVal = !effective
+                          const res = await fetch(`/api/events/${eventId}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ requires_staffing: newVal }),
+                          })
+                          if (res.ok) {
+                            setEvent(prev => prev ? { ...prev, requires_staffing: newVal } : prev)
+                          }
+                        }}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${effective ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${effective ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                      <span className="text-sm text-zinc-700">{effective ? 'Requires staffing' : 'Warranty only'}</span>
+                    </div>
+                    {isOverridden && (
+                      <button
+                        onClick={async () => {
+                          const res = await fetch(`/api/events/${eventId}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ requires_staffing: null }),
+                          })
+                          if (res.ok) {
+                            setEvent(prev => prev ? { ...prev, requires_staffing: null } : prev)
+                          }
+                        }}
+                        className="text-xs text-[#0A52EF] hover:underline font-medium"
+                      >
+                        Reset to venue default
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Quick Actions */}

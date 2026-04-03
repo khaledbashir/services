@@ -15,6 +15,9 @@ interface Event {
   workflow_status: string
   date?: string
   time?: string
+  event_requires_staffing?: boolean | null
+  venue_requires_assignment?: boolean
+  assigned_count?: number
 }
 
 const leagueColors: Record<string, { bg: string; text: string; hex: string }> = {
@@ -65,6 +68,7 @@ function EventsPageInner() {
   const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
   const [showVenueFilter, setShowVenueFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [staffingFilter, setStaffingFilter] = useState<'all' | 'needs_staffing' | 'warranty_only'>('all')
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [creating, setCreating] = useState(false)
   const [newEvent, setNewEvent] = useState({
@@ -170,13 +174,27 @@ function EventsPageInner() {
     }))
   }
 
-  // Filter events by selected venues (client-side)
+  // Determine if an event effectively requires staffing (event override > venue default)
+  const eventNeedsStaffing = (e: Event): boolean => {
+    if (e.event_requires_staffing !== null && e.event_requires_staffing !== undefined) return e.event_requires_staffing
+    return e.venue_requires_assignment !== false
+  }
+
+  // Filter events by selected venues and staffing filter (client-side)
   const filterByVenue = (list: Event[]) => {
-    if (selectedVenues.size === 0) return list
-    return list.filter(e => {
-      const venueName = e.venue_name || (e as any).venue || ''
-      return venueOptions.some(v => selectedVenues.has(v.id) && v.name === venueName)
-    })
+    let filtered = list
+    if (selectedVenues.size > 0) {
+      filtered = filtered.filter(e => {
+        const venueName = e.venue_name || (e as any).venue || ''
+        return venueOptions.some(v => selectedVenues.has(v.id) && v.name === venueName)
+      })
+    }
+    if (staffingFilter === 'needs_staffing') {
+      filtered = filtered.filter(e => eventNeedsStaffing(e))
+    } else if (staffingFilter === 'warranty_only') {
+      filtered = filtered.filter(e => !eventNeedsStaffing(e))
+    }
+    return filtered
   }
 
   useEffect(() => {
@@ -321,13 +339,32 @@ function EventsPageInner() {
                     <div key={colIdx} className="border-r border-[#E8E8E8] last:border-r-0 p-2 min-h-64 bg-white" style={{ borderColor: '#E8E8E8' }}>
                       {cellEvents.map((event) => {
                         const leagueColor = getLeagueBadge(event.league)
+                        const needsStaffing = eventNeedsStaffing(event)
+                        const assignedCount = Number((event as any).assigned_count) || 0
+                        const isStaffed = needsStaffing && assignedCount > 0
+                        const isUnderstaffed = needsStaffing && assignedCount === 0
+                        const isWarranty = !needsStaffing
+
+                        // Border color: red=understaffed, green=staffed, gray=warranty
+                        const borderColor = isUnderstaffed ? '#dc2626' : isStaffed ? '#16a34a' : '#a1a1aa'
+                        const bgColor = isUnderstaffed ? '#fef2f2' : isStaffed ? '#f0fdf4' : '#fafafa'
+
                         return (
                           <button
                             key={event.id}
                             onClick={() => router.push(`/events/${event.id}`)}
                             className="w-full text-left p-2 rounded mb-1 transition-all hover:shadow-md text-xs"
-                            style={{ backgroundColor: leagueColor.hex + '20', borderLeft: `3px solid ${leagueColor.hex}` }}
+                            style={{ backgroundColor: bgColor, borderLeft: `3px solid ${borderColor}` }}
                           >
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isUnderstaffed ? 'bg-red-500' : isStaffed ? 'bg-green-500' : 'bg-zinc-400'}`} />
+                              <span className={`text-[9px] font-semibold uppercase tracking-wide ${isUnderstaffed ? 'text-red-600' : isStaffed ? 'text-green-700' : 'text-zinc-400'}`}>
+                                {isUnderstaffed ? 'Needs Staff' : isWarranty ? 'Warranty' : `${assignedCount} Assigned`}
+                              </span>
+                              {event.league && (
+                                <span className="text-[9px] font-medium px-1 rounded ml-auto" style={{ backgroundColor: leagueColor.hex + '20', color: leagueColor.hex }}>{event.league}</span>
+                              )}
+                            </div>
                             <p className="font-medium text-zinc-900 truncate">{event.summary}</p>
                             <p className="text-zinc-500 truncate">{event.venue_name || (event as any).venue}</p>
                             <p className="text-zinc-600 truncate">{(event as any).time}</p>
@@ -369,6 +406,7 @@ function EventsPageInner() {
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Event</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Venue</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">League</th>
+                <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Staffing</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Assigned</th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Status</th>
               </tr>
@@ -394,6 +432,15 @@ function EventsPageInner() {
                       <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium ${leagueColor.bg} ${leagueColor.text}`}>
                         {event.league}
                       </span>
+                    </td>
+                    <td className="py-3 px-6">
+                      {(() => {
+                        const needs = eventNeedsStaffing(event)
+                        const count = Number((event as any).assigned_count) || 0
+                        if (!needs) return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500"><span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />Warranty</span>
+                        if (count > 0) return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200"><span className="w-1.5 h-1.5 rounded-full bg-green-500" />Staffed</span>
+                        return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />Needs Staff</span>
+                      })()}
                     </td>
                     <td className="py-3 px-6 text-zinc-600 text-xs max-w-48 truncate">
                       {(event as any).assigned_techs || <span className="text-zinc-400">Unassigned</span>}
@@ -566,9 +613,45 @@ function EventsPageInner() {
           </div>
         )}
 
-        {/* Venue multi-select filter */}
+        {/* Staffing + Venue filters */}
         <div className="relative">
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Staffing filter */}
+            {(['all', 'needs_staffing', 'warranty_only'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setStaffingFilter(f)}
+                className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
+                  staffingFilter === f
+                    ? f === 'needs_staffing' ? 'bg-red-600 text-white border-red-600'
+                      : f === 'warranty_only' ? 'bg-zinc-600 text-white border-zinc-600'
+                      : 'bg-[#0A52EF] text-white border-[#0A52EF]'
+                    : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
+                }`}
+              >
+                {f === 'all' && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
+                    Show All
+                  </>
+                )}
+                {f === 'needs_staffing' && (
+                  <>
+                    <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-red-500'}`} />
+                    Needs Staffing
+                  </>
+                )}
+                {f === 'warranty_only' && (
+                  <>
+                    <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-zinc-400'}`} />
+                    Warranty Only
+                  </>
+                )}
+              </button>
+            ))}
+            <span className="w-px h-6 bg-zinc-200" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mt-2">
             <button
               onClick={() => setShowVenueFilter(!showVenueFilter)}
               className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${

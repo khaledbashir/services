@@ -67,13 +67,16 @@ export async function GET(request: NextRequest) {
         e.start_time,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         COALESCE(e.workflow_status, 'pending') as workflow_status,
+        e.requires_staffing as event_requires_staffing,
+        COALESCE(v.requires_assignment, true) as venue_requires_assignment,
+        COUNT(ea.id)::int as assigned_count,
         STRING_AGG(s.full_name, ', ') as assigned_techs
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       ${whereClause} ${venueFilter} ${assignmentFilter}
-      GROUP BY e.id, v.name
+      GROUP BY e.id, v.name, v.requires_assignment
       ORDER BY e.start_time ASC
       LIMIT $${limitIndex}`,
       [...params, ...vf.params, ...af.params, parseInt(limit)]

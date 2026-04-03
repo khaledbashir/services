@@ -10,10 +10,11 @@ export async function GET(
 
     // Event details with venue
     const eventResult = await query(
-      `SELECT 
-        e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league, 
-        e.workflow_status, e.venue_id,
-        v.name as venue_name
+      `SELECT
+        e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league,
+        e.workflow_status, e.venue_id, e.requires_staffing,
+        v.name as venue_name,
+        COALESCE(v.requires_assignment, true) as venue_requires_assignment
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
       WHERE e.id = $1`,
@@ -76,6 +77,29 @@ export async function GET(
     })
   } catch (err) {
     console.error('Error fetching event:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { id } = params
+    const body = await request.json()
+
+    if ('requires_staffing' in body) {
+      const val = body.requires_staffing === null ? null : Boolean(body.requires_staffing)
+      await query(
+        `UPDATE events SET requires_staffing = $1 WHERE id = $2`,
+        [val, id]
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Error updating event:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

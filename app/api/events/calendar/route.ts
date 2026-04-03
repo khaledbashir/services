@@ -20,7 +20,9 @@ export async function GET(request: NextRequest) {
         TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as time,
         v.name as venue, v.name as venue_name,
         e.workflow_status,
-        (SELECT count(*) FROM event_assignments ea WHERE ea.event_id = e.id) as assigned_count,
+        e.requires_staffing as event_requires_staffing,
+        COALESCE(v.requires_assignment, true) as venue_requires_assignment,
+        (SELECT count(*) FROM event_assignments ea WHERE ea.event_id = e.id)::int as assigned_count,
         (SELECT STRING_AGG(s.full_name, ', ') FROM event_assignments ea JOIN staff s ON ea.staff_id = s.id WHERE ea.event_id = e.id) as assigned_techs
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
