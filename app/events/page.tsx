@@ -76,7 +76,7 @@ function EventsPageInner() {
   function getWeekStart(date: Date): Date {
     const d = new Date(date)
     const day = d.getDay()
-    const diff = d.getDate() - day
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1)
     return new Date(d.setDate(diff))
   }
 
@@ -306,8 +306,12 @@ function EventsPageInner() {
               <div className="grid grid-cols-7">
                 {weekCells.map((cellDate, colIdx) => {
                   const cellEvents = filterByVenue(calendarEvents).filter((e) => {
-                    const eDate = new Date(e.date || e.event_date)
-                    if (eDate.toDateString() !== cellDate.toDateString()) return false
+                    const raw = e.date || e.event_date
+                    const eDateStr = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw)
+                      ? raw
+                      : new Date(new Date(raw).toLocaleString('en-US', { timeZone: 'America/New_York' })).toISOString().slice(0, 10)
+                    const cellStr = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`
+                    if (eDateStr !== cellStr) return false
                     if (!search) return true
                     const q = search.toLowerCase()
                     return e.summary.toLowerCase().includes(q) || (e.venue_name || '').toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
