@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
       // Smart name: split camelCase and add spaces, uppercase abbreviations
       let venueName_ = domainBase
         .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase → spaces
-        .replace(/([A-Z]+)/g, (m) => m.length <= 4 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()) // Short = acronym, long = capitalize
+        .replace(/([A-Z]+)/g, (m: string) => m.length <= 4 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()) // Short = acronym, long = capitalize
         .trim()
       if (venueName_.length <= 5) venueName_ = venueName_.toUpperCase() // Short domains are usually acronyms
 
