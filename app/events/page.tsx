@@ -190,7 +190,7 @@ function EventsPageInner() {
       })
     }
     if (staffingFilter === 'needs_staffing') {
-      filtered = filtered.filter(e => eventNeedsStaffing(e))
+      filtered = filtered.filter(e => eventNeedsStaffing(e) && (Number((e as any).assigned_count) || 0) === 0)
     } else if (staffingFilter === 'warranty_only') {
       filtered = filtered.filter(e => !eventNeedsStaffing(e))
     }
