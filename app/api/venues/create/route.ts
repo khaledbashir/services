@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { geocodeAddress } from '@/lib/geocode'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +26,16 @@ export async function POST(request: NextRequest) {
     )
 
     const v = result.rows[0]
+
+    // Geocode the address asynchronously (don't block the response)
+    if (address) {
+      geocodeAddress(address).then(geo => {
+        if (geo.lat && geo.lng) {
+          query('UPDATE venues SET latitude = $1, longitude = $2 WHERE id = $3', [geo.lat, geo.lng, v.id])
+        }
+      }).catch(err => console.warn('Geocoding failed for new venue:', err))
+    }
+
     notifyOps(':stadium:', `*New venue created:* ${v.name}`, { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${v.id}` })
     return NextResponse.json({ venue: v })
   } catch (err) {

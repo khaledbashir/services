@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { geocodeAddress } from '@/lib/geocode'
 
 export async function GET(
   request: NextRequest,
@@ -30,7 +31,8 @@ export async function GET(
         sm.full_name as venue_manager_name,
         sl.full_name as lead_field_rep_name,
         v.logo_url,
-        v.cover_image_url
+        v.cover_image_url,
+        COALESCE(v.is_active, true) as is_active
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
@@ -123,6 +125,15 @@ export async function PATCH(
       }
     }
 
+    // Geocode if address changed
+    if (body.address !== undefined && body.address) {
+      geocodeAddress(body.address).then(geo => {
+        if (geo.lat && geo.lng) {
+          query('UPDATE venues SET latitude = $1, longitude = $2 WHERE id = $3', [geo.lat, geo.lng, venueId])
+        }
+      }).catch(err => console.warn('Geocoding failed:', err))
+    }
+
     // Handle service toggle
     if (body.service_type_id !== undefined) {
       if (body.enabled) {
@@ -140,6 +151,11 @@ export async function PATCH(
           [venueId, body.service_type_id]
         )
       }
+    }
+
+    // Handle is_active toggle
+    if (body.is_active !== undefined) {
+      await query(`UPDATE venues SET is_active = $1 WHERE id = $2`, [body.is_active, venueId])
     }
 
     // Handle requires_assignment toggle
@@ -214,7 +230,8 @@ export async function PATCH(
         sm.full_name as venue_manager_name,
         sl.full_name as lead_field_rep_name,
         v.logo_url,
-        v.cover_image_url
+        v.cover_image_url,
+        COALESCE(v.is_active, true) as is_active
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id

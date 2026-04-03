@@ -112,7 +112,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [venueServices, setVenueServices] = useState<VenueService[]>([])
   const [screens, setScreens] = useState<VenueScreen[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'settings'>('events')
+  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'documents' | 'settings'>('events')
   const [venueTickets, setVenueTickets] = useState<Array<{ id: string; title: string; ticket_number: number; status: string; priority: string; created_at: string; assigned_to_name: string | null }>>([])
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
@@ -131,6 +131,10 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [refreshingBriefing, setRefreshingBriefing] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [documents, setDocuments] = useState<Array<{ id: string; filename: string; original_name: string; file_type: string; file_size: number; description: string | null; uploaded_by_name: string | null; created_at: string }>>([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [docType, setDocType] = useState('document')
+  const [docDescription, setDocDescription] = useState('')
   const router = useRouter()
   const auth = useAuth()
 
@@ -154,11 +158,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           }).then(d => { if (d) setBriefing(d) }).catch(err => console.warn('Briefing error:', err))
 
           // Fetch screens, linked staff, and tickets
-          const [screensRes, linkedStaffRes, allStaffRes, ticketsRes] = await Promise.all([
+          const [screensRes, linkedStaffRes, allStaffRes, ticketsRes, docsRes] = await Promise.all([
             fetch(`/api/venues/${params.id}/screens`),
             fetch(`/api/venues/${params.id}/staff`),
             fetch(`/api/staff`),
             fetch(`/api/tickets?venue_id=${params.id}`),
+            fetch(`/api/venues/${params.id}/documents`),
           ])
           if (screensRes.ok) {
             const screensData = await screensRes.json()
@@ -175,6 +180,10 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           if (ticketsRes.ok) {
             const data = await ticketsRes.json()
             setVenueTickets(data.tickets || [])
+          }
+          if (docsRes.ok) {
+            const data = await docsRes.json()
+            setDocuments(data.documents || [])
           }
         }
       } catch (err) {
@@ -470,14 +479,15 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           )}
 
           {/* Tabs */}
-          <div className="border-t border-[#E8E8E8] flex px-6">
-            {(['events', 'staff', 'tickets', 'specs', 'settings'] as const).map(tab => (
+          <div className="border-t border-[#E8E8E8] flex px-6 overflow-x-auto">
+            {(['events', 'staff', 'tickets', 'specs', 'documents', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
                 {tab === 'events' && `Events (${upcomingEvents.length})`}
                 {tab === 'staff' && `Staff (${assignedStaff.length})`}
                 {tab === 'tickets' && `Tickets (${venueTickets.length})`}
                 {tab === 'specs' && `Specs${screens.length > 0 ? ` (${screens.length})` : ''}`}
+                {tab === 'documents' && `Docs${documents.length > 0 ? ` (${documents.length})` : ''}`}
                 {tab === 'settings' && 'Settings'}
               </button>
             ))}
@@ -772,6 +782,191 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* DOCUMENTS TAB */}
+        {activeTab === 'documents' && (
+          <div className="space-y-4">
+            {/* Upload area */}
+            {auth.isManager && (
+              <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-1">Upload Document</h3>
+                <p className="text-xs text-zinc-500 mb-4">Share spec sheets, config files, firmware, SOPs, and vendor documents</p>
+                <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                  <select value={docType} onChange={e => setDocType(e.target.value)}
+                    className="px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white">
+                    <option value="document">Document</option>
+                    <option value="spec_sheet">Spec Sheet</option>
+                    <option value="config">Config File</option>
+                    <option value="firmware">Firmware</option>
+                    <option value="sop">SOP</option>
+                    <option value="vendor">Vendor File</option>
+                    <option value="image">Image</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <input type="text" value={docDescription} onChange={e => setDocDescription(e.target.value)}
+                    placeholder="Description (optional)"
+                    className="flex-1 px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  <label className={`px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-colors flex items-center gap-2 ${
+                    uploadingDoc ? 'bg-zinc-100 text-zinc-400 cursor-wait' : 'bg-[#0A52EF] text-white hover:bg-[#0840C0]'
+                  }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    {uploadingDoc ? 'Uploading...' : 'Choose File'}
+                    <input type="file" className="hidden" disabled={uploadingDoc}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        setUploadingDoc(true)
+                        try {
+                          const fd = new FormData()
+                          fd.append('file', file)
+                          fd.append('file_type', docType)
+                          fd.append('description', docDescription)
+                          const res = await fetch(`/api/venues/${params.id}/documents`, { method: 'POST', body: fd })
+                          if (res.ok) {
+                            const data = await res.json()
+                            setDocuments(prev => [data.document, ...prev])
+                            setDocDescription('')
+                            setDocType('document')
+                          }
+                        } catch {} finally { setUploadingDoc(false) }
+                        e.target.value = ''
+                      }} />
+                  </label>
+                </div>
+                {/* Drag-and-drop zone */}
+                <DropZone
+                  accept="*"
+                  disabled={uploadingDoc}
+                  onFile={async (file) => {
+                    setUploadingDoc(true)
+                    try {
+                      const fd = new FormData()
+                      fd.append('file', file)
+                      fd.append('file_type', docType)
+                      fd.append('description', docDescription)
+                      const res = await fetch(`/api/venues/${params.id}/documents`, { method: 'POST', body: fd })
+                      if (res.ok) {
+                        const data = await res.json()
+                        setDocuments(prev => [data.document, ...prev])
+                        setDocDescription('')
+                      }
+                    } catch {} finally { setUploadingDoc(false) }
+                  }}
+                  className="w-full h-20 rounded-lg bg-zinc-50 flex items-center justify-center border-2 border-dashed border-zinc-200 hover:border-zinc-300 transition-colors"
+                  activeClassName="ring-2 ring-[#0A52EF] border-[#0A52EF] bg-blue-50"
+                >
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-400">{uploadingDoc ? 'Uploading...' : 'Drag & drop files here'}</p>
+                    <p className="text-[10px] text-zinc-300 mt-0.5">PDF, Excel, Word, Images, ZIP — up to 50MB</p>
+                  </div>
+                </DropZone>
+              </div>
+            )}
+
+            {/* Document list grouped by type */}
+            {documents.length === 0 ? (
+              <div className="bg-white rounded-xl border border-zinc-200 p-16 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <p className="text-sm font-medium text-zinc-500">No documents uploaded yet</p>
+                <p className="text-xs text-zinc-400 mt-1">Upload spec sheets, firmware, SOPs, or vendor files</p>
+              </div>
+            ) : (
+              (() => {
+                const typeGroups: Record<string, { label: string; icon: string; color: string }> = {
+                  spec_sheet: { label: 'Spec Sheets', icon: '📋', color: 'blue' },
+                  config: { label: 'Config Files', icon: '⚙️', color: 'violet' },
+                  firmware: { label: 'Firmware', icon: '💾', color: 'amber' },
+                  sop: { label: 'SOPs', icon: '📖', color: 'emerald' },
+                  vendor: { label: 'Vendor Files', icon: '📦', color: 'orange' },
+                  image: { label: 'Images', icon: '🖼️', color: 'pink' },
+                  document: { label: 'Documents', icon: '📄', color: 'zinc' },
+                  other: { label: 'Other', icon: '📎', color: 'zinc' },
+                }
+                const grouped = documents.reduce((acc, doc) => {
+                  const key = doc.file_type || 'document'
+                  if (!acc[key]) acc[key] = []
+                  acc[key].push(doc)
+                  return acc
+                }, {} as Record<string, typeof documents>)
+
+                const formatSize = (bytes: number) => {
+                  if (bytes < 1024) return `${bytes} B`
+                  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+                  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+                }
+
+                return Object.entries(typeGroups).filter(([key]) => grouped[key]?.length).map(([key, conf]) => (
+                  <div key={key} className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-zinc-100 bg-zinc-50/50 flex items-center gap-2">
+                      <span className="text-sm">{conf.icon}</span>
+                      <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">{conf.label}</h3>
+                      <span className="text-xs text-zinc-400">({grouped[key].length})</span>
+                    </div>
+                    <div className="divide-y divide-zinc-100">
+                      {grouped[key].map(doc => (
+                        <div key={doc.id} className="px-5 py-3 flex items-center gap-3 hover:bg-zinc-50 transition-colors group">
+                          <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center flex-shrink-0 group-hover:bg-zinc-200 transition-colors">
+                            <span className="text-xs font-bold text-zinc-500 uppercase">{doc.original_name.split('.').pop()?.slice(0, 4) || '?'}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <a href={doc.filename} download target="_blank" rel="noopener noreferrer"
+                              className="text-sm font-medium text-zinc-900 hover:text-[#0A52EF] transition-colors truncate block">
+                              {doc.original_name}
+                            </a>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-zinc-400">{formatSize(doc.file_size)}</span>
+                              {doc.description && (
+                                <>
+                                  <span className="text-zinc-300">·</span>
+                                  <span className="text-[10px] text-zinc-500 truncate">{doc.description}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="text-right">
+                              <p className="text-[10px] text-zinc-400">{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                              {doc.uploaded_by_name && <p className="text-[10px] text-zinc-400">by {doc.uploaded_by_name}</p>}
+                            </div>
+                            <a href={doc.filename} download target="_blank" rel="noopener noreferrer"
+                              className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition-colors"
+                              title="Download">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </a>
+                            {auth.isAdmin && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Delete "${doc.original_name}"?`)) return
+                                  const res = await fetch(`/api/venues/${params.id}/documents`, {
+                                    method: 'DELETE',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ document_id: doc.id }),
+                                  })
+                                  if (res.ok) setDocuments(prev => prev.filter(d => d.id !== doc.id))
+                                }}
+                                className="p-1.5 rounded-md hover:bg-red-50 text-zinc-400 hover:text-red-500 transition-colors"
+                                title="Delete">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              })()
             )}
           </div>
         )}

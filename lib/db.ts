@@ -69,6 +69,20 @@ async function runMigrations() {
     )`)
     await client.query(`ALTER TABLE event_assignments ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`)
+    await client.query(`CREATE TABLE IF NOT EXISTS venue_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      file_type TEXT NOT NULL DEFAULT 'document',
+      file_size BIGINT DEFAULT 0,
+      description TEXT,
+      uploaded_by UUID REFERENCES staff(id),
+      created_at TIMESTAMP DEFAULT NOW()
+    )`)
     await client.query(`CREATE TABLE IF NOT EXISTS kb_entries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       title TEXT NOT NULL,

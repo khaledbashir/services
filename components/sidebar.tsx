@@ -68,6 +68,7 @@ export function Sidebar() {
         <Link href="/events" className={linkClass('/events')}>Events</Link>
         {isManager && <Link href="/shifts" className={subLinkClass('/shifts')}>Shift Templates</Link>}
         <Link href="/venues" className={linkClass('/venues')}>Venues</Link>
+        {isManager && <Link href="/venues/map" className={subLinkClass('/venues/map')}>Map View</Link>}
 
         {/* Support */}
         {isManager && (

@@ -15,6 +15,7 @@ interface Venue {
   requires_assignment: boolean
   venue_type: string
   logo_url: string | null
+  is_active: boolean
 }
 
 const venueTypeConfig: Record<string, { label: string; badge: string; dot: string }> = {
@@ -33,6 +34,7 @@ export default function VenuesPage() {
   const [newVenue, setNewVenue] = useState({ name: '', address: '', primary_contact_name: '', primary_contact_email: '', venue_type: 'sports' })
   const [submitting, setSubmitting] = useState(false)
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -40,7 +42,7 @@ export default function VenuesPage() {
     const fetchVenues = async () => {
       try {
         setLoading(true)
-        const res = await fetch(`/api/venues?period=${period}`)
+        const res = await fetch(`/api/venues?period=${period}${showInactive ? '&include_inactive=true' : ''}`)
         if (res.ok) {
           const data = await res.json()
           setVenues(data.venues || [])
@@ -52,7 +54,7 @@ export default function VenuesPage() {
       }
     }
     fetchVenues()
-  }, [period])
+  }, [period, showInactive])
 
   const periodLabel = period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
 
@@ -79,10 +81,18 @@ export default function VenuesPage() {
             <p className="text-sm text-zinc-500 mt-1">{venues.length} venues &middot; {totalEvents} events {periodLabel} &middot; {needsAttention > 0 ? <button onClick={() => setShowUnassignedOnly(!showUnassignedOnly)} className={`font-semibold hover:underline transition-colors ${showUnassignedOnly ? 'text-[#0A52EF]' : 'text-orange-600'}`}>{showUnassignedOnly ? `Showing ${needsAttention} unassigned — click to clear` : `${needsAttention} need assignment`}</button> : <span className="text-emerald-600 font-semibold">All covered</span>}</p>
           </div>
           {auth.isManager && (
-            <button onClick={() => setShowAdd(!showAdd)}
-              className="px-5 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-semibold hover:bg-[#0840C0] transition-colors shadow-sm">
-              {showAdd ? 'Cancel' : '+ Add Venue'}
-            </button>
+            <div className="flex items-center gap-2">
+              {auth.isAdmin && (
+                <button onClick={() => setShowInactive(!showInactive)}
+                  className={`px-4 py-2.5 rounded-lg text-sm font-semibold border transition-colors ${showInactive ? 'bg-zinc-800 text-white border-zinc-800' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'}`}>
+                  {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+                </button>
+              )}
+              <button onClick={() => setShowAdd(!showAdd)}
+                className="px-5 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-semibold hover:bg-[#0840C0] transition-colors shadow-sm">
+                {showAdd ? 'Cancel' : '+ Add Venue'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -234,10 +244,11 @@ export default function VenuesPage() {
               }
 
               return (
-                <div key={venue.id} onClick={() => router.push(`/venues/${venue.id}`)}
-                  className="bg-white rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-md transition-all cursor-pointer group overflow-hidden">
+                <div key={venue.id}
+                  className={`bg-white rounded-xl border transition-all overflow-hidden ${venue.is_active ? 'border-zinc-200 hover:border-zinc-300 hover:shadow-md cursor-pointer group' : 'border-zinc-200 opacity-60'}`}
+                  onClick={() => venue.is_active && router.push(`/venues/${venue.id}`)}>
                   {/* Health strip */}
-                  <div className={`h-1 ${healthColors[health]}`}></div>
+                  <div className={`h-1 ${venue.is_active ? healthColors[health] : 'bg-zinc-300'}`}></div>
                   <div className="p-5">
                     {/* Row 1: Logo + Name + Type badge */}
                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -253,9 +264,14 @@ export default function VenuesPage() {
                         </div>
                         <h3 className="text-sm font-bold text-zinc-900 group-hover:text-[#0A52EF] transition-colors leading-tight">{venue.name}</h3>
                       </div>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border flex-shrink-0 ${typeConf.badge}`}>
-                        {typeConf.label}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {!venue.is_active && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border bg-zinc-100 text-zinc-500 border-zinc-200">Inactive</span>
+                        )}
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeConf.badge}`}>
+                          {typeConf.label}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Row 2: Market */}
@@ -301,6 +317,23 @@ export default function VenuesPage() {
                         <span className="w-1.5 h-1.5 rounded-full bg-zinc-300"></span>
                         <span className="text-[11px] font-semibold text-zinc-400">No events {periodLabel}</span>
                       </div>
+                    )}
+
+                    {/* Deactivate / Activate button — admin only */}
+                    {auth.isAdmin && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          await fetch(`/api/venues/${venue.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_active: !venue.is_active }),
+                          })
+                          setVenues(prev => prev.map(v => v.id === venue.id ? { ...v, is_active: !venue.is_active } : v))
+                        }}
+                        className={`mt-3 w-full py-1.5 rounded-lg text-xs font-semibold border transition-colors ${venue.is_active ? 'text-zinc-500 border-zinc-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100'}`}>
+                        {venue.is_active ? 'Deactivate' : 'Reactivate'}
+                      </button>
                     )}
                   </div>
                 </div>
