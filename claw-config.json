@@ -34,6 +34,20 @@
       "description": "How many events last week had all 3 workflow stages completed vs incomplete. Which techs missed check-ins",
       "schedule": "Every 15 minutes",
       "enabled": true
+    },
+    {
+      "id": "sync-capabilities",
+      "name": "Dashboard Capabilities Sync",
+      "description": "Scans codebase and generates a capabilities manifest so ANC bot knows what the dashboard can do",
+      "schedule": "6:00 AM ET daily",
+      "enabled": true
+    },
+    {
+      "id": "auto-event-discovery",
+      "name": "Auto Event Discovery",
+      "description": "AI searches web for upcoming events at all active venues, imports new ones, posts Slack digest",
+      "schedule": "7:00 AM ET daily",
+      "enabled": true
     }
   ],
   "channel": "#external--ai-services"
