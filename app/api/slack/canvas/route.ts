@@ -49,6 +49,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create canvas', detail: res.error }, { status: 500 })
       }
 
+      // Set access so everyone in the workspace can view/edit
+      if (res.canvas_id) {
+        await slackAPI('canvases.access.set', {
+          canvas_id: res.canvas_id,
+          access_level: 'write',
+          channel_ids: channel_id ? [channel_id] : [],
+        }).catch(() => {})
+      }
+
       // If channel_id provided, share the canvas to that channel
       if (channel_id && res.canvas_id) {
         await slackAPI('conversations.canvases.create', {
