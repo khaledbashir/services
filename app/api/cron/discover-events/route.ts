@@ -207,10 +207,10 @@ export async function GET(request: Request) {
           .map((e: DiscoveredEvent) => `  ${e.event_date} — ${e.summary}${e.league ? ` (${e.league})` : ''}`)
           .join('\n')
 
-        await sendSlackMessage(
-          venue.slack_channel_id || SLACK_CHANNEL,
-          `:mag: *Event Discovery — ${venue.name}*\n\nImported *${result.imported} new events*:\n\n${eventLines}${result.new_events.length > 15 ? `\n  _...and ${result.new_events.length - 15} more_` : ''}\n\n_Events are pending — <https://abc-anc-services.izcgmb.easypanel.host/venues/${venue.id}|assign staff on the dashboard>._`
-        )
+        await sendSlackMessage({
+          channel: venue.slack_channel_id || SLACK_CHANNEL,
+          text: `:mag: *Event Discovery — ${venue.name}*\n\nImported *${result.imported} new events*:\n\n${eventLines}${result.new_events.length > 15 ? `\n  _...and ${result.new_events.length - 15} more_` : ''}\n\n_Events are pending — <https://abc-anc-services.izcgmb.easypanel.host/venues/${venue.id}|assign staff on the dashboard>._`,
+        })
       }
 
       return NextResponse.json(result)
@@ -256,15 +256,15 @@ export async function GET(request: Request) {
           .map(v => `  *${v.name}:* ${v.imported} new events`)
           .join('\n')
 
-        await sendSlackMessage(
-          SLACK_CHANNEL,
-          `:mag: *Daily Event Discovery*\n\nFound *${totalImported} new events* across ${venueResults.filter(v => v.imported > 0).length} venues:\n\n${lines}\n\n${totalSkipped > 0 ? `_${totalSkipped} duplicates skipped._\n` : ''}_Events are set to pending — assign staff on the <https://abc-anc-services.izcgmb.easypanel.host/events|dashboard>._`
-        )
+        await sendSlackMessage({
+          channel: SLACK_CHANNEL,
+          text: `:mag: *Daily Event Discovery*\n\nFound *${totalImported} new events* across ${venueResults.filter(v => v.imported > 0).length} venues:\n\n${lines}\n\n${totalSkipped > 0 ? `_${totalSkipped} duplicates skipped._\n` : ''}_Events are set to pending — assign staff on the <https://abc-anc-services.izcgmb.easypanel.host/events|dashboard>._`,
+        })
       } else if (venues.length > 0) {
-        await sendSlackMessage(
-          SLACK_CHANNEL,
-          `:mag: *Daily Event Discovery* — No new events found across ${venues.length} venues. Calendar is up to date.`
-        )
+        await sendSlackMessage({
+          channel: SLACK_CHANNEL,
+          text: `:mag: *Daily Event Discovery* — No new events found across ${venues.length} venues. Calendar is up to date.`,
+        })
       }
     }
 
