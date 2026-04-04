@@ -10,6 +10,7 @@ interface ImportEvent {
   end_time: string | null
   event_type: 'game' | 'concert' | 'other'
   league: string | null
+  source: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -65,10 +66,10 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await query(
-        `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+        `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type, source)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)
          RETURNING id`,
-        [e.summary, e.event_date, startTs, endTs, venue_id, e.league || null, 'event']
+        [e.summary, e.event_date, startTs, endTs, venue_id, e.league || null, 'event', e.source || 'AI Discovery']
       )
       importedIds.push(result.rows[0].id)
       existingSet.add(key)

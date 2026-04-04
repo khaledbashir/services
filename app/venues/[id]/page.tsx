@@ -676,6 +676,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               <div className="text-xs text-zinc-500 mt-1">
                                 {new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                 {event.start_time && ` at ${event.start_time}`}
+                                {(event as any).source && (
+                                  <span className="ml-2 text-violet-500">
+                                    — {(event as any).source.startsWith('http') ? new URL((event as any).source).hostname.replace('www.', '') : (event as any).source}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </label>

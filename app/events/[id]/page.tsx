@@ -17,6 +17,7 @@ interface EventDetail {
   venue_name: string
   requires_staffing: boolean | null
   venue_requires_assignment: boolean
+  source: string | null
 }
 
 interface Technician {
@@ -157,9 +158,21 @@ export default function EventDetailPage() {
             ← Back to Events
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">{event.summary}</h1>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <Link href={`/venues/${event.venue_id}`} className="text-sm text-[#0A52EF] hover:underline font-medium">{event.venue_name}</Link>
             <span className="inline-block px-2.5 py-1 rounded text-xs font-medium bg-orange-50 text-orange-600">{event.league}</span>
+            {event.source && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-violet-50 text-violet-600" title={event.source}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                {event.source.startsWith('http') ? (
+                  <a href={event.source} target="_blank" rel="noopener noreferrer" className="hover:underline">{new URL(event.source).hostname.replace('www.', '')}</a>
+                ) : (
+                  event.source
+                )}
+              </span>
+            )}
           </div>
           <p className={`text-sm font-medium mt-2 ${countdown.color}`}>{countdown.text}</p>
         </div>

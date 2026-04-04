@@ -12,7 +12,7 @@ export async function GET(
     const eventResult = await query(
       `SELECT
         e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league,
-        e.workflow_status, e.venue_id, e.requires_staffing,
+        e.workflow_status, e.venue_id, e.requires_staffing, e.source,
         v.name as venue_name,
         COALESCE(v.requires_assignment, true) as venue_requires_assignment
       FROM events e

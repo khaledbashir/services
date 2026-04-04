@@ -19,6 +19,7 @@ interface DiscoveredEvent {
   end_time: string | null
   event_type: string
   league: string | null
+  source: string | null
 }
 
 async function searchWeb(q: string): Promise<string> {
@@ -80,7 +81,7 @@ DATE RANGE: ${today} to ${sixtyDays}
 ${searchContext}
 ${existingList}
 
-Return a JSON array of events. Each object: {"summary":"Team A vs Team B","event_date":"YYYY-MM-DD","start_time":"HH:MM" or null,"end_time":null,"event_type":"game"|"concert"|"other","league":"NBA"|"NHL"|etc or null}
+Return a JSON array of events. Each object: {"summary":"Team A vs Team B","event_date":"YYYY-MM-DD","start_time":"HH:MM" or null,"end_time":null,"event_type":"game"|"concert"|"other","league":"NBA"|"NHL"|etc or null,"source":"URL or site name where found" or null}
 
 Return ONLY the JSON array.` },
       ],
@@ -152,9 +153,9 @@ async function processVenue(
     }
 
     await query(
-      `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'event')`,
-      [e.summary, e.event_date, startTs, endTs, venue.id, e.league || null]
+      `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type, source)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', 'event', $7)`,
+      [e.summary, e.event_date, startTs, endTs, venue.id, e.league || null, e.source || 'AI Discovery']
     )
     existingSet.add(key)
     imported++

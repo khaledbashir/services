@@ -14,6 +14,7 @@ interface DiscoveredEvent {
   event_type: 'game' | 'concert' | 'other'
   league: string | null
   teams: string | null
+  source: string | null
 }
 
 async function searchWeb(queryStr: string): Promise<string> {
@@ -83,7 +84,8 @@ Return ONLY a JSON array of objects with these exact fields:
   "end_time": null,
   "event_type": "game" | "concert" | "other",
   "league": "NBA" | "NHL" | "NFL" | "MLB" | "MLS" | etc. | null,
-  "teams": "Team A vs Team B" or null
+  "teams": "Team A vs Team B" or null,
+  "source": "URL or site name where this event was found" or null
 }]
 
 Return ONLY the JSON array, no other text.`
@@ -130,6 +132,7 @@ Return ONLY the JSON array, no other text.`
       event_type: ['game', 'concert', 'other'].includes(e.event_type) ? e.event_type : 'other',
       league: e.league || null,
       teams: e.teams || null,
+      source: e.source || null,
     }))
   } catch {
     return []
