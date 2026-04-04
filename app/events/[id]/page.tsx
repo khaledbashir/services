@@ -99,10 +99,11 @@ export default function EventDetailPage() {
   }
 
   const getCountdown = (eventDate: string, startTime: string) => {
-    const eventDateTime = new Date(`${eventDate}T${startTime}`)
+    const eventDateTime = new Date(startTime || eventDate)
     const now = new Date()
     const diffMs = eventDateTime.getTime() - now.getTime()
 
+    if (isNaN(diffMs)) return { text: '', color: 'text-zinc-400' }
     if (diffMs < 0) return { text: 'Completed', color: 'text-blue-600' }
     if (diffMs < 7200000) return { text: 'Starting Soon', color: 'text-amber-600' }
 
