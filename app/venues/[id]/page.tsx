@@ -159,6 +159,8 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [discoverStats, setDiscoverStats] = useState<{ total_found: number; duplicates_skipped: number; existing_count: number } | null>(null)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
   const router = useRouter()
   const auth = useAuth()
 
@@ -523,10 +525,12 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           <div className="space-y-3">
             <div className="flex justify-end gap-2">
               <button
+                type="button"
                 onClick={async () => {
                   setDiscovering(true)
                   setDiscoveredEvents([])
                   setDiscoverStats(null)
+                  setDiscoverError(null)
                   try {
                     const res = await fetch('/api/events/discover', {
                       method: 'POST',
@@ -538,8 +542,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       setDiscoveredEvents((data.discovered || []).map((e: any) => ({ ...e, selected: !e.duplicate })))
                       setDiscoverStats({ total_found: data.total_found, duplicates_skipped: data.duplicates_skipped, existing_count: data.existing_count })
                       setShowDiscoverModal(true)
+                    } else {
+                      const data = await res.json().catch(() => null)
+                      setDiscoverError(data?.error || 'Unable to discover events right now.')
                     }
-                  } catch {} finally { setDiscovering(false) }
+                  } catch {
+                    setDiscoverError('Unable to discover events right now.')
+                  } finally { setDiscovering(false) }
                 }}
                 disabled={discovering}
                 className="px-3 py-1.5 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
@@ -582,6 +591,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
               )}
             </div>
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+            {discoverError && (
+              <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {discoverError}
+              </div>
+            )}
             {upcomingEvents.length === 0 ? (
               <div className="p-12 text-center text-zinc-400 text-sm">No upcoming events in the next 30 days</div>
             ) : (
@@ -722,16 +736,19 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     </span>
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => setShowDiscoverModal(false)}
                         className="px-4 py-2 text-sm font-medium text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300 transition-colors"
                       >
                         Cancel
                       </button>
                       <button
+                        type="button"
                         onClick={async () => {
                           const selected = discoveredEvents.filter(e => e.selected && !e.duplicate)
                           if (selected.length === 0) return
                           setImporting(true)
+                          setImportError(null)
                           try {
                             const res = await fetch('/api/events/discover/import', {
                               method: 'POST',
@@ -743,7 +760,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               }),
                             })
                             if (res.ok) {
-                              const data = await res.json()
+                              await res.json()
                               setShowDiscoverModal(false)
                               setDiscoveredEvents([])
                               // Refresh venue data to show new events
@@ -752,8 +769,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                                 const vData = await venueRes.json()
                                 setUpcomingEvents(vData.upcomingEvents || [])
                               }
+                            } else {
+                              const data = await res.json().catch(() => null)
+                              setImportError(data?.error || 'Import failed. Please try again.')
                             }
-                          } catch {} finally { setImporting(false) }
+                          } catch {
+                            setImportError('Import failed. Please try again.')
+                          } finally { setImporting(false) }
                         }}
                         disabled={importing || discoveredEvents.filter(e => e.selected && !e.duplicate).length === 0}
                         className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded hover:bg-[#0941bf] transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
@@ -768,6 +790,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                         )}
                       </button>
                     </div>
+                  </div>
+                )}
+                {importError && (
+                  <div className="border-t border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {importError}
                   </div>
                 )}
               </div>
