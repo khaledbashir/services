@@ -137,7 +137,25 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [docDescription, setDocDescription] = useState('')
   // Event discovery state
   const [discovering, setDiscovering] = useState(false)
-  const [discoveredEvents, setDiscoveredEvents] = useState<Array<{ summary: string; event_date: string; start_time: string | null; end_time: string | null; event_type: string; league: string | null; teams: string | null; selected: boolean }>>([])
+  const [discoveredEvents, setDiscoveredEvents] = useState<Array<{
+    venue_id: string
+    venue_name: string
+    summary: string
+    event_date: string
+    start_time: string | null
+    end_time: string | null
+    event_type: string
+    league: string | null
+    teams: string | null
+    source: string
+    source_label: string | null
+    source_url: string | null
+    confidence: number
+    duplicate: boolean
+    duplicate_reason: string | null
+    auto_importable: boolean
+    selected: boolean
+  }>>([])
   const [discoverStats, setDiscoverStats] = useState<{ total_found: number; duplicates_skipped: number; existing_count: number } | null>(null)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -517,7 +535,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     })
                     if (res.ok) {
                       const data = await res.json()
-                      setDiscoveredEvents((data.discovered || []).map((e: any) => ({ ...e, selected: true })))
+                      setDiscoveredEvents((data.discovered || []).map((e: any) => ({ ...e, selected: !e.duplicate })))
                       setDiscoverStats({ total_found: data.total_found, duplicates_skipped: data.duplicates_skipped, existing_count: data.existing_count })
                       setShowDiscoverModal(true)
                     }
@@ -612,8 +630,8 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       <h3 className="text-lg font-semibold text-zinc-900">Discovered Events</h3>
                       {discoverStats && (
                         <p className="text-sm text-zinc-500 mt-1">
-                          Found {discoverStats.total_found} events
-                          {discoverStats.duplicates_skipped > 0 && ` (${discoverStats.duplicates_skipped} already in database)`}
+                          Found {discoverStats.total_found} results
+                          {discoverStats.duplicates_skipped > 0 && ` (${discoverStats.duplicates_skipped} duplicates already in database)`}
                           {' '}&middot; {discoverStats.existing_count} existing events
                         </p>
                       )}
@@ -635,11 +653,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                         <label className="flex items-center gap-2 text-sm text-zinc-600">
                           <input
                             type="checkbox"
-                            checked={discoveredEvents.every(e => e.selected)}
-                            onChange={e => setDiscoveredEvents(prev => prev.map(ev => ({ ...ev, selected: e.target.checked })))}
+                            checked={discoveredEvents.filter(e => !e.duplicate).length > 0 && discoveredEvents.filter(e => !e.duplicate).every(e => e.selected)}
+                            onChange={e => setDiscoveredEvents(prev => prev.map(ev => ev.duplicate ? ev : ({ ...ev, selected: e.target.checked })))}
                             className="rounded border-zinc-300"
                           />
-                          Select all ({discoveredEvents.filter(e => e.selected).length}/{discoveredEvents.length})
+                          Select all ({discoveredEvents.filter(e => e.selected && !e.duplicate).length}/{discoveredEvents.filter(e => !e.duplicate).length})
                         </label>
                       </div>
                       {discoveredEvents.map((event, idx) => {
@@ -658,8 +676,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                             <input
                               type="checkbox"
                               checked={event.selected}
+                              disabled={event.duplicate}
                               onChange={() => setDiscoveredEvents(prev => prev.map((e, i) => i === idx ? { ...e, selected: !e.selected } : e))}
-                              className="mt-1 rounded border-zinc-300"
+                              className="mt-1 rounded border-zinc-300 disabled:opacity-40"
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -676,10 +695,16 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               <div className="text-xs text-zinc-500 mt-1">
                                 {new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                 {event.start_time && ` at ${event.start_time}`}
-                                {(event as any).source && (
+                                {event.source_label && (
                                   <span className="ml-2 text-violet-500">
-                                    — {(event as any).source.startsWith('http') ? new URL((event as any).source).hostname.replace('www.', '') : (event as any).source}
+                                    — {event.source_label}
                                   </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-zinc-400 mt-1 flex items-center gap-2">
+                                <span>{Math.round((event.confidence || 0) * 100)}% confidence</span>
+                                {event.duplicate && (
+                                  <span className="text-amber-600">Duplicate: {event.duplicate_reason || 'already exists'}</span>
                                 )}
                               </div>
                             </div>
@@ -693,7 +718,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 {discoveredEvents.length > 0 && (
                   <div className="p-4 border-t border-[#E8E8E8] flex items-center justify-between bg-zinc-50">
                     <span className="text-sm text-zinc-500">
-                      {discoveredEvents.filter(e => e.selected).length} events selected for import
+                      {discoveredEvents.filter(e => e.selected && !e.duplicate).length} events selected for import
                     </span>
                     <div className="flex gap-2">
                       <button
@@ -704,7 +729,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       </button>
                       <button
                         onClick={async () => {
-                          const selected = discoveredEvents.filter(e => e.selected)
+                          const selected = discoveredEvents.filter(e => e.selected && !e.duplicate)
                           if (selected.length === 0) return
                           setImporting(true)
                           try {
@@ -713,6 +738,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
                                 venue_id: params.id,
+                                status: 'confirmed',
                                 events: selected.map(({ selected: _, ...e }) => e),
                               }),
                             })
@@ -729,7 +755,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                             }
                           } catch {} finally { setImporting(false) }
                         }}
-                        disabled={importing || discoveredEvents.filter(e => e.selected).length === 0}
+                        disabled={importing || discoveredEvents.filter(e => e.selected && !e.duplicate).length === 0}
                         className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded hover:bg-[#0941bf] transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
                       >
                         {importing ? (
@@ -738,7 +764,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                             Importing...
                           </>
                         ) : (
-                          `Import ${discoveredEvents.filter(e => e.selected).length} Events`
+                          `Import ${discoveredEvents.filter(e => e.selected && !e.duplicate).length} Events`
                         )}
                       </button>
                     </div>

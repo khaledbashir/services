@@ -48,6 +48,29 @@ interface StaffOption {
   full_name: string
 }
 
+interface DiscoveryEventRow {
+  venue_id: string
+  venue_name: string
+  summary: string
+  event_date: string
+  start_time: string | null
+  end_time: string | null
+  event_type: string
+  league: string | null
+  home_team: string | null
+  away_team: string | null
+  source: string
+  source_label: string | null
+  source_url: string | null
+  confidence: number
+  duplicate: boolean
+  duplicate_reason: string | null
+  requires_staffing: boolean
+  status: 'discovered' | 'confirmed' | 'imported'
+  auto_importable: boolean
+  selected: boolean
+}
+
 export default function EventsPageWrapper() {
   return <Suspense><EventsPageInner /></Suspense>
 }
@@ -71,11 +94,37 @@ function EventsPageInner() {
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'needs_staffing' | 'warranty_only'>('all')
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [creating, setCreating] = useState(false)
+  const [discovering, setDiscovering] = useState(false)
+  const [importingDiscovery, setImportingDiscovery] = useState(false)
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
+  const [discoveryRows, setDiscoveryRows] = useState<DiscoveryEventRow[]>([])
+  const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
   const [newEvent, setNewEvent] = useState({
     summary: '', event_date: '', start_time: '', end_time: '',
     venue_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
   })
   const router = useRouter()
+
+  const refreshEvents = async () => {
+    const res = await fetch(`/api/events?filter=${filter}`)
+    if (res.ok) {
+      const data = await res.json()
+      const sorted = (data.events || []).sort((a: Event, b: Event) => {
+        return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      })
+      setEvents(sorted)
+    }
+
+    if (view === 'calendar') {
+      const [start, end] = getDateRange(filter, currentWeekStart)
+      const startStr = start.toISOString().split('T')[0]
+      const endStr = end.toISOString().split('T')[0]
+      const calRes = await fetch(`/api/events/calendar?start=${startStr}&end=${endStr}`)
+      if (calRes.ok) {
+        setCalendarEvents(await calRes.json())
+      }
+    }
+  }
 
   function getWeekStart(date: Date): Date {
     const d = new Date(date)
@@ -158,9 +207,7 @@ function EventsPageInner() {
       if (res.ok) {
         setNewEvent({ summary: '', event_date: '', start_time: '', end_time: '', venue_id: '', league: '', staff_ids: [], event_type: 'event' })
         setShowCreate(false)
-        // Refresh events
-        const evRes = await fetch(`/api/events?filter=${filter}`)
-        if (evRes.ok) { const d = await evRes.json(); setEvents(d.events || []) }
+        await refreshEvents()
       }
     } catch {} finally { setCreating(false) }
   }
@@ -201,26 +248,7 @@ function EventsPageInner() {
     const fetchEvents = async () => {
       try {
         setLoading(true)
-        const res = await fetch(`/api/events?filter=${filter}`)
-        if (res.ok) {
-          const data = await res.json()
-          const sorted = (data.events || []).sort((a: Event, b: Event) => {
-            return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-          })
-          setEvents(sorted)
-        }
-
-        // Fetch calendar events
-        if (view === 'calendar') {
-          const [start, end] = getDateRange(filter, currentWeekStart)
-          const startStr = start.toISOString().split('T')[0]
-          const endStr = end.toISOString().split('T')[0]
-          const calRes = await fetch(`/api/events/calendar?start=${startStr}&end=${endStr}`)
-          if (calRes.ok) {
-            const calData = await calRes.json()
-            setCalendarEvents(calData)
-          }
-        }
+        await refreshEvents()
       } catch (err) {
         console.error('Failed to fetch events:', err)
       } finally {
@@ -248,6 +276,64 @@ function EventsPageInner() {
 
   const getWorkflowStatus = (status: string) => {
     return workflowStatusColors[status] || workflowStatusColors.pending
+  }
+
+  const runBulkDiscovery = async () => {
+    setDiscovering(true)
+    setDiscoveryRows([])
+    setDiscoverySummary(null)
+    try {
+      const res = await fetch('/api/events/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all_active: true }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const rows = (data.discovered || []).map((event: Omit<DiscoveryEventRow, 'selected'>) => ({
+          ...event,
+          selected: !event.duplicate,
+        }))
+        setDiscoveryRows(rows)
+        setDiscoverySummary({
+          venues: (data.venues || []).length,
+          total_found: data.total_found || 0,
+          duplicates_skipped: data.duplicates_skipped || 0,
+        })
+        setShowDiscoveryModal(true)
+      }
+    } catch (err) {
+      console.error('Bulk discovery failed:', err)
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
+  const selectedDiscoveryCount = discoveryRows.filter(row => row.selected && !row.duplicate).length
+
+  const importSelectedDiscovery = async () => {
+    const selected = discoveryRows.filter(row => row.selected && !row.duplicate)
+    if (selected.length === 0) return
+    setImportingDiscovery(true)
+    try {
+      const res = await fetch('/api/events/discover/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'confirmed',
+          events: selected.map(({ selected: _selected, ...event }) => event),
+        }),
+      })
+      if (res.ok) {
+        setShowDiscoveryModal(false)
+        setDiscoveryRows([])
+        await refreshEvents()
+      }
+    } catch (err) {
+      console.error('Discovery import failed:', err)
+    } finally {
+      setImportingDiscovery(false)
+    }
   }
 
   // Calendar view rendering
@@ -467,6 +553,13 @@ function EventsPageInner() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">Events</h1>
           <div className="flex gap-2 items-center">
+            <button
+              onClick={runBulkDiscovery}
+              disabled={discovering}
+              className="px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-zinc-300 transition-colors disabled:opacity-50"
+            >
+              {discovering ? 'Discovering...' : 'Discover Active Venues'}
+            </button>
             <button
               onClick={() => setShowCreate(!showCreate)}
               className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
@@ -709,6 +802,129 @@ function EventsPageInner() {
         </div>
 
         {view === 'calendar' ? <CalendarView /> : <ListView />}
+
+        {showDiscoveryModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDiscoveryModal(false)}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-[#E8E8E8]">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-zinc-900">Discovery Preview</h3>
+                    {discoverySummary && (
+                      <p className="text-sm text-zinc-500 mt-1">
+                        {discoverySummary.total_found} results across {discoverySummary.venues} venues
+                        {discoverySummary.duplicates_skipped > 0 && ` · ${discoverySummary.duplicates_skipped} duplicates already in the system`}
+                      </p>
+                    )}
+                  </div>
+                  <button onClick={() => setShowDiscoveryModal(false)} className="text-zinc-400 hover:text-zinc-600 text-sm">Close</button>
+                </div>
+              </div>
+
+              <div className="px-6 py-3 border-b border-[#E8E8E8] bg-zinc-50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setDiscoveryRows(prev => prev.map(row => row.duplicate ? row : { ...row, selected: true }))}
+                    className="text-sm text-[#0A52EF] hover:text-[#0840C0]"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={() => setDiscoveryRows(prev => prev.map(row => ({ ...row, selected: false })))}
+                    className="text-sm text-zinc-500 hover:text-zinc-700"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+                <span className="text-sm text-zinc-500">{selectedDiscoveryCount} selected for import</span>
+              </div>
+
+              <div className="overflow-auto flex-1">
+                {discoveryRows.length === 0 ? (
+                  <div className="p-12 text-center text-zinc-400 text-sm">No discovery results returned.</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white border-b border-[#E8E8E8]">
+                      <tr>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Select</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Event</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Date</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Time</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Type</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Source</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Venue</th>
+                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {discoveryRows.map((row, idx) => (
+                        <tr key={`${row.venue_id}-${row.summary}-${idx}`} className={`border-b border-[#E8E8E8] ${row.duplicate ? 'bg-amber-50/40' : 'bg-white'}`}>
+                          <td className="py-3 px-4 align-top">
+                            <input
+                              type="checkbox"
+                              checked={row.selected}
+                              disabled={row.duplicate}
+                              onChange={() => setDiscoveryRows(prev => prev.map((event, eventIdx) => eventIdx === idx ? { ...event, selected: !event.selected } : event))}
+                              className="rounded border-zinc-300 disabled:opacity-40"
+                            />
+                          </td>
+                          <td className="py-3 px-4 align-top">
+                            <div className="font-medium text-zinc-900">{row.summary}</div>
+                            {(row.home_team || row.away_team) && (
+                              <div className="text-xs text-zinc-500 mt-1">
+                                {[row.home_team, row.away_team].filter(Boolean).join(' vs ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-zinc-600 align-top">{row.event_date}</td>
+                          <td className="py-3 px-4 text-zinc-600 align-top">{row.start_time || 'TBD'}</td>
+                          <td className="py-3 px-4 align-top">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-700 uppercase">
+                              {row.event_type}
+                            </span>
+                            {row.league && <div className="text-xs text-zinc-500 mt-1">{row.league}</div>}
+                          </td>
+                          <td className="py-3 px-4 align-top">
+                            <div className="text-zinc-700">{row.source_label || row.source}</div>
+                            <div className="text-xs text-zinc-400 mt-1">{Math.round(row.confidence * 100)}% confidence</div>
+                          </td>
+                          <td className="py-3 px-4 text-zinc-700 align-top">{row.venue_name}</td>
+                          <td className="py-3 px-4 align-top">
+                            {row.duplicate ? (
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
+                                Duplicate
+                              </span>
+                            ) : row.auto_importable ? (
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                                High Confidence
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
+                                Review
+                              </span>
+                            )}
+                            {row.duplicate_reason && <div className="text-xs text-zinc-400 mt-1 max-w-40">{row.duplicate_reason}</div>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-[#E8E8E8] bg-zinc-50 flex items-center justify-between">
+                <span className="text-sm text-zinc-500">Imported rows will be saved with status "confirmed".</span>
+                <button
+                  onClick={importSelectedDiscovery}
+                  disabled={importingDiscovery || selectedDiscoveryCount === 0}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded hover:bg-[#0840C0] transition-colors disabled:opacity-50"
+                >
+                  {importingDiscovery ? 'Importing...' : `Import Selected (${selectedDiscoveryCount})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )
