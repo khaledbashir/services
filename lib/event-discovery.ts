@@ -79,6 +79,7 @@ export interface DiscoveryBatchResult {
   total_found: number
   duplicates_skipped: number
   existing_count: number
+  discovery_hint?: string | null
 }
 
 function normalizeSummary(summary: string): string {
@@ -225,6 +226,13 @@ function buildSearchQueries(venue: DiscoveryVenue): string[] {
   ]
 }
 
+function buildSearchQueriesWithHint(venue: DiscoveryVenue, discoveryHint?: string | null): string[] {
+  const baseQueries = buildSearchQueries(venue)
+  const hint = discoveryHint?.trim()
+  if (!hint) return baseQueries
+  return [...baseQueries, `${venue.name} ${hint}`.trim()]
+}
+
 interface SearchEvidence {
   query: string
   result_url: string | null
@@ -332,11 +340,12 @@ function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEv
 
 async function discoverWithAI(
   venue: DiscoveryVenue,
-  existingEvents: ExistingEventRow[]
+  existingEvents: ExistingEventRow[],
+  discoveryHint?: string | null
 ): Promise<RawDiscoveryCandidate[]> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
-  const searchQueries = buildSearchQueries(venue)
+  const searchQueries = buildSearchQueriesWithHint(venue, discoveryHint)
   const searchResults = (await Promise.all(searchQueries.map(searchWeb))).flat()
 
   const city = parseCityFromAddress(venue.address)
@@ -355,6 +364,7 @@ VENUE
 - Active services: ${venue.active_service_count}
 - Likely leagues: ${venue.likely_leagues.join(', ') || 'Unknown'}
 - Pilot emphasis: Prudential Center and Fenway Park should be handled carefully if matched.
+${discoveryHint?.trim() ? `- Discovery hint from user: ${discoveryHint.trim()}` : ''}
 
 DISCOVERY WINDOW
 - Start: ${today}
@@ -376,6 +386,7 @@ ${searchResults.length > 0
 
 INSTRUCTIONS
 - Search for games, concerts, and other ticketed venue events.
+- Follow the discovery hint when it narrows the search, but do not invent events without evidence.
 - Favor official sources: team websites, Ticketmaster, league schedule pages, and the venue calendar.
 - Return both home_team and away_team when the event is a game and the matchup is known.
 - Use event_type values: "game", "concert", or "other".
@@ -491,11 +502,11 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
   }
 }
 
-export async function discoverForVenue(venue: DiscoveryVenue): Promise<DiscoveryBatchResult> {
+export async function discoverForVenue(venue: DiscoveryVenue, discoveryHint?: string | null): Promise<DiscoveryBatchResult> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
   const existingEvents = await loadExistingEvents(venue.id, today, sixtyDaysOut)
-  const raw = await discoverWithAI(venue, existingEvents)
+  const raw = await discoverWithAI(venue, existingEvents, discoveryHint)
 
   const candidates = raw
     .map(candidate => hydrateCandidate(candidate, venue))
@@ -523,15 +534,16 @@ export async function discoverForVenue(venue: DiscoveryVenue): Promise<Discovery
     total_found: deduped.length,
     duplicates_skipped: deduped.filter(event => event.duplicate).length,
     existing_count: existingEvents.length,
+    discovery_hint: discoveryHint?.trim() || null,
   }
 }
 
-export async function discoverAcrossVenues(venues: DiscoveryVenue[]): Promise<DiscoveryBatchResult> {
+export async function discoverAcrossVenues(venues: DiscoveryVenue[], discoveryHint?: string | null): Promise<DiscoveryBatchResult> {
   const results: DiscoveryCandidate[] = []
   let totalExisting = 0
 
   for (const venue of venues) {
-    const venueResult = await discoverForVenue(venue)
+    const venueResult = await discoverForVenue(venue, discoveryHint)
     results.push(...venueResult.discovered)
     totalExisting += venueResult.existing_count
     await new Promise(resolve => setTimeout(resolve, 1000))
@@ -543,6 +555,7 @@ export async function discoverAcrossVenues(venues: DiscoveryVenue[]): Promise<Di
     total_found: results.length,
     duplicates_skipped: results.filter(event => event.duplicate).length,
     existing_count: totalExisting,
+    discovery_hint: discoveryHint?.trim() || null,
   }
 }
 

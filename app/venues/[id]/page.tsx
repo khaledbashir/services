@@ -158,6 +158,8 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     selected: boolean
   }>>([])
   const [discoverStats, setDiscoverStats] = useState<{ total_found: number; duplicates_skipped: number; existing_count: number } | null>(null)
+  const [discoveryHint, setDiscoveryHint] = useState('')
+  const [activeDiscoveryHint, setActiveDiscoveryHint] = useState<string | null>(null)
   const [showDiscoverSummaryCard, setShowDiscoverSummaryCard] = useState(false)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -526,6 +528,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         {activeTab === 'events' && (
           <div className="space-y-3">
             <div className="flex justify-end gap-2">
+              <input
+                type="text"
+                value={discoveryHint}
+                onChange={e => setDiscoveryHint(e.target.value)}
+                placeholder="Optional discovery hint"
+                className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 w-64"
+              />
               <button
                 type="button"
                 onClick={async () => {
@@ -538,12 +547,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     const res = await fetch('/api/events/discover', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ venue_id: params.id }),
+                      body: JSON.stringify({ venue_id: params.id, discovery_hint: discoveryHint.trim() || undefined }),
                     })
                     if (res.ok) {
                       const data = await res.json()
                       setDiscoveredEvents((data.discovered || []).map((e: any) => ({ ...e, selected: !e.duplicate })))
                       setDiscoverStats({ total_found: data.total_found, duplicates_skipped: data.duplicates_skipped, existing_count: data.existing_count })
+                      setActiveDiscoveryHint(data.discovery_hint || discoveryHint.trim() || null)
                       setShowDiscoverSummaryCard(true)
                       setShowDiscoverModal(true)
                     } else {
@@ -613,6 +623,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     {discoveredEvents.filter(e => e.auto_importable && !e.duplicate).length} high confidence
                     {discoverStats.duplicates_skipped > 0 && ` · ${discoverStats.duplicates_skipped} duplicates`}
                   </p>
+                  {activeDiscoveryHint && (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Discovery hint used: "{activeDiscoveryHint}"
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -697,6 +712,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                           Found {discoverStats.total_found} results
                           {discoverStats.duplicates_skipped > 0 && ` (${discoverStats.duplicates_skipped} duplicates already in database)`}
                           {' '}&middot; {discoverStats.existing_count} existing events
+                        </p>
+                      )}
+                      {activeDiscoveryHint && (
+                        <p className="text-xs text-zinc-500 mt-2">
+                          Discovery hint: "{activeDiscoveryHint}"
                         </p>
                       )}
                     </div>

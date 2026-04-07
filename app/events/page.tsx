@@ -108,6 +108,8 @@ function EventsPageInner() {
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
   const [discoveryRows, setDiscoveryRows] = useState<DiscoveryEventRow[]>([])
   const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
+  const [discoveryHint, setDiscoveryHint] = useState('')
+  const [activeDiscoveryHint, setActiveDiscoveryHint] = useState<string | null>(null)
   const [showDiscoverySummaryCard, setShowDiscoverySummaryCard] = useState(false)
   const [discoverySearch, setDiscoverySearch] = useState('')
   const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
@@ -314,7 +316,7 @@ function EventsPageInner() {
       const res = await fetch('/api/events/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all_active: true }),
+        body: JSON.stringify({ all_active: true, discovery_hint: discoveryHint.trim() || undefined }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -328,6 +330,7 @@ function EventsPageInner() {
           total_found: data.total_found || 0,
           duplicates_skipped: data.duplicates_skipped || 0,
         })
+        setActiveDiscoveryHint(data.discovery_hint || discoveryHint.trim() || null)
         setShowDiscoverySummaryCard(true)
         setShowDiscoveryModal(true)
       }
@@ -718,6 +721,15 @@ function EventsPageInner() {
                 className="pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-48"
               />
             </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={discoveryHint}
+                onChange={(e) => setDiscoveryHint(e.target.value)}
+                placeholder="Optional discovery hint, e.g. focus on MLB and concerts"
+                className="px-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-80"
+              />
+            </div>
             <div className="bg-zinc-100 rounded p-1 flex gap-1">
               <button
                 onClick={() => saveViewPreference('calendar')}
@@ -777,6 +789,11 @@ function EventsPageInner() {
                   {totalDiscoveryImportableCount} importable · {totalDiscoveryHighConfidenceCount} high confidence
                   {discoverySummary.duplicates_skipped > 0 && ` · ${discoverySummary.duplicates_skipped} duplicates`}
                 </p>
+                {activeDiscoveryHint && (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Discovery hint used: "{activeDiscoveryHint}"
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1014,6 +1031,11 @@ function EventsPageInner() {
                     <p className="text-xs text-zinc-400 mt-2">
                       Discovery checks Ticketmaster, venue calendars, team sites, and league schedules, then normalizes anything it finds into import-ready rows.
                     </p>
+                    {activeDiscoveryHint && (
+                      <p className="text-xs text-zinc-500 mt-2">
+                        Discovery hint: "{activeDiscoveryHint}"
+                      </p>
+                    )}
                   </div>
                   <button onClick={() => setShowDiscoveryModal(false)} className="text-zinc-400 hover:text-zinc-600 text-sm">Close</button>
                 </div>

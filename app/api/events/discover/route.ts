@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const venueId = typeof body.venue_id === 'string' ? body.venue_id : ''
     const allActive = body.all_active === true
+    const discoveryHint = typeof body.discovery_hint === 'string' ? body.discovery_hint.trim() : ''
 
     if (!venueId && !allActive) {
       return NextResponse.json({ error: 'venue_id or all_active is required' }, { status: 400 })
@@ -21,10 +22,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
       }
 
-      const result = await discoverForVenue(venue)
+      const result = await discoverForVenue(venue, discoveryHint)
       return NextResponse.json({
         ...result,
         mode: 'single',
+        discovery_hint: discoveryHint || null,
       })
     }
 
@@ -40,10 +42,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const result = await discoverAcrossVenues(venues)
+    const result = await discoverAcrossVenues(venues, discoveryHint)
     return NextResponse.json({
       ...result,
       mode: 'bulk',
+      discovery_hint: discoveryHint || null,
     })
   } catch (err) {
     console.error('Event discovery error:', err)
