@@ -63,7 +63,13 @@ interface DiscoveryEventRow {
   source: string
   source_label: string | null
   source_url: string | null
+  source_domain?: string | null
+  match_type?: 'official_source' | 'ai_inferred'
+  matched_query?: string | null
+  evidence_snippet?: string | null
   confidence: number
+  trust_score?: number
+  trust_reasons?: string[]
   duplicate: boolean
   duplicate_reason: string | null
   requires_staffing: boolean
@@ -1144,9 +1150,23 @@ function EventsPageInner() {
                                       <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
                                         Source: {row.source_label || row.source}
                                       </span>
+                                      {row.match_type && (
+                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium ${
+                                          row.match_type === 'official_source'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-zinc-100 text-zinc-600'
+                                        }`}>
+                                          {row.match_type === 'official_source' ? 'Official Source' : 'AI Inferred'}
+                                        </span>
+                                      )}
                                       <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
                                         {Math.round(row.confidence * 100)}% confidence
                                       </span>
+                                      {typeof row.trust_score === 'number' && (
+                                        <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700">
+                                          Trust {Math.round(row.trust_score * 100)}%
+                                        </span>
+                                      )}
                                       {row.source_url && (
                                         <a
                                           href={row.source_url}
@@ -1158,6 +1178,26 @@ function EventsPageInner() {
                                         </a>
                                       )}
                                     </div>
+
+                                    {(row.evidence_snippet || row.matched_query || (row.trust_reasons && row.trust_reasons.length > 0)) && (
+                                      <div className="mt-3 rounded-xl border border-[#E8E8E8] bg-zinc-50 px-3 py-3">
+                                        {row.evidence_snippet && (
+                                          <div className="text-xs text-zinc-700">
+                                            <span className="font-semibold text-zinc-900">Evidence:</span> "{row.evidence_snippet}"
+                                          </div>
+                                        )}
+                                        {row.matched_query && (
+                                          <div className="text-xs text-zinc-500 mt-2">
+                                            Query: {row.matched_query}
+                                          </div>
+                                        )}
+                                        {row.trust_reasons && row.trust_reasons.length > 0 && (
+                                          <div className="text-xs text-zinc-500 mt-2">
+                                            Why matched: {row.trust_reasons.slice(0, 3).join(' · ')}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
 
                                     {row.duplicate_reason && (
                                       <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">

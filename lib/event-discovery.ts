@@ -7,6 +7,7 @@ const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
 
 export type DiscoveryEventType = 'game' | 'concert' | 'other'
 export type DiscoveryStatus = 'discovered' | 'confirmed' | 'imported'
+export type DiscoveryMatchType = 'official_source' | 'ai_inferred'
 
 export interface DiscoveryVenue {
   id: string
@@ -38,10 +39,16 @@ export interface DiscoveryCandidate {
   home_team: string | null
   away_team: string | null
   source_url: string | null
+  source_domain: string | null
   source_label: string | null
   source_kind: string
   source: string
+  match_type: DiscoveryMatchType
+  matched_query: string | null
+  evidence_snippet: string | null
   confidence: number
+  trust_score: number
+  trust_reasons: string[]
   duplicate: boolean
   duplicate_reason: string | null
   requires_staffing: boolean
@@ -61,6 +68,8 @@ interface RawDiscoveryCandidate {
   source_url: string | null
   source_label: string | null
   source_kind: string | null
+  matched_query: string | null
+  evidence_snippet: string | null
   confidence: number | null
 }
 
@@ -111,6 +120,15 @@ function sourceKindFromUrl(url: string | null, venueName: string): string {
   return 'team_website'
 }
 
+function sourceDomainFromUrl(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return null
+  }
+}
+
 function buildSourceLabel(url: string | null, fallbackKind: string): string {
   if (!url) return fallbackKind
   try {
@@ -127,6 +145,64 @@ function clampConfidence(value: number | null | undefined, sourceKind: string): 
   }
   if (['ticketmaster', 'league_schedule', 'team_website', 'venue_calendar'].includes(sourceKind)) return 0.82
   return 0.62
+}
+
+function isOfficialSourceKind(sourceKind: string): boolean {
+  return ['ticketmaster', 'league_schedule', 'venue_calendar', 'team_website'].includes(sourceKind)
+}
+
+function getMatchType(sourceKind: string, sourceUrl: string | null): DiscoveryMatchType {
+  return isOfficialSourceKind(sourceKind) && Boolean(sourceUrl) ? 'official_source' : 'ai_inferred'
+}
+
+function scoreDiscoveryTrust(params: {
+  confidence: number
+  sourceKind: string
+  sourceDomain: string | null
+  matchType: DiscoveryMatchType
+  evidenceSnippet: string | null
+  matchedQuery: string | null
+}): { trustScore: number; trustReasons: string[] } {
+  const reasons: string[] = []
+  let score = params.confidence * 0.45
+
+  if (params.matchType === 'official_source') {
+    score += 0.25
+    reasons.push('Official source URL captured at discovery time')
+  } else {
+    reasons.push('No official source URL captured, so this remains AI-inferred')
+  }
+
+  if (params.sourceKind === 'ticketmaster') {
+    score += 0.18
+    reasons.push('Matched Ticketmaster listing')
+  } else if (params.sourceKind === 'league_schedule') {
+    score += 0.16
+    reasons.push('Matched league schedule domain')
+  } else if (params.sourceKind === 'venue_calendar') {
+    score += 0.14
+    reasons.push('Matched venue calendar source')
+  } else if (params.sourceKind === 'team_website') {
+    score += 0.12
+    reasons.push('Matched team website source')
+  }
+
+  if (params.sourceDomain) {
+    reasons.push(`Source domain: ${params.sourceDomain}`)
+  }
+  if (params.evidenceSnippet) {
+    score += 0.08
+    reasons.push('Supporting text snippet captured from search evidence')
+  }
+  if (params.matchedQuery) {
+    score += 0.04
+    reasons.push(`Matched via query: ${params.matchedQuery}`)
+  }
+
+  return {
+    trustScore: Math.max(0, Math.min(1, score)),
+    trustReasons: reasons,
+  }
 }
 
 function parseCityFromAddress(address: string | null): string | null {
@@ -149,24 +225,70 @@ function buildSearchQueries(venue: DiscoveryVenue): string[] {
   ]
 }
 
-async function searchWeb(queryStr: string): Promise<string> {
+interface SearchEvidence {
+  query: string
+  result_url: string | null
+  source_domain: string | null
+  snippet: string
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+}
+
+function stripHtml(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+}
+
+function decodeDuckDuckGoHref(href: string): string | null {
+  if (!href) return null
+  try {
+    const normalized = href.startsWith('//') ? `https:${href}` : href
+    const url = new URL(normalized, 'https://html.duckduckgo.com')
+    const uddg = url.searchParams.get('uddg')
+    return uddg ? decodeURIComponent(uddg) : normalized
+  } catch {
+    return href
+  }
+}
+
+async function searchWeb(queryStr: string): Promise<SearchEvidence[]> {
   try {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(queryStr)}`
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
       signal: AbortSignal.timeout(10000),
     })
-    if (!res.ok) return ''
+    if (!res.ok) return []
     const html = await res.text()
-    return html
+    const cleanHtml = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000)
+
+    const links = [...cleanHtml.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    const snippets = [...cleanHtml.matchAll(/<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/gi)]
+
+    return links.slice(0, 6).map((match, index) => {
+      const resultUrl = decodeDuckDuckGoHref(match[1])
+      return {
+        query: queryStr,
+        result_url: resultUrl,
+        source_domain: sourceDomainFromUrl(resultUrl),
+        snippet: stripHtml(snippets[index]?.[1] || match[2] || '').slice(0, 280),
+      }
+    }).filter((entry) => entry.snippet || entry.result_url)
   } catch {
-    return ''
+    return []
   }
 }
 
@@ -215,7 +337,7 @@ async function discoverWithAI(
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
   const searchQueries = buildSearchQueries(venue)
-  const searchResults = await Promise.all(searchQueries.map(searchWeb))
+  const searchResults = (await Promise.all(searchQueries.map(searchWeb))).flat()
 
   const city = parseCityFromAddress(venue.address)
   const state = extractStateFromAddress(venue.address || '') || venue.market_name || ''
@@ -242,7 +364,15 @@ EXISTING EVENTS IN DATABASE (do not repeat these)
 ${existingList}
 
 SEARCH RESULTS
-${searchResults.filter(Boolean).join('\n\n---\n\n') || 'No search results captured'}
+${searchResults.length > 0
+    ? searchResults.map((result, index) => [
+      `RESULT ${index + 1}`,
+      `Query: ${result.query}`,
+      `URL: ${result.result_url || 'Unknown'}`,
+      `Domain: ${result.source_domain || 'Unknown'}`,
+      `Snippet: ${result.snippet || 'None'}`,
+    ].join('\n')).join('\n\n---\n\n')
+    : 'No search results captured'}
 
 INSTRUCTIONS
 - Search for games, concerts, and other ticketed venue events.
@@ -250,6 +380,8 @@ INSTRUCTIONS
 - Return both home_team and away_team when the event is a game and the matchup is known.
 - Use event_type values: "game", "concert", or "other".
 - Use source_kind values: "ticketmaster", "team_website", "league_schedule", "venue_calendar", or "ai_discovery".
+- Return matched_query using the exact query string from the search results above when possible.
+- Return evidence_snippet using a short verbatim snippet from the search results above when possible.
 - Use confidence as a decimal from 0.00 to 1.00.
 - If a source URL is unknown, set source_url to null.
 - If a source label is unknown, set source_label to a short human-readable source name.
@@ -268,6 +400,8 @@ RETURN ONLY JSON
   "source_url": "https://...",
   "source_label": "ticketmaster.com",
   "source_kind": "ticketmaster",
+  "matched_query": "Fenway Park ticketmaster MLB upcoming events",
+  "evidence_snippet": "Boston Red Sox vs New York Yankees at Fenway Park on Apr 10",
   "confidence": 0.94
 }]`
 
@@ -309,7 +443,20 @@ RETURN ONLY JSON
 function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): DiscoveryCandidate | null {
   if (!raw.summary || !raw.event_date || !/^\d{4}-\d{2}-\d{2}$/.test(raw.event_date)) return null
   const sourceKind = raw.source_kind || sourceKindFromUrl(raw.source_url || null, venue.name)
+  const sourceUrl = raw.source_url || null
+  const sourceDomain = sourceDomainFromUrl(sourceUrl)
+  const matchType = getMatchType(sourceKind, sourceUrl)
   const confidence = clampConfidence(raw.confidence, sourceKind)
+  const evidenceSnippet = raw.evidence_snippet?.trim() ? raw.evidence_snippet.trim().slice(0, 280) : null
+  const matchedQuery = raw.matched_query?.trim() ? raw.matched_query.trim().slice(0, 140) : null
+  const { trustScore, trustReasons } = scoreDiscoveryTrust({
+    confidence,
+    sourceKind,
+    sourceDomain,
+    matchType,
+    evidenceSnippet,
+    matchedQuery,
+  })
   const eventType: DiscoveryEventType = raw.event_type === 'game' || raw.event_type === 'concert' ? raw.event_type : 'other'
   const startTime = raw.start_time && /^\d{2}:\d{2}$/.test(raw.start_time) ? raw.start_time : null
   const endTime = raw.end_time && /^\d{2}:\d{2}$/.test(raw.end_time) ? raw.end_time : null
@@ -325,16 +472,22 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
     league: raw.league || null,
     home_team: raw.home_team || null,
     away_team: raw.away_team || null,
-    source_url: raw.source_url || null,
-    source_label: raw.source_label || buildSourceLabel(raw.source_url || null, sourceKind),
+    source_url: sourceUrl,
+    source_domain: sourceDomain,
+    source_label: raw.source_label || buildSourceLabel(sourceUrl, sourceKind),
     source_kind: sourceKind,
     source: sourceKind,
+    match_type: matchType,
+    matched_query: matchedQuery,
+    evidence_snippet: evidenceSnippet,
     confidence,
+    trust_score: trustScore,
+    trust_reasons: trustReasons,
     duplicate: false,
     duplicate_reason: null,
     requires_staffing: venue.active_service_count > 0,
     status: 'discovered',
-    auto_importable: confidence >= 0.85 && ['ticketmaster', 'team_website', 'league_schedule', 'venue_calendar'].includes(sourceKind),
+    auto_importable: matchType === 'official_source' && trustScore >= 0.78 && confidence >= 0.85 && isOfficialSourceKind(sourceKind),
   }
 }
 

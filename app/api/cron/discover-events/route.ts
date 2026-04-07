@@ -6,7 +6,7 @@ import { DiscoveryCandidate, discoverAcrossVenues, discoverForVenue, getActiveDi
 const SLACK_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 
 function isAutoImportCandidate(event: DiscoveryCandidate): boolean {
-  return !event.duplicate && event.auto_importable
+  return !event.duplicate && event.auto_importable && event.match_type === 'official_source'
 }
 
 async function logRun(details: Record<string, unknown>) {
