@@ -1007,10 +1007,13 @@ function EventsPageInner() {
                     <h3 className="text-xl font-semibold text-zinc-900">Discovery Center</h3>
                     {discoverySummary && (
                       <p className="text-sm text-zinc-500 mt-1">
-                        {discoverySummary.total_found} results across {discoverySummary.venues} venues
+                        Searched {discoverySummary.venues} active venues · found {discoverySummary.total_found} results in the next 60 days
                         {discoverySummary.duplicates_skipped > 0 && ` · ${discoverySummary.duplicates_skipped} duplicates already in the system`}
                       </p>
                     )}
+                    <p className="text-xs text-zinc-400 mt-2">
+                      Discovery checks Ticketmaster, venue calendars, team sites, and league schedules, then normalizes anything it finds into import-ready rows.
+                    </p>
                   </div>
                   <button onClick={() => setShowDiscoveryModal(false)} className="text-zinc-400 hover:text-zinc-600 text-sm">Close</button>
                 </div>
@@ -1108,7 +1111,9 @@ function EventsPageInner() {
 
               <div className="overflow-auto flex-1 px-6 py-6">
                 {discoveryRows.length === 0 ? (
-                  <div className="p-12 text-center text-zinc-400 text-sm">No discovery results returned.</div>
+                  <div className="p-12 text-center text-zinc-400 text-sm">
+                    No discovery results were found in the next 60 days for the active venues that were searched.
+                  </div>
                 ) : discoveryVenueGroups.length === 0 ? (
                   <div className="p-12 text-center text-zinc-400 text-sm">No results match the current filters.</div>
                 ) : (
