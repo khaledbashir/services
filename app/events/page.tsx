@@ -100,6 +100,11 @@ function EventsPageInner() {
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
   const [discoveryRows, setDiscoveryRows] = useState<DiscoveryEventRow[]>([])
   const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
+  const [discoverySearch, setDiscoverySearch] = useState('')
+  const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
+  const [discoveryConfidenceFilter, setDiscoveryConfidenceFilter] = useState<'all' | 'high' | 'review'>('all')
+  const [showDiscoveryDuplicates, setShowDiscoveryDuplicates] = useState(true)
+  const [collapsedDiscoveryVenues, setCollapsedDiscoveryVenues] = useState<Set<string>>(new Set())
   const [newEvent, setNewEvent] = useState({
     summary: '', event_date: '', start_time: '', end_time: '',
     venue_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
@@ -283,6 +288,11 @@ function EventsPageInner() {
     setDiscovering(true)
     setDiscoveryRows([])
     setDiscoverySummary(null)
+    setDiscoverySearch('')
+    setDiscoveryTypeFilter('all')
+    setDiscoveryConfidenceFilter('all')
+    setShowDiscoveryDuplicates(true)
+    setCollapsedDiscoveryVenues(new Set())
     try {
       const res = await fetch('/api/events/discover', {
         method: 'POST',
@@ -311,6 +321,94 @@ function EventsPageInner() {
   }
 
   const selectedDiscoveryCount = discoveryRows.filter(row => row.selected && !row.duplicate).length
+  const filteredDiscoveryRows = discoveryRows.filter((row) => {
+    if (!showDiscoveryDuplicates && row.duplicate) return false
+    if (discoveryTypeFilter !== 'all' && row.event_type !== discoveryTypeFilter) return false
+    if (discoveryConfidenceFilter === 'high' && !row.auto_importable) return false
+    if (discoveryConfidenceFilter === 'review' && row.auto_importable) return false
+
+    const searchValue = discoverySearch.trim().toLowerCase()
+    if (!searchValue) return true
+
+    return [
+      row.summary,
+      row.venue_name,
+      row.league || '',
+      row.source_label || '',
+      row.source || '',
+      row.home_team || '',
+      row.away_team || '',
+    ].some((value) => value.toLowerCase().includes(searchValue))
+  })
+  const visibleSelectableCount = filteredDiscoveryRows.filter((row) => !row.duplicate).length
+  const visibleSelectedCount = filteredDiscoveryRows.filter((row) => row.selected && !row.duplicate).length
+  const visibleDuplicateCount = filteredDiscoveryRows.filter((row) => row.duplicate).length
+  const visibleHighConfidenceCount = filteredDiscoveryRows.filter((row) => row.auto_importable && !row.duplicate).length
+  const discoveryVenueGroups: Array<{
+    venueId: string
+    venueName: string
+    rows: DiscoveryEventRow[]
+    selectedCount: number
+    duplicateCount: number
+    selectableCount: number
+    highConfidenceCount: number
+  }> = []
+  for (const row of filteredDiscoveryRows) {
+    let group = discoveryVenueGroups.find((entry) => entry.venueId === row.venue_id)
+    if (!group) {
+      group = {
+        venueId: row.venue_id,
+        venueName: row.venue_name,
+        rows: [],
+        selectedCount: 0,
+        duplicateCount: 0,
+        selectableCount: 0,
+        highConfidenceCount: 0,
+      }
+      discoveryVenueGroups.push(group)
+    }
+
+    group.rows.push(row)
+    if (row.duplicate) {
+      group.duplicateCount += 1
+    } else {
+      group.selectableCount += 1
+      if (row.selected) group.selectedCount += 1
+      if (row.auto_importable) group.highConfidenceCount += 1
+    }
+  }
+  discoveryVenueGroups.sort((a, b) => a.venueName.localeCompare(b.venueName))
+
+  const selectVisibleDiscoveryRows = (mode: 'all' | 'high' | 'none') => {
+    setDiscoveryRows((prev) => prev.map((row) => {
+      const isVisible = filteredDiscoveryRows.some((visibleRow) =>
+        visibleRow.venue_id === row.venue_id &&
+        visibleRow.summary === row.summary &&
+        visibleRow.event_date === row.event_date &&
+        visibleRow.start_time === row.start_time
+      )
+
+      if (!isVisible || row.duplicate) return row
+      if (mode === 'none') return { ...row, selected: false }
+      if (mode === 'high') return { ...row, selected: row.auto_importable }
+      return { ...row, selected: true }
+    }))
+  }
+
+  const toggleDiscoveryVenueCollapse = (venueId: string) => {
+    setCollapsedDiscoveryVenues((prev) => {
+      const next = new Set(prev)
+      if (next.has(venueId)) next.delete(venueId)
+      else next.add(venueId)
+      return next
+    })
+  }
+
+  const setDiscoveryVenueSelection = (venueId: string, selected: boolean) => {
+    setDiscoveryRows((prev) => prev.map((row) => (
+      row.venue_id === venueId && !row.duplicate ? { ...row, selected } : row
+    )))
+  }
 
   const importSelectedDiscovery = async () => {
     const selected = discoveryRows.filter(row => row.selected && !row.duplicate)
@@ -336,6 +434,14 @@ function EventsPageInner() {
       setImportingDiscovery(false)
     }
   }
+
+  const formatDiscoveryDate = (dateStr: string) =>
+    new Date(`${dateStr}T12:00:00`).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
 
   // Calendar view rendering
   const CalendarView = () => {
@@ -819,11 +925,11 @@ function EventsPageInner() {
 
         {showDiscoveryModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDiscoveryModal(false)}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-              <div className="p-6 border-b border-[#E8E8E8]">
+            <div className="bg-[#F8FAFC] rounded-2xl shadow-xl w-full max-w-[92rem] max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-[#E8E8E8] bg-white">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-zinc-900">Discovery Preview</h3>
+                    <h3 className="text-xl font-semibold text-zinc-900">Discovery Center</h3>
                     {discoverySummary && (
                       <p className="text-sm text-zinc-500 mt-1">
                         {discoverySummary.total_found} results across {discoverySummary.venues} venues
@@ -833,105 +939,249 @@ function EventsPageInner() {
                   </div>
                   <button onClick={() => setShowDiscoveryModal(false)} className="text-zinc-400 hover:text-zinc-600 text-sm">Close</button>
                 </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+                  <div className="rounded-2xl border border-[#E8E8E8] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Visible Results</div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-900">{filteredDiscoveryRows.length}</div>
+                    <div className="mt-1 text-xs text-zinc-500">{visibleDuplicateCount} duplicates in the current view</div>
+                  </div>
+                  <div className="rounded-2xl border border-[#E8E8E8] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Selected</div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-900">{visibleSelectedCount}</div>
+                    <div className="mt-1 text-xs text-zinc-500">of {visibleSelectableCount} importable rows in this view</div>
+                  </div>
+                  <div className="rounded-2xl border border-[#E8E8E8] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">High Confidence</div>
+                    <div className="mt-2 text-2xl font-semibold text-emerald-700">{visibleHighConfidenceCount}</div>
+                    <div className="mt-1 text-xs text-zinc-500">ideal for quick selection</div>
+                  </div>
+                  <div className="rounded-2xl border border-[#E8E8E8] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Venue Groups</div>
+                    <div className="mt-2 text-2xl font-semibold text-zinc-900">{discoveryVenueGroups.length}</div>
+                    <div className="mt-1 text-xs text-zinc-500">review venue by venue from one dashboard</div>
+                  </div>
+                </div>
               </div>
 
-              <div className="px-6 py-3 border-b border-[#E8E8E8] bg-zinc-50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-4">
+              <div className="px-6 py-4 border-b border-[#E8E8E8] bg-white flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[16rem] flex-1 max-w-md">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={discoverySearch}
+                    onChange={(e) => setDiscoverySearch(e.target.value)}
+                    placeholder="Search events, teams, venues, or sources..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-[#E8E8E8] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                  />
+                </div>
+                <select
+                  value={discoveryTypeFilter}
+                  onChange={(e) => setDiscoveryTypeFilter(e.target.value as 'all' | 'game' | 'concert' | 'other')}
+                  className="px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm bg-white text-zinc-700"
+                >
+                  <option value="all">All Types</option>
+                  <option value="game">Games</option>
+                  <option value="concert">Concerts</option>
+                  <option value="other">Other</option>
+                </select>
+                <select
+                  value={discoveryConfidenceFilter}
+                  onChange={(e) => setDiscoveryConfidenceFilter(e.target.value as 'all' | 'high' | 'review')}
+                  className="px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm bg-white text-zinc-700"
+                >
+                  <option value="all">All Confidence</option>
+                  <option value="high">High Confidence</option>
+                  <option value="review">Needs Review</option>
+                </select>
+                <label className="inline-flex items-center gap-2 px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm text-zinc-700 bg-white">
+                  <input
+                    type="checkbox"
+                    checked={showDiscoveryDuplicates}
+                    onChange={(e) => setShowDiscoveryDuplicates(e.target.checked)}
+                    className="rounded border-zinc-300"
+                  />
+                  Show duplicates
+                </label>
+              </div>
+
+              <div className="px-6 py-3 border-b border-[#E8E8E8] bg-zinc-50 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => setDiscoveryRows(prev => prev.map(row => row.duplicate ? row : { ...row, selected: true }))}
-                    className="text-sm text-[#0A52EF] hover:text-[#0840C0]"
+                    onClick={() => selectVisibleDiscoveryRows('all')}
+                    className="px-3 py-1.5 rounded-full bg-white border border-[#E8E8E8] text-sm text-[#0A52EF] hover:border-[#0A52EF]/30"
                   >
-                    Select all
+                    Select visible
                   </button>
                   <button
-                    onClick={() => setDiscoveryRows(prev => prev.map(row => ({ ...row, selected: false })))}
-                    className="text-sm text-zinc-500 hover:text-zinc-700"
+                    onClick={() => selectVisibleDiscoveryRows('high')}
+                    className="px-3 py-1.5 rounded-full bg-white border border-[#E8E8E8] text-sm text-emerald-700 hover:border-emerald-300"
                   >
-                    Deselect all
+                    Select high confidence
+                  </button>
+                  <button
+                    onClick={() => selectVisibleDiscoveryRows('none')}
+                    className="px-3 py-1.5 rounded-full bg-white border border-[#E8E8E8] text-sm text-zinc-600 hover:border-zinc-300"
+                  >
+                    Clear visible
                   </button>
                 </div>
-                <span className="text-sm text-zinc-500">{selectedDiscoveryCount} selected for import</span>
+                <span className="text-sm text-zinc-500">{selectedDiscoveryCount} total rows selected for import</span>
               </div>
 
-              <div className="overflow-auto flex-1">
+              <div className="overflow-auto flex-1 px-6 py-6">
                 {discoveryRows.length === 0 ? (
                   <div className="p-12 text-center text-zinc-400 text-sm">No discovery results returned.</div>
+                ) : discoveryVenueGroups.length === 0 ? (
+                  <div className="p-12 text-center text-zinc-400 text-sm">No results match the current filters.</div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-white border-b border-[#E8E8E8]">
-                      <tr>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Select</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Event</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Date</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Time</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Type</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Source</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Venue</th>
-                        <th className="text-left py-3 px-4 text-xs font-medium text-zinc-500 uppercase">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {discoveryRows.map((row, idx) => (
-                        <tr key={`${row.venue_id}-${row.summary}-${idx}`} className={`border-b border-[#E8E8E8] ${row.duplicate ? 'bg-amber-50/40' : 'bg-white'}`}>
-                          <td className="py-3 px-4 align-top">
-                            <input
-                              type="checkbox"
-                              checked={row.selected}
-                              disabled={row.duplicate}
-                              onChange={() => setDiscoveryRows(prev => prev.map((event, eventIdx) => eventIdx === idx ? { ...event, selected: !event.selected } : event))}
-                              className="rounded border-zinc-300 disabled:opacity-40"
-                            />
-                          </td>
-                          <td className="py-3 px-4 align-top">
-                            <div className="font-medium text-zinc-900">{row.summary}</div>
-                            {(row.home_team || row.away_team) && (
-                              <div className="text-xs text-zinc-500 mt-1">
-                                {[row.home_team, row.away_team].filter(Boolean).join(' vs ')}
+                  <div className="space-y-4">
+                    {discoveryVenueGroups.map((group) => {
+                      const isCollapsed = collapsedDiscoveryVenues.has(group.venueId)
+                      const fullySelected = group.selectableCount > 0 && group.selectedCount === group.selectableCount
+
+                      return (
+                        <section key={group.venueId} className="rounded-2xl border border-[#E8E8E8] bg-white shadow-sm overflow-hidden">
+                          <div className="px-5 py-4 border-b border-[#E8E8E8] bg-[linear-gradient(180deg,#FFFFFF,#F8FAFC)] flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => toggleDiscoveryVenueCollapse(group.venueId)}
+                                className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-[#E8E8E8] text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+                                aria-label={isCollapsed ? `Expand ${group.venueName}` : `Collapse ${group.venueName}`}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                              <div>
+                                <h4 className="text-base font-semibold text-zinc-900">{group.venueName}</h4>
+                                <p className="text-xs text-zinc-500 mt-1">
+                                  {group.rows.length} results · {group.selectedCount}/{group.selectableCount} selected · {group.highConfidenceCount} high confidence
+                                </p>
                               </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-zinc-600 align-top">{row.event_date}</td>
-                          <td className="py-3 px-4 text-zinc-600 align-top">{row.start_time || 'TBD'}</td>
-                          <td className="py-3 px-4 align-top">
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-700 uppercase">
-                              {row.event_type}
-                            </span>
-                            {row.league && <div className="text-xs text-zinc-500 mt-1">{row.league}</div>}
-                          </td>
-                          <td className="py-3 px-4 align-top">
-                            <div className="text-zinc-700">{row.source_label || row.source}</div>
-                            <div className="text-xs text-zinc-400 mt-1">{Math.round(row.confidence * 100)}% confidence</div>
-                          </td>
-                          <td className="py-3 px-4 text-zinc-700 align-top">{row.venue_name}</td>
-                          <td className="py-3 px-4 align-top">
-                            {row.duplicate ? (
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
-                                Duplicate
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {group.duplicateCount > 0 && (
+                                <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700">
+                                  {group.duplicateCount} duplicates
+                                </span>
+                              )}
+                              <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">
+                                {group.highConfidenceCount} high confidence
                               </span>
-                            ) : row.auto_importable ? (
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                                High Confidence
-                              </span>
-                            ) : (
-                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
-                                Review
-                              </span>
-                            )}
-                            {row.duplicate_reason && <div className="text-xs text-zinc-400 mt-1 max-w-40">{row.duplicate_reason}</div>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              <button
+                                onClick={() => setDiscoveryVenueSelection(group.venueId, !fullySelected)}
+                                disabled={group.selectableCount === 0}
+                                className="px-3 py-1.5 rounded-full border border-[#E8E8E8] text-sm text-[#0A52EF] disabled:opacity-40"
+                              >
+                                {fullySelected ? 'Deselect Venue' : 'Select Venue'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {!isCollapsed && (
+                            <div className="divide-y divide-[#E8E8E8]">
+                              {group.rows.map((row, idx) => (
+                                <div
+                                  key={`${row.venue_id}-${row.summary}-${row.event_date}-${row.start_time || 'na'}-${idx}`}
+                                  className={`px-5 py-4 flex flex-col lg:flex-row lg:items-start gap-4 ${row.duplicate ? 'bg-amber-50/40' : 'bg-white'}`}
+                                >
+                                  <div className="pt-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.selected}
+                                      disabled={row.duplicate}
+                                      onChange={() => setDiscoveryRows(prev => prev.map((event) => (
+                                        event.venue_id === row.venue_id &&
+                                        event.summary === row.summary &&
+                                        event.event_date === row.event_date &&
+                                        event.start_time === row.start_time
+                                          ? { ...event, selected: !event.selected }
+                                          : event
+                                      )))}
+                                      className="rounded border-zinc-300 disabled:opacity-40"
+                                    />
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h5 className="text-sm font-semibold text-zinc-900">{row.summary}</h5>
+                                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-700 uppercase">
+                                        {row.event_type}
+                                      </span>
+                                      {row.league && (
+                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 uppercase">
+                                          {row.league}
+                                        </span>
+                                      )}
+                                      {row.duplicate ? (
+                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
+                                          Duplicate
+                                        </span>
+                                      ) : row.auto_importable ? (
+                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                                          High Confidence
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
+                                          Review
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="mt-2 text-sm text-zinc-600 flex flex-wrap items-center gap-x-4 gap-y-1">
+                                      <span>{formatDiscoveryDate(row.event_date)}</span>
+                                      <span>{row.start_time || 'Time TBD'}</span>
+                                      {(row.home_team || row.away_team) && (
+                                        <span>{[row.home_team, row.away_team].filter(Boolean).join(' vs ')}</span>
+                                      )}
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                      <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
+                                        Source: {row.source_label || row.source}
+                                      </span>
+                                      <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
+                                        {Math.round(row.confidence * 100)}% confidence
+                                      </span>
+                                      {row.source_url && (
+                                        <a
+                                          href={row.source_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-white border border-[#E8E8E8] text-[#0A52EF] hover:border-[#0A52EF]/30"
+                                        >
+                                          View Source
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {row.duplicate_reason && (
+                                      <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                                        {row.duplicate_reason}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
 
-              <div className="p-4 border-t border-[#E8E8E8] bg-zinc-50 flex items-center justify-between">
+              <div className="p-4 border-t border-[#E8E8E8] bg-white flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-zinc-500">Imported rows will be created with workflow status "pending".</span>
                 <button
                   onClick={importSelectedDiscovery}
                   disabled={importingDiscovery || selectedDiscoveryCount === 0}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded hover:bg-[#0840C0] transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#0A52EF] rounded-xl hover:bg-[#0840C0] transition-colors disabled:opacity-50"
                 >
                   {importingDiscovery ? 'Importing...' : `Import Selected (${selectedDiscoveryCount})`}
                 </button>
