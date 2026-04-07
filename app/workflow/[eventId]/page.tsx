@@ -153,6 +153,9 @@ export default function WorkflowPage() {
   const isCheckInDone = workflow.checked_in !== null
   const isGameReadyDone = workflow.game_ready !== null
   const isPostGameDone = workflow.post_game_submitted !== null
+  const completedSteps = [isCheckInDone, isGameReadyDone, isPostGameDone].filter(Boolean).length
+  const progressPercent = Math.round((completedSteps / 3) * 100)
+  const nextStepLabel = !isCheckInDone ? 'Check-in' : !isGameReadyDone ? 'Game Ready' : !isPostGameDone ? 'Post-Game Report' : 'All steps complete'
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -163,18 +166,44 @@ export default function WorkflowPage() {
 
       <div className="pt-16 pb-8 px-4 max-w-2xl mx-auto">
         {/* Event Card */}
-        <div className="bg-white rounded shadow-sm border border-[#E8E8E8] p-4 mb-6">
-          <h1 className="text-xl font-semibold text-zinc-900">{event.summary}</h1>
-          <p className="text-zinc-600 text-sm mt-1">{event.venue_name}</p>
-          <div className="flex gap-4 mt-3 text-xs text-zinc-500 font-mono">
-            <span>{formatDate(event.event_date)}</span>
-            <span>{formatTime(event.start_time)}</span>
+        <div className="bg-white rounded-[24px] shadow-sm border border-[#E8E8E8] p-4 mb-6 overflow-hidden relative">
+          <div className="absolute inset-x-0 top-0 h-1 bg-zinc-100">
+            <div className="h-full bg-[linear-gradient(90deg,#0A52EF_0%,#1F7BF2_100%)] transition-all" style={{ width: `${progressPercent}%` }}></div>
+          </div>
+          <div className="pt-2">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[#0A52EF] font-semibold">Live Workflow</p>
+                <h1 className="text-xl font-semibold text-zinc-900 mt-2">{event.summary}</h1>
+                <p className="text-zinc-600 text-sm mt-1">{event.venue_name}</p>
+              </div>
+              {event.league && (
+                <span className="inline-flex rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-semibold text-zinc-600">
+                  {event.league}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-3 mt-4 text-xs text-zinc-500 flex-wrap">
+              <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium">{formatDate(event.event_date)}</span>
+              <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium">{formatTime(event.start_time)}</span>
+              <span className="rounded-full bg-[#0A52EF]/8 px-2.5 py-1 font-medium text-[#0A52EF]">{progressPercent}% complete</span>
+            </div>
+            <div className="mt-4 rounded-2xl bg-zinc-50 border border-zinc-200 px-3 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500 font-semibold">Next Step</p>
+                <p className="text-sm font-semibold text-zinc-900 mt-1">{nextStepLabel}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500 font-semibold">Progress</p>
+                <p className="text-sm font-semibold text-zinc-900 mt-1">{completedSteps} of 3</p>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Tech Selector */}
         {viewer?.role === 'technician' ? (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded p-4">
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-2xl p-4">
             <p className="text-sm font-medium text-blue-800">Assigned Workflow</p>
             <p className="text-xs text-blue-700 mt-1">
               This workflow is tied to your assignment, so you can check in and submit updates directly without choosing a technician.
