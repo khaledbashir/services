@@ -106,6 +106,7 @@ function EventsPageInner() {
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
   const [discoveryRows, setDiscoveryRows] = useState<DiscoveryEventRow[]>([])
   const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
+  const [showDiscoverySummaryCard, setShowDiscoverySummaryCard] = useState(false)
   const [discoverySearch, setDiscoverySearch] = useState('')
   const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
   const [discoveryConfidenceFilter, setDiscoveryConfidenceFilter] = useState<'all' | 'high' | 'review'>('all')
@@ -294,6 +295,7 @@ function EventsPageInner() {
     setDiscovering(true)
     setDiscoveryRows([])
     setDiscoverySummary(null)
+    setShowDiscoverySummaryCard(false)
     setDiscoverySearch('')
     setDiscoveryTypeFilter('all')
     setDiscoveryConfidenceFilter('all')
@@ -317,6 +319,7 @@ function EventsPageInner() {
           total_found: data.total_found || 0,
           duplicates_skipped: data.duplicates_skipped || 0,
         })
+        setShowDiscoverySummaryCard(true)
         setShowDiscoveryModal(true)
       }
     } catch (err) {
@@ -350,6 +353,8 @@ function EventsPageInner() {
   const visibleSelectedCount = filteredDiscoveryRows.filter((row) => row.selected && !row.duplicate).length
   const visibleDuplicateCount = filteredDiscoveryRows.filter((row) => row.duplicate).length
   const visibleHighConfidenceCount = filteredDiscoveryRows.filter((row) => row.auto_importable && !row.duplicate).length
+  const totalDiscoveryImportableCount = discoveryRows.filter((row) => !row.duplicate).length
+  const totalDiscoveryHighConfidenceCount = discoveryRows.filter((row) => row.auto_importable && !row.duplicate).length
   const discoveryVenueGroups: Array<{
     venueId: string
     venueName: string
@@ -736,6 +741,37 @@ function EventsPageInner() {
               'AI Normalization',
             ]}
           />
+        )}
+
+        {!discovering && showDiscoverySummaryCard && discoverySummary && (
+          <div className="rounded-2xl border border-[#E8E8E8] bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 bg-[linear-gradient(180deg,#FFFFFF,#F8FAFC)] flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Discovery Complete</div>
+                <h3 className="mt-1 text-lg font-semibold text-zinc-900">
+                  {discoverySummary.total_found} results found across {discoverySummary.venues} venues
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {totalDiscoveryImportableCount} importable · {totalDiscoveryHighConfidenceCount} high confidence
+                  {discoverySummary.duplicates_skipped > 0 && ` · ${discoverySummary.duplicates_skipped} duplicates`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDiscoveryModal(true)}
+                  className="px-4 py-2 rounded-xl bg-[#0A52EF] text-white text-sm font-medium hover:bg-[#0840C0] transition-colors"
+                >
+                  Open Discovery Center
+                </button>
+                <button
+                  onClick={() => setShowDiscoverySummaryCard(false)}
+                  className="px-3 py-2 rounded-xl border border-[#E8E8E8] text-sm text-zinc-500 hover:text-zinc-700 hover:border-zinc-300 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Create Event Form */}
