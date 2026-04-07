@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { DiscoveryLoader } from '@/components/discovery-loader'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 
 interface Event {
@@ -611,6 +612,19 @@ function EventsPageInner() {
             </div>
           </div>
         </div>
+
+        {discovering && (
+          <DiscoveryLoader
+            title="Discovering Across Active Venues"
+            subtitle="Pulling live event candidates from public sources and shaping them into import-ready rows."
+            hints={[
+              'Ticketmaster',
+              'Team Sites',
+              'Venue Calendars',
+              'AI Normalization',
+            ]}
+          />
+        )}
 
         {/* Create Event Form */}
         {showCreate && (

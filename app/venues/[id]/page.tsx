@@ -3,6 +3,7 @@
 import { useEffect, useState, FormEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { DiscoveryLoader } from '@/components/discovery-loader'
 import { DropZone } from '@/components/drop-zone'
 import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
@@ -594,6 +595,20 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
             {discoverError && (
               <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {discoverError}
+              </div>
+            )}
+            {discovering && (
+              <div className="p-5 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.78))]">
+                <DiscoveryLoader
+                  title="Discovering Events"
+                  subtitle="Scanning official schedules, venue calendars, and ticket sources for this venue."
+                  compact
+                  hints={[
+                    'Ticketmaster',
+                    'Venue Calendars',
+                    'League Schedules',
+                  ]}
+                />
               </div>
             )}
             {upcomingEvents.length === 0 ? (
