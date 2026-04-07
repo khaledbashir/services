@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { discoverAcrossVenues, discoverForVenue, getActiveDiscoveryVenues, getDiscoveryVenue } from '@/lib/event-discovery'
+import { writeDiscoveryLogs } from '@/lib/discovery-log'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await discoverForVenue(venue, discoveryHint, includeExisting)
+      await writeDiscoveryLogs({ result })
       return NextResponse.json({
         ...result,
         mode: 'single',
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await discoverAcrossVenues(venues, discoveryHint, includeExisting)
+    await writeDiscoveryLogs({ result })
     return NextResponse.json({
       ...result,
       mode: 'bulk',

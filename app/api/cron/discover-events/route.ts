@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { DiscoveryCandidate, discoverAcrossVenues, discoverForVenue, getActiveDiscoveryVenues, getDiscoveryVenue, importDiscoveryEvents } from '@/lib/event-discovery'
+import { writeDiscoveryLogs } from '@/lib/discovery-log'
 
 const SLACK_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 
@@ -57,6 +58,10 @@ export async function GET(request: Request) {
           auto_imported: imported.imported,
           pending_review: pendingReview.length,
         })
+
+        await writeDiscoveryLogs({ result, importedByVenue: imported.byVenue })
+      } else {
+        await writeDiscoveryLogs({ result })
       }
 
       return NextResponse.json({
@@ -94,6 +99,7 @@ export async function GET(request: Request) {
     }
 
     await logRun(summary)
+    await writeDiscoveryLogs({ result, importedByVenue: imported.byVenue })
 
     if (!preview && SLACK_CHANNEL) {
       await sendSlackMessage({

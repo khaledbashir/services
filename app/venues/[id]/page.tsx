@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
+import { DiscoveryReviewCard } from '@/components/discovery-review-card'
 import { DropZone } from '@/components/drop-zone'
 import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
@@ -147,11 +148,17 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     end_time: string | null
     event_type: string
     league: string | null
-    teams: string | null
+    home_team?: string | null
+    away_team?: string | null
     source: string
     source_label: string | null
     source_url: string | null
+    match_type?: 'official_source' | 'ai_inferred'
+    matched_query?: string | null
+    evidence_snippet?: string | null
     confidence: number
+    trust_score?: number
+    trust_reasons?: string[]
     duplicate: boolean
     duplicate_reason: string | null
     auto_importable: boolean
@@ -163,6 +170,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [includeExistingDiscovery, setIncludeExistingDiscovery] = useState(false)
   const [showDiscoverSummaryCard, setShowDiscoverSummaryCard] = useState(false)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
+  const [discoverTrustFilter, setDiscoverTrustFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
   const [importing, setImporting] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -315,6 +323,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     s => !linkedStaffIds.has(s.id?.toString()) &&
       (s.full_name || '').toLowerCase().includes(staffSearch.toLowerCase())
   )
+  const filteredDiscoveredEvents = discoveredEvents.filter((event) => {
+    const trust = event.trust_score || 0
+    if (discoverTrustFilter === 'high') return trust >= 0.85
+    if (discoverTrustFilter === 'medium') return trust >= 0.7 && trust < 0.85
+    if (discoverTrustFilter === 'low') return trust < 0.7
+    return true
+  })
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
@@ -552,6 +567,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   setDiscoveredEvents([])
                   setDiscoverStats(null)
                   setShowDiscoverSummaryCard(false)
+                  setDiscoverTrustFilter('all')
                   setDiscoverError(null)
                   try {
                     const res = await fetch('/api/events/discover', {
@@ -757,7 +773,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     <div className="text-center py-12 text-zinc-400">No new events found for this venue in the next 60 days.</div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between px-2 mb-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3 px-2 mb-3">
                         <label className="flex items-center gap-2 text-sm text-zinc-600">
                           <input
                             type="checkbox"
@@ -767,58 +783,55 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                           />
                           Select all ({discoveredEvents.filter(e => e.selected && !e.duplicate).length}/{discoveredEvents.filter(e => !e.duplicate).length})
                         </label>
+                        <select
+                          value={discoverTrustFilter}
+                          onChange={(e) => setDiscoverTrustFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}
+                          className="px-3 py-2 border border-[#E8E8E8] rounded-xl text-sm bg-white text-zinc-700"
+                        >
+                          <option value="all">All Trust</option>
+                          <option value="high">High Trust</option>
+                          <option value="medium">Medium Trust</option>
+                          <option value="low">Low Trust</option>
+                        </select>
                       </div>
-                      {discoveredEvents.map((event, idx) => {
-                        const typeColors: Record<string, string> = {
-                          game: 'bg-blue-50 text-blue-700 border-blue-200',
-                          concert: 'bg-purple-50 text-purple-700 border-purple-200',
-                          other: 'bg-zinc-50 text-zinc-600 border-zinc-200',
-                        }
-                        return (
-                          <label
-                            key={idx}
-                            className={`flex items-start gap-3 p-3 rounded border transition-colors cursor-pointer ${
-                              event.selected ? 'border-[#0A52EF] bg-blue-50/30' : 'border-[#E8E8E8] bg-white hover:border-zinc-300'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={event.selected}
-                              disabled={event.duplicate}
-                              onChange={() => setDiscoveredEvents(prev => prev.map((e, i) => i === idx ? { ...e, selected: !e.selected } : e))}
-                              className="mt-1 rounded border-zinc-300 disabled:opacity-40"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-sm text-zinc-900">{event.summary}</span>
-                                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${typeColors[event.event_type] || typeColors.other}`}>
-                                  {event.event_type}
-                                </span>
-                                {event.league && (
-                                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">
-                                    {event.league}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs text-zinc-500 mt-1">
-                                {new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                                {event.start_time && ` at ${event.start_time}`}
-                                {event.source_label && (
-                                  <span className="ml-2 text-violet-500">
-                                    — {event.source_label}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-zinc-400 mt-1 flex items-center gap-2">
-                                <span>{Math.round((event.confidence || 0) * 100)}% confidence</span>
-                                {event.duplicate && (
-                                  <span className="text-amber-600">Duplicate: {event.duplicate_reason || 'already exists'}</span>
-                                )}
-                              </div>
-                            </div>
-                          </label>
-                        )
-                      })}
+                      {filteredDiscoveredEvents.map((event, idx) => (
+                        <DiscoveryReviewCard
+                          key={`${event.summary}-${event.event_date}-${event.start_time || idx}`}
+                          summary={event.summary}
+                          eventDate={event.event_date}
+                          startTime={event.start_time}
+                          endTime={event.end_time}
+                          venueName={event.venue_name}
+                          eventType={event.event_type}
+                          league={event.league}
+                          sourceLabel={event.source_label || event.source}
+                          sourceUrl={event.source_url}
+                          trustScore={event.trust_score}
+                          confidence={event.confidence}
+                          duplicate={event.duplicate}
+                          duplicateReason={event.duplicate_reason}
+                          selected={event.selected}
+                          disabled={event.duplicate}
+                          subtitle={[
+                            event.match_type === 'official_source' ? 'Official source' : 'AI inferred',
+                            (event.home_team || event.away_team) ? [event.home_team, event.away_team].filter(Boolean).join(' vs ') : null,
+                            event.matched_query ? `Query: ${event.matched_query}` : null,
+                            event.evidence_snippet || null,
+                          ].filter(Boolean).join(' · ')}
+                          onToggle={() => setDiscoveredEvents(prev => prev.map((entry) => (
+                            entry.summary === event.summary &&
+                            entry.event_date === event.event_date &&
+                            entry.start_time === event.start_time
+                              ? { ...entry, selected: !entry.selected }
+                              : entry
+                          )))}
+                        />
+                      ))}
+                      {filteredDiscoveredEvents.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+                          No discovered events match the current trust filter.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

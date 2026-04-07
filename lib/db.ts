@@ -98,6 +98,17 @@ async function runMigrations() {
       created_by UUID REFERENCES staff(id),
       created_at TIMESTAMP DEFAULT NOW()
     )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS discovery_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+      discovered_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      source TEXT NOT NULL,
+      events_found INT NOT NULL DEFAULT 0,
+      events_imported INT NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'success',
+      raw_response JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`)
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
       DECLARE

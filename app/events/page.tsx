@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
+import { DiscoveryReviewCard } from '@/components/discovery-review-card'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 
 interface Event {
@@ -114,7 +115,8 @@ function EventsPageInner() {
   const [showDiscoverySummaryCard, setShowDiscoverySummaryCard] = useState(false)
   const [discoverySearch, setDiscoverySearch] = useState('')
   const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
-  const [discoveryConfidenceFilter, setDiscoveryConfidenceFilter] = useState<'all' | 'high' | 'review'>('all')
+  const [discoveryConfidenceFilter, setDiscoveryConfidenceFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
+  const [discoveryVenueFilter, setDiscoveryVenueFilter] = useState<'all' | string>('all')
   const [showDiscoveryDuplicates, setShowDiscoveryDuplicates] = useState(true)
   const [collapsedDiscoveryVenues, setCollapsedDiscoveryVenues] = useState<Set<string>>(new Set())
   const [newEvent, setNewEvent] = useState({
@@ -311,6 +313,7 @@ function EventsPageInner() {
     setDiscoverySearch('')
     setDiscoveryTypeFilter('all')
     setDiscoveryConfidenceFilter('all')
+    setDiscoveryVenueFilter('all')
     setShowDiscoveryDuplicates(true)
     setCollapsedDiscoveryVenues(new Set())
     try {
@@ -350,8 +353,10 @@ function EventsPageInner() {
   const filteredDiscoveryRows = discoveryRows.filter((row) => {
     if (!showDiscoveryDuplicates && row.duplicate) return false
     if (discoveryTypeFilter !== 'all' && row.event_type !== discoveryTypeFilter) return false
-    if (discoveryConfidenceFilter === 'high' && !row.auto_importable) return false
-    if (discoveryConfidenceFilter === 'review' && row.auto_importable) return false
+    if (discoveryVenueFilter !== 'all' && row.venue_id !== discoveryVenueFilter) return false
+    if (discoveryConfidenceFilter === 'high' && (row.trust_score || 0) < 0.85) return false
+    if (discoveryConfidenceFilter === 'medium' && ((row.trust_score || 0) < 0.7 || (row.trust_score || 0) >= 0.85)) return false
+    if (discoveryConfidenceFilter === 'low' && (row.trust_score || 0) >= 0.7) return false
 
     const searchValue = discoverySearch.trim().toLowerCase()
     if (!searchValue) return true
@@ -372,6 +377,10 @@ function EventsPageInner() {
   const visibleHighConfidenceCount = filteredDiscoveryRows.filter((row) => row.auto_importable && !row.duplicate).length
   const totalDiscoveryImportableCount = discoveryRows.filter((row) => !row.duplicate).length
   const totalDiscoveryHighConfidenceCount = discoveryRows.filter((row) => row.auto_importable && !row.duplicate).length
+  const discoveryVenueOptions = discoveryRows
+    .map((row) => ({ id: row.venue_id, name: row.venue_name }))
+    .filter((option, index, arr) => arr.findIndex((candidate) => candidate.id === option.id) === index)
+    .sort((a, b) => a.name.localeCompare(b.name))
   const discoveryVenueGroups: Array<{
     venueId: string
     venueName: string
@@ -701,6 +710,12 @@ function EventsPageInner() {
         <div className="flex justify-between items-center flex-wrap gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">Events</h1>
           <div className="flex gap-2 items-center">
+            <button
+              onClick={() => router.push('/events/discovery-log')}
+              className="px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-zinc-300 transition-colors"
+            >
+              Discovery Log
+            </button>
             <button
               onClick={runBulkDiscovery}
               disabled={discovering}
@@ -1113,12 +1128,23 @@ function EventsPageInner() {
                 </select>
                 <select
                   value={discoveryConfidenceFilter}
-                  onChange={(e) => setDiscoveryConfidenceFilter(e.target.value as 'all' | 'high' | 'review')}
+                  onChange={(e) => setDiscoveryConfidenceFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}
                   className="px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm bg-white text-zinc-700"
                 >
-                  <option value="all">All Confidence</option>
-                  <option value="high">High Confidence</option>
-                  <option value="review">Needs Review</option>
+                  <option value="all">All Trust</option>
+                  <option value="high">High Trust</option>
+                  <option value="medium">Medium Trust</option>
+                  <option value="low">Low Trust</option>
+                </select>
+                <select
+                  value={discoveryVenueFilter}
+                  onChange={(e) => setDiscoveryVenueFilter(e.target.value)}
+                  className="px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm bg-white text-zinc-700"
+                >
+                  <option value="all">All Venues</option>
+                  {discoveryVenueOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
                 </select>
                 <label className="inline-flex items-center gap-2 px-3 py-2.5 border border-[#E8E8E8] rounded-xl text-sm text-zinc-700 bg-white">
                   <input
@@ -1213,118 +1239,39 @@ function EventsPageInner() {
                               {group.rows.map((row, idx) => (
                                 <div
                                   key={`${row.venue_id}-${row.summary}-${row.event_date}-${row.start_time || 'na'}-${idx}`}
-                                  className={`px-5 py-4 flex flex-col lg:flex-row lg:items-start gap-4 ${row.duplicate ? 'bg-amber-50/40' : 'bg-white'}`}
+                                  className={`px-5 py-4 ${row.duplicate ? 'bg-amber-50/40' : 'bg-white'}`}
                                 >
-                                  <div className="pt-0.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={row.selected}
-                                      disabled={row.duplicate}
-                                      onChange={() => setDiscoveryRows(prev => prev.map((event) => (
-                                        event.venue_id === row.venue_id &&
-                                        event.summary === row.summary &&
-                                        event.event_date === row.event_date &&
-                                        event.start_time === row.start_time
-                                          ? { ...event, selected: !event.selected }
-                                          : event
-                                      )))}
-                                      className="rounded border-zinc-300 disabled:opacity-40"
-                                    />
-                                  </div>
-
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <h5 className="text-sm font-semibold text-zinc-900">{row.summary}</h5>
-                                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-700 uppercase">
-                                        {row.event_type}
-                                      </span>
-                                      {row.league && (
-                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 uppercase">
-                                          {row.league}
-                                        </span>
-                                      )}
-                                      {row.duplicate ? (
-                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
-                                          Duplicate
-                                        </span>
-                                      ) : row.auto_importable ? (
-                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                                          High Confidence
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
-                                          Review
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-2 text-sm text-zinc-600 flex flex-wrap items-center gap-x-4 gap-y-1">
-                                      <span>{formatDiscoveryDate(row.event_date)}</span>
-                                      <span>{row.start_time || 'Time TBD'}</span>
-                                      {(row.home_team || row.away_team) && (
-                                        <span>{[row.home_team, row.away_team].filter(Boolean).join(' vs ')}</span>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                                      <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
-                                        Source: {row.source_label || row.source}
-                                      </span>
-                                      {row.match_type && (
-                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium ${
-                                          row.match_type === 'official_source'
-                                            ? 'bg-emerald-100 text-emerald-700'
-                                            : 'bg-zinc-100 text-zinc-600'
-                                        }`}>
-                                          {row.match_type === 'official_source' ? 'Official Source' : 'AI Inferred'}
-                                        </span>
-                                      )}
-                                      <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600">
-                                        {Math.round(row.confidence * 100)}% confidence
-                                      </span>
-                                      {typeof row.trust_score === 'number' && (
-                                        <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700">
-                                          Trust {Math.round(row.trust_score * 100)}%
-                                        </span>
-                                      )}
-                                      {row.source_url && (
-                                        <a
-                                          href={row.source_url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-white border border-[#E8E8E8] text-[#0A52EF] hover:border-[#0A52EF]/30"
-                                        >
-                                          View Source
-                                        </a>
-                                      )}
-                                    </div>
-
-                                    {(row.evidence_snippet || row.matched_query || (row.trust_reasons && row.trust_reasons.length > 0)) && (
-                                      <div className="mt-3 rounded-xl border border-[#E8E8E8] bg-zinc-50 px-3 py-3">
-                                        {row.evidence_snippet && (
-                                          <div className="text-xs text-zinc-700">
-                                            <span className="font-semibold text-zinc-900">Evidence:</span> "{row.evidence_snippet}"
-                                          </div>
-                                        )}
-                                        {row.matched_query && (
-                                          <div className="text-xs text-zinc-500 mt-2">
-                                            Query: {row.matched_query}
-                                          </div>
-                                        )}
-                                        {row.trust_reasons && row.trust_reasons.length > 0 && (
-                                          <div className="text-xs text-zinc-500 mt-2">
-                                            Why matched: {row.trust_reasons.slice(0, 3).join(' · ')}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {row.duplicate_reason && (
-                                      <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                                        {row.duplicate_reason}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <DiscoveryReviewCard
+                                    summary={row.summary}
+                                    eventDate={row.event_date}
+                                    startTime={row.start_time}
+                                    endTime={row.end_time}
+                                    eventType={row.event_type}
+                                    league={row.league}
+                                    sourceLabel={row.source_label || row.source}
+                                    sourceUrl={row.source_url}
+                                    trustScore={row.trust_score}
+                                    confidence={row.confidence}
+                                    duplicate={row.duplicate}
+                                    duplicateReason={row.duplicate_reason}
+                                    selected={row.selected}
+                                    disabled={row.duplicate}
+                                    subtitle={[
+                                      row.match_type === 'official_source' ? 'Official source' : 'AI inferred',
+                                      (row.home_team || row.away_team) ? [row.home_team, row.away_team].filter(Boolean).join(' vs ') : null,
+                                      row.matched_query ? `Query: ${row.matched_query}` : null,
+                                      row.evidence_snippet || null,
+                                      row.trust_reasons?.length ? `Why: ${row.trust_reasons.slice(0, 2).join(' · ')}` : null,
+                                    ].filter(Boolean).join(' · ')}
+                                    onToggle={() => setDiscoveryRows(prev => prev.map((event) => (
+                                      event.venue_id === row.venue_id &&
+                                      event.summary === row.summary &&
+                                      event.event_date === row.event_date &&
+                                      event.start_time === row.start_time
+                                        ? { ...event, selected: !event.selected }
+                                        : event
+                                    )))}
+                                  />
                                 </div>
                               ))}
                             </div>
