@@ -36,7 +36,8 @@ export default function LoginPage() {
         localStorage.setItem('userId', data.user.userId)
       }
 
-      router.push('/dashboard')
+      const nextPath = data.user?.role === 'technician' ? '/my-events' : '/dashboard'
+      router.push(nextPath)
     } catch (err) {
       setError('An error occurred')
     } finally {

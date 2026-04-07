@@ -78,6 +78,14 @@ export default function DashboardPage() {
   const router = useRouter()
 
   useEffect(() => {
+    if (auth.loaded && !auth.isManager) {
+      router.replace('/my-events')
+    }
+  }, [auth.loaded, auth.isManager, router])
+
+  useEffect(() => {
+    if (auth.loaded && !auth.isManager) return
+
     const fetchData = async () => {
       try {
         const [statsRes, todayRes, activityRes, chartRes, alertsRes] = await Promise.all([
@@ -107,7 +115,7 @@ export default function DashboardPage() {
     }
 
     fetchData()
-  }, [])
+  }, [auth.loaded, auth.isManager])
 
   const formatTime = (dateTimeStr: string) => {
     const date = new Date(dateTimeStr)

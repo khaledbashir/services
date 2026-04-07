@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { appendFile } from 'fs/promises'
 import { resolve } from 'path'
+import { getAuthUser } from '@/lib/rbac'
 
 const workflowLabels: Record<string, { label: string; emoji: string }> = {
   check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
@@ -16,6 +17,10 @@ export async function GET(
 ) {
   try {
     const eventId = params.eventId
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Get event details
     const eventResult = await query(
@@ -36,6 +41,19 @@ export async function GET(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 })
     }
 
+    if (user.role === 'technician') {
+      const accessResult = await query(
+        `SELECT 1
+         FROM event_assignments
+         WHERE event_id = $1 AND staff_id = $2
+         LIMIT 1`,
+        [eventId, user.userId]
+      )
+      if (accessResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
     // Get assigned technicians
     const techsResult = await query(
       `SELECT DISTINCT s.id, s.full_name
@@ -46,9 +64,9 @@ export async function GET(
     )
 
     // Get all active staff as fallback
-    const allStaffResult = await query(
-      `SELECT id, full_name FROM staff WHERE is_active = true ORDER BY full_name`
-    )
+    const allStaffResult = user.role === 'technician'
+      ? { rows: techsResult.rows.filter((row: any) => row.id === user.userId) }
+      : await query(`SELECT id, full_name FROM staff WHERE is_active = true ORDER BY full_name`)
 
     // Get workflow submissions and map DB types to frontend types
     const workflowResult = await query(
@@ -78,6 +96,10 @@ export async function GET(
       assignedTechs: techsResult.rows,
       allStaff: allStaffResult.rows,
       workflow,
+      viewer: {
+        userId: user.userId,
+        role: user.role,
+      },
     })
   } catch (err) {
     console.error('Error fetching workflow:', err)
@@ -91,7 +113,30 @@ export async function POST(
 ) {
   try {
     const eventId = params.eventId
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { staffId, type, data } = await request.json()
+    const effectiveStaffId = user.role === 'technician' ? user.userId : staffId
+
+    if (!effectiveStaffId) {
+      return NextResponse.json({ error: 'Technician is required' }, { status: 400 })
+    }
+
+    if (user.role === 'technician') {
+      const accessResult = await query(
+        `SELECT 1
+         FROM event_assignments
+         WHERE event_id = $1 AND staff_id = $2
+         LIMIT 1`,
+        [eventId, user.userId]
+      )
+      if (accessResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
 
     // Map frontend type names to database type names
     const typeMap: Record<string, string> = {
@@ -111,7 +156,7 @@ export async function POST(
        VALUES ($1, $2, $3, $4, NOW())
        ON CONFLICT (event_id, staff_id, type) DO UPDATE 
        SET data = EXCLUDED.data, submitted_at = NOW()`,
-      [eventId, staffId, submissionType, data ? JSON.stringify(data) : '{}']
+      [eventId, effectiveStaffId, submissionType, data ? JSON.stringify(data) : '{}']
     )
 
     // Get all workflow submissions for event
@@ -150,7 +195,7 @@ export async function POST(
     )
 
     // Get staff and event names for notification log
-    const staffResult = await query('SELECT full_name FROM staff WHERE id = $1', [staffId])
+    const staffResult = await query('SELECT full_name FROM staff WHERE id = $1', [effectiveStaffId])
     const eventResult = await query('SELECT summary, venue_id FROM events WHERE id = $1', [eventId])
     const venueResult = await query('SELECT name FROM venues WHERE id = $1', [eventResult.rows[0]?.venue_id])
 

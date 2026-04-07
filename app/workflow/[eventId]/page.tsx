@@ -24,6 +24,11 @@ interface Staff {
   full_name: string
 }
 
+interface ViewerInfo {
+  userId: string
+  role: 'admin' | 'manager' | 'technician'
+}
+
 export default function WorkflowPage() {
   const params = useParams()
   const eventId = params.eventId as string
@@ -34,6 +39,7 @@ export default function WorkflowPage() {
   const [assignedTechs, setAssignedTechs] = useState<Staff[]>([])
   const [allStaff, setAllStaff] = useState<Staff[]>([])
   const [selectedTech, setSelectedTech] = useState<string>('')
+  const [viewer, setViewer] = useState<ViewerInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [gameReadyData, setGameReadyData] = useState({
@@ -53,7 +59,10 @@ export default function WorkflowPage() {
           setWorkflow(data.workflow)
           setAssignedTechs(data.assignedTechs || [])
           setAllStaff(data.allStaff || [])
-          if (data.assignedTechs.length > 0) {
+          setViewer(data.viewer || null)
+          if (data.viewer?.role === 'technician' && data.viewer?.userId) {
+            setSelectedTech(data.viewer.userId)
+          } else if (data.assignedTechs.length > 0) {
             setSelectedTech(data.assignedTechs[0].id)
           } else if (data.allStaff.length > 0) {
             setSelectedTech(data.allStaff[0].id)
@@ -97,7 +106,8 @@ export default function WorkflowPage() {
           setPostGameData({ notes: '', incidents: '' })
         }
       } else {
-        showToast('Failed to submit', 'error')
+        const error = await res.json().catch(() => null)
+        showToast(error?.error || 'Failed to submit', 'error')
       }
     } catch (err) {
       console.error('Error submitting workflow:', err)
@@ -163,21 +173,30 @@ export default function WorkflowPage() {
         </div>
 
         {/* Tech Selector */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-zinc-900 mb-2">Technician</label>
-          <select
-            value={selectedTech}
-            onChange={(e) => setSelectedTech(e.target.value)}
-            className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:ring-slate-500"
-          >
-            <option value="">Select technician</option>
-            {allStaff.map((tech) => (
-              <option key={tech.id} value={tech.id}>
-                {tech.full_name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {viewer?.role === 'technician' ? (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded p-4">
+            <p className="text-sm font-medium text-blue-800">Assigned Workflow</p>
+            <p className="text-xs text-blue-700 mt-1">
+              This workflow is tied to your assignment, so you can check in and submit updates directly without choosing a technician.
+            </p>
+          </div>
+        ) : (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-zinc-900 mb-2">Technician</label>
+            <select
+              value={selectedTech}
+              onChange={(e) => setSelectedTech(e.target.value)}
+              className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:ring-slate-500"
+            >
+              <option value="">Select technician</option>
+              {allStaff.map((tech) => (
+                <option key={tech.id} value={tech.id}>
+                  {tech.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Vertical Progress Steps */}
         <div className="space-y-4">

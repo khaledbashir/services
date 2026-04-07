@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import Link from 'next/link'
+import { useAuth } from '@/lib/useAuth'
 
 interface EventDetail {
   id: string
@@ -48,6 +49,7 @@ interface Ticket {
 }
 
 export default function EventDetailPage() {
+  const auth = useAuth()
   const router = useRouter()
   const params = useParams()
   const eventId = params?.id as string
@@ -65,7 +67,15 @@ export default function EventDetailPage() {
   const [staffSearch, setStaffSearch] = useState('')
 
   useEffect(() => {
+    if (auth.loaded && auth.role === 'technician' && eventId) {
+      router.replace(`/workflow/${eventId}`)
+      return
+    }
+  }, [auth.loaded, auth.role, eventId, router])
+
+  useEffect(() => {
     if (!eventId) return
+    if (auth.loaded && auth.role === 'technician') return
 
     const fetchData = async () => {
       try {
@@ -86,7 +96,7 @@ export default function EventDetailPage() {
     }
 
     fetchData()
-  }, [eventId])
+  }, [auth.loaded, auth.role, eventId])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -136,7 +146,7 @@ export default function EventDetailPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading || !event) {
+  if (!auth.loaded || loading || !event) {
     return (
       <DashboardLayout>
         <div className="animate-pulse space-y-6">
@@ -431,7 +441,7 @@ export default function EventDetailPage() {
               >
                 {copied ? 'Copied!' : 'Copy Link'}
               </button>
-              <p className="text-xs text-zinc-500 mt-3">Share this with the assigned technician</p>
+              <p className="text-xs text-zinc-500 mt-3">Assigned technicians can now reach this from My Events after login. Copying the link is optional.</p>
             </div>
 
             {/* Staffing Requirement */}

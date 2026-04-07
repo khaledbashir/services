@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 
 export async function GET(
   request: NextRequest,
@@ -7,6 +8,10 @@ export async function GET(
 ) {
   try {
     const { id } = params
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Event details with venue
     const eventResult = await query(
@@ -26,6 +31,19 @@ export async function GET(
     }
 
     const event = eventResult.rows[0]
+
+    if (user.role === 'technician') {
+      const accessResult = await query(
+        `SELECT 1
+         FROM event_assignments
+         WHERE event_id = $1 AND staff_id = $2
+         LIMIT 1`,
+        [id, user.userId]
+      )
+      if (accessResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
 
     // Assigned technicians
     const techResult = await query(
@@ -86,6 +104,9 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
     const { id } = params
     const body = await request.json()
 

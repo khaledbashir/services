@@ -34,6 +34,7 @@ export function Sidebar() {
 
   const isAdmin = userRole === 'admin'
   const isManager = userRole === 'manager' || isAdmin
+  const isTechnician = userRole === 'technician'
 
   const linkClass = (path: string) =>
     isActive(path)
@@ -61,13 +62,21 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        <Link href="/dashboard" className={linkClass('/dashboard')}>Dashboard</Link>
+        {isManager ? (
+          <Link href="/dashboard" className={linkClass('/dashboard')}>Dashboard</Link>
+        ) : (
+          <Link href="/my-events" className={linkClass('/my-events')}>My Events</Link>
+        )}
 
         {/* Operations */}
         {sectionLabel('Operations')}
-        <Link href="/events" className={linkClass('/events')}>Events</Link>
+        {isTechnician ? (
+          <Link href="/my-events" className={linkClass('/my-events')}>My Assignments</Link>
+        ) : (
+          <Link href="/events" className={linkClass('/events')}>Events</Link>
+        )}
         {isManager && <Link href="/shifts" className={subLinkClass('/shifts')}>Shift Templates</Link>}
-        <Link href="/venues" className={linkClass('/venues')}>Venues</Link>
+        {!isTechnician && <Link href="/venues" className={linkClass('/venues')}>Venues</Link>}
         {isManager && <Link href="/venues/map" className={subLinkClass('/venues/map')}>Map View</Link>}
 
         {/* Support */}
