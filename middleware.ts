@@ -14,6 +14,16 @@ async function verifyJWT(token: string): Promise<any | null> {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
+
+  // Normalize accidental double slashes before Next.js routing kicks in.
+  // Without this, paths like //events/discovery-log can be treated like
+  // protocol-relative URLs during client navigation and trigger SecurityError.
+  const normalizedPathname = pathname.replace(/\/{2,}/g, '/')
+  if (normalizedPathname !== pathname) {
+    const url = request.nextUrl.clone()
+    url.pathname = normalizedPathname
+    return NextResponse.redirect(url)
+  }
   
   // Public routes that don't require auth
   const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/api/webhooks', '/api/showcase', '/api/cron', '/api/schedule/export', '/api/slack', '/api/internal', '/api/kb', '/presentation', '/_next', '/favicon', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
