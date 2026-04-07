@@ -37,6 +37,14 @@ export async function GET(request: Request) {
       if (!venue) {
         return NextResponse.json({ error: 'Venue not found' }, { status: 404 })
       }
+      if (venue.active_service_count <= 0) {
+        return NextResponse.json({
+          message: `Skipping ${venue.name}: no active contracted services`,
+          imported: 0,
+          pending_review: 0,
+          mode: preview ? 'preview' : 'cron',
+        })
+      }
 
       const result = await discoverForVenue(venue)
       const autoImportable = result.discovered.filter(isAutoImportCandidate)

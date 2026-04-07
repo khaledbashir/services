@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { extractStateFromAddress } from '@/lib/geocode'
+import { buildAutomationSelect, getVenueAutomationInfo, withComputedAutomation } from '@/lib/venue-automation'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
@@ -17,6 +18,9 @@ export interface DiscoveryVenue {
   slack_channel_id?: string | null
   requires_assignment: boolean
   active_service_count: number
+  active_service_names: string[]
+  active_service_descriptions: string[]
+  requires_staffing_default: boolean
   likely_leagues: string[]
 }
 
@@ -377,7 +381,7 @@ function buildExistingDemoCandidates(
       trust_reasons: ['Loaded directly from the ANC event database for demo mode review'],
       duplicate: true,
       duplicate_reason: 'Already exists in database (demo mode)',
-      requires_staffing: venue.active_service_count > 0,
+      requires_staffing: venue.requires_staffing_default,
       status: 'discovered',
       auto_importable: false,
     }
@@ -546,7 +550,7 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
     trust_reasons: trustReasons,
     duplicate: false,
     duplicate_reason: null,
-    requires_staffing: venue.active_service_count > 0,
+    requires_staffing: venue.requires_staffing_default,
     status: 'discovered',
     auto_importable: matchType === 'official_source' && trustScore >= 0.78 && confidence >= 0.85 && isOfficialSourceKind(sourceKind),
   }
@@ -632,17 +636,18 @@ export async function getDiscoveryVenue(venueId: string): Promise<DiscoveryVenue
        m.name as market_name,
        v.slack_channel_id,
        COALESCE(v.requires_assignment, true) as requires_assignment,
-       COUNT(CASE WHEN vs.enabled = true THEN 1 END)::int as active_service_count,
+       ${buildAutomationSelect('v', 'vs', 'st')},
        COALESCE(array_remove(array_agg(DISTINCT e.league), NULL), '{}') as likely_leagues
      FROM venues v
      LEFT JOIN markets m ON v.market_id = m.id
      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN service_types st ON st.id = vs.service_type_id
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE v.id = $1
      GROUP BY v.id, m.name`,
     [venueId]
   )
-  return result.rows[0] || null
+  return result.rows[0] ? withComputedAutomation(result.rows[0]) : null
 }
 
 export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
@@ -654,15 +659,16 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
        m.name as market_name,
        v.slack_channel_id,
        COALESCE(v.requires_assignment, true) as requires_assignment,
-       COUNT(CASE WHEN vs.enabled = true THEN 1 END)::int as active_service_count,
+       ${buildAutomationSelect('v', 'vs', 'st')},
        COALESCE(array_remove(array_agg(DISTINCT e.league), NULL), '{}') as likely_leagues
      FROM venues v
      LEFT JOIN markets m ON v.market_id = m.id
      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN service_types st ON st.id = vs.service_type_id
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE COALESCE(v.is_active, true) = true
      GROUP BY v.id, m.name
-     HAVING COUNT(CASE WHEN vs.enabled = true THEN 1 END) > 0
+     HAVING COUNT(DISTINCT CASE WHEN vs.enabled = true THEN st.id END) > 0
      ORDER BY
        CASE
          WHEN LOWER(v.name) = 'prudential center' THEN 0
@@ -671,7 +677,7 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
        END,
        v.name`
   )
-  return result.rows
+  return result.rows.map(withComputedAutomation)
 }
 
 export async function importDiscoveryEvents(
@@ -683,6 +689,7 @@ export async function importDiscoveryEvents(
 ): Promise<{ imported: number; skipped: number; eventIds: string[]; byVenue: Record<string, number> }> {
   const eventIds: string[] = []
   const byVenue: Record<string, number> = {}
+  const automationByVenue = new Map<string, Awaited<ReturnType<typeof getVenueAutomationInfo>>>()
   let imported = 0
   let skipped = 0
 
@@ -692,6 +699,10 @@ export async function importDiscoveryEvents(
       skipped++
       continue
     }
+    if (!automationByVenue.has(venueId)) {
+      automationByVenue.set(venueId, await getVenueAutomationInfo(venueId))
+    }
+    const automation = automationByVenue.get(venueId)!
 
     const existing = await loadExistingEvents(venueId, event.event_date, event.event_date)
     const hydrated = { ...event, venue_id: venueId }
@@ -728,7 +739,7 @@ export async function importDiscoveryEvents(
         event.league || null,
         event.event_type,
         event.source || 'ai_discovery',
-        Boolean(event.requires_staffing),
+        automation.requires_staffing_default,
       ]
     )
 

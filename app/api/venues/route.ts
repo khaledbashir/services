@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { buildAutomationSelect, classifyVenueAutomationStatus, withComputedAutomation } from '@/lib/venue-automation'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,19 +44,34 @@ export async function GET(request: NextRequest) {
         COALESCE(v.venue_type, 'sports') as venue_type,
         v.logo_url,
         COALESCE(v.is_active, true) as is_active,
-        COUNT(e.id) as event_count,
-        COUNT(CASE WHEN ea.event_id IS NOT NULL THEN 1 END) as assigned_count
+        v.feed_url,
+        ${buildAutomationSelect('v', 'vs', 'st')},
+        COUNT(DISTINCT e.id) as event_count,
+        COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as assigned_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
+      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+      LEFT JOIN service_types st ON st.id = vs.service_type_id
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id
       ${whereClause}
-      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active
+      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active, v.feed_url
       ORDER BY v.name`,
       [...vf.params]
     )
+    const venues = result.rows.map((row) => {
+      const hydrated = withComputedAutomation(row)
+      return {
+        ...hydrated,
+        automation_status: classifyVenueAutomationStatus({
+          is_active: Boolean(hydrated.is_active),
+          active_service_count: hydrated.active_service_count,
+          feed_url: hydrated.feed_url,
+        }),
+      }
+    })
 
-    return NextResponse.json({ venues: result.rows })
+    return NextResponse.json({ venues })
   } catch (err) {
     console.error('Error fetching venues:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

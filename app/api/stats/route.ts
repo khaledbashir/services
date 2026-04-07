@@ -67,6 +67,30 @@ export async function GET(request: NextRequest) {
       [today, weekEndStr, ...vfLabor.params, ...afLabor.params]
     )
 
+    const venueAutomationResult = await query(
+      `SELECT
+         COUNT(*) FILTER (
+           WHERE COALESCE(v.is_active, true) = true
+             AND active.active_service_count > 0
+             AND COALESCE(v.feed_url, '') <> ''
+         )::int as auto_syncing_venues,
+         COUNT(*) FILTER (
+           WHERE COALESCE(v.is_active, true) = true
+             AND active.active_service_count > 0
+             AND COALESCE(v.feed_url, '') = ''
+         )::int as venues_needing_feed_urls,
+         COUNT(*) FILTER (
+           WHERE COALESCE(v.is_active, true) = false
+         )::int as inactive_venues
+       FROM venues v
+       LEFT JOIN (
+         SELECT vs.venue_id, COUNT(*)::int as active_service_count
+         FROM venue_services vs
+         WHERE vs.enabled = true
+         GROUP BY vs.venue_id
+       ) active ON active.venue_id = v.id`
+    )
+
     return NextResponse.json({
       todaysEvents: parseInt(todaysEventsResult.rows[0]?.count || '0'),
       assignedStaff: parseInt(assignedStaffResult.rows[0]?.count || '0'),
@@ -74,6 +98,9 @@ export async function GET(request: NextRequest) {
       pendingWorkflows: parseInt(pendingWorkflowsResult.rows[0]?.count || '0'),
       estimatedLaborHours: parseFloat(laborHoursResult.rows[0]?.total_hours || '0'),
       laborByStaff: laborByStaffResult.rows,
+      autoSyncingVenues: parseInt(venueAutomationResult.rows[0]?.auto_syncing_venues || '0'),
+      venuesNeedingFeedUrls: parseInt(venueAutomationResult.rows[0]?.venues_needing_feed_urls || '0'),
+      inactiveVenues: parseInt(venueAutomationResult.rows[0]?.inactive_venues || '0'),
     })
   } catch (err) {
     console.error('Error fetching stats:', err)

@@ -16,6 +16,9 @@ interface Venue {
   venue_type: string
   logo_url: string | null
   is_active: boolean
+  feed_url: string | null
+  active_service_count: number
+  automation_status: 'auto_sync_active' | 'no_services' | 'no_feed_url' | 'inactive'
 }
 
 const venueTypeConfig: Record<string, { label: string; badge: string; dot: string }> = {
@@ -23,6 +26,13 @@ const venueTypeConfig: Record<string, { label: string; badge: string; dot: strin
   ooh: { label: 'OOH', badge: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
   facility: { label: 'Facility', badge: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
 }
+
+const automationStatusConfig = {
+  auto_sync_active: { label: 'Auto-Sync Active', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  no_services: { label: 'No Services', style: 'bg-zinc-50 text-zinc-500 border-zinc-200' },
+  no_feed_url: { label: 'No Feed URL', style: 'bg-amber-50 text-amber-700 border-amber-200' },
+  inactive: { label: 'Inactive', style: 'bg-zinc-100 text-zinc-500 border-zinc-200' },
+} as const
 
 export default function VenuesPage() {
   const [venues, setVenues] = useState<Venue[]>([])
@@ -268,6 +278,9 @@ export default function VenuesPage() {
                         {!venue.is_active && (
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border bg-zinc-100 text-zinc-500 border-zinc-200">Inactive</span>
                         )}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${automationStatusConfig[venue.automation_status]?.style || automationStatusConfig.no_services.style}`}>
+                          {automationStatusConfig[venue.automation_status]?.label || 'No Services'}
+                        </span>
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeConf.badge}`}>
                           {typeConf.label}
                         </span>

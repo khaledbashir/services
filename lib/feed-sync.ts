@@ -1,6 +1,7 @@
 import { query } from '@/lib/db'
 import { importDiscoveryEvents, type DiscoveryCandidate } from '@/lib/event-discovery'
 import { parseVenueFeed, type FeedEvent, type FeedType } from '@/lib/feed-parsers'
+import { buildAutomationSelect, withComputedAutomation } from '@/lib/venue-automation'
 
 export interface FeedVenue {
   id: string
@@ -9,6 +10,9 @@ export interface FeedVenue {
   feed_url: string
   feed_type: FeedType
   active_service_count: number
+  active_service_names: string[]
+  active_service_descriptions: string[]
+  requires_staffing_default: boolean
 }
 
 interface ExistingEventRow {
@@ -124,7 +128,7 @@ function feedEventToCandidate(feedEvent: FeedEvent, venue: FeedVenue): Discovery
     ],
     duplicate: false,
     duplicate_reason: null,
-    requires_staffing: venue.active_service_count > 0,
+    requires_staffing: venue.requires_staffing_default,
     status: 'discovered',
     auto_importable: matchType === 'official_source' && trustScore >= 0.9,
   }
@@ -138,14 +142,17 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
        v.address,
        v.feed_url,
        COALESCE(v.feed_type, 'other') as feed_type,
-       COUNT(CASE WHEN vs.enabled = true THEN 1 END)::int as active_service_count
+       ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN service_types st ON st.id = vs.service_type_id
      WHERE COALESCE(v.feed_url, '') <> ''
+       AND COALESCE(v.is_active, true) = true
      GROUP BY v.id
+     HAVING COUNT(DISTINCT CASE WHEN vs.enabled = true THEN st.id END) > 0
      ORDER BY v.name`
   )
-  return result.rows
+  return result.rows.map(withComputedAutomation)
 }
 
 export async function syncVenueFeed(venue: FeedVenue): Promise<{
