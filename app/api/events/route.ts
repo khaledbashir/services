@@ -10,7 +10,11 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get('limit') || '100'
 
     const user = await getAuthUser(request)
-    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    // Technicians should see events they are assigned to even if they are not linked
+    // to the venue in staff_venues. Venue scoping still applies for managers/admins.
+    const venueIds = user && user.role !== 'technician'
+      ? await getStaffVenueIds(user.userId, user.role)
+      : null
 
     let whereClause = ''
     const params: any[] = []
