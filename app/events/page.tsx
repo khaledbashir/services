@@ -913,7 +913,7 @@ function EventsPageInner() {
               </div>
 
               <div className="p-4 border-t border-[#E8E8E8] bg-zinc-50 flex items-center justify-between">
-                <span className="text-sm text-zinc-500">Imported rows will be saved with status "confirmed".</span>
+                <span className="text-sm text-zinc-500">Imported rows will be created with workflow status "pending".</span>
                 <button
                   onClick={importSelectedDiscovery}
                   disabled={importingDiscovery || selectedDiscoveryCount === 0}

@@ -485,9 +485,9 @@ export async function importDiscoveryEvents(
     const result = await query(
       `INSERT INTO events (
          summary, event_date, start_time, end_time, venue_id, league,
-         workflow_status, event_type, source, status, requires_staffing
+         workflow_status, event_type, source, requires_staffing
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)
        RETURNING id`,
       [
         event.summary,
@@ -498,7 +498,6 @@ export async function importDiscoveryEvents(
         event.league || null,
         event.event_type,
         event.source || 'ai_discovery',
-        payload.status,
         Boolean(event.requires_staffing),
       ]
     )
