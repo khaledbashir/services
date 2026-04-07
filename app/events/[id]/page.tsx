@@ -332,10 +332,14 @@ export default function EventDetailPage() {
                 <div className="space-y-2 mb-4">
                   {technicians.map((tech) => (
                     <div key={tech.id} className="flex items-center gap-2 text-xs">
+                      {(() => {
+                        const techName = tech.full_name || 'Unknown Tech'
+                        return (
+                          <>
                       <div className="w-6 h-6 rounded-full bg-[#0A52EF]/15 flex items-center justify-center text-[10px] font-semibold text-[#0A52EF]">
-                        {tech.full_name.charAt(0)}
+                        {techName.charAt(0)}
                       </div>
-                      <Link href={`/staff/${tech.id}`} className="text-[#0A52EF] hover:underline flex-1">{tech.full_name}</Link>
+                      <Link href={`/staff/${tech.id}`} className="text-[#0A52EF] hover:underline flex-1">{techName}</Link>
                       <button
                         onClick={async () => {
                           const res = await fetch(`/api/events/${eventId}/assign`, {
@@ -350,6 +354,9 @@ export default function EventDetailPage() {
                         }}
                         className="text-zinc-400 hover:text-rose-500 transition-colors"
                       >×</button>
+                          </>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>

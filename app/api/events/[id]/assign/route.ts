@@ -41,7 +41,7 @@ export async function POST(
 
     // Return updated assignments
     const result = await query(
-      'SELECT s.id, s.full_name as name, ea.role_at_event FROM staff s JOIN event_assignments ea ON s.id = ea.staff_id WHERE ea.event_id = $1',
+      'SELECT s.id, s.full_name, ea.role_at_event FROM staff s JOIN event_assignments ea ON s.id = ea.staff_id WHERE ea.event_id = $1',
       [eventId]
     )
 
@@ -75,7 +75,7 @@ export async function DELETE(
     )
 
     const result = await query(
-      'SELECT s.id, s.full_name as name, ea.role_at_event FROM staff s JOIN event_assignments ea ON s.id = ea.staff_id WHERE ea.event_id = $1',
+      'SELECT s.id, s.full_name, ea.role_at_event FROM staff s JOIN event_assignments ea ON s.id = ea.staff_id WHERE ea.event_id = $1',
       [eventId]
     )
 
