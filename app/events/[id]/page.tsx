@@ -60,7 +60,6 @@ export default function EventDetailPage() {
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([])
   const [openTickets, setOpenTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
-  const [copied, setCopied] = useState(false)
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
   const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number; linked_to_venue: boolean }>>([])
   const [assigning, setAssigning] = useState(false)
@@ -137,13 +136,6 @@ export default function EventDetailPage() {
 
   const getStepData = (stepType: string) => {
     return workflows.find((w) => w.type === stepType)
-  }
-
-  const copyWorkflowLink = async () => {
-    const link = `${window.location.origin}/workflow/${eventId}`
-    await navigator.clipboard.writeText(link)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   if (!auth.loaded || loading || !event) {
@@ -434,21 +426,6 @@ export default function EventDetailPage() {
                   + Add Technician
                 </button>
               )}
-            </div>
-
-            {/* Workflow Link */}
-            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-zinc-900 mb-3">Workflow Link</h2>
-              <div className="bg-[#FAFAFA] font-mono text-xs rounded p-3 mb-3 overflow-hidden text-ellipsis whitespace-nowrap">
-                {window.location.origin}/workflow/{eventId}
-              </div>
-              <button
-                onClick={copyWorkflowLink}
-                className="w-full text-xs px-3 py-2 bg-[#0A52EF] text-white rounded hover:bg-[#0840C0] font-medium transition-colors"
-              >
-                {copied ? 'Copied!' : 'Copy Link'}
-              </button>
-              <p className="text-xs text-zinc-500 mt-3">Assigned technicians can now reach this from My Events after login. Copying the link is optional.</p>
             </div>
 
             {/* Staffing Requirement */}
