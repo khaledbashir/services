@@ -25,6 +25,9 @@ interface ExistingEventRow {
   summary: string
   event_date: string
   start_time: string | null
+  event_type: string | null
+  league: string | null
+  source: string | null
 }
 
 export interface DiscoveryCandidate {
@@ -306,7 +309,10 @@ async function loadExistingEvents(venueId: string, startDate: string, endDate: s
     `SELECT id,
             summary,
             TO_CHAR(event_date, 'YYYY-MM-DD') as event_date,
-            TO_CHAR(start_time AT TIME ZONE 'America/New_York', 'HH24:MI') as start_time
+            TO_CHAR(start_time AT TIME ZONE 'America/New_York', 'HH24:MI') as start_time,
+            event_type,
+            league,
+            source
      FROM events
      WHERE venue_id = $1
        AND event_date >= $2
@@ -337,6 +343,45 @@ function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEv
   }
 
   return { duplicate: false, reason: null }
+}
+
+function buildExistingDemoCandidates(
+  venue: DiscoveryVenue,
+  existingEvents: ExistingEventRow[]
+): DiscoveryCandidate[] {
+  return existingEvents.map((event) => {
+    const eventType: DiscoveryEventType =
+      event.event_type === 'game' || event.event_type === 'concert' ? event.event_type : 'other'
+
+    return {
+      venue_id: venue.id,
+      venue_name: venue.name,
+      summary: event.summary,
+      event_date: event.event_date,
+      start_time: event.start_time,
+      end_time: null,
+      event_type: eventType,
+      league: event.league || null,
+      home_team: null,
+      away_team: null,
+      source_url: null,
+      source_domain: null,
+      source_label: 'Existing ANC event',
+      source_kind: 'existing_event',
+      source: event.source || 'existing_event',
+      match_type: 'ai_inferred',
+      matched_query: null,
+      evidence_snippet: 'Loaded from the ANC events database because demo mode is enabled.',
+      confidence: 1,
+      trust_score: 1,
+      trust_reasons: ['Loaded directly from the ANC event database for demo mode review'],
+      duplicate: true,
+      duplicate_reason: 'Already exists in database (demo mode)',
+      requires_staffing: venue.active_service_count > 0,
+      status: 'discovered',
+      auto_importable: false,
+    }
+  })
 }
 
 async function discoverWithAI(
@@ -520,6 +565,10 @@ export async function discoverForVenue(
   const candidates = raw
     .map(candidate => hydrateCandidate(candidate, venue))
     .filter((candidate): candidate is DiscoveryCandidate => Boolean(candidate))
+
+  if (includeExisting && existingEvents.length > 0) {
+    candidates.push(...buildExistingDemoCandidates(venue, existingEvents))
+  }
 
   const deduped: DiscoveryCandidate[] = []
   const seenKeys = new Set<string>()
