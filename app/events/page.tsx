@@ -110,6 +110,7 @@ function EventsPageInner() {
   const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
   const [discoveryHint, setDiscoveryHint] = useState('')
   const [activeDiscoveryHint, setActiveDiscoveryHint] = useState<string | null>(null)
+  const [includeExistingDiscovery, setIncludeExistingDiscovery] = useState(false)
   const [showDiscoverySummaryCard, setShowDiscoverySummaryCard] = useState(false)
   const [discoverySearch, setDiscoverySearch] = useState('')
   const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
@@ -316,7 +317,11 @@ function EventsPageInner() {
       const res = await fetch('/api/events/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all_active: true, discovery_hint: discoveryHint.trim() || undefined }),
+        body: JSON.stringify({
+          all_active: true,
+          discovery_hint: discoveryHint.trim() || undefined,
+          include_existing: includeExistingDiscovery,
+        }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -730,6 +735,15 @@ function EventsPageInner() {
                 className="px-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-80"
               />
             </div>
+            <label className="inline-flex items-center gap-2 px-3 py-2 border border-[#E8E8E8] rounded text-sm text-zinc-700 bg-white">
+              <input
+                type="checkbox"
+                checked={includeExistingDiscovery}
+                onChange={(e) => setIncludeExistingDiscovery(e.target.checked)}
+                className="rounded border-zinc-300"
+              />
+              Demo mode
+            </label>
             <div className="bg-zinc-100 rounded p-1 flex gap-1">
               <button
                 onClick={() => saveViewPreference('calendar')}
@@ -792,6 +806,11 @@ function EventsPageInner() {
                 {activeDiscoveryHint && (
                   <p className="mt-2 text-xs text-zinc-500">
                     Discovery hint used: "{activeDiscoveryHint}"
+                  </p>
+                )}
+                {includeExistingDiscovery && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Demo mode included events that already exist so they can appear as duplicates for review.
                   </p>
                 )}
               </div>
@@ -1034,6 +1053,11 @@ function EventsPageInner() {
                     {activeDiscoveryHint && (
                       <p className="text-xs text-zinc-500 mt-2">
                         Discovery hint: "{activeDiscoveryHint}"
+                      </p>
+                    )}
+                    {includeExistingDiscovery && (
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Demo mode is on, so existing events may appear here as duplicates.
                       </p>
                     )}
                   </div>

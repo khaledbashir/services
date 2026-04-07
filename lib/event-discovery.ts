@@ -80,6 +80,7 @@ export interface DiscoveryBatchResult {
   duplicates_skipped: number
   existing_count: number
   discovery_hint?: string | null
+  include_existing?: boolean
 }
 
 function normalizeSummary(summary: string): string {
@@ -341,7 +342,8 @@ function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEv
 async function discoverWithAI(
   venue: DiscoveryVenue,
   existingEvents: ExistingEventRow[],
-  discoveryHint?: string | null
+  discoveryHint?: string | null,
+  includeExisting?: boolean
 ): Promise<RawDiscoveryCandidate[]> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
@@ -365,12 +367,13 @@ VENUE
 - Likely leagues: ${venue.likely_leagues.join(', ') || 'Unknown'}
 - Pilot emphasis: Prudential Center and Fenway Park should be handled carefully if matched.
 ${discoveryHint?.trim() ? `- Discovery hint from user: ${discoveryHint.trim()}` : ''}
+${includeExisting ? '- Demo mode: include events even if they already exist in the database so they can be reviewed as duplicates.' : ''}
 
 DISCOVERY WINDOW
 - Start: ${today}
 - End: ${sixtyDaysOut}
 
-EXISTING EVENTS IN DATABASE (do not repeat these)
+EXISTING EVENTS IN DATABASE
 ${existingList}
 
 SEARCH RESULTS
@@ -396,7 +399,9 @@ INSTRUCTIONS
 - Use confidence as a decimal from 0.00 to 1.00.
 - If a source URL is unknown, set source_url to null.
 - If a source label is unknown, set source_label to a short human-readable source name.
-- Do not include anything already in the database list above.
+${includeExisting
+    ? '- You may include events that already exist in the database list above if they appear in search results. The application will flag them as duplicates later.'
+    : '- Do not include anything already in the database list above.'}
 
 RETURN ONLY JSON
 [{
@@ -502,11 +507,15 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
   }
 }
 
-export async function discoverForVenue(venue: DiscoveryVenue, discoveryHint?: string | null): Promise<DiscoveryBatchResult> {
+export async function discoverForVenue(
+  venue: DiscoveryVenue,
+  discoveryHint?: string | null,
+  includeExisting = false
+): Promise<DiscoveryBatchResult> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
   const existingEvents = await loadExistingEvents(venue.id, today, sixtyDaysOut)
-  const raw = await discoverWithAI(venue, existingEvents, discoveryHint)
+  const raw = await discoverWithAI(venue, existingEvents, discoveryHint, includeExisting)
 
   const candidates = raw
     .map(candidate => hydrateCandidate(candidate, venue))
@@ -535,15 +544,20 @@ export async function discoverForVenue(venue: DiscoveryVenue, discoveryHint?: st
     duplicates_skipped: deduped.filter(event => event.duplicate).length,
     existing_count: existingEvents.length,
     discovery_hint: discoveryHint?.trim() || null,
+    include_existing: includeExisting,
   }
 }
 
-export async function discoverAcrossVenues(venues: DiscoveryVenue[], discoveryHint?: string | null): Promise<DiscoveryBatchResult> {
+export async function discoverAcrossVenues(
+  venues: DiscoveryVenue[],
+  discoveryHint?: string | null,
+  includeExisting = false
+): Promise<DiscoveryBatchResult> {
   const results: DiscoveryCandidate[] = []
   let totalExisting = 0
 
   for (const venue of venues) {
-    const venueResult = await discoverForVenue(venue, discoveryHint)
+    const venueResult = await discoverForVenue(venue, discoveryHint, includeExisting)
     results.push(...venueResult.discovered)
     totalExisting += venueResult.existing_count
     await new Promise(resolve => setTimeout(resolve, 1000))
@@ -556,6 +570,7 @@ export async function discoverAcrossVenues(venues: DiscoveryVenue[], discoveryHi
     duplicates_skipped: results.filter(event => event.duplicate).length,
     existing_count: totalExisting,
     discovery_hint: discoveryHint?.trim() || null,
+    include_existing: includeExisting,
   }
 }
 

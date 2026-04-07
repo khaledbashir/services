@@ -160,6 +160,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [discoverStats, setDiscoverStats] = useState<{ total_found: number; duplicates_skipped: number; existing_count: number } | null>(null)
   const [discoveryHint, setDiscoveryHint] = useState('')
   const [activeDiscoveryHint, setActiveDiscoveryHint] = useState<string | null>(null)
+  const [includeExistingDiscovery, setIncludeExistingDiscovery] = useState(false)
   const [showDiscoverSummaryCard, setShowDiscoverSummaryCard] = useState(false)
   const [showDiscoverModal, setShowDiscoverModal] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -535,6 +536,15 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 placeholder="Optional discovery hint"
                 className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 w-64"
               />
+              <label className="inline-flex items-center gap-2 px-3 py-1.5 border border-[#E8E8E8] rounded text-xs text-zinc-700 bg-white">
+                <input
+                  type="checkbox"
+                  checked={includeExistingDiscovery}
+                  onChange={e => setIncludeExistingDiscovery(e.target.checked)}
+                  className="rounded border-zinc-300"
+                />
+                Demo mode
+              </label>
               <button
                 type="button"
                 onClick={async () => {
@@ -547,7 +557,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     const res = await fetch('/api/events/discover', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ venue_id: params.id, discovery_hint: discoveryHint.trim() || undefined }),
+                      body: JSON.stringify({
+                        venue_id: params.id,
+                        discovery_hint: discoveryHint.trim() || undefined,
+                        include_existing: includeExistingDiscovery,
+                      }),
                     })
                     if (res.ok) {
                       const data = await res.json()
@@ -626,6 +640,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   {activeDiscoveryHint && (
                     <p className="mt-2 text-xs text-zinc-500">
                       Discovery hint used: "{activeDiscoveryHint}"
+                    </p>
+                  )}
+                  {includeExistingDiscovery && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Demo mode included events that already exist so they can still show up as duplicates.
                     </p>
                   )}
                 </div>
@@ -717,6 +736,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       {activeDiscoveryHint && (
                         <p className="text-xs text-zinc-500 mt-2">
                           Discovery hint: "{activeDiscoveryHint}"
+                        </p>
+                      )}
+                      {includeExistingDiscovery && (
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Demo mode is on, so existing events may appear here as duplicates.
                         </p>
                       )}
                     </div>
