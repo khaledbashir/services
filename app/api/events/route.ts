@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
         e.summary,
         v.name as venue_name,
         e.league,
+        e.source,
         e.start_time,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         COALESCE(e.workflow_status, 'pending') as workflow_status,

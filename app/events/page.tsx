@@ -11,6 +11,7 @@ interface Event {
   summary: string
   venue_name: string
   league: string
+  source?: string | null
   start_time: string
   event_date: string
   workflow_status: string
@@ -99,6 +100,7 @@ function EventsPageInner() {
   const [showVenueFilter, setShowVenueFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'needs_staffing' | 'warranty_only'>('all')
+  const [aiFilter, setAiFilter] = useState<'all' | 'ai_only'>('all')
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [creating, setCreating] = useState(false)
   const [discovering, setDiscovering] = useState(false)
@@ -240,6 +242,10 @@ function EventsPageInner() {
     return e.venue_requires_assignment !== false
   }
 
+  const isAiImportedEvent = (e: Event): boolean => {
+    return ['ai_discovery', 'ticketmaster', 'league_schedule', 'venue_calendar', 'team_website'].includes(e.source || '')
+  }
+
   // Filter events by selected venues and staffing filter (client-side)
   const filterByVenue = (list: Event[]) => {
     let filtered = list
@@ -248,6 +254,9 @@ function EventsPageInner() {
         const venueName = e.venue_name || (e as any).venue || ''
         return venueOptions.some(v => selectedVenues.has(v.id) && v.name === venueName)
       })
+    }
+    if (aiFilter === 'ai_only') {
+      filtered = filtered.filter((e) => isAiImportedEvent(e))
     }
     if (staffingFilter === 'needs_staffing') {
       filtered = filtered.filter(e => eventNeedsStaffing(e) && (Number((e as any).assigned_count) || 0) === 0)
@@ -565,6 +574,11 @@ function EventsPageInner() {
                               <span className={`text-[9px] font-semibold uppercase tracking-wide ${isUnderstaffed ? 'text-red-600' : isStaffed ? 'text-green-700' : 'text-zinc-400'}`}>
                                 {isUnderstaffed ? 'Needs Staff' : isWarranty ? 'Warranty' : `${assignedCount} Assigned`}
                               </span>
+                              {isAiImportedEvent(event) && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">
+                                  AI
+                                </span>
+                              )}
                               {event.league && (
                                 <span className="text-[9px] font-medium px-1 rounded ml-auto" style={{ backgroundColor: leagueColor.hex + '20', color: leagueColor.hex }}>{event.league}</span>
                               )}
@@ -633,9 +647,17 @@ function EventsPageInner() {
                     <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
                     <td className="py-3 px-6 text-zinc-600">{event.venue_name}</td>
                     <td className="py-3 px-6">
-                      <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium ${leagueColor.bg} ${leagueColor.text}`}>
-                        {event.league}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium ${leagueColor.bg} ${leagueColor.text}`}>
+                          {event.league}
+                        </span>
+                        {isAiImportedEvent(event) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                            AI Imported
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-6">
                       {(() => {
@@ -904,6 +926,17 @@ function EventsPageInner() {
                 )}
               </button>
             ))}
+            <button
+              onClick={() => setAiFilter(aiFilter === 'ai_only' ? 'all' : 'ai_only')}
+              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
+                aiFilter === 'ai_only'
+                  ? 'bg-sky-600 text-white border-sky-600'
+                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${aiFilter === 'ai_only' ? 'bg-white' : 'bg-sky-500'}`} />
+              AI Imported
+            </button>
             <span className="w-px h-6 bg-zinc-200" />
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-2">

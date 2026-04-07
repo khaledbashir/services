@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
         e.id,
         e.summary,
         e.league,
+        e.source,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as date,
         TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as time,
         v.name as venue, v.name as venue_name,
