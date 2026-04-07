@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 // POST - Run geocoding for venues without coordinates
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireRole(request, 'admin')
+    const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
 
     const { venue_id, limit } = await request.json().catch(() => ({}))

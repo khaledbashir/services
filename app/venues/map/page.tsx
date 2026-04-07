@@ -65,6 +65,7 @@ export default function VenueMapPage() {
   const [filterType, setFilterType] = useState<string>('all')
   const [geocoding, setGeocoding] = useState(false)
   const [geocodeProgress, setGeocodeProgress] = useState<{ current: number; total: number } | null>(null)
+  const [geocodeMessage, setGeocodeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export default function VenueMapPage() {
     
     setGeocoding(true)
     setGeocodeProgress({ current: 0, total: data.unmapped.length })
+    setGeocodeMessage(null)
     
     try {
       const response = await fetch('/api/venues/geocode', {
@@ -86,14 +88,32 @@ export default function VenueMapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ limit: data.unmapped.length }),
       })
+
+      const result = await response.json().catch(() => null)
       
+      if (!response.ok) {
+        setGeocodeMessage({
+          type: 'error',
+          text: result?.error || 'Geocoding failed. Please try again.',
+        })
+        return
+      }
+
       if (response.ok) {
+        setGeocodeMessage({
+          type: 'success',
+          text: `Geocoded ${result?.successful || 0} venue${result?.successful === 1 ? '' : 's'}${result?.failed ? `, ${result.failed} not found` : ''}.`,
+        })
         // Refresh map data after geocoding
         const refreshed = await fetch('/api/venues/map').then(r => r.json())
         setData(refreshed)
       }
     } catch (err) {
       console.error('Geocoding failed:', err)
+      setGeocodeMessage({
+        type: 'error',
+        text: 'Geocoding failed. Please check the connection and try again.',
+      })
     } finally {
       setGeocoding(false)
       setGeocodeProgress(null)
@@ -127,6 +147,11 @@ export default function VenueMapPage() {
             <p className="text-sm text-zinc-500 mt-1">
               {data?.mappedVenues || 0} of {data?.totalVenues || 0} venues mapped across {data?.stateCount || 0} states
             </p>
+            {geocodeMessage && (
+              <p className={`text-sm mt-2 ${geocodeMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {geocodeMessage.text}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Geocode button */}
