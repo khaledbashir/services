@@ -29,6 +29,10 @@ interface VenueDetail {
   cover_image_url: string | null
   venue_manager_name: string | null
   lead_field_rep_name: string | null
+  feed_url: string | null
+  feed_type: 'ticketmaster' | 'team-website' | 'league-page' | 'ical' | 'other'
+  last_feed_synced_at: string | null
+  last_feed_sync_status: string | null
 }
 
 interface VenueService {
@@ -125,6 +129,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [distEmails, setDistEmails] = useState<string[]>([])
   const [newDistEmail, setNewDistEmail] = useState('')
   const [savingDist, setSavingDist] = useState(false)
+  const [savingFeed, setSavingFeed] = useState(false)
   const [linkedStaff, setLinkedStaff] = useState<LinkedStaff[]>([])
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
   const [staffSearch, setStaffSearch] = useState('')
@@ -288,6 +293,23 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     } catch {}
   }
 
+  const saveFeedSettings = async (payload: { feed_url?: string | null; feed_type?: string }) => {
+    setSavingFeed(true)
+    try {
+      const res = await fetch(`/api/venues/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setVenue(data.venue)
+      }
+    } finally {
+      setSavingFeed(false)
+    }
+  }
+
   const linkStaff = async (staffId: string) => {
     try {
       const res = await fetch(`/api/venues/${params.id}/staff`, {
@@ -344,6 +366,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   }
 
   const enabledServices = venueServices.filter(s => s.enabled)
+  const feedStatusStyles: Record<string, string> = {
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    partial: 'bg-amber-50 text-amber-700 border-amber-200',
+    failed: 'bg-rose-50 text-rose-700 border-rose-200',
+  }
 
   return (
     <DashboardLayout>
@@ -1438,6 +1465,57 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${venue.requires_assignment ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                   <span className="text-sm text-zinc-700">{venue.requires_assignment ? 'Required' : 'Not required (support only)'}</span>
+                </div>
+              </div>
+
+              {/* Feed Sync */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Venue Feed Sync</h3>
+                    <p className="text-xs text-zinc-500 mt-1">Configure a hands-off source URL for daily syncs. Venues without a feed can still use AI discovery.</p>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium ${
+                    feedStatusStyles[venue.last_feed_sync_status || ''] || 'bg-zinc-50 text-zinc-500 border-zinc-200'
+                  }`}>
+                    {venue.last_feed_sync_status || 'Not synced'}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-1">Feed Type</label>
+                    <select
+                      value={venue.feed_type || 'other'}
+                      onChange={(e) => saveFeedSettings({ feed_type: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    >
+                      <option value="ticketmaster">Ticketmaster</option>
+                      <option value="team-website">Team Website</option>
+                      <option value="league-page">League Page</option>
+                      <option value="ical">iCal</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-1">Feed URL</label>
+                    <input
+                      type="url"
+                      defaultValue={venue.feed_url || ''}
+                      onBlur={(e) => {
+                        if ((venue.feed_url || '') !== e.target.value) {
+                          saveFeedSettings({ feed_url: e.target.value || null })
+                        }
+                      }}
+                      placeholder="https://..."
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-zinc-500">
+                    <span>
+                      Last synced: {venue.last_feed_synced_at ? new Date(venue.last_feed_synced_at).toLocaleString() : 'Never'}
+                    </span>
+                    <span>{savingFeed ? 'Saving…' : 'Saves automatically'}</span>
+                  </div>
                 </div>
               </div>
 

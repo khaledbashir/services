@@ -32,7 +32,11 @@ export async function GET(
         sl.full_name as lead_field_rep_name,
         v.logo_url,
         v.cover_image_url,
-        COALESCE(v.is_active, true) as is_active
+        COALESCE(v.is_active, true) as is_active,
+        v.feed_url,
+        COALESCE(v.feed_type, 'other') as feed_type,
+        v.last_feed_synced_at,
+        v.last_feed_sync_status
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
@@ -123,6 +127,17 @@ export async function PATCH(
       if (body[field] !== undefined) {
         await query(`UPDATE venues SET ${field} = $1 WHERE id = $2`, [body[field], venueId])
       }
+    }
+
+    if (body.feed_url !== undefined) {
+      const normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim() ? body.feed_url.trim() : null
+      await query(`UPDATE venues SET feed_url = $1 WHERE id = $2`, [normalizedFeedUrl, venueId])
+    }
+
+    if (body.feed_type !== undefined) {
+      const validFeedTypes = ['ticketmaster', 'team-website', 'league-page', 'ical', 'other']
+      const nextFeedType = validFeedTypes.includes(body.feed_type) ? body.feed_type : 'other'
+      await query(`UPDATE venues SET feed_type = $1 WHERE id = $2`, [nextFeedType, venueId])
     }
 
     // Geocode if address changed
@@ -231,7 +246,11 @@ export async function PATCH(
         sl.full_name as lead_field_rep_name,
         v.logo_url,
         v.cover_image_url,
-        COALESCE(v.is_active, true) as is_active
+        COALESCE(v.is_active, true) as is_active,
+        v.feed_url,
+        COALESCE(v.feed_type, 'other') as feed_type,
+        v.last_feed_synced_at,
+        v.last_feed_sync_status
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id

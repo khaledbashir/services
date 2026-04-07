@@ -49,6 +49,10 @@ async function runMigrations() {
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS cover_image_url TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_manager_id UUID REFERENCES staff(id)`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS lead_field_rep_id UUID REFERENCES staff(id)`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS feed_url TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS feed_type TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_synced_at TIMESTAMP`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_sync_status TEXT`)
     await client.query(`CREATE TABLE IF NOT EXISTS shift_templates (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
@@ -109,6 +113,16 @@ async function runMigrations() {
       raw_response JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMP DEFAULT NOW()
     )`)
+    await client.query(`UPDATE venues
+      SET feed_url = 'https://www.prucenter.com/events',
+          feed_type = 'ticketmaster'
+      WHERE LOWER(name) = 'prudential center'
+        AND COALESCE(feed_url, '') = ''`)
+    await client.query(`UPDATE venues
+      SET feed_url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=111&startDate=2026-04-01&endDate=2026-06-30',
+          feed_type = 'team-website'
+      WHERE LOWER(name) = 'fenway park'
+        AND COALESCE(feed_url, '') = ''`)
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
       DECLARE
