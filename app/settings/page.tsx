@@ -34,26 +34,6 @@ interface VenueOption {
   name: string
 }
 
-function CalendarSyncSection() {
-  return (
-    <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-zinc-900">Calendar Sync</h2>
-          <p className="text-sm text-zinc-500 mt-1">
-            Google Calendar sync is being retired in favor of the AI-powered event discovery engine.
-          </p>
-        </div>
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-          Replaced
-        </span>
-      </div>
-      <p className="text-sm text-zinc-600 mt-4">
-        Existing Google sync code remains in the repo for reference, but Phase 4a discovery is now the primary event ingestion path.
-      </p>
-    </div>
-  )
-}
 
 export default function SettingsPage() {
   const auth = useAuth('admin')
@@ -359,11 +339,6 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs text-zinc-400 mt-2">This name will appear in Slack notifications and throughout the dashboard</p>
         </div>
-
-        <div className="border-t border-[#E8E8E8] pt-6"></div>
-
-        {/* Calendar Sync */}
-        <CalendarSyncSection />
 
         <div className="border-t border-[#E8E8E8] pt-6"></div>
 

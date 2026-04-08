@@ -123,6 +123,7 @@ function sourceKindFromUrl(url: string | null, venueName: string): string {
   if (!url) return 'ai_discovery'
   const lower = url.toLowerCase()
   if (lower.includes('ticketmaster')) return 'ticketmaster'
+  if (lower.includes('stubhub')) return 'ticketmaster' // treat StubHub as equivalent ticket source
   if (lower.includes('nba.com') || lower.includes('nhl.com') || lower.includes('mlb.com') || lower.includes('wnba.com') || lower.includes('ncaa.com') || lower.includes('espn.com')) return 'league_schedule'
   const venueSlug = venueName.toLowerCase().replace(/[^a-z0-9]+/g, '')
   if (lower.includes(venueSlug)) return 'venue_calendar'
@@ -228,9 +229,10 @@ function buildSearchQueries(venue: DiscoveryVenue): string[] {
   const leagueHint = venue.likely_leagues.length > 0 ? ` ${venue.likely_leagues.join(' ')}` : ''
   return [
     `${venue.name} ticketmaster${leagueHint} upcoming events`,
+    `${venue.name} stubhub${leagueHint} upcoming events`,
+    `site:mlb.com/schedule ${venue.name}${leagueHint}`.trim(),
     `${venue.name} official venue calendar ${location}`.trim(),
     `${venue.name} team schedule ${location}${leagueHint}`.trim(),
-    `${venue.name} league schedule ${location}${leagueHint}`.trim(),
   ]
 }
 
@@ -601,6 +603,16 @@ export async function discoverForVenue(
   }
 }
 
+function buildCrossVenueKey(candidate: DiscoveryCandidate): string {
+  // Key by date + normalized teams (or summary if no teams)
+  const date = candidate.event_date
+  if (candidate.home_team && candidate.away_team) {
+    const teams = [candidate.home_team, candidate.away_team].map(t => t.toLowerCase().trim()).sort().join('|')
+    return `${date}|${teams}`
+  }
+  return `${date}|${normalizeSummary(candidate.summary)}`
+}
+
 export async function discoverAcrossVenues(
   venues: DiscoveryVenue[],
   discoveryHint?: string | null,
@@ -609,9 +621,32 @@ export async function discoverAcrossVenues(
   const results: DiscoveryCandidate[] = []
   let totalExisting = 0
 
+  // Track cross-venue keys to flag duplicates across different venues
+  const crossVenueSeen = new Map<string, { venue_id: string; venue_name: string }>()
+
   for (const venue of venues) {
     const venueResult = await discoverForVenue(venue, discoveryHint, includeExisting)
-    results.push(...venueResult.discovered)
+
+    for (const candidate of venueResult.discovered) {
+      if (candidate.duplicate) {
+        results.push(candidate)
+        continue
+      }
+
+      const crossKey = buildCrossVenueKey(candidate)
+      const existing = crossVenueSeen.get(crossKey)
+      if (existing && existing.venue_id !== candidate.venue_id) {
+        results.push({
+          ...candidate,
+          duplicate: true,
+          duplicate_reason: `Same event already discovered at ${existing.venue_name}`,
+        })
+      } else {
+        if (!existing) crossVenueSeen.set(crossKey, { venue_id: candidate.venue_id, venue_name: candidate.venue_name })
+        results.push(candidate)
+      }
+    }
+
     totalExisting += venueResult.existing_count
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
@@ -710,6 +745,22 @@ export async function importDiscoveryEvents(
     if (dup.duplicate) {
       skipped++
       continue
+    }
+
+    // Cross-venue dedup: check if the same game exists at another venue on the same date
+    if (event.home_team && event.away_team) {
+      const crossResult = await query(
+        `SELECT id, venue_id FROM events
+         WHERE event_date = $1
+           AND venue_id != $2
+           AND LOWER(summary) LIKE $3
+         LIMIT 1`,
+        [event.event_date, venueId, `%${event.away_team.toLowerCase().split(' ').pop()}%${event.home_team.toLowerCase().split(' ').pop()}%`]
+      )
+      if (crossResult.rows.length > 0) {
+        skipped++
+        continue
+      }
     }
 
     const startTimestamp = event.start_time

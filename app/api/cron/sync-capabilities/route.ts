@@ -126,7 +126,7 @@ export async function GET() {
       { name: 'Knowledge Base & AI Diagnostics', routes: ['/api/kb', '/api/kb/diagnose'] },
       { name: 'Inventory Tracking', routes: ['/api/inventory'] },
       { name: 'Shift Templates', routes: ['/api/shift-templates'] },
-      { name: 'Calendar Sync (Google)', routes: ['/api/calendar-sync'] },
+      { name: 'MLB Schedule Feed', routes: ['/api/cron/sync-feeds'] },
       { name: 'Slack Notifications', routes: ['/api/slack/broadcast'] },
       { name: 'Email Webhooks', routes: ['/api/webhooks/email'] },
       { name: 'Automated Reminders', routes: ['/api/cron/reminders'] },

@@ -119,10 +119,15 @@ async function runMigrations() {
       WHERE LOWER(name) = 'prudential center'
         AND COALESCE(feed_url, '') = ''`)
     await client.query(`UPDATE venues
-      SET feed_url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=111&startDate=2026-04-01&endDate=2026-06-30',
-          feed_type = 'team-website'
+      SET feed_url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&hydrate=venue,team',
+          feed_type = 'mlb-schedule'
       WHERE LOWER(name) = 'fenway park'
-        AND COALESCE(feed_url, '') = ''`)
+        AND (COALESCE(feed_url, '') = '' OR feed_type = 'team-website')`)
+    // Twenty CRM ID columns for bidirectional mapping
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS twenty_person_id TEXT`)
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS twenty_technician_id TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS twenty_id TEXT`)
+
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
       DECLARE

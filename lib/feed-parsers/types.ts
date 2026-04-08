@@ -1,4 +1,4 @@
-export type FeedType = 'ticketmaster' | 'team-website' | 'league-page' | 'ical' | 'other'
+export type FeedType = 'ticketmaster' | 'team-website' | 'league-page' | 'mlb-schedule' | 'ical' | 'other'
 
 export interface FeedEvent {
   name: string

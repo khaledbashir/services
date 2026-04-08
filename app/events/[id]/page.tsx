@@ -64,6 +64,9 @@ export default function EventDetailPage() {
   const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number; linked_to_venue: boolean }>>([])
   const [assigning, setAssigning] = useState(false)
   const [staffSearch, setStaffSearch] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (auth.loaded && auth.role === 'technician' && eventId) {
@@ -138,6 +141,66 @@ export default function EventDetailPage() {
     return workflows.find((w) => w.type === stepType)
   }
 
+  const startEditing = (field: string, currentValue: string) => {
+    setEditing(field)
+    setEditValues({ ...editValues, [field]: currentValue })
+  }
+
+  const cancelEditing = () => {
+    setEditing(null)
+  }
+
+  const saveField = async (field: string) => {
+    if (!event || saving) return
+    setSaving(true)
+    try {
+      const payload: Record<string, string> = {}
+      if (field === 'summary') {
+        payload.summary = editValues.summary
+      } else if (field === 'event_date') {
+        payload.event_date = editValues.event_date
+      } else if (field === 'start_time') {
+        payload.start_time = editValues.start_time
+        payload.event_date = event.event_date
+      } else if (field === 'end_time') {
+        payload.end_time = editValues.end_time
+        payload.event_date = event.event_date
+      }
+
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        // Re-fetch event to get updated timestamps
+        const refetch = await fetch(`/api/events/${eventId}`)
+        if (refetch.ok) {
+          const data = await refetch.json()
+          setEvent(data.event)
+        }
+      }
+    } catch (err) {
+      console.error('Save error:', err)
+    } finally {
+      setSaving(false)
+      setEditing(null)
+    }
+  }
+
+  const extractTime = (timestamp: string) => {
+    try {
+      const d = new Date(timestamp)
+      const h = d.getUTCHours().toString().padStart(2, '0')
+      const m = d.getUTCMinutes().toString().padStart(2, '0')
+      return `${h}:${m}`
+    } catch {
+      return '00:00'
+    }
+  }
+
+  const isManager = auth.role === 'admin' || auth.role === 'manager'
+
   if (!auth.loaded || loading || !event) {
     return (
       <DashboardLayout>
@@ -160,7 +223,29 @@ export default function EventDetailPage() {
           <Link href="/events" className="text-sm text-[#0A52EF] hover:text-[#0840C0] font-medium mb-4 block">
             ← Back to Events
           </Link>
-          <h1 className="text-xl font-semibold text-zinc-900">{event.summary}</h1>
+          {editing === 'summary' ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editValues.summary}
+                onChange={(e) => setEditValues({ ...editValues, summary: e.target.value })}
+                className="text-xl font-semibold text-zinc-900 border border-[#0A52EF] rounded px-2 py-1 flex-1 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') saveField('summary'); if (e.key === 'Escape') cancelEditing() }}
+              />
+              <button onClick={() => saveField('summary')} disabled={saving} className="text-xs px-2.5 py-1.5 bg-[#0A52EF] text-white rounded font-medium hover:bg-[#0840C0] disabled:opacity-50">Save</button>
+              <button onClick={cancelEditing} className="text-xs px-2.5 py-1.5 text-zinc-500 hover:text-zinc-700">Cancel</button>
+            </div>
+          ) : (
+            <h1 className="text-xl font-semibold text-zinc-900 group">
+              {event.summary}
+              {isManager && (
+                <button onClick={() => startEditing('summary', event.summary)} className="ml-2 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                </button>
+              )}
+            </h1>
+          )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <Link href={`/venues/${event.venue_id}`} className="text-sm text-[#0A52EF] hover:underline font-medium">{event.venue_name}</Link>
             <span className="inline-block px-2.5 py-1 rounded text-xs font-medium bg-orange-50 text-orange-600">{event.league}</span>
@@ -186,17 +271,83 @@ export default function EventDetailPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Event Info Grid */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-[#FAFAFA] rounded p-4">
+              <div className="bg-[#FAFAFA] rounded p-4 group">
                 <p className="text-xs text-zinc-500 font-medium mb-1">Date</p>
-                <p className="text-sm font-semibold text-zinc-900">{formatDate(event.event_date)}</p>
+                {editing === 'event_date' ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={editValues.event_date}
+                      onChange={(e) => setEditValues({ ...editValues, event_date: e.target.value })}
+                      className="text-sm font-semibold text-zinc-900 border border-[#0A52EF] rounded px-1.5 py-0.5 w-full focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveField('event_date'); if (e.key === 'Escape') cancelEditing() }}
+                    />
+                    <button onClick={() => saveField('event_date')} disabled={saving} className="text-[10px] px-1.5 py-1 bg-[#0A52EF] text-white rounded font-medium">OK</button>
+                    <button onClick={cancelEditing} className="text-[10px] text-zinc-400">X</button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {formatDate(event.event_date)}
+                    {isManager && (
+                      <button onClick={() => startEditing('event_date', event.event_date)} className="ml-1.5 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
-              <div className="bg-[#FAFAFA] rounded p-4">
+              <div className="bg-[#FAFAFA] rounded p-4 group">
                 <p className="text-xs text-zinc-500 font-medium mb-1">Start Time</p>
-                <p className="text-sm font-semibold text-zinc-900">{formatTime(event.start_time)}</p>
+                {editing === 'start_time' ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={editValues.start_time}
+                      onChange={(e) => setEditValues({ ...editValues, start_time: e.target.value })}
+                      className="text-sm font-semibold text-zinc-900 border border-[#0A52EF] rounded px-1.5 py-0.5 w-full focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveField('start_time'); if (e.key === 'Escape') cancelEditing() }}
+                    />
+                    <button onClick={() => saveField('start_time')} disabled={saving} className="text-[10px] px-1.5 py-1 bg-[#0A52EF] text-white rounded font-medium">OK</button>
+                    <button onClick={cancelEditing} className="text-[10px] text-zinc-400">X</button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {formatTime(event.start_time)}
+                    {isManager && (
+                      <button onClick={() => startEditing('start_time', extractTime(event.start_time))} className="ml-1.5 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
-              <div className="bg-[#FAFAFA] rounded p-4">
+              <div className="bg-[#FAFAFA] rounded p-4 group">
                 <p className="text-xs text-zinc-500 font-medium mb-1">End Time</p>
-                <p className="text-sm font-semibold text-zinc-900">{formatTime(event.end_time)}</p>
+                {editing === 'end_time' ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={editValues.end_time}
+                      onChange={(e) => setEditValues({ ...editValues, end_time: e.target.value })}
+                      className="text-sm font-semibold text-zinc-900 border border-[#0A52EF] rounded px-1.5 py-0.5 w-full focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveField('end_time'); if (e.key === 'Escape') cancelEditing() }}
+                    />
+                    <button onClick={() => saveField('end_time')} disabled={saving} className="text-[10px] px-1.5 py-1 bg-[#0A52EF] text-white rounded font-medium">OK</button>
+                    <button onClick={cancelEditing} className="text-[10px] text-zinc-400">X</button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {formatTime(event.end_time)}
+                    {isManager && (
+                      <button onClick={() => startEditing('end_time', extractTime(event.end_time))} className="ml-1.5 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
 

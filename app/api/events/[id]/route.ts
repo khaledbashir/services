@@ -110,13 +110,62 @@ export async function PATCH(
     const { id } = params
     const body = await request.json()
 
+    const updates: string[] = []
+    const values: any[] = []
+    let paramIndex = 1
+
     if ('requires_staffing' in body) {
       const val = body.requires_staffing === null ? null : Boolean(body.requires_staffing)
-      await query(
-        `UPDATE events SET requires_staffing = $1 WHERE id = $2`,
-        [val, id]
-      )
+      updates.push(`requires_staffing = $${paramIndex++}`)
+      values.push(val)
     }
+
+    if ('summary' in body && typeof body.summary === 'string' && body.summary.trim()) {
+      updates.push(`summary = $${paramIndex++}`)
+      values.push(body.summary.trim())
+    }
+
+    if ('event_date' in body && /^\d{4}-\d{2}-\d{2}$/.test(body.event_date)) {
+      updates.push(`event_date = $${paramIndex++}`)
+      values.push(body.event_date)
+    }
+
+    if ('start_time' in body && typeof body.start_time === 'string') {
+      const timeMatch = body.start_time.match(/^(\d{2}:\d{2})$/)
+      if (timeMatch) {
+        const eventDate = body.event_date || (await query(`SELECT TO_CHAR(event_date, 'YYYY-MM-DD') as d FROM events WHERE id = $1`, [id])).rows[0]?.d
+        if (eventDate) {
+          updates.push(`start_time = $${paramIndex++}`)
+          values.push(`${eventDate}T${timeMatch[1]}:00`)
+        }
+      }
+    }
+
+    if ('end_time' in body && typeof body.end_time === 'string') {
+      const timeMatch = body.end_time.match(/^(\d{2}:\d{2})$/)
+      if (timeMatch) {
+        const eventDate = body.event_date || (await query(`SELECT TO_CHAR(event_date, 'YYYY-MM-DD') as d FROM events WHERE id = $1`, [id])).rows[0]?.d
+        if (eventDate) {
+          updates.push(`end_time = $${paramIndex++}`)
+          values.push(`${eventDate}T${timeMatch[1]}:00`)
+        }
+      }
+    }
+
+    if ('league' in body) {
+      updates.push(`league = $${paramIndex++}`)
+      values.push(body.league || null)
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    values.push(id)
+    await query(
+      `UPDATE events SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramIndex}`,
+      values
+    )
 
     return NextResponse.json({ success: true })
   } catch (err) {
