@@ -19,6 +19,7 @@ interface MapData {
   totalVenues: number
   mappedVenues: number
   stateCount: number
+  serviceTypes: string[]
 }
 
 const roleColors: Record<string, string> = {
@@ -48,11 +49,14 @@ export default function VenueMapPage() {
   const [loading, setLoading] = useState(true)
   const [selectedVenue, setSelectedVenue] = useState<VenueMapVenue | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [filterService, setFilterService] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [geocoding, setGeocoding] = useState(false)
   const [geocodeProgress, setGeocodeProgress] = useState<{ current: number; total: number } | null>(null)
   const [geocodeMessage, setGeocodeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const router = useRouter()
+
+  const autoGeocodeTriggered = useState(false)
 
   useEffect(() => {
     fetch('/api/venues/map')
@@ -66,6 +70,15 @@ export default function VenueMapPage() {
         setLoading(false)
       })
   }, [])
+
+  // Auto-geocode unmapped venues on first load
+  useEffect(() => {
+    if (!data || autoGeocodeTriggered[0] || geocoding) return
+    if (data.unmapped.length > 0) {
+      autoGeocodeTriggered[1](true)
+      handleGeocode()
+    }
+  }, [data])
 
   const handleGeocode = async () => {
     if (!data?.unmapped || data.unmapped.length === 0) return
@@ -112,18 +125,19 @@ export default function VenueMapPage() {
 
   const filteredVenues = useMemo(() => {
     const venues = data?.venues || []
-    const query = search.trim().toLowerCase()
+    const q = search.trim().toLowerCase()
 
     return venues.filter((venue) => {
       const matchesType = filterType === 'all' || venue.venue_type === filterType
-      const matchesSearch = !query
-        || venue.name.toLowerCase().includes(query)
-        || (venue.market || '').toLowerCase().includes(query)
-        || (venue.address || '').toLowerCase().includes(query)
+      const matchesService = filterService === 'all' || (venue.services || []).some(s => s === filterService)
+      const matchesSearch = !q
+        || venue.name.toLowerCase().includes(q)
+        || (venue.market || '').toLowerCase().includes(q)
+        || (venue.address || '').toLowerCase().includes(q)
 
-      return matchesType && matchesSearch
+      return matchesType && matchesService && matchesSearch
     })
-  }, [data?.venues, filterType, search])
+  }, [data?.venues, filterType, filterService, search])
 
   const mappedVenues = filteredVenues.filter((venue) => venue.lat && venue.lng)
   const filteredVenueIds = new Set(filteredVenues.map((venue) => venue.id))
@@ -211,6 +225,18 @@ export default function VenueMapPage() {
                 </button>
               ))}
             </div>
+            {(data?.serviceTypes || []).length > 0 && (
+              <select
+                value={filterService}
+                onChange={(e) => setFilterService(e.target.value)}
+                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+              >
+                <option value="all">All Services</option>
+                {(data?.serviceTypes || []).map((svc) => (
+                  <option key={svc} value={svc}>{svc}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {data?.unmapped && data.unmapped.length > 0 && (
@@ -299,6 +325,19 @@ export default function VenueMapPage() {
                       <p className="mt-1 text-2xl font-semibold text-zinc-900">{selectedVenue.staff.length}</p>
                     </div>
                   </div>
+
+                  {(selectedVenue.services || []).length > 0 && (
+                    <div className="mt-5">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-400 mb-2">Service Obligations</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedVenue.services.map((svc) => (
+                          <span key={svc} className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                            {svc}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-5 flex items-center gap-2">
                     <button

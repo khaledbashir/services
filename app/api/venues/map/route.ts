@@ -21,10 +21,16 @@ export async function GET(request: NextRequest) {
         v.longitude,
         COALESCE(v.is_active, true) as is_active,
         v.requires_assignment,
-        COUNT(DISTINCT e.id) as event_count
+        COUNT(DISTINCT e.id) as event_count,
+        COALESCE(
+          array_remove(array_agg(DISTINCT CASE WHEN vs.enabled = true THEN st.name END), NULL),
+          '{}'
+        ) as service_names
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN events e ON v.id = e.venue_id AND e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '30 days'
+      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+      LEFT JOIN service_types st ON st.id = vs.service_type_id
       WHERE v.is_active = true ${vf.clause}
       GROUP BY v.id, v.name, v.address, m.name, v.venue_type, v.logo_url, v.latitude, v.longitude, v.is_active, v.requires_assignment
       ORDER BY v.name`,
@@ -45,19 +51,27 @@ export async function GET(request: NextRequest) {
       staffByVenue[row.venue_id].push({ id: row.staff_id, name: row.full_name, role: row.role })
     }
 
-    const venues = result.rows.map(v => ({
-      id: v.id,
-      name: v.name,
-      address: v.address,
-      market: v.market,
-      venue_type: v.venue_type,
-      logo_url: v.logo_url,
-      lat: v.latitude,
-      lng: v.longitude,
-      event_count: Number(v.event_count) || 0,
-      requires_assignment: v.requires_assignment,
-      staff: staffByVenue[v.id] || [],
-    }))
+    // Collect all unique service types across all venues
+    const allServiceTypes = new Set<string>()
+
+    const venues = result.rows.map(v => {
+      const services: string[] = Array.isArray(v.service_names) ? v.service_names : []
+      services.forEach(s => allServiceTypes.add(s))
+      return {
+        id: v.id,
+        name: v.name,
+        address: v.address,
+        market: v.market,
+        venue_type: v.venue_type,
+        logo_url: v.logo_url,
+        lat: v.latitude,
+        lng: v.longitude,
+        event_count: Number(v.event_count) || 0,
+        requires_assignment: v.requires_assignment,
+        staff: staffByVenue[v.id] || [],
+        services,
+      }
+    })
 
     // Group by approximate state (from address parsing)
     const statePattern = /\b([A-Z]{2})\s+\d{5}\b/
@@ -93,6 +107,7 @@ export async function GET(request: NextRequest) {
       totalVenues: venues.length,
       mappedVenues: venues.length - unmapped.length,
       stateCount: Object.keys(byState).length,
+      serviceTypes: [...allServiceTypes].sort(),
     })
   } catch (err) {
     console.error('Error fetching venue map data:', err)

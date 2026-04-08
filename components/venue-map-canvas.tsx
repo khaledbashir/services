@@ -16,6 +16,7 @@ export interface VenueMapVenue {
   event_count: number
   requires_assignment: boolean
   staff: Array<{ id: string; name: string; role: string }>
+  services: string[]
 }
 
 const venueTypeColors: Record<string, string> = {
@@ -113,6 +114,9 @@ export default function VenueMapCanvas({
                 <p className="text-[11px] text-zinc-500 mt-1">
                   {venue.event_count} upcoming event{venue.event_count === 1 ? '' : 's'} · {venue.staff.length} staff
                 </p>
+                {venue.services.length > 0 && (
+                  <p className="text-[10px] text-blue-600 mt-0.5">{venue.services.join(', ')}</p>
+                )}
               </div>
             </Tooltip>
           </CircleMarker>
