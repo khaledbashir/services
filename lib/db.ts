@@ -146,6 +146,30 @@ async function runMigrations() {
       END;
       $$ LANGUAGE plpgsql IMMUTABLE;
     `)
+
+    // ============================================================
+    // proof_shares — public URL sharing for Twenty CRM proof files
+    // ============================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS proof_shares (
+        token TEXT PRIMARY KEY,
+        twenty_object_type TEXT NOT NULL,
+        twenty_record_id UUID NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        view_count INT NOT NULL DEFAULT 0,
+        last_viewed_at TIMESTAMPTZ,
+        last_viewed_ip TEXT,
+        client_response TEXT,
+        client_response_at TIMESTAMPTZ,
+        client_response_note TEXT,
+        message TEXT,
+        created_by_name TEXT,
+        created_by_email TEXT
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)
