@@ -127,12 +127,27 @@ Started the full migration of Nick's NYC Airtable base into the CRM. What landed
 - Maintenance — escort info, techs scheduled, end time
 - Walkthrough — three-letter code, locations visited, technician name
 
-**Still remaining to migrate (next waves):**
-- WMATA shipping chain: Shipping Cases (478), Frames (907), LUs (235), LCD units (97), RMA Events, Deliveries
-- Stations (WMATA, 120)
+**Wave 3 (done):** WMATA shipping chain + Stations
+
+6 more new Twenty objects: `shippingCase`, `frame`, `loadUnit`, `lcdUnit`, `station`, `rmaEvent`.
+
+| New Object | Records | What it is |
+|---|---|---|
+| shippingCase | 478 | Crates that hold display frames in transit |
+| frame | 907 | Individual LED frames shipped in cases |
+| loadUnit | 2 | Shippable parts going out for RMA |
+| lcdUnit | 1 | Bare LCD panels |
+| station | 120 | WMATA metro stations |
+| rmaEvent | 1 | Return shipment events |
+
+**Also fixed:** 28,013 Designer Time Entries were showing as "Untitled" in Twenty. They now show real project names (e.g. "Indy College Basketball Events - 2026 — Apr 01, 2026 · 0.25h") by joining against the matching `designRequest` and `contentSchedule` records via their Wrike task IDs.
+
+**Still remaining to migrate:**
 - WMATA Switches (165), Security Scan Results (342)
 - ANC Advertising base (172): Clients, Deliverables, Campaigns, Channels, Teams & Venues, Objectives, Key Results
 - Inventory Tracking parts: Manufacturers (21), Restock Orders, Checkout records, Parts
+- Technicians from Airtable (13)
+- Tasks from ANC Service - WMATA (49)
 
 **What this unlocks:**
 - On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.

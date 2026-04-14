@@ -452,6 +452,239 @@ async function main() {
     console.log(`[${baseName}] RackDevices ✓ ${inserted}`)
   }
 
+  // ---------- RMA EVENTS ----------
+  async function loadRmaEvents(baseName: string, rows: any[]): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, "rmaNumber" FROM ${WS}."_rmaEvent" WHERE "deletedAt" IS NULL AND "rmaNumber" IS NOT NULL`)).rows.map((r) => [r.rmaNumber, r.id])
+    )
+    console.log(`[${baseName}] RMA Events: ${rows.length} incoming, ${existing.size} already in Twenty`)
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const ev of rows) {
+      const f = ev.fields || {}
+      const num = String(f['ID'] || f['Name'] || ev.id)
+      if (existing.has(num)) { recMap.set(ev.id, existing.get(num)!); continue }
+      toInsert.push([
+        String(f['Name'] || `RMA ${num}`).slice(0, 255),
+        num,
+        f['Ship Date'] ? String(f['Ship Date']).slice(0, 10) : null,
+        f['Status'] || null,
+        Number(f['#Shipped (LUs)']) || null,
+      ])
+      atIds.push(ev.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const cols = ['name', '"rmaNumber"', '"shipDate"', 'status', '"shippedCount"']
+    const values: string[] = []
+    const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 5
+      values.push(`(${Array.from({ length: 5 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+      params.push(...row)
+    })
+    const r = await client.query(`INSERT INTO ${WS}."_rmaEvent" (${cols.join(',')}) VALUES ${values.join(',')} RETURNING id`, params)
+    for (let k = 0; k < r.rows.length; k++) recMap.set(atIds[k], r.rows[k].id)
+    console.log(`[${baseName}] RMA Events ✓ ${r.rows.length}`)
+    return recMap
+  }
+
+  // ---------- SHIPPING CASES ----------
+  async function loadShippingCases(baseName: string, rows: any[]): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, "crateNumber" FROM ${WS}."_shippingCase" WHERE "deletedAt" IS NULL AND "crateNumber" IS NOT NULL`)).rows.map((r) => [r.crateNumber, r.id])
+    )
+    console.log(`[${baseName}] Shipping Cases: ${rows.length} incoming, ${existing.size} already in Twenty`)
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const sc of rows) {
+      const f = sc.fields || {}
+      const crateNum = String(f['Crate #'] || sc.id)
+      if (existing.has(crateNum)) { recMap.set(sc.id, existing.get(crateNum)!); continue }
+      const name = `Case ${crateNum}`
+      const labelPhoto = Array.isArray(f['Label Photo']) && f['Label Photo'][0]?.url ? String(f['Label Photo'][0].url).slice(0, 2000) : null
+      toInsert.push([
+        name,
+        crateNum,
+        Array.isArray(f['Contents Type']) ? f['Contents Type'][0] : f['Contents Type'] || null,
+        f['Packaging'] || null,
+        Array.isArray(f['Project Code']) ? f['Project Code'][0] : f['Project Code'] || null,
+        labelPhoto,
+        Array.isArray(f['Last Location']) ? f['Last Location'][0] : f['Last Location'] || null,
+        f['Crate Inventoried?'] === true || String(f['Crate Inventoried?']).toLowerCase() === 'yes',
+        Number(f['Count (Frames)']) || null,
+        Number(f['Count (Parts)']) || null,
+      ])
+      atIds.push(sc.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const cols = ['name', '"crateNumber"', '"contentsType"', 'packaging', '"projectCode"', '"labelPhotoUrl"', '"lastLocation"', '"crateInventoried"', '"countFrames"', '"countParts"']
+    const BATCH = 200
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const slice = toInsert.slice(i, i + BATCH)
+      const atSlice = atIds.slice(i, i + BATCH)
+      const values: string[] = []; const params: any[] = []
+      slice.forEach((row, idx) => {
+        const base = idx * 10
+        values.push(`(${Array.from({ length: 10 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+        params.push(...row)
+      })
+      const r = await client.query(`INSERT INTO ${WS}."_shippingCase" (${cols.join(',')}) VALUES ${values.join(',')} RETURNING id`, params)
+      for (let k = 0; k < r.rows.length; k++) recMap.set(atSlice[k], r.rows[k].id)
+    }
+    console.log(`[${baseName}] Shipping Cases ✓ ${recMap.size - existing.size}`)
+    return recMap
+  }
+
+  // ---------- FRAMES ----------
+  async function loadFrames(baseName: string, rows: any[], caseMap: Map<string, string>) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT "serialNumber" FROM ${WS}."_frame" WHERE "deletedAt" IS NULL AND "serialNumber" IS NOT NULL`)).rows.map((r) => r.serialNumber)
+    )
+    console.log(`[${baseName}] Frames: ${rows.length} incoming, ${existing.size} already`)
+    const toInsert: any[][] = []
+    for (const fr of rows) {
+      const f = fr.fields || {}
+      const sn = String(f['SN'] || fr.id)
+      if (existing.has(sn)) continue
+      existing.add(sn)
+      const atCase = Array.isArray(f['Shipping Case']) ? f['Shipping Case'][0] : null
+      toInsert.push([
+        `Frame ${sn}`,
+        sn,
+        atCase ? caseMap.get(atCase) || null : null,
+      ])
+    }
+    if (toInsert.length === 0) { console.log(`  nothing new`); return }
+    const cols = ['name', '"serialNumber"', '"frameCaseId"']
+    const BATCH = 400
+    let inserted = 0
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const slice = toInsert.slice(i, i + BATCH)
+      const values: string[] = []; const params: any[] = []
+      slice.forEach((row, idx) => {
+        const base = idx * 3
+        values.push(`($${base + 1},$${base + 2},$${base + 3})`)
+        params.push(...row)
+      })
+      await client.query(`INSERT INTO ${WS}."_frame" (${cols.join(',')}) VALUES ${values.join(',')}`, params)
+      inserted += slice.length
+    }
+    console.log(`[${baseName}] Frames ✓ ${inserted}`)
+  }
+
+  // ---------- LOAD UNITS ----------
+  async function loadLoadUnits(baseName: string, rows: any[], rmaMap: Map<string, string>) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT "serialNumber" FROM ${WS}."_loadUnit" WHERE "deletedAt" IS NULL AND "serialNumber" IS NOT NULL`)).rows.map((r) => r.serialNumber)
+    )
+    console.log(`[${baseName}] Load Units: ${rows.length} incoming, ${existing.size} already`)
+    const toInsert: any[][] = []
+    for (const lu of rows) {
+      const f = lu.fields || {}
+      const sn = String(f['Serial Number'] || lu.id)
+      if (existing.has(sn)) continue
+      existing.add(sn)
+      const atRma = Array.isArray(f['RMA Event']) ? f['RMA Event'][0] : null
+      toInsert.push([
+        `LU ${sn}`,
+        sn,
+        f['Part Number'] || null,
+        f['Brand'] || null,
+        Array.isArray(f['Fault']) ? f['Fault'].join(', ').slice(0, 500) : f['Fault'] || null,
+        f['Returned'] === true || String(f['Returned']).toLowerCase() === 'yes',
+        atRma ? rmaMap.get(atRma) || null : null,
+      ])
+    }
+    if (toInsert.length === 0) { console.log(`  nothing new`); return }
+    const cols = ['name', '"serialNumber"', '"partNumber"', 'brand', 'fault', 'returned', '"luRmaId"']
+    const BATCH = 300
+    let inserted = 0
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const slice = toInsert.slice(i, i + BATCH)
+      const values: string[] = []; const params: any[] = []
+      slice.forEach((row, idx) => {
+        const base = idx * 7
+        values.push(`(${Array.from({ length: 7 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+        params.push(...row)
+      })
+      await client.query(`INSERT INTO ${WS}."_loadUnit" (${cols.join(',')}) VALUES ${values.join(',')}`, params)
+      inserted += slice.length
+    }
+    console.log(`[${baseName}] Load Units ✓ ${inserted}`)
+  }
+
+  // ---------- LCD UNITS ----------
+  async function loadLcdUnits(baseName: string, rows: any[]) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT "serialNumber" FROM ${WS}."_lcdUnit" WHERE "deletedAt" IS NULL AND "serialNumber" IS NOT NULL`)).rows.map((r) => r.serialNumber)
+    )
+    console.log(`[${baseName}] LCD Units: ${rows.length} incoming, ${existing.size} already`)
+    const toInsert: any[][] = []
+    for (const l of rows) {
+      const f = l.fields || {}
+      const sn = String(f['SN'] || l.id)
+      if (existing.has(sn)) continue
+      existing.add(sn)
+      toInsert.push([`LCD ${sn}`, sn, Array.isArray(f['Current Use']) ? f['Current Use'][0] : f['Current Use'] || null])
+    }
+    if (toInsert.length === 0) { console.log(`  nothing new`); return }
+    const BATCH = 300
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const slice = toInsert.slice(i, i + BATCH)
+      const values: string[] = []; const params: any[] = []
+      slice.forEach((row, idx) => {
+        const base = idx * 3
+        values.push(`($${base + 1},$${base + 2},$${base + 3})`)
+        params.push(...row)
+      })
+      await client.query(`INSERT INTO ${WS}."_lcdUnit" (name, "serialNumber", "currentUse") VALUES ${values.join(',')}`, params)
+    }
+    console.log(`[${baseName}] LCD Units ✓ ${toInsert.length}`)
+  }
+
+  // ---------- STATIONS ----------
+  async function loadStations(baseName: string, rows: any[], vMap: Map<string, string>) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT name FROM ${WS}."_station" WHERE "deletedAt" IS NULL AND name IS NOT NULL`)).rows.map((r) => r.name.trim())
+    )
+    console.log(`[${baseName}] Stations: ${rows.length} incoming, ${existing.size} already`)
+    const toInsert: any[][] = []
+    for (const s of rows) {
+      const f = s.fields || {}
+      const name = String(f['Name'] || f['Station Name'] || `Station ${s.id}`).slice(0, 255).trim()
+      if (existing.has(name)) continue
+      existing.add(name)
+      const atV = Array.isArray(f['Venue']) ? f['Venue'][0] : null
+      toInsert.push([
+        name,
+        f['Primary Station Code'] || f['Station Code'] || null,
+        Array.isArray(f['Line']) ? f['Line'].join(', ') : f['Line'] || null,
+        atV ? vMap.get(atV) || null : null,
+      ])
+    }
+    if (toInsert.length === 0) { console.log(`  nothing new`); return }
+    const BATCH = 200
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const slice = toInsert.slice(i, i + BATCH)
+      const values: string[] = []; const params: any[] = []
+      slice.forEach((row, idx) => {
+        const base = idx * 4
+        values.push(`(${Array.from({ length: 4 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+        params.push(...row)
+      })
+      await client.query(`INSERT INTO ${WS}."_station" (name, "stationCode", "stationLine", "stationVenueId") VALUES ${values.join(',')}`, params)
+    }
+    console.log(`[${baseName}] Stations ✓ ${toInsert.length}`)
+  }
+
   // ---------- Iterate bases ----------
   const files = fs.readdirSync(EXPORT_DIR).filter((f) => f.endsWith('.json'))
   for (const file of files) {
@@ -488,6 +721,18 @@ async function main() {
         const devTable = baseFile.tables['Rack Devices'] || baseFile.tables['IP Devices'] || baseFile.tables['Devices']
         await loadRackDevices(baseName, devTable, vMap, rackMap)
       }
+    }
+    if (stage === 'all' || stage === 'wmata') {
+      const rmaMap = baseFile.tables['RMA Event']
+        ? await loadRmaEvents(baseName, baseFile.tables['RMA Event'])
+        : new Map<string, string>()
+      const caseMap = baseFile.tables['Shipping Cases']
+        ? await loadShippingCases(baseName, baseFile.tables['Shipping Cases'])
+        : new Map<string, string>()
+      if (baseFile.tables['Frames']) await loadFrames(baseName, baseFile.tables['Frames'], caseMap)
+      if (baseFile.tables['LUs']) await loadLoadUnits(baseName, baseFile.tables['LUs'], rmaMap)
+      if (baseFile.tables['LCD']) await loadLcdUnits(baseName, baseFile.tables['LCD'])
+      if (baseFile.tables['Stations']) await loadStations(baseName, baseFile.tables['Stations'], vMap)
     }
   }
 
