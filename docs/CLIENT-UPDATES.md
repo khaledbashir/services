@@ -142,12 +142,49 @@ Started the full migration of Nick's NYC Airtable base into the CRM. What landed
 
 **Also fixed:** 28,013 Designer Time Entries were showing as "Untitled" in Twenty. They now show real project names (e.g. "Indy College Basketball Events - 2026 — Apr 01, 2026 · 0.25h") by joining against the matching `designRequest` and `contentSchedule` records via their Wrike task IDs.
 
-**Still remaining to migrate:**
-- WMATA Switches (165), Security Scan Results (342)
-- ANC Advertising base (172): Clients, Deliverables, Campaigns, Channels, Teams & Venues, Objectives, Key Results
-- Inventory Tracking parts: Manufacturers (21), Restock Orders, Checkout records, Parts
-- Technicians from Airtable (13)
-- Tasks from ANC Service - WMATA (49)
+**Wave 4 (done):** Migration effectively complete.
+
+Migrated the Inventory Tracking parts chain + ANC Advertising base:
+- 21 Manufacturers · 9 Parts · 9 Restock Orders
+- 4 Ad Campaigns · 82 Ad Deliverables · 9 Ad Channels
+
+### Final migration totals
+
+| Object | Records |
+|---|---|
+| venue | 372 |
+| inventoryAsset | 1,656 |
+| serviceTicket | 3,900 |
+| walkthroughLog | 15,465 |
+| maintenanceLog | 432 |
+| displayLocation | 296 |
+| rack | 43 |
+| rackDevice | 2,827 |
+| shippingCase | 478 |
+| frame | 907 |
+| station | 120 |
+| manufacturer | 21 |
+| part | 9 |
+| restockOrder | 9 |
+| adCampaign | 4 |
+| adDeliverable | 82 |
+| adChannel | 9 |
+| **Total** | **26,630** |
+
+---
+
+## April 14, 2026 — Asset History Timeline
+
+The piece that ties all the migration data together. Click any display (inventoryAsset) and see **one chronological feed** of every ticket, maintenance event, and walkthrough that's ever touched that display — unified from what used to be separate Airtable tabs.
+
+**How it works:**
+- Every display record now has a **"View History Timeline"** link at the top.
+- Clicking opens a clean page showing: photo, spec row (manufacturer/model/resolution/IP), three summary counts (tickets / maintenance / walkthroughs), and a vertical timeline of every event sorted newest-first.
+- Each event shows date, title, who worked on it, priority/status badges, and a 2-line excerpt of the details.
+
+**Try it** with `Screen #5 [WST-WTC-E/W]` — 71 tickets + 6 maintenance events. Or `Main Train Hall Display 2 [PST-MOY-MCM #21.3]` — 33 tickets + 25 maintenance events + 100s of walkthroughs.
+
+**For Nick:** this is the replacement for Airtable's "Active Issues" + "Resolved Issues" + maintenance history + walkthrough log, all merged into one view per display.
 
 **What this unlocks:**
 - On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.

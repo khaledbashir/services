@@ -685,6 +685,215 @@ async function main() {
     console.log(`[${baseName}] Stations ✓ ${toInsert.length}`)
   }
 
+  // ---------- MANUFACTURERS ----------
+  async function loadManufacturers(baseName: string, rows: any[]): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, name FROM ${WS}."_manufacturer" WHERE "deletedAt" IS NULL AND name IS NOT NULL`)).rows.map((r) => [r.name.trim(), r.id])
+    )
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const m of rows) {
+      const name = String(m.fields?.['Name'] || `Mfr ${m.id}`).slice(0, 255).trim()
+      if (existing.has(name)) { recMap.set(m.id, existing.get(name)!); continue }
+      toInsert.push([name, Number(m.fields?.['Total # of Orders']) || null])
+      atIds.push(m.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 2
+      values.push(`($${base + 1}, $${base + 2})`)
+      params.push(...row)
+    })
+    const r = await client.query(`INSERT INTO ${WS}."_manufacturer" (name, "totalOrders") VALUES ${values.join(',')} RETURNING id`, params)
+    for (let k = 0; k < r.rows.length; k++) recMap.set(atIds[k], r.rows[k].id)
+    console.log(`[${baseName}] Manufacturers ✓ ${r.rows.length}`)
+    return recMap
+  }
+
+  // ---------- PARTS ----------
+  async function loadParts(baseName: string, rows: any[], mfrMap: Map<string, string>): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, "productId" FROM ${WS}."_part" WHERE "deletedAt" IS NULL AND "productId" IS NOT NULL`)).rows.map((r) => [r.productId, r.id])
+    )
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const p of rows) {
+      const f = p.fields || {}
+      const pid = String(f['Product ID'] || p.id)
+      if (existing.has(pid)) { recMap.set(p.id, existing.get(pid)!); continue }
+      const atMfr = Array.isArray(f['Manufacturer']) ? f['Manufacturer'][0] : null
+      const mfrId = atMfr ? mfrMap.get(atMfr) || null : null
+      // Model Number can be an object {text: "..."} or string
+      const modelNum = typeof f['Model Number'] === 'object' && f['Model Number']?.text ? f['Model Number'].text : f['Model Number'] || null
+      toInsert.push([
+        String(f['Part Name'] || pid).slice(0, 255),
+        pid,
+        f['Part Name'] || null,
+        modelNum,
+        Array.isArray(f['Type']) ? f['Type'][0] : f['Type'] || null,
+        null, null, Number(f['Units Ordered']) || null,
+        mfrId,
+      ])
+      atIds.push(p.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const cols = ['name', '"productId"', '"partName"', '"modelNumber"', '"partType"', '"unitsAvailable"', '"unitsConsumed"', '"unitsOrdered"', '"partManufacturerId"']
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 9
+      values.push(`(${Array.from({ length: 9 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+      params.push(...row)
+    })
+    const r = await client.query(`INSERT INTO ${WS}."_part" (${cols.join(',')}) VALUES ${values.join(',')} RETURNING id`, params)
+    for (let k = 0; k < r.rows.length; k++) recMap.set(atIds[k], r.rows[k].id)
+    console.log(`[${baseName}] Parts ✓ ${r.rows.length}`)
+    return recMap
+  }
+
+  // ---------- RESTOCK ORDERS ----------
+  async function loadRestockOrders(baseName: string, rows: any[], partMap: Map<string, string>, mfrMap: Map<string, string>) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT "orderNumber" FROM ${WS}."_restockOrder" WHERE "deletedAt" IS NULL AND "orderNumber" IS NOT NULL`)).rows.map((r) => r.orderNumber)
+    )
+    const toInsert: any[][] = []
+    for (const o of rows) {
+      const f = o.fields || {}
+      const num = String(f['Order #'] || f['Name'] || o.id)
+      if (existing.has(num)) continue
+      existing.add(num)
+      const atPart = Array.isArray(f['Part']) ? f['Part'][0] : null
+      const atMfr = Array.isArray(f['Manufacturer']) ? f['Manufacturer'][0] : null
+      toInsert.push([
+        String(f['Name'] || `Order ${num}`).slice(0, 255),
+        num,
+        f['Order Date'] || null,
+        Number(f['Quantity']) || null,
+        f['Status'] || null,
+        f['Paid?'] === true || String(f['Paid?']).toLowerCase() === 'yes',
+        atPart ? partMap.get(atPart) || null : null,
+        atMfr ? mfrMap.get(atMfr) || null : null,
+      ])
+    }
+    if (toInsert.length === 0) return
+    const cols = ['name', '"orderNumber"', '"orderDate"', 'quantity', 'status', 'paid', '"orderPartId"', '"orderManufacturerId"']
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 8
+      values.push(`(${Array.from({ length: 8 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+      params.push(...row)
+    })
+    await client.query(`INSERT INTO ${WS}."_restockOrder" (${cols.join(',')}) VALUES ${values.join(',')}`, params)
+    console.log(`[${baseName}] Restock Orders ✓ ${toInsert.length}`)
+  }
+
+  // ---------- AD CHANNELS ----------
+  async function loadAdChannels(baseName: string, rows: any[]): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, name FROM ${WS}."_adChannel" WHERE "deletedAt" IS NULL AND name IS NOT NULL`)).rows.map((r) => [r.name.trim(), r.id])
+    )
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const c of rows) {
+      const name = String(c.fields?.['Channel'] || `Channel ${c.id}`).slice(0, 255).trim()
+      if (existing.has(name)) { recMap.set(c.id, existing.get(name)!); continue }
+      toInsert.push([name, c.fields?.['Channel type'] || null, c.fields?.['Specifications'] || null, c.fields?.['Description'] || null])
+      atIds.push(c.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 4
+      values.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4})`)
+      params.push(...row)
+    })
+    const r = await client.query(`INSERT INTO ${WS}."_adChannel" (name, "channelType", specifications, description) VALUES ${values.join(',')} RETURNING id`, params)
+    for (let k = 0; k < r.rows.length; k++) recMap.set(atIds[k], r.rows[k].id)
+    console.log(`[${baseName}] Ad Channels ✓ ${r.rows.length}`)
+    return recMap
+  }
+
+  // ---------- AD CAMPAIGNS ----------
+  async function loadAdCampaigns(baseName: string, rows: any[]): Promise<Map<string, string>> {
+    const recMap = new Map<string, string>()
+    if (rows.length === 0) return recMap
+    const existing = new Map<string, string>(
+      (await client.query(`SELECT id, name FROM ${WS}."_adCampaign" WHERE "deletedAt" IS NULL AND name IS NOT NULL`)).rows.map((r) => [r.name.trim(), r.id])
+    )
+    const toInsert: any[][] = []
+    const atIds: string[] = []
+    for (const c of rows) {
+      const f = c.fields || {}
+      const name = String(f['Campaign'] || f['Name'] || `Campaign ${c.id}`).slice(0, 255).trim()
+      if (existing.has(name)) { recMap.set(c.id, existing.get(name)!); continue }
+      toInsert.push([
+        name,
+        Array.isArray(f['Campaign tier']) ? f['Campaign tier'][0] : f['Campaign tier'] || null,
+        f['Start date'] || null,
+        f['End date'] || null,
+        f['Status'] || null,
+        f['Description'] || null,
+        f['Result'] || null,
+      ])
+      atIds.push(c.id)
+    }
+    if (toInsert.length === 0) return recMap
+    const cols = ['name', 'tier', '"startDate"', '"endDate"', 'status', 'description', 'result']
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 7
+      values.push(`(${Array.from({ length: 7 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+      params.push(...row)
+    })
+    const r = await client.query(`INSERT INTO ${WS}."_adCampaign" (${cols.join(',')}) VALUES ${values.join(',')} RETURNING id`, params)
+    for (let k = 0; k < r.rows.length; k++) recMap.set(atIds[k], r.rows[k].id)
+    console.log(`[${baseName}] Ad Campaigns ✓ ${r.rows.length}`)
+    return recMap
+  }
+
+  // ---------- AD DELIVERABLES ----------
+  async function loadAdDeliverables(baseName: string, rows: any[], campaignMap: Map<string, string>) {
+    if (rows.length === 0) return
+    const existing = new Set<string>(
+      (await client.query(`SELECT name FROM ${WS}."_adDeliverable" WHERE "deletedAt" IS NULL AND name IS NOT NULL`)).rows.map((r) => r.name.trim())
+    )
+    const toInsert: any[][] = []
+    for (const d of rows) {
+      const f = d.fields || {}
+      const name = String(f['Deliverable'] || f['Name'] || `Deliverable ${d.id}`).slice(0, 255).trim()
+      if (existing.has(name)) continue
+      existing.add(name)
+      const atCamp = Array.isArray(f['Campaigns']) ? f['Campaigns'][0] : null
+      toInsert.push([
+        name,
+        Array.isArray(f['Deliverable']) ? f['Deliverable'][0] : f['Deliverable'] || null,
+        Number(f['CPM']) || null,
+        Number(f['Cost']) || null,
+        Number(f['Impressions']) || null,
+        f['Start date'] || null,
+        f['End date'] || null,
+        atCamp ? campaignMap.get(atCamp) || null : null,
+      ])
+    }
+    if (toInsert.length === 0) return
+    const cols = ['name', '"deliverableType"', 'cpm', 'cost', 'impressions', '"startDate"', '"endDate"', '"deliverableCampaignId"']
+    const values: string[] = []; const params: any[] = []
+    toInsert.forEach((row, idx) => {
+      const base = idx * 8
+      values.push(`(${Array.from({ length: 8 }, (_, j) => `$${base + j + 1}`).join(',')})`)
+      params.push(...row)
+    })
+    await client.query(`INSERT INTO ${WS}."_adDeliverable" (${cols.join(',')}) VALUES ${values.join(',')}`, params)
+    console.log(`[${baseName}] Ad Deliverables ✓ ${toInsert.length}`)
+  }
+
   // ---------- Iterate bases ----------
   const files = fs.readdirSync(EXPORT_DIR).filter((f) => f.endsWith('.json'))
   for (const file of files) {
@@ -733,6 +942,16 @@ async function main() {
       if (baseFile.tables['LUs']) await loadLoadUnits(baseName, baseFile.tables['LUs'], rmaMap)
       if (baseFile.tables['LCD']) await loadLcdUnits(baseName, baseFile.tables['LCD'])
       if (baseFile.tables['Stations']) await loadStations(baseName, baseFile.tables['Stations'], vMap)
+    }
+    if (stage === 'all' || stage === 'parts') {
+      const mfrMap = baseFile.tables['Manufacturers'] ? await loadManufacturers(baseName, baseFile.tables['Manufacturers']) : new Map<string, string>()
+      const partMap = baseFile.tables['Inventory'] ? await loadParts(baseName, baseFile.tables['Inventory'], mfrMap) : new Map<string, string>()
+      if (baseFile.tables['Restock Orders']) await loadRestockOrders(baseName, baseFile.tables['Restock Orders'], partMap, mfrMap)
+    }
+    if (stage === 'all' || stage === 'ads') {
+      if (baseFile.tables['Channels']) await loadAdChannels(baseName, baseFile.tables['Channels'])
+      const campaignMap = baseFile.tables['Campaigns'] ? await loadAdCampaigns(baseName, baseFile.tables['Campaigns']) : new Map<string, string>()
+      if (baseFile.tables['Deliverables']) await loadAdDeliverables(baseName, baseFile.tables['Deliverables'], campaignMap)
     }
   }
 
