@@ -209,6 +209,30 @@ The piece that ties all the migration data together. Click any display (inventor
 
 **WMATA display names fixed** — 1,274 WMATA displays had imported with placeholder names like "Display rec02qy8..." because the ANC Service-WMATA Airtable base uses `Name (no alerts)` instead of `Display Name`. They now have their real names: `C13-MZ48-KID-01`, `B08-PL3-CID-02`, etc. — the names techs actually reference in the field.
 
+---
+
+## April 14, 2026 — Opening-Day Readiness Dashboard (Gianni)
+
+One page that answers "is opening day going to be a disaster?" at a glance.
+
+**URL:** `/dashboard/readiness` on anc-services.
+
+**What it shows:**
+- A card for every team with a 30/60/90 checklist
+- Big number: days until that team's opening day (computed from the latest checklist item due date)
+- Progress bar + % complete
+- 4-count breakdown: Done / In Progress / Not Started / Overdue
+- "Up next" preview showing the nearest unfinished checklist item and when it's due
+
+**Color coding:**
+- Red card if opening day is within 14 days — stop everything, this team is in crunch
+- Orange if 15–45 days out — push hard
+- Green if 45+ days out or already past opening
+
+**For Gianni:** instead of clicking through each team's folder, you open one page and see every team's readiness ranked by urgency. If the Red Sox has 82% complete and 2 overdue items with 18 days out, the card catches your eye before you even scroll.
+
+Data updates live from the Twenty CRM every time the page is opened. As checklist items flip to Done, the progress bar and count update.
+
 **What this unlocks:**
 - On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.
 - Every display record in Twenty can show its full ticket/maintenance history once we wire the relation displays (coming).
