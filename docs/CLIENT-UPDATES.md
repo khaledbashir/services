@@ -82,6 +82,21 @@ Open ANC Forms tab → Design Request form → type an `@mlb.com` email → watc
 
 ---
 
+## April 14, 2026 — Design Request form is live with auto-fills
+
+Cleaned up 6 duplicate forms that were floating around (3× Design Request, 3× Parts Order — all had zero submissions). One canonical copy of each form now.
+
+**The Design Request form is fully switched on:**
+- Email field auto-fills the Client Name from the sender's domain
+- Venue field is a typeahead (type "Fen" → pick Fenway)
+- New "Which boards / sections?" chip picker appears after venue is picked, pulled from the inventory we have at that venue
+
+**Company domain coverage** — 2,990 of 3,719 companies in the CRM have a domain set (80%), so the email→client fill will work for most teams. The 729 without domains will just skip the auto-fill silently (user types the name as normal).
+
+**Next up:** turning on the same auto-fills on Parts Order (venue → shipping address), Print Request (email → client), and CG Design Request (email → client).
+
+---
+
 ## Coming next
 
 ### Bigger features being planned
