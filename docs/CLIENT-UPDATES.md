@@ -97,6 +97,27 @@ Cleaned up 6 duplicate forms that were floating around (3× Design Request, 3× 
 
 ---
 
+## April 14, 2026 — NYC Airtable migration into Twenty (in progress)
+
+Started the full migration of Nick's NYC Airtable base into the CRM. What landed so far:
+
+| What | Count | Where it now lives in Twenty |
+|---|---|---|
+| NYC venues | 17 | Venues (10 matched, 7 newly created — Fairleigh Dickinson, Grand Central Madison, NBC-30 Rock, Grand Central Terminal, AT&T 3 Times Sq, JP Morgan 390 Madison, St Johns) |
+| Displays | 337 | Inventory Assets (linked to venue, with make, model, orientation, resolution, IP, ownership, install phase) |
+| Issues | 925 | Service Tickets (priority + open/closed + details) |
+| Maintenance Events | 89 | Maintenance Logs (type, scheduled date, scope of work) |
+
+**Still running:**
+- Walkthrough Log — 20,446 records (takes ~3.5 hours to finish because of CRM rate limits, running in background)
+- WMATA base — displays, frames, cases, parts (smaller scope)
+
+**What this unlocks:**
+- On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.
+- Every display record in Twenty can show its full ticket/maintenance history once we wire the relation displays (coming).
+
+---
+
 ## Coming next
 
 ### Bigger features being planned
