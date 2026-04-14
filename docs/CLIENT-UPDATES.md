@@ -108,9 +108,31 @@ Started the full migration of Nick's NYC Airtable base into the CRM. What landed
 | Issues | 925 | Service Tickets (priority + open/closed + details) |
 | Maintenance Events | 89 | Maintenance Logs (type, scheduled date, scope of work) |
 
-**Still running:**
-- Walkthrough Log — 20,446 records (takes ~3.5 hours to finish because of CRM rate limits, running in background)
-- WMATA base — displays, frames, cases, parts (smaller scope)
+**Wave 2 (done):** switched to direct-DB bulk load to bypass CRM rate limits (3 hours → 3 minutes). Added 3 new Twenty objects for Nick's infrastructure backbone, plus backfilled missing fields on records imported earlier.
+
+| Object | Records |
+|---|---|
+| venue | 372 |
+| inventoryAsset (displays) | 1,656 |
+| serviceTicket (issues) | 3,900 |
+| walkthroughLog | 15,465 |
+| maintenanceLog | 432 |
+| displayLocation (NEW) | 296 |
+| rack (NEW) | 43 |
+| rackDevice (NEW) | 2,827 |
+
+**Backfilled fields** on records migrated earlier:
+- Displays — photo URL, render name, physical dimensions, location code, three-letter code
+- Tickets — observed state, player name, date reported, closed date
+- Maintenance — escort info, techs scheduled, end time
+- Walkthrough — three-letter code, locations visited, technician name
+
+**Still remaining to migrate (next waves):**
+- WMATA shipping chain: Shipping Cases (478), Frames (907), LUs (235), LCD units (97), RMA Events, Deliveries
+- Stations (WMATA, 120)
+- WMATA Switches (165), Security Scan Results (342)
+- ANC Advertising base (172): Clients, Deliverables, Campaigns, Channels, Teams & Venues, Objectives, Key Results
+- Inventory Tracking parts: Manufacturers (21), Restock Orders, Checkout records, Parts
 
 **What this unlocks:**
 - On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.
