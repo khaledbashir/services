@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import {
   OBJECT_CONFIGS,
   updateTwentyRecordStatus,
+  patchTwentyRecord,
 } from '@/lib/proof-share'
 import { sendSlackMessage } from '@/lib/slack'
 
@@ -62,7 +63,7 @@ export async function POST(
       [token, response, note || null]
     )
 
-    // Update Twenty record status
+    // Update Twenty record status + proof-response fields
     const newStatus =
       response === 'approved' ? cfg.approvedValue : cfg.revisionsValue
     await updateTwentyRecordStatus(
@@ -70,6 +71,9 @@ export async function POST(
       share.twenty_record_id,
       newStatus
     )
+    void patchTwentyRecord(share.twenty_object_type, share.twenty_record_id, {
+      proofRespondedAt: new Date().toISOString(),
+    })
 
     // Slack notify the designer (if we have Slack configured)
     const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''

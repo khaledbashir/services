@@ -208,6 +208,33 @@ export async function updateTwentyRecordStatus(
   }
 }
 
+/**
+ * Patch any fields on a Twenty record. Used to sync proof state
+ * (proofShareUrl, proofViewCount, proofLastViewedAt, etc.) back to Twenty
+ * so Alexis/designers see it on the record itself.
+ */
+export async function patchTwentyRecord(
+  objectType: string,
+  recordId: string,
+  patch: Record<string, unknown>
+): Promise<boolean> {
+  const cfg = OBJECT_CONFIGS[objectType]
+  if (!cfg) return false
+  try {
+    await twentyFetch(
+      `/rest/${cfg.plural}/${recordId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }
+    )
+    return true
+  } catch (err) {
+    console.error(`[proof-share] patchTwentyRecord failed:`, err)
+    return false
+  }
+}
+
 // --- File categorization for the client UI ---
 
 export function classifyFile(extension: string): 'image' | 'video' | 'pdf' | 'other' {
@@ -228,4 +255,131 @@ export function buildPublicUrl(token: string): string {
     process.env.NEXT_PUBLIC_BASE_URL ||
     'https://abc-anc-services.izcgmb.easypanel.host'
   return `${base.replace(/\/$/, '')}/proof/${token}`
+}
+
+/**
+ * Build the HTML body for a proof-ready email sent to a client.
+ * Includes an inline thumbnail for image attachments, a big APPROVE and
+ * REQUEST CHANGES button, and the designer's name/message.
+ */
+export function buildProofEmailHtml(opts: {
+  recordName: string
+  recordTypeLabel: string
+  proofUrl: string
+  message?: string | null
+  designerName?: string | null
+  expiresAt?: Date | null
+  thumbnailUrl?: string | null
+  isRenewal?: boolean
+}): string {
+  const {
+    recordName,
+    recordTypeLabel,
+    proofUrl,
+    message,
+    designerName,
+    expiresAt,
+    thumbnailUrl,
+    isRenewal,
+  } = opts
+  const heading = isRenewal
+    ? `New version ready — ${recordName}`
+    : `Your proof is ready — ${recordName}`
+  const subHeading = isRenewal
+    ? `A new version has been uploaded. Any previous link is no longer current.`
+    : `Review and respond below.`
+  const deadlineLine = expiresAt
+    ? `<p style="margin:12px 0 0;font-size:12px;color:#777">This link expires on ${expiresAt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}.</p>`
+    : ''
+  const messageBlock = message
+    ? `<div style="background:#F7F7F9;border-left:3px solid #002C73;padding:12px 14px;margin:16px 0;border-radius:4px;font-size:14px;color:#333">${escapeHtml(message)}</div>`
+    : ''
+  const designerLine = designerName
+    ? `<p style="margin:0 0 8px;font-size:13px;color:#777">from ${escapeHtml(designerName)}</p>`
+    : ''
+  const thumbBlock = thumbnailUrl
+    ? `<div style="text-align:center;margin:20px 0"><a href="${proofUrl}" style="text-decoration:none"><img src="${thumbnailUrl}" alt="Proof preview" style="max-width:100%;max-height:320px;border-radius:6px;border:1px solid #E5E5E8"/></a></div>`
+    : ''
+  return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:0 16px">
+    <div style="background:#002C73;color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">
+      <h2 style="margin:0;font-size:18px;line-height:1.3">${escapeHtml(heading)}</h2>
+      <p style="margin:6px 0 0;opacity:0.8;font-size:13px">${escapeHtml(recordTypeLabel)}</p>
+    </div>
+    <div style="background:#fff;padding:22px 24px;border:1px solid #E5E5E8;border-top:none;border-radius:0 0 8px 8px">
+      ${designerLine}
+      <p style="margin:0 0 6px;font-size:15px;color:#111">${escapeHtml(subHeading)}</p>
+      ${messageBlock}
+      ${thumbBlock}
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        <tr>
+          <td style="padding-right:6px">
+            <a href="${proofUrl}?action=approve" style="display:block;text-align:center;background:#16A34A;color:#fff;text-decoration:none;padding:14px 18px;border-radius:6px;font-weight:600;font-size:15px">✓ Approve</a>
+          </td>
+          <td style="padding-left:6px">
+            <a href="${proofUrl}?action=changes" style="display:block;text-align:center;background:#fff;color:#111;border:1px solid #D4D4D8;text-decoration:none;padding:14px 18px;border-radius:6px;font-weight:600;font-size:15px">✎ Request Changes</a>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:16px 0 0;font-size:13px;color:#555">
+        Or open the full proof: <a href="${proofUrl}" style="color:#002C73">${proofUrl}</a>
+      </p>
+      ${deadlineLine}
+    </div>
+    <p style="margin:16px 0;text-align:center;font-size:11px;color:#999">Sent by ANC Sports · This is a secure client link, do not forward.</p>
+  </div>`
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' :
+    c === '<' ? '&lt;' :
+    c === '>' ? '&gt;' :
+    c === '"' ? '&quot;' : '&#39;'
+  )
+}
+
+/**
+ * Send the proof-ready email to the client with a thumbnail and action buttons.
+ * Uses the first image attachment (if any) as the inline thumbnail, served
+ * through our file proxy so the JWT stays fresh.
+ */
+export async function sendProofEmailToClient(opts: {
+  token: string
+  clientEmail: string
+  recordName: string
+  recordTypeLabel: string
+  message?: string | null
+  designerName?: string | null
+  designerEmail?: string | null
+  expiresAt?: Date | null
+  attachments?: TwentyAttachment[]
+  isRenewal?: boolean
+}): Promise<boolean> {
+  const { sendEmail } = await import('./email')
+  const proofUrl = buildPublicUrl(opts.token)
+  const base =
+    process.env.NEXT_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    'https://abc-anc-services.izcgmb.easypanel.host'
+  // Pick the first image as a preview thumbnail (video/pdf fall through)
+  const firstImage = opts.attachments?.find((a) =>
+    classifyFile(a.file?.[0]?.extension || '') === 'image'
+  )
+  const thumbnailUrl = firstImage
+    ? `${base.replace(/\/$/, '')}/api/proof-share/${opts.token}/file/${firstImage.id}`
+    : null
+  const html = buildProofEmailHtml({
+    recordName: opts.recordName,
+    recordTypeLabel: opts.recordTypeLabel,
+    proofUrl,
+    message: opts.message,
+    designerName: opts.designerName,
+    expiresAt: opts.expiresAt,
+    thumbnailUrl,
+    isRenewal: opts.isRenewal,
+  })
+  const subject = opts.isRenewal
+    ? `New version: ${opts.recordName}`
+    : `Ready for your review: ${opts.recordName}`
+  return sendEmail([opts.clientEmail], subject, html, opts.designerEmail || undefined)
 }

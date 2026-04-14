@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { patchTwentyRecord } from '@/lib/proof-share'
 
 /**
  * POST /api/proof-share/[token]/view
@@ -23,14 +24,24 @@ export async function POST(
       request.headers.get('x-real-ip') ||
       'unknown'
 
-    await query(
+    const result = await query(
       `UPDATE proof_shares
        SET view_count = view_count + 1,
            last_viewed_at = NOW(),
            last_viewed_ip = $2
-       WHERE token = $1`,
+       WHERE token = $1
+       RETURNING twenty_object_type, twenty_record_id, view_count, last_viewed_at`,
       [token, ip]
     )
+
+    // Sync view stats back to the Twenty record so the designer sees it
+    if (result.rows.length > 0) {
+      const row = result.rows[0]
+      void patchTwentyRecord(row.twenty_object_type, row.twenty_record_id, {
+        proofViewCount: row.view_count,
+        proofLastViewedAt: row.last_viewed_at,
+      })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

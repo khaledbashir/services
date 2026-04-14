@@ -1,11 +1,49 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+
+type Venue = { id: string; name: string; market: string | null }
 
 export default function PartsOrderFormPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState<{ id: string; name: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [venueSuggestions, setVenueSuggestions] = useState<Venue[]>([])
+  const [venueFillNote, setVenueFillNote] = useState<string | null>(null)
+  const shippingRef = useRef<HTMLInputElement>(null)
+  const venueIdRef = useRef<HTMLInputElement>(null)
+
+  // Typeahead: search Twenty venues as the user types.
+  async function handleVenueInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const q = e.currentTarget.value
+    if (q.length < 2) { setVenueSuggestions([]); return }
+    try {
+      const res = await fetch(`/api/forms/search-venues?q=${encodeURIComponent(q)}`)
+      const data = await res.json()
+      setVenueSuggestions(data.venues || [])
+    } catch { /* silent */ }
+  }
+
+  // When a venue from the suggestion list is picked, fetch its address and
+  // pre-fill the shipping field. No more typing the same address by hand.
+  async function pickVenue(v: Venue) {
+    if (venueIdRef.current) venueIdRef.current.value = v.id
+    const inputEl = document.querySelector<HTMLInputElement>('input[name="venue"]')
+    if (inputEl) inputEl.value = v.name
+    setVenueSuggestions([])
+    try {
+      const res = await fetch(`/api/forms/lookup-venue?id=${v.id}`)
+      const data = await res.json()
+      const addr = data?.venue
+      if (addr && shippingRef.current) {
+        const parts = [addr.addressStreet1, addr.addressCity, addr.addressState, addr.addressPostcode].filter(Boolean)
+        if (parts.length > 0 && !shippingRef.current.value.trim()) {
+          shippingRef.current.value = parts.join(', ')
+          setVenueFillNote(`Shipping auto-filled from ${v.name} — edit if wrong`)
+        }
+      }
+    } catch { /* silent */ }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -17,6 +55,7 @@ export default function PartsOrderFormPage() {
       requestorName: fd.get('requestorName'),
       requestorEmail: fd.get('email'),
       venueName: fd.get('venue'),
+      venueId: fd.get('venueId') || undefined,
       partsNeeded: fd.get('partsNeeded'),
       quantity: Number(fd.get('quantity') || 1),
       shippingAddress: fd.get('shippingAddress'),
@@ -72,7 +111,35 @@ export default function PartsOrderFormPage() {
           <Field label="Email" name="email" type="email" required />
         </div>
 
-        <Field label="Venue" name="venue" placeholder="Where are the parts for?" required />
+        <div className="relative">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Venue<span className="text-red-500 ml-0.5">*</span></label>
+          <input
+            type="text"
+            name="venue"
+            required
+            placeholder="Start typing — Fenway, Prudential, Gainbridge…"
+            onChange={handleVenueInput}
+            autoComplete="off"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--anc-brand)] focus:border-transparent"
+          />
+          <input ref={venueIdRef} type="hidden" name="venueId" />
+          {venueSuggestions.length > 0 && (
+            <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+              {venueSuggestions.map((v) => (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    onClick={() => pickVenue(v)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    <div className="font-medium text-gray-900">{v.name}</div>
+                    {v.market && <div className="text-xs text-gray-500">{v.market}</div>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <Textarea
           label="Parts needed"
@@ -92,12 +159,22 @@ export default function PartsOrderFormPage() {
           />
         </div>
 
-        <Field
-          label="Ship to address"
-          name="shippingAddress"
-          placeholder="Where do the parts need to go?"
-          required
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Ship to address<span className="text-red-500 ml-0.5">*</span>
+          </label>
+          <input
+            ref={shippingRef}
+            type="text"
+            name="shippingAddress"
+            required
+            placeholder="Where do the parts need to go?"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--anc-brand)] focus:border-transparent"
+          />
+          {venueFillNote && (
+            <div className="text-xs text-emerald-700 mt-1">✨ {venueFillNote}</div>
+          )}
+        </div>
 
         <Textarea
           label="Additional notes"

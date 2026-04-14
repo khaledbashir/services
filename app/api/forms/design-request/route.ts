@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       body.sport ? `**Sport / League:** ${str(body.sport)}` : '',
       body.venueName ? `**Venue:** ${str(body.venueName)}` : '',
       body.rushRequest ? `**🚨 RUSH REQUEST**` : '',
+      body.boardSection ? `\n## Boards / Sections\n${str(body.boardSection, 3000)}` : '',
       '',
       `## Description`,
       str(body.description, 5000) || '',
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.dueDate) payload.dueDate = body.dueDate
+    if (body.boardSection) payload.boardSection = str(body.boardSection, 3000)
 
     const result = await twentyCreate<{ data: { createDesignRequest: any } }>(
       'designRequests',

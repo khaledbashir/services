@@ -165,11 +165,16 @@ async function runMigrations() {
         client_response_note TEXT,
         message TEXT,
         created_by_name TEXT,
-        created_by_email TEXT
+        created_by_email TEXT,
+        client_email TEXT,
+        last_nudged_at TIMESTAMPTZ
       )
     `)
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_email TEXT`)
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS last_nudged_at TIMESTAMPTZ`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)
