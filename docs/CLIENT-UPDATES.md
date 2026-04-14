@@ -186,6 +186,29 @@ The piece that ties all the migration data together. Click any display (inventor
 
 **For Nick:** this is the replacement for Airtable's "Active Issues" + "Resolved Issues" + maintenance history + walkthrough log, all merged into one view per display.
 
+---
+
+## April 14, 2026 — Relations wired + WMATA display names fixed
+
+**Relations wired** — the data now behaves like a graph, not flat tables:
+
+| From → To | Records linked |
+|---|---|
+| display → venue | 1,290 |
+| display → display location | 376 |
+| display → station (WMATA) | 1,273 |
+| ticket → display | 888 |
+| maintenance → display | 294 |
+| maintenance → station | 109 |
+| walkthrough → display location | 7,186 |
+| walkthrough → venue | 5,626 |
+| rack device → rack | 375 |
+| rack → venue | 42 |
+
+**Why this matters:** on a venue page you can now see every display, location, rack, and device at that venue. On a station page you see its displays and maintenance. On a display you see its tickets and walkthroughs. The data unifies — no more jumping between tabs.
+
+**WMATA display names fixed** — 1,274 WMATA displays had imported with placeholder names like "Display rec02qy8..." because the ANC Service-WMATA Airtable base uses `Name (no alerts)` instead of `Display Name`. They now have their real names: `C13-MZ48-KID-01`, `B08-PL3-CID-02`, etc. — the names techs actually reference in the field.
+
 **What this unlocks:**
 - On the Design Request form, picking any of those 17 NYC venues now shows the actual displays at that venue in the chip picker. Alexis clicks real boards, not types them.
 - Every display record in Twenty can show its full ticket/maintenance history once we wire the relation displays (coming).
