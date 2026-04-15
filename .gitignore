@@ -20,3 +20,9 @@ query-twenty.js
 process-proofs.js
 test-db.ts
 tsconfig.tsbuildinfo
+
+# Stray screenshots + uploads that shouldn't be tracked
+image.png
+image\ copy.png
+Slack\ Channel\ ID.xlsx
+.playwright-mcp/
