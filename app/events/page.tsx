@@ -309,12 +309,12 @@ function EventsPageInner() {
 
   const formatTime = (dateTimeStr: string, timeZone?: string) => {
     const date = new Date(dateTimeStr)
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: timeZone || 'America/New_York',
-    })
+    const tz = timeZone || 'America/New_York'
+    // Exact midnight in venue-local time = "we never knew the start time";
+    // show "TBD" instead of a misleading 12:00 AM.
+    const hhmm = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz })
+    if (hhmm === '00:00' || hhmm === '24:00') return 'TBD'
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz })
   }
 
   const getLeagueBadge = (league: string) => {

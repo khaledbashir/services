@@ -64,7 +64,13 @@ JSON:`
     const match = clean.match(/\[[\s\S]*\]/)
     if (!match) return []
     const parsed = JSON.parse(match[0]) as Array<{ name?: string; date?: string; time?: string | null; teams?: string[]; eventType?: string; league?: string | null; confidence?: number }>
-    return parsed.filter(e => e?.name && e?.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date!)).map(e => ({
+    return parsed.filter(e =>
+      e?.name && e?.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date!)
+      // Require a real HH:MM — snippets without a time produce misleading
+      // 12:00 AM entries on the calendar. Drop them rather than import
+      // half-truths.
+      && typeof e.time === 'string' && /^\d{2}:\d{2}$/.test(e.time)
+    ).map(e => ({
       name: e.name!,
       date: e.date!,
       time: e.time || null,
