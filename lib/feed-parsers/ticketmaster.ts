@@ -7,6 +7,12 @@ const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
 const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
 const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY || ''
 const TICKETMASTER_DISCOVERY_BASE = process.env.TICKETMASTER_DISCOVERY_BASE || 'https://app.ticketmaster.com/discovery/v2'
+const TICKETMASTER_MIN_INTERVAL_MS = 300
+const TICKETMASTER_MAX_RETRIES = 3
+
+let ticketmasterRequestChain: Promise<void> = Promise.resolve()
+let ticketmasterLastRequestAt = 0
+const ticketmasterVenueCache = new Map<string, TicketmasterDiscoveryVenue | null>()
 
 interface TicketmasterDiscoveryVenue {
   id: string
@@ -76,6 +82,25 @@ function normalizeDiscoveryEvent(event: TicketmasterDiscoveryEvent, params: Pars
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForTicketmasterSlot(): Promise<void> {
+  const previous = ticketmasterRequestChain
+  let release!: () => void
+  ticketmasterRequestChain = new Promise<void>((resolve) => {
+    release = resolve
+  })
+
+  await previous
+  const now = Date.now()
+  const waitMs = Math.max(0, TICKETMASTER_MIN_INTERVAL_MS - (now - ticketmasterLastRequestAt))
+  if (waitMs > 0) await sleep(waitMs)
+  ticketmasterLastRequestAt = Date.now()
+  release()
+}
+
 async function fetchTicketmasterJson<T>(pathname: string, searchParams: URLSearchParams): Promise<T> {
   if (!TICKETMASTER_API_KEY) {
     throw new Error('TICKETMASTER_API_KEY is not configured')
@@ -83,24 +108,45 @@ async function fetchTicketmasterJson<T>(pathname: string, searchParams: URLSearc
 
   const url = new URL(`${TICKETMASTER_DISCOVERY_BASE}${pathname}`)
   url.search = searchParams.toString()
-  const res = await fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'anc-services/1.0',
-    },
-    signal: AbortSignal.timeout(15000),
-    cache: 'no-store',
-  })
+  let lastStatus = 0
 
-  if (!res.ok) {
-    throw new Error(`Ticketmaster API request failed: ${res.status}`)
+  for (let attempt = 0; attempt < TICKETMASTER_MAX_RETRIES; attempt++) {
+    await waitForTicketmasterSlot()
+    const res = await fetch(url.toString(), {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'anc-services/1.0',
+      },
+      signal: AbortSignal.timeout(15000),
+      cache: 'no-store',
+    })
+
+    if (res.ok) {
+      return res.json() as Promise<T>
+    }
+
+    lastStatus = res.status
+    if (res.status !== 429) {
+      throw new Error(`Ticketmaster API request failed: ${res.status}`)
+    }
+
+    const retryAfterHeader = Number(res.headers.get('retry-after') || '0')
+    const backoffMs = retryAfterHeader > 0
+      ? retryAfterHeader * 1000
+      : 1200 * (attempt + 1)
+    await sleep(backoffMs)
   }
 
-  return res.json() as Promise<T>
+  throw new Error(`Ticketmaster API request failed: ${lastStatus}`)
 }
 
 async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<TicketmasterDiscoveryVenue | null> {
   const { city, stateCode } = parseCityState(params.venueAddress)
+  const cacheKey = `${params.venueName.toLowerCase()}|${city || ''}|${stateCode || ''}`
+  if (ticketmasterVenueCache.has(cacheKey)) {
+    return ticketmasterVenueCache.get(cacheKey) || null
+  }
+
   const search = new URLSearchParams({
     apikey: TICKETMASTER_API_KEY,
     keyword: params.venueName,
@@ -115,11 +161,17 @@ async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<Ticketm
     search
   )
   const venues = data._embedded?.venues || []
-  if (venues.length === 0) return null
+  if (venues.length === 0) {
+    ticketmasterVenueCache.set(cacheKey, null)
+    return null
+  }
 
   const normalizedTarget = params.venueName.toLowerCase().replace(/[^a-z0-9]+/g, '')
   const exact = venues.find((venue) => (venue.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalizedTarget)
-  if (exact) return exact
+  if (exact) {
+    ticketmasterVenueCache.set(cacheKey, exact)
+    return exact
+  }
 
   const nameOverlapScore = (venue: TicketmasterDiscoveryVenue): number => {
     const venueWords = new Set((venue.name || '').toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').split(/\s+/).filter(Boolean))
@@ -135,7 +187,9 @@ async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<Ticketm
     return score
   }
 
-  return [...venues].sort((a, b) => nameOverlapScore(b) - nameOverlapScore(a))[0]
+  const best = [...venues].sort((a, b) => nameOverlapScore(b) - nameOverlapScore(a))[0]
+  ticketmasterVenueCache.set(cacheKey, best)
+  return best
 }
 
 async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<FeedEvent[]> {
@@ -264,6 +318,10 @@ export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<Fe
     const official = await ticketmasterViaOfficialApi(params)
     if (official.length > 0) return official
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/429/.test(message)) {
+      throw new Error('Ticketmaster Discovery API is rate-limited right now. Retry the discovery run in a moment.')
+    }
     console.warn('Ticketmaster Discovery API failed, falling back to page parsing:', error)
   }
 
