@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Chat { id: string; title: string; updated_at: string }
 
@@ -397,8 +399,29 @@ export function AiAssistant() {
                       )
                     })}
                     {m.content ? (
-                      <div className="rounded-2xl bg-zinc-100 text-zinc-800 px-4 py-2.5 text-sm whitespace-pre-wrap break-words">
-                        {m.content}
+                      <div className="rounded-2xl bg-zinc-100 text-zinc-800 px-4 py-2.5 text-sm break-words ai-prose">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: (p) => <h2 className="text-base font-semibold mt-2 mb-1 text-zinc-900" {...p} />,
+                            h2: (p) => <h3 className="text-sm font-semibold mt-2 mb-1 text-zinc-900" {...p} />,
+                            h3: (p) => <h4 className="text-sm font-semibold mt-1.5 mb-0.5 text-zinc-800" {...p} />,
+                            p: (p) => <p className="my-1 leading-relaxed" {...p} />,
+                            ul: (p) => <ul className="list-disc pl-5 my-1 space-y-0.5" {...p} />,
+                            ol: (p) => <ol className="list-decimal pl-5 my-1 space-y-0.5" {...p} />,
+                            li: (p) => <li className="my-0" {...p} />,
+                            strong: (p) => <strong className="font-semibold text-zinc-900" {...p} />,
+                            code: ({ children, ...rest }) => <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 text-[11px] font-mono" {...rest}>{children}</code>,
+                            a: (p) => <a className="text-[#0A52EF] underline" target="_blank" rel="noopener noreferrer" {...p} />,
+                            table: (p) => <div className="my-2 overflow-x-auto"><table className="text-[12px] border-collapse w-full" {...p} /></div>,
+                            thead: (p) => <thead className="bg-zinc-200/60" {...p} />,
+                            th: (p) => <th className="border border-zinc-300 px-2 py-1 text-left font-semibold" {...p} />,
+                            td: (p) => <td className="border border-zinc-300 px-2 py-1 align-top" {...p} />,
+                            hr: () => <hr className="my-2 border-zinc-300" />,
+                          }}
+                        >
+                          {m.content}
+                        </ReactMarkdown>
                       </div>
                     ) : m.pending ? (
                       <div className="rounded-2xl bg-zinc-100 text-zinc-400 px-4 py-2.5 text-sm italic">Thinking…</div>
