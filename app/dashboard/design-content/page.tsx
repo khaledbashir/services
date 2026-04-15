@@ -127,24 +127,17 @@ export default async function DesignContentIframePage() {
       <style>{css}</style>
       <main className="dash-main">
         <AutoRefresh everyMs={REFRESH_MS} />
-        <div className="dash-shell">
-          <div className="dash-header">
-            <div>
-              <div className="dash-overline">ANC Creative Ops</div>
-              <h1 className="dash-title">Design &amp; Content</h1>
-              <p className="dash-desc">
-                Live creative production metrics rendered outside Twenty&apos;s
-                native widget stack and refreshed every five minutes.
-              </p>
-            </div>
-            <div className="dash-badge">Live refresh · 5 min</div>
+        <div className="dash-head">
+          <div>
+            <div className="dash-overline">ANC Creative Ops</div>
+            <h1 className="dash-title">Design &amp; Content</h1>
           </div>
-
-          <div className="dash-grid">
-            {cards.map((card) => (
-              <MetricTile key={card.label} card={card} />
-            ))}
-          </div>
+          <div className="dash-badge">Live · 5 min</div>
+        </div>
+        <div className="dash-grid">
+          {cards.map((card) => (
+            <MetricTile key={card.label} card={card} />
+          ))}
         </div>
       </main>
     </>
@@ -152,117 +145,63 @@ export default async function DesignContentIframePage() {
 }
 
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
-  :root {
-    --dash-bg: transparent;
-    --dash-card-bg: #1e1e1e;
-    --dash-card-border: rgba(255,255,255,0.08);
-    --dash-card-hover-bg: #252525;
-    --dash-card-hover-border: rgba(255,255,255,0.14);
-    --dash-text-primary: #e6e6e6;
-    --dash-text-secondary: #999999;
-    --dash-overline-color: #777777;
-    --dash-link-color: #378ADD;
-    --dash-shell-bg: #1e1e1e;
-    --dash-shell-border: rgba(255,255,255,0.08);
-    --dash-header-border: rgba(255,255,255,0.06);
-    --dash-badge-bg: rgba(255,255,255,0.05);
-    --dash-badge-border: rgba(255,255,255,0.08);
-    --dash-badge-color: #999999;
+  .dash-main {
+    min-height: 100vh;
+    background: transparent;
+    color: #e6e6e6;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 0 1.5rem 2rem;
   }
 
   @media (prefers-color-scheme: light) {
-    :root {
-      --dash-bg: transparent;
-      --dash-card-bg: #ffffff;
-      --dash-card-border: rgba(0,0,0,0.08);
-      --dash-card-hover-bg: #f8f8f8;
-      --dash-card-hover-border: rgba(0,0,0,0.14);
-      --dash-text-primary: #333333;
-      --dash-text-secondary: #666666;
-      --dash-overline-color: #999999;
-      --dash-link-color: #378ADD;
-      --dash-shell-bg: #ffffff;
-      --dash-shell-border: rgba(0,0,0,0.08);
-      --dash-header-border: rgba(0,0,0,0.06);
-      --dash-badge-bg: rgba(0,0,0,0.04);
-      --dash-badge-border: rgba(0,0,0,0.08);
-      --dash-badge-color: #666666;
-    }
+    .dash-main { color: #333333; }
   }
 
-  .dash-main {
-    min-height: 100vh;
-    background: var(--dash-bg);
-    color: var(--dash-text-primary);
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-
-  .dash-shell {
-    max-width: 80rem;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-  }
-
-  .dash-header {
-    background: var(--dash-shell-bg);
-    border: 1px solid var(--dash-shell-border);
-    border-radius: 1rem;
-    padding: 1.5rem;
+  .dash-head {
     display: flex;
-    flex-direction: column;
+    align-items: baseline;
+    justify-content: space-between;
     gap: 1rem;
-    border-bottom: 1px solid var(--dash-header-border);
-    margin-bottom: 1.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .dash-header {
-      flex-direction: row;
-      align-items: flex-end;
-      justify-content: space-between;
-    }
+    padding: 1rem 0 1.25rem;
   }
 
   .dash-overline {
     font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.22em;
-    color: var(--dash-overline-color);
+    color: rgba(255,255,255,0.4);
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-overline { color: rgba(0,0,0,0.4); }
   }
 
   .dash-title {
-    margin-top: 0.75rem;
-    font-size: 1.75rem;
+    margin-top: 0.25rem;
+    font-size: 1.125rem;
     font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--dash-text-primary);
-  }
-
-  .dash-desc {
-    margin-top: 0.5rem;
-    max-width: 40rem;
-    font-size: 0.875rem;
-    color: var(--dash-text-secondary);
+    letter-spacing: -0.01em;
   }
 
   .dash-badge {
     flex-shrink: 0;
     border-radius: 9999px;
-    border: 1px solid var(--dash-badge-border);
-    background: var(--dash-badge-bg);
-    padding: 0.5rem 1rem;
-    font-size: 0.6875rem;
+    background: rgba(255,255,255,0.08);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.625rem;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--dash-badge-color);
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.4);
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-badge { background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.4); }
   }
 
   .dash-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 0.5rem;
   }
 
   @media (min-width: 768px) {
@@ -274,47 +213,64 @@ const css = `
 
   .dash-card {
     display: block;
-    border-radius: 0.75rem;
-    border: 1px solid var(--dash-card-border);
-    background: var(--dash-card-bg);
-    padding: 1.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.04);
+    padding: 1.125rem 1.25rem;
     text-decoration: none;
     transition: background 0.15s, border-color 0.15s;
   }
 
   .dash-card:hover {
-    background: var(--dash-card-hover-bg);
-    border-color: var(--dash-card-hover-border);
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.1);
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-card {
+      border-color: rgba(0,0,0,0.06);
+      background: rgba(0,0,0,0.02);
+    }
+    .dash-card:hover {
+      background: rgba(0,0,0,0.04);
+      border-color: rgba(0,0,0,0.1);
+    }
   }
 
   .dash-label {
-    margin-top: 1.25rem;
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--dash-text-secondary);
+    letter-spacing: 0.18em;
+    color: #999999;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-label { color: #666666; }
   }
 
   .dash-value {
-    margin-top: 0.75rem;
-    font-size: 2.25rem;
+    margin-top: 0.625rem;
+    font-size: 2rem;
     font-weight: 600;
     letter-spacing: -0.02em;
-    color: var(--dash-text-primary);
   }
 
   .dash-note {
-    margin-top: 0.75rem;
-    font-size: 0.875rem;
-    color: var(--dash-text-secondary);
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: #999999;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-note { color: #666666; }
   }
 
   .dash-link {
-    margin-top: 1.25rem;
-    font-size: 0.75rem;
+    margin-top: 0.875rem;
+    font-size: 0.6875rem;
     font-weight: 500;
-    color: var(--dash-link-color);
-    opacity: 0.7;
+    color: #378ADD;
+    opacity: 0;
     transition: opacity 0.15s;
   }
 
@@ -324,19 +280,27 @@ const css = `
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 1rem;
+    font-size: 0.9375rem;
     font-weight: 400;
-    color: var(--dash-text-secondary);
+    color: #999999;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-loading { color: #666666; }
   }
 
   .dash-spinner {
     display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--dash-card-border);
-    border-top-color: var(--dash-text-secondary);
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid rgba(255,255,255,0.08);
+    border-top-color: #999999;
     border-radius: 50%;
     animation: dash-spin 0.8s linear infinite;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .dash-spinner { border-color: rgba(0,0,0,0.08); border-top-color: #666666; }
   }
 
   @keyframes dash-spin {
