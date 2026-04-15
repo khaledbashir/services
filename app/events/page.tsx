@@ -108,9 +108,9 @@ function EventsPageInner() {
   const [discovering, setDiscovering] = useState(false)
   const [discoveryProgress, setDiscoveryProgress] = useState<{
     status: string
-    venueIndex: number
+    completed: number
     totalVenues: number
-    currentVenue: string | null
+    activeVenues: Array<{ name: string; step: string }>
     runningTotal: number
     venueLog: Array<{ name: string; found: number; ok: boolean; error?: string }>
   } | null>(null)
@@ -330,7 +330,7 @@ function EventsPageInner() {
     setDiscoveryVenueFilter('all')
     setShowDiscoveryDuplicates(true)
     setCollapsedDiscoveryVenues(new Set())
-    setDiscoveryProgress({ status: 'Starting…', venueIndex: 0, totalVenues: 0, currentVenue: null, runningTotal: 0, venueLog: [] })
+    setDiscoveryProgress({ status: 'Starting…', completed: 0, totalVenues: 0, activeVenues: [], runningTotal: 0, venueLog: [] })
 
     try {
       const res = await fetch('/api/events/discover/stream', {
@@ -366,33 +366,36 @@ function EventsPageInner() {
             } else if (event.type === 'venue_start') {
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
-                status: `Starting ${event.venue.name}…`,
-                venueIndex: event.index,
+                status: `Running ${prev.activeVenues.length + 1} in parallel…`,
                 totalVenues: event.total,
-                currentVenue: event.venue.name,
+                activeVenues: [...prev.activeVenues.filter(v => v.name !== event.venue.name), { name: event.venue.name, step: 'starting' }],
               })
             } else if (event.type === 'venue_step') {
               const labels: Record<string, string> = {
-                searching: `Searching Google for ${event.venue.name} (${event.detail?.queries ?? '?'} queries)…`,
-                fetching: `Fetching ${event.detail?.urls ?? '?'} pages of venue content…`,
-                thinking: `Asking Kimi to extract events from ${event.detail?.pages ?? '?'} pages (${Math.round(((event.detail?.prompt_chars ?? 0) as number) / 1000)}k chars)…`,
-                parsing: event.detail?.error
-                  ? `JSON parse failed — retrying…`
-                  : `Parsed ${event.detail?.events ?? 0} raw events, normalizing…`,
+                searching: `searching Google (${event.detail?.queries ?? '?'} queries)`,
+                fetching: `fetching ${event.detail?.urls ?? '?'} pages`,
+                thinking: `asking Kimi on ${event.detail?.pages ?? '?'} pages (${Math.round(((event.detail?.prompt_chars ?? 0) as number) / 1000)}k chars)`,
+                parsing: event.detail?.error ? 'parse failed' : `parsed ${event.detail?.events ?? 0} events`,
               }
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
-                status: labels[event.step] || event.step,
+                activeVenues: prev.activeVenues.map(v =>
+                  v.name === event.venue.name ? { ...v, step: labels[event.step] || event.step } : v
+                ),
               })
             } else if (event.type === 'venue_done') {
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
+                completed: event.completed ?? prev.completed + 1,
                 runningTotal: event.running_total,
+                activeVenues: prev.activeVenues.filter(v => v.name !== event.venue.name),
                 venueLog: [...prev.venueLog, { name: event.venue.name, found: event.new, ok: true }],
               })
             } else if (event.type === 'venue_error') {
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
+                completed: event.completed ?? prev.completed + 1,
+                activeVenues: prev.activeVenues.filter(v => v.name !== event.venue.name),
                 venueLog: [...prev.venueLog, { name: event.venue.name, found: 0, ok: false, error: event.message }],
               })
             } else if (event.type === 'done') {
@@ -897,9 +900,7 @@ function EventsPageInner() {
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Live Discovery</div>
                   <h3 className="mt-1 text-lg font-semibold text-zinc-900">
-                    {discoveryProgress.currentVenue
-                      ? `Venue ${discoveryProgress.venueIndex}/${discoveryProgress.totalVenues} — ${discoveryProgress.currentVenue}`
-                      : discoveryProgress.status}
+                    {discoveryProgress.completed} / {discoveryProgress.totalVenues || '?'} venues complete
                   </h3>
                   <p className="mt-1 text-sm text-zinc-500">{discoveryProgress.status}</p>
                 </div>
@@ -915,14 +916,25 @@ function EventsPageInner() {
                 <div className="mt-3 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
                   <div
                     className="h-full bg-[#0A52EF] transition-all"
-                    style={{ width: `${Math.min(100, (discoveryProgress.venueIndex / Math.max(1, discoveryProgress.totalVenues)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (discoveryProgress.completed / Math.max(1, discoveryProgress.totalVenues)) * 100)}%` }}
                   />
+                </div>
+              )}
+              {discoveryProgress.activeVenues.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {discoveryProgress.activeVenues.map((v) => (
+                    <div key={v.name} className="flex items-center gap-2 text-xs text-zinc-600 font-mono">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0A52EF] animate-pulse" />
+                      <span className="font-semibold text-zinc-800">{v.name}</span>
+                      <span className="text-zinc-400">— {v.step}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
             {discoveryProgress.venueLog.length > 0 && (
               <div className="px-5 py-3 max-h-64 overflow-auto">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 mb-2">Log</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 mb-2">Completed</div>
                 <div className="space-y-1.5 font-mono text-xs">
                   {discoveryProgress.venueLog.map((entry, i) => (
                     <div key={i} className={`flex items-center justify-between ${entry.ok ? 'text-zinc-700' : 'text-red-600'}`}>

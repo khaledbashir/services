@@ -50,16 +50,20 @@ export async function POST(request: NextRequest) {
         let totalFound = 0
         let totalDuplicates = 0
         let totalExisting = 0
+        let completedCount = 0
 
-        for (let i = 0; i < venues.length; i++) {
-          const venue = venues[i]
-          emit({ type: 'venue_start', index: i + 1, total: venues.length, venue: { id: venue.id, name: venue.name } })
-
+        // Process up to 3 venues in parallel — each venue call is dominated by
+        // a ~60-90s LLM request, so concurrency turns 5×90s=7.5min serial into
+        // ~3min. Higher would hammer Ollama's rate limits.
+        const CONCURRENCY = 3
+        const runVenue = async (venue: typeof venues[number], idx: number) => {
+          const index = idx + 1
+          emit({ type: 'venue_start', index, total: venues.length, venue: { id: venue.id, name: venue.name } })
           try {
             const onProgress: DiscoveryProgress = (step, detail) => {
               emit({
                 type: 'venue_step',
-                index: i + 1,
+                index,
                 total: venues.length,
                 venue: { id: venue.id, name: venue.name },
                 step,
@@ -74,11 +78,13 @@ export async function POST(request: NextRequest) {
             totalFound += found
             totalDuplicates += dupes
             totalExisting += result.existing_count || 0
+            completedCount += 1
 
             emit({
               type: 'venue_done',
-              index: i + 1,
+              index,
               total: venues.length,
+              completed: completedCount,
               venue: { id: venue.id, name: venue.name },
               found,
               new: found - dupes,
@@ -86,15 +92,27 @@ export async function POST(request: NextRequest) {
               running_total: allDiscovered.filter(c => !c.duplicate).length,
             })
           } catch (err) {
+            completedCount += 1
             emit({
               type: 'venue_error',
-              index: i + 1,
+              index,
               total: venues.length,
+              completed: completedCount,
               venue: { id: venue.id, name: venue.name },
               message: err instanceof Error ? err.message : String(err),
             })
           }
         }
+
+        // Pool-based concurrency: always keep CONCURRENCY workers busy.
+        let cursor = 0
+        const workers = Array.from({ length: Math.min(CONCURRENCY, venues.length) }, async () => {
+          while (cursor < venues.length) {
+            const idx = cursor++
+            await runVenue(venues[idx], idx)
+          }
+        })
+        await Promise.all(workers)
 
         const finalResult = {
           mode: venueId ? 'single' : 'bulk',

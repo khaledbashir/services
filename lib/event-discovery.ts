@@ -451,7 +451,7 @@ async function discoverWithAI(
   onProgress?: DiscoveryProgress
 ): Promise<RawDiscoveryCandidate[]> {
   const today = new Date().toISOString().split('T')[0]
-  const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
+  const sixtyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
   const searchQueries = buildSearchQueriesWithHint(venue, discoveryHint)
   onProgress?.('searching', { queries: searchQueries.length })
   const searchResults = (await Promise.all(searchQueries.map(searchWeb))).flat()
@@ -515,15 +515,15 @@ ${searchResults.length > 0
     : 'No search results captured'}
 
 INSTRUCTIONS
-- Search for games, concerts, and other ticketed venue events.
-- Follow the discovery hint when it narrows the search, but do not invent events without evidence.
+- Be EXHAUSTIVE. Return every distinct upcoming event you can extract from the FETCHED PAGE CONTENT above, plus any additional events you can identify from SEARCH RESULTS. Aim for 15-40 events per venue when the source material supports it — do not stop at 3 or 4.
+- Do not invent events without evidence, but if a page lists a schedule of games or concerts, extract all of them.
 - Favor official sources: team websites, Ticketmaster, league schedule pages, and the venue calendar.
 - Return both home_team and away_team when the event is a game and the matchup is known.
 - Use event_type values: "game", "concert", or "other".
 - Use source_kind values: "ticketmaster", "team_website", "league_schedule", "venue_calendar", or "ai_discovery".
 - Return matched_query using the exact query string from the search results above when possible.
-- Return evidence_snippet using a short verbatim snippet from the search results above when possible.
-- Use confidence as a decimal from 0.00 to 1.00.
+- Return evidence_snippet using a short verbatim snippet (under 140 chars) from the source when possible.
+- Use confidence as a decimal from 0.00 to 1.00 (never a string like "high" or "low").
 - If a source URL is unknown, set source_url to null.
 - If a source label is unknown, set source_label to a short human-readable source name.
 ${includeExisting
@@ -655,7 +655,7 @@ export async function discoverForVenue(
   onProgress?: DiscoveryProgress
 ): Promise<DiscoveryBatchResult> {
   const today = new Date().toISOString().split('T')[0]
-  const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
+  const sixtyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
   const existingEvents = await loadExistingEvents(venue.id, today, sixtyDaysOut)
   const raw = await discoverWithAI(venue, existingEvents, discoveryHint, includeExisting, onProgress)
 
