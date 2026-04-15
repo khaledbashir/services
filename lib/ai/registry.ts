@@ -56,6 +56,17 @@ async function loadSkills(): Promise<Skill[]> {
     console.warn('[ai/registry] failed to load auto-CRUD skills:', err instanceof Error ? err.message : err)
   }
 
+  // Browser-driving UI skills — navigate, click, fill, highlight, toast.
+  // Server just echoes the payload; the client dispatcher animates them.
+  try {
+    const { uiSkills } = await import('@/lib/ai/skills/_ui-actions')
+    for (const s of uiSkills()) {
+      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
+    }
+  } catch (err) {
+    console.warn('[ai/registry] failed to load UI skills:', err instanceof Error ? err.message : err)
+  }
+
   // Fallback fs scan for files that aren't in the static map yet (dev mode).
   try {
     const entries = fs.readdirSync(SKILLS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'))

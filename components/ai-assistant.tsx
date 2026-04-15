@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { dispatchUiAction, type UiAction } from './ai-ui-driver'
 
 interface Chat { id: string; title: string; updated_at: string }
 
@@ -21,6 +22,30 @@ interface MessageRow {
   content: string | null
   pending?: boolean
   steps?: ThoughtStep[]
+  suggestions?: string[]
+}
+
+const DEFAULT_SUGGESTIONS = [
+  'Show me events this week',
+  'Open the Prudential Center page',
+  'Create a design request',
+  'What tickets are open?',
+  'List my venues with no feed URL',
+]
+
+// Strip a <suggestions>[...]</suggestions> block (if present) from the
+// assistant text and return both. The agent emits suggestions inline so
+// we parse them client-side.
+function extractSuggestions(text: string): { clean: string; suggestions?: string[] } {
+  const m = text.match(/<suggestions>([\s\S]*?)<\/suggestions>/i)
+  if (!m) return { clean: text }
+  try {
+    const arr = JSON.parse(m[1])
+    if (Array.isArray(arr)) {
+      return { clean: text.replace(m[0], '').trim(), suggestions: arr.slice(0, 5).map(String) }
+    }
+  } catch {}
+  return { clean: text.replace(m[0], '').trim() }
 }
 
 interface Skill {
@@ -253,7 +278,6 @@ export function AiAssistant() {
                 const last = copy[copy.length - 1]
                 if (last?.pending) {
                   const steps = [...(last.steps || [])]
-                  // Pair into the most recent matching tool_call.
                   for (let i = steps.length - 1; i >= 0; i--) {
                     if (steps[i].kind === 'tool_call' && steps[i].name === ev.data.name && !steps[i].result) {
                       steps[i] = { ...steps[i], result: ev.data.result }
@@ -264,6 +288,13 @@ export function AiAssistant() {
                 }
                 return copy
               })
+              // If the tool returned a _ui_action, run it in the real DOM.
+              try {
+                const parsed = JSON.parse(ev.data.result)
+                if (parsed?._ui_action && typeof parsed._ui_action.type === 'string') {
+                  dispatchUiAction(parsed._ui_action as UiAction)
+                }
+              } catch {}
             } else if (ev.type === 'error') {
               setMessages(prev => {
                 const copy = [...prev]
@@ -279,7 +310,10 @@ export function AiAssistant() {
       setMessages(prev => {
         const copy = [...prev]
         const last = copy[copy.length - 1]
-        if (last?.pending) copy[copy.length - 1] = { ...last, pending: false, content: assistantText || 'Done.' }
+        if (last?.pending) {
+          const { clean, suggestions } = extractSuggestions(assistantText || 'Done.')
+          copy[copy.length - 1] = { ...last, pending: false, content: clean || 'Done.', suggestions }
+        }
         return copy
       })
       loadChats()
@@ -395,9 +429,19 @@ export function AiAssistant() {
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 ? (
-              <div className="text-center text-sm text-zinc-400 mt-16 space-y-2">
-                <div className="text-2xl">👋</div>
-                <div>Ask me to pull events, create a ticket, log a walkthrough, or spin up a design request.</div>
+              <div className="text-center text-sm text-zinc-500 mt-12 px-2">
+                <div className="text-3xl mb-2">👋</div>
+                <div className="text-zinc-600 font-medium">ANC Assistant</div>
+                <div className="text-zinc-400 text-xs mt-1">Ask, click, or pick a suggestion.</div>
+                <div className="flex flex-wrap gap-1.5 justify-center mt-5">
+                  {DEFAULT_SUGGESTIONS.map((s, i) => (
+                    <button key={i}
+                      onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
+                      className="text-[11px] px-2.5 py-1 rounded-full border border-[#E8E8E8] bg-white text-zinc-600 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors">
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : messages.filter(m => m.role !== 'tool' && m.role !== 'system').map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -406,44 +450,53 @@ export function AiAssistant() {
                     {m.content}
                   </div>
                 ) : (
-                  <div className="max-w-[90%] w-full space-y-1.5">
-                    {(m.steps || []).map((step, si) => {
-                      const key = `${i}-${si}`
-                      const expanded = !!expandedSteps[key]
-                      return (
-                        <div key={si} className="rounded-lg border border-[#E8E8E8] bg-zinc-50 text-xs">
-                          <button
-                            onClick={() => toggleStep(key)}
-                            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 rounded-lg"
-                          >
-                            <span className="flex items-center gap-2 text-zinc-700">
-                              <span className="text-sm">{step.result ? '✓' : '🔧'}</span>
-                              <span className="font-mono font-medium">{step.name}</span>
-                            </span>
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                          </button>
-                          {expanded && (
-                            <div className="px-3 pb-2 space-y-1 font-mono text-[11px]">
-                              {step.args ? (
-                                <div>
-                                  <div className="text-zinc-400">Args:</div>
-                                  <div className="text-zinc-700 break-all">{step.args}</div>
+                  <div className="max-w-[92%] w-full">
+                    {(m.steps || []).length > 0 && (
+                      <div className="relative pl-5 border-l-2 border-zinc-200 space-y-2.5 mb-2">
+                        {(m.steps || []).map((step, si) => {
+                          const key = `${i}-${si}`
+                          const expanded = !!expandedSteps[key]
+                          const running = !step.result
+                          return (
+                            <div key={si} className="relative">
+                              <div className={`absolute -left-[27px] top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${running ? 'bg-[#0A52EF] text-white animate-pulse' : 'bg-emerald-500 text-white'}`}>
+                                {running ? '·' : '✓'}
+                              </div>
+                              <button
+                                onClick={() => toggleStep(key)}
+                                className="text-left block w-full group"
+                              >
+                                <div className="text-[11px] text-zinc-500 font-medium uppercase tracking-[0.12em]">
+                                  {running ? 'Running' : 'Ran tool'}
                                 </div>
-                              ) : null}
-                              {step.result ? (
-                                <div>
-                                  <div className="text-zinc-400">Result:</div>
-                                  <div className="text-zinc-700 break-all max-h-40 overflow-y-auto">{step.result.length > 1200 ? step.result.slice(0, 1200) + '…' : step.result}</div>
+                                <div className="text-xs text-zinc-800 font-mono group-hover:text-[#0A52EF] flex items-center gap-1.5">
+                                  <span>{step.name}</span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                                 </div>
-                              ) : (
-                                <div className="text-zinc-400">Running…</div>
+                              </button>
+                              {expanded && (
+                                <div className="mt-1 rounded-lg border border-[#E8E8E8] bg-zinc-50 px-3 py-2 font-mono text-[11px] space-y-1">
+                                  {step.args ? (
+                                    <div>
+                                      <div className="text-zinc-400 text-[10px] uppercase tracking-wider">Args</div>
+                                      <div className="text-zinc-700 break-all">{step.args}</div>
+                                    </div>
+                                  ) : null}
+                                  {step.result ? (
+                                    <div>
+                                      <div className="text-zinc-400 text-[10px] uppercase tracking-wider">Result</div>
+                                      <div className="text-zinc-700 break-all max-h-40 overflow-y-auto">{step.result.length > 1200 ? step.result.slice(0, 1200) + '…' : step.result}</div>
+                                    </div>
+                                  ) : null}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                          )
+                        })}
+                      </div>
+                    )}
                     {m.content ? (
+                      <>
                       <div className="rounded-2xl bg-zinc-100 text-zinc-800 px-4 py-2.5 text-sm break-words ai-prose">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
@@ -468,6 +521,18 @@ export function AiAssistant() {
                           {m.content}
                         </ReactMarkdown>
                       </div>
+                      {m.suggestions && m.suggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {m.suggestions.map((s, si) => (
+                            <button key={si}
+                              onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
+                              className="text-[11px] px-2.5 py-1 rounded-full border border-[#E8E8E8] bg-white text-zinc-600 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors">
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      </>
                     ) : m.pending ? (
                       <div className="rounded-2xl bg-zinc-100 text-zinc-400 px-4 py-2.5 text-sm italic">Thinking…</div>
                     ) : null}
