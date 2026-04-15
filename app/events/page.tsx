@@ -302,8 +302,13 @@ function EventsPageInner() {
   }, [filter, view, currentWeekStart])
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    // YYYY-MM-DD strings parsed as "new Date()" come back as UTC midnight,
+    // which shifts one calendar day west in any negative-offset zone
+    // (May 8 → May 7 in ET). Parse the parts directly to avoid the drift.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+    if (m) return `${months[Number(m[2]) - 1]} ${Number(m[3])}`
+    const date = new Date(dateStr)
     return `${months[date.getMonth()]} ${date.getDate()}`
   }
 

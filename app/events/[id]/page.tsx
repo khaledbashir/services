@@ -102,7 +102,10 @@ export default function EventDetailPage() {
   }, [auth.loaded, auth.role, eventId])
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
+    // YYYY-MM-DD → parse parts directly to avoid the UTC-midnight-shift bug
+    // (a "2026-05-08" date rendered in ET otherwise shows as May 7).
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+    const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
