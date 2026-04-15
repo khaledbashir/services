@@ -33,10 +33,18 @@ interface Provider { name: string; model: string }
 
 const STORAGE_KEY = 'ai-panel-open'
 const PROVIDER_KEY = 'ai-panel-provider'
+const ACTIVE_CHAT_KEY = 'ai-active-chat'
 
 export function AiAssistant() {
   const [open, setOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyOpen, setHistoryOpenState] = useState(false)
+  const setHistoryOpen = (v: boolean | ((prev: boolean) => boolean)) => {
+    setHistoryOpenState(prev => {
+      const next = typeof v === 'function' ? (v as (prev: boolean) => boolean)(prev) : v
+      if (next) loadChats()
+      return next
+    })
+  }
   const [showSkills, setShowSkills] = useState(false)
   const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
@@ -53,7 +61,16 @@ export function AiAssistant() {
   useEffect(() => {
     setOpen(localStorage.getItem(STORAGE_KEY) === '1')
     setSelectedProvider(localStorage.getItem(PROVIDER_KEY) || '')
+    const stored = localStorage.getItem(ACTIVE_CHAT_KEY)
+    if (stored) setActiveChatId(stored)
   }, [])
+
+  // Persist activeChatId so chat survives reload.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (activeChatId) localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId)
+    else localStorage.removeItem(ACTIVE_CHAT_KEY)
+  }, [activeChatId])
   useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, open ? '1' : '0') }, [open])
   useEffect(() => { if (selectedProvider && typeof window !== 'undefined') localStorage.setItem(PROVIDER_KEY, selectedProvider) }, [selectedProvider])
 
@@ -85,8 +102,20 @@ export function AiAssistant() {
   }, [])
 
   useEffect(() => {
-    if (open) { loadChats(); loadSkills(); loadProviders() }
-  }, [open, loadChats, loadSkills, loadProviders])
+    if (!open) return
+    loadChats()
+    loadSkills()
+    loadProviders()
+    // If the panel reopens with a persisted active chat, hydrate its
+    // messages so history survives reloads.
+    if (activeChatId && messages.length === 0) {
+      loadChat(activeChatId).catch(() => {
+        // Chat was deleted or is inaccessible — clear pointer.
+        setActiveChatId(null)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })

@@ -40,7 +40,11 @@ export async function POST(request: NextRequest) {
       const emit = (ev: StreamEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))
       }
-      emit({ type: 'text', data: '' })  // flush initial byte so the client sees the stream
+      // Padding trick: many proxies (nginx, Cloudflare, EasyPanel's
+      // reverse proxy) buffer the first ~2KB of an SSE stream before
+      // flushing. Without this, the client sees nothing until the
+      // response closes, which looks like "the AI isn't doing anything".
+      controller.enqueue(encoder.encode(': ' + ' '.repeat(2048) + '\n\n'))
       // Announce the chat id so the UI can anchor new chats.
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chat', data: { id: chatId } })}\n\n`))
       try {
