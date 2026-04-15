@@ -1,5 +1,6 @@
 'use client'
 
+import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +10,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="lg:ml-60 flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto">
           <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
+            <div className="mb-4 flex justify-end lg:mb-6">
+              <GlobalSearch />
+            </div>
             {children}
           </div>
         </div>
