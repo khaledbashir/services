@@ -589,32 +589,71 @@ RETURN ONLY JSON
   "confidence": 0.94
 }]`
 
-  const provider = nextProvider()
-  onProgress?.('thinking', { model: provider.model, provider: provider.name, prompt_chars: prompt.length, pages: fetchedPages.filter(p => p.text).length })
-  const aiRes = await fetch(`${provider.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: provider.model,
-      max_tokens: 8000,
-      temperature: 0.1,
-      messages: [
-        { role: 'system', content: 'You are an expert event aggregation and normalization system. Respond with valid JSON only.' },
-        { role: 'user', content: prompt },
-      ],
-    }),
-  })
+  // Try providers in round-robin order; on rate-limit / transient failure,
+  // cascade to the next one in the pool. 429 (explicit rate limit) and
+  // provider-specific codes like MiniMax 1302 both surface as non-ok
+  // responses, so we check the body for rate-limit markers too.
+  const isRateLimitLike = (status: number, body: string) =>
+    status === 429 || status === 503 || status === 502 ||
+    /rate[_\s-]?limit|too many|quota|1302/i.test(body)
 
-  if (!aiRes.ok) {
-    const err = await aiRes.text()
-    throw new Error(`AI API error: ${aiRes.status} — ${err}`)
+  let aiData: { choices?: Array<{ message?: { content?: string } }> } | null = null
+  let lastError = ''
+  let chosenProvider = AI_PROVIDERS[0]
+
+  for (let attempt = 0; attempt < AI_PROVIDERS.length; attempt++) {
+    const provider = nextProvider()
+    chosenProvider = provider
+    onProgress?.('thinking', { model: provider.model, provider: provider.name, prompt_chars: prompt.length, pages: fetchedPages.filter(p => p.text).length, attempt })
+    try {
+      const aiRes = await fetch(`${provider.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${provider.apiKey}` },
+        body: JSON.stringify({
+          model: provider.model,
+          max_tokens: 8000,
+          temperature: 0.1,
+          messages: [
+            { role: 'system', content: 'You are an expert event aggregation and normalization system. Respond with valid JSON only.' },
+            { role: 'user', content: prompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(120000),
+      })
+
+      if (aiRes.ok) {
+        aiData = await aiRes.json()
+        // Some providers return 200 with an embedded rate-limit error body.
+        const embeddedErr = (aiData as { error?: { code?: string | number; message?: string } } | null)?.error
+        if (embeddedErr && isRateLimitLike(0, String(embeddedErr.code ?? '') + ' ' + (embeddedErr.message || ''))) {
+          lastError = `${provider.name}: ${embeddedErr.message || embeddedErr.code}`
+          aiData = null
+          continue
+        }
+        break
+      }
+
+      const errBody = await aiRes.text()
+      lastError = `${provider.name}: ${aiRes.status} — ${errBody.slice(0, 200)}`
+      if (isRateLimitLike(aiRes.status, errBody)) {
+        // Try next provider
+        continue
+      }
+      // Non-rate-limit error — still try next provider as a courtesy, but
+      // only once more; otherwise the caller never recovers from a bad key.
+      if (attempt >= 1) throw new Error(`AI API error: ${lastError}`)
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+      if (attempt >= AI_PROVIDERS.length - 1) throw new Error(`AI API error: ${lastError}`)
+    }
   }
 
-  const aiData = await aiRes.json()
+  if (!aiData) {
+    throw new Error(`AI API error: all ${AI_PROVIDERS.length} providers failed. Last: ${lastError}`)
+  }
+
   const rawContent: string = aiData.choices?.[0]?.message?.content || '[]'
+  onProgress?.('thinking', { model: chosenProvider.model, provider: chosenProvider.name, prompt_chars: prompt.length, resolved: true })
   // Strip any reasoning scaffolding the provider slipped into `content`:
   //   - <think>…</think> blocks (MiniMax)
   //   - ```json … ``` code fences (GLM, most providers)
