@@ -151,7 +151,6 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
      WHERE COALESCE(v.feed_url, '') <> ''
        AND COALESCE(v.is_active, true) = true
      GROUP BY v.id
-     HAVING COUNT(DISTINCT CASE WHEN vs.enabled = true THEN st.id END) > 0
      ORDER BY v.name`
   )
   return result.rows.map(withComputedAutomation)

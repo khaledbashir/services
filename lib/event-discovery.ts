@@ -794,7 +794,6 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE COALESCE(v.is_active, true) = true
      GROUP BY v.id, m.name
-     HAVING COUNT(DISTINCT CASE WHEN vs.enabled = true THEN st.id END) > 0
      ORDER BY
        CASE
          WHEN LOWER(v.name) = 'prudential center' THEN 0
