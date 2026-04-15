@@ -1,0 +1,30 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
+
+const EDITABLE = ['asset_id','station_id','technician_id','maintenance_type','issue','issue_summary',
+  'details_to_resolve','status','reported_date','scheduled_date','completed_date',
+  'escort_information','location_reported','techs_scheduled']
+
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireRole(request, 'manager')
+  if (isAuthError(auth)) return auth
+
+  const body = await request.json()
+  const sets: string[] = []
+  const values: unknown[] = []
+  for (const k of EDITABLE) {
+    if (k in body) { values.push(body[k]); sets.push(`${k} = $${values.length}`) }
+  }
+  if (!sets.length) return NextResponse.json({ error: 'no fields to update' }, { status: 400 })
+  values.push(params.id)
+  const r = await query(`UPDATE maintenance_logs SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`, values)
+  return NextResponse.json({ log: r.rows[0] })
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireRole(request, 'admin')
+  if (isAuthError(auth)) return auth
+  await query(`DELETE FROM maintenance_logs WHERE id = $1`, [params.id])
+  return NextResponse.json({ ok: true })
+}
