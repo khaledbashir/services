@@ -52,6 +52,10 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [notesDraft, setNotesDraft] = useState('')
   const [proofLinkDraft, setProofLinkDraft] = useState('')
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
+  const [finalFileNameDraft, setFinalFileNameDraft] = useState('')
+  const [finalDurationDraft, setFinalDurationDraft] = useState('')
+  const [hoursEstimatedDraft, setHoursEstimatedDraft] = useState('')
+  const [hoursSpentDraft, setHoursSpentDraft] = useState('')
   const router = useRouter()
 
   const fetchData = async () => {
@@ -71,6 +75,10 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       setNotesDraft(drData.design_request?.notes || '')
       setProofLinkDraft(drData.design_request?.ftp_proof_link || '')
       setFinalLinkDraft(drData.design_request?.ftp_final_link || '')
+      setFinalFileNameDraft(drData.design_request?.final_file_name || '')
+      setFinalDurationDraft(drData.design_request?.final_duration || '')
+      setHoursEstimatedDraft(drData.design_request?.hours_estimated?.toString() || '')
+      setHoursSpentDraft(drData.design_request?.hours_spent?.toString() || '')
     } catch (err) {
       console.error(err)
     } finally {
@@ -108,6 +116,16 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     await updateField({
       ftp_proof_link: proofLinkDraft,
       ftp_final_link: finalLinkDraft,
+      final_file_name: finalFileNameDraft,
+      final_duration: finalDurationDraft,
+    })
+  }
+
+  const saveHours = async (e: FormEvent) => {
+    e.preventDefault()
+    await updateField({
+      hours_estimated: hoursEstimatedDraft === '' ? null : Number(hoursEstimatedDraft),
+      hours_spent: hoursSpentDraft === '' ? null : Number(hoursSpentDraft),
     })
   }
 
@@ -135,6 +153,13 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       </DashboardLayout>
     )
   }
+
+  const progressPct =
+    designRequest.hours_estimated && designRequest.hours_estimated > 0
+      ? Math.min(100, Math.round((Number(designRequest.hours_spent || 0) / Number(designRequest.hours_estimated)) * 100))
+      : 0
+  const progressTone =
+    progressPct >= 75 ? 'bg-red-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
 
   return (
     <DashboardLayout>
@@ -232,6 +257,26 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Final File Name</label>
+                  <input
+                    type="text"
+                    value={finalFileNameDraft}
+                    onChange={(e) => setFinalFileNameDraft(e.target.value)}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Final Duration</label>
+                  <input
+                    type="text"
+                    value={finalDurationDraft}
+                    onChange={(e) => setFinalDurationDraft(e.target.value)}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  />
+                </div>
+              </div>
             </form>
           </div>
 
@@ -265,6 +310,56 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                     ))}
                   </select>
                 </div>
+              </div>
+            </div>
+
+            <div className="border border-zinc-200 bg-zinc-50 p-5">
+              <h2 className="text-sm font-semibold text-zinc-900 mb-4">Hours Progress</h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-zinc-500">Spent vs Estimated</span>
+                  <span className="text-zinc-900">
+                    {designRequest.hours_spent ?? 0}h / {designRequest.hours_estimated ?? '—'}h
+                  </span>
+                </div>
+                <div className="h-3 rounded-full bg-white border border-zinc-200 overflow-hidden">
+                  <div className={`h-full ${progressTone}`} style={{ width: `${progressPct}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <span>{progressPct}% of estimated hours used</span>
+                  {progressPct >= 75 ? <span className="text-red-600 font-medium">75% threshold reached</span> : null}
+                </div>
+                <form onSubmit={saveHours} className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Hours Estimated</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={hoursEstimatedDraft}
+                      onChange={(e) => setHoursEstimatedDraft(e.target.value)}
+                      className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Hours Spent</label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={hoursSpentDraft}
+                      onChange={(e) => setHoursSpentDraft(e.target.value)}
+                      className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="px-4 py-2 bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Hours'}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
 

@@ -45,6 +45,13 @@ function normalizeValue(key: string, value: any) {
   return value
 }
 
+function getBudgetThresholdState(hoursSpent: number | null | undefined, hoursEstimated: number | null | undefined) {
+  const spent = Number(hoursSpent || 0)
+  const estimated = Number(hoursEstimated || 0)
+  if (!estimated || estimated <= 0) return false
+  return spent >= estimated * 0.75
+}
+
 async function getAccessibleRecord(request: NextRequest, id: string, minRole: 'technician' | 'admin') {
   const auth = await requireRole(request, minRole)
   if (isAuthError(auth)) return auth
@@ -114,6 +121,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     if (body.status === 'client_review' && access.record.status !== 'client_review') {
       // TODO(ahmad): hook up client-review email notification
+    }
+
+    const previousThresholdState = getBudgetThresholdState(access.record.hours_spent, access.record.hours_estimated)
+    const nextHoursSpent = body.hours_spent !== undefined ? normalizeValue('hours_spent', body.hours_spent) : access.record.hours_spent
+    const nextHoursEstimated = body.hours_estimated !== undefined ? normalizeValue('hours_estimated', body.hours_estimated) : access.record.hours_estimated
+    const nextThresholdState = getBudgetThresholdState(nextHoursSpent, nextHoursEstimated)
+
+    if (!previousThresholdState && nextThresholdState) {
+      // TODO(ahmad): fire 75%-of-budget Slack alert
     }
 
     values.push(params.id)

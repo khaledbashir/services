@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
 import { Skeleton } from '@/components/skeleton'
 
 interface DesignRequest {
@@ -28,14 +29,14 @@ interface DesignRequest {
 interface Venue { id: string; name: string }
 interface Staff { id: string; full_name: string }
 
-const statusColumns = [
-  { key: 'request_submitted', label: 'Submitted' },
-  { key: 'in_queue', label: 'In Queue' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'in_qc', label: 'In QC' },
-  { key: 'client_review', label: 'Client Review' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'done', label: 'Done' },
+const statusColumns: KanbanColumn[] = [
+  { key: 'request_submitted', label: 'Submitted', accent: 'bg-sky-500' },
+  { key: 'in_queue', label: 'In Queue', accent: 'bg-violet-500' },
+  { key: 'in_progress', label: 'In Progress', accent: 'bg-amber-500' },
+  { key: 'in_qc', label: 'In QC', accent: 'bg-orange-500' },
+  { key: 'client_review', label: 'Client Review', accent: 'bg-blue-500' },
+  { key: 'approved', label: 'Approved', accent: 'bg-emerald-500' },
+  { key: 'done', label: 'Done', accent: 'bg-zinc-400' },
 ] as const
 
 const statusTone: Record<string, string> = {
@@ -91,6 +92,21 @@ export default function DesignsPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  const updateStatus = async (item: DesignRequest, status: string) => {
+    try {
+      const res = await fetch(`/api/design-requests/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (res.ok) {
+        setDesignRequests((prev) => prev.map((row) => (row.id === item.id ? { ...row, status } : row)))
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -368,54 +384,46 @@ export default function DesignsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
-          {statusColumns.map((column) => {
-            const items = filtered.filter((item) => item.status === column.key)
+        <KanbanBoard
+          items={filtered}
+          columns={statusColumns as KanbanColumn[]}
+          statusOf={(item) => item.status}
+          keyOf={(item) => item.id}
+          onStatusChange={updateStatus}
+          renderCard={(item) => {
+            const hoursSpent = Number(item.hours_spent || 0)
+            const hoursEstimated = Number(item.hours_estimated || 0)
+            const progressPct = hoursEstimated > 0 ? Math.min(100, Math.round((hoursSpent / hoursEstimated) * 100)) : 0
+            const progressTone =
+              progressPct >= 75 ? 'bg-red-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
+
             return (
-              <div key={column.key} className="border border-zinc-200 bg-zinc-50 min-h-[22rem]">
-                <div className="px-4 py-3 border-b border-zinc-200 bg-white flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-zinc-900">{column.label}</h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">{items.length} requests</p>
+              <Link href={`/designs/${item.id}`} className="block space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.job_title}</h3>
+                  <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>
+                    {statusColumns.find((column) => column.key === item.status)?.label || item.status}
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-xs text-zinc-500">
+                  <p>{item.company_name || 'No company'}</p>
+                  <p>{item.venue_name || 'No venue linked'}</p>
+                  <p>{item.designer_name || 'No designer assigned'}</p>
+                  {item.due_date && <p>Due {item.due_date}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                    <span>Hours</span>
+                    <span>{hoursSpent}h{hoursEstimated ? ` / ${hoursEstimated}h` : ''}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+                    <div className={`h-full ${progressTone}`} style={{ width: `${progressPct}%` }} />
                   </div>
                 </div>
-                <div className="p-3 space-y-3">
-                  {items.length === 0 && (
-                    <div className="border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">
-                      No requests
-                    </div>
-                  )}
-                  {items.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={`/designs/${item.id}`}
-                      className="block border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.job_title}</h3>
-                        <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>
-                          {column.label}
-                        </span>
-                      </div>
-                      <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
-                        <p>{item.company_name || 'No company'}</p>
-                        <p>{item.venue_name || 'No venue linked'}</p>
-                        <p>{item.designer_name || 'No designer assigned'}</p>
-                        {item.due_date && <p>Due {item.due_date}</p>}
-                        {(item.hours_estimated || item.hours_spent) && (
-                          <p>
-                            {item.hours_spent || 0}h spent
-                            {item.hours_estimated ? ` / ${item.hours_estimated}h est.` : ''}
-                          </p>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              </Link>
             )
-          })}
-        </div>
+          }}
+        />
       </div>
     </DashboardLayout>
   )
