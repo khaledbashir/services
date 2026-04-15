@@ -25,11 +25,6 @@ interface TicketmasterDiscoveryEvent {
   }
 }
 
-function ticketmasterVenueIdFromUrl(url: string): string | null {
-  const match = url.match(/\/venue\/(\d+)(?:[/?#]|$)/i)
-  return match?.[1] || null
-}
-
 function parseCityState(address?: string | null): { city: string | null; stateCode: string | null } {
   if (!address) return { city: null, stateCode: null }
   const parts = address.split(',').map((part) => part.trim()).filter(Boolean)
@@ -126,25 +121,42 @@ async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<Ticketm
   const exact = venues.find((venue) => (venue.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalizedTarget)
   if (exact) return exact
 
-  return venues[0]
+  const nameOverlapScore = (venue: TicketmasterDiscoveryVenue): number => {
+    const venueWords = new Set((venue.name || '').toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').split(/\s+/).filter(Boolean))
+    const targetWords = new Set(params.venueName.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').split(/\s+/).filter(Boolean))
+    if (venueWords.size === 0 || targetWords.size === 0) return 0
+    let overlap = 0
+    for (const word of targetWords) {
+      if (venueWords.has(word)) overlap++
+    }
+    let score = overlap / targetWords.size
+    if (city && venue.city?.name?.toLowerCase() === city.toLowerCase()) score += 0.2
+    if (stateCode && venue.state?.stateCode?.toUpperCase() === stateCode.toUpperCase()) score += 0.1
+    return score
+  }
+
+  return [...venues].sort((a, b) => nameOverlapScore(b) - nameOverlapScore(a))[0]
 }
 
 async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<FeedEvent[]> {
   if (!TICKETMASTER_API_KEY) return []
 
-  let venueId = ticketmasterVenueIdFromUrl(params.feedUrl)
-  if (!venueId) {
-    const venue = await lookupTicketmasterVenue(params)
-    venueId = venue?.id || null
-  }
+  const venue = await lookupTicketmasterVenue(params)
+  const venueId = venue?.id || null
 
   const search = new URLSearchParams({
     apikey: TICKETMASTER_API_KEY,
     size: '200',
     sort: 'date,asc',
   })
-  if (venueId) search.set('venueId', venueId)
-  else search.set('keyword', params.venueName)
+  if (venueId) {
+    search.set('venueId', venueId)
+  } else {
+    search.set('keyword', params.venueName)
+    const { city, stateCode } = parseCityState(params.venueAddress)
+    if (city) search.set('city', city)
+    if (stateCode) search.set('stateCode', stateCode)
+  }
 
   const data = await fetchTicketmasterJson<{ _embedded?: { events?: TicketmasterDiscoveryEvent[] } }>(
     '/events.json',
