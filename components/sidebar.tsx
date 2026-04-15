@@ -137,6 +137,8 @@ export function Sidebar() {
         { href: '/cg-designs', label: 'CG Designs' },
         { href: '/content-schedules', label: 'Content Schedule' },
         { href: '/prints', label: 'Print Requests', role: 'manager' },
+        { href: '/hours-budgets', label: 'Hours Budgets', role: 'manager' },
+        { href: '/time-entries', label: 'Time Entries' },
       ],
     },
     {
