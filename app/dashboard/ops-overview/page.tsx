@@ -15,6 +15,14 @@ type MetricCard = {
   note: string;
 };
 
+async function readMetric(load: () => Promise<number>): Promise<number | null> {
+  try {
+    return await load();
+  } catch {
+    return null;
+  }
+}
+
 function MetricTile({ card }: { card: MetricCard }) {
   return (
     <Link
@@ -41,67 +49,94 @@ function MetricTile({ card }: { card: MetricCard }) {
 }
 
 export default async function OpsOverviewIframePage() {
-  const [
-    openTickets,
-    criticalTickets,
-    activeEvents,
-    wonDeals,
-    problemWalkthroughs,
-    activeVenues,
-  ] = await Promise.all([
+  const openTickets = await readMetric(() =>
     fetchTotalCount("serviceTickets", 'ticketStatus[neq]:"TICKET_CLOSED"'),
+  );
+  const criticalTickets = await readMetric(() =>
     fetchTotalCount("serviceTickets", 'priority[eq]:"PRIORITY_CRITICAL"'),
+  );
+  const activeEvents = await readMetric(() =>
     fetchTotalCount(
       "venueEvents",
       'or(workflowStatus[eq]:"STATUS_PENDING",workflowStatus[eq]:"STATUS_CONFIRMED")',
     ),
+  );
+  const wonDeals = await readMetric(() =>
     fetchTotalCount("opportunities", 'bidStatus[eq]:"WON"'),
+  );
+  const problemWalkthroughs = await readMetric(() =>
     fetchTotalCount("walkthroughLogs", 'result[eq]:"RESULT_PROBLEM"'),
+  );
+  const activeVenues = await readMetric(() =>
     fetchTotalCount("venues", 'venueStatus[eq]:"ACTIVE"'),
-  ]);
+  );
 
   const cards: MetricCard[] = [
     {
       label: "Open Service Tickets",
-      value: formatMetricValue(openTickets),
+      value: openTickets == null ? "Unavailable" : formatMetricValue(openTickets),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/serviceTickets",
       accent: "#5ba2ff",
-      note: "All service tickets except closed",
+      note:
+        openTickets == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "All service tickets except closed",
     },
     {
       label: "Critical Tickets",
-      value: formatMetricValue(criticalTickets),
+      value:
+        criticalTickets == null
+          ? "Unavailable"
+          : formatMetricValue(criticalTickets),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/serviceTickets",
       accent: "#ff6b7d",
-      note: "Priority set to critical",
+      note:
+        criticalTickets == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Priority set to critical",
     },
     {
       label: "Pending / Confirmed Events",
-      value: formatMetricValue(activeEvents),
+      value: activeEvents == null ? "Unavailable" : formatMetricValue(activeEvents),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/venueEvents",
       accent: "#7c91ff",
-      note: "Workflow status pending or confirmed",
+      note:
+        activeEvents == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Workflow status pending or confirmed",
     },
     {
       label: "Won Deals",
-      value: formatMetricValue(wonDeals),
+      value: wonDeals == null ? "Unavailable" : formatMetricValue(wonDeals),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/opportunities",
       accent: "#4fd1a5",
-      note: "Opportunities with bid status won",
+      note:
+        wonDeals == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Opportunities with bid status won",
     },
     {
       label: "Problem Walkthroughs",
-      value: formatMetricValue(problemWalkthroughs),
+      value:
+        problemWalkthroughs == null
+          ? "Unavailable"
+          : formatMetricValue(problemWalkthroughs),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/walkthroughLogs",
       accent: "#ffb14a",
-      note: "Walkthrough logs flagged as problems",
+      note:
+        problemWalkthroughs == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Walkthrough logs flagged as problems",
     },
     {
       label: "Active Venues",
-      value: formatMetricValue(activeVenues),
+      value: activeVenues == null ? "Unavailable" : formatMetricValue(activeVenues),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/venues",
       accent: "#37d6ff",
-      note: "Venue status currently active",
+      note:
+        activeVenues == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Venue status currently active",
     },
   ];
 
@@ -138,4 +173,3 @@ export default async function OpsOverviewIframePage() {
     </main>
   );
 }
-

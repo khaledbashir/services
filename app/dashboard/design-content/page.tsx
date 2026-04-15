@@ -20,6 +20,14 @@ type MetricCard = {
   note: string;
 };
 
+async function readMetric(load: () => Promise<number>): Promise<number | null> {
+  try {
+    return await load();
+  } catch {
+    return null;
+  }
+}
+
 function MetricTile({ card }: { card: MetricCard }) {
   return (
     <Link
@@ -46,55 +54,87 @@ function MetricTile({ card }: { card: MetricCard }) {
 }
 
 export default async function DesignContentIframePage() {
-  const [openDesignRequests, contentInQueue, printInProduction, budgetAlerts, designerHours] =
-    await Promise.all([
-      fetchTotalCount(
-        "designRequests",
-        'and(status[neq]:"STATUS_DONE",status[neq]:"STATUS_APPROVED")',
-      ),
-      fetchTotalCount("contentSchedules", 'status[eq]:"STATUS_IN_QUEUE"'),
-      fetchTotalCount("printRequests", 'status[eq]:"STATUS_IN_PRODUCTION"'),
-      fetchTotalCount("designerHoursBudgets", 'alert75Pct[eq]:true'),
-      fetchSumForCurrentMonth("designerTimeEntries", "hoursSpent", "date"),
-    ]);
+  const openDesignRequests = await readMetric(() =>
+    fetchTotalCount(
+      "designRequests",
+      'and(status[neq]:"STATUS_DONE",status[neq]:"STATUS_APPROVED")',
+    ),
+  );
+  const contentInQueue = await readMetric(() =>
+    fetchTotalCount("contentSchedules", 'status[eq]:"STATUS_IN_QUEUE"'),
+  );
+  const printInProduction = await readMetric(() =>
+    fetchTotalCount("printRequests", 'status[eq]:"STATUS_IN_PRODUCTION"'),
+  );
+  const budgetAlerts = await readMetric(() =>
+    fetchTotalCount("designerHoursBudgets", 'alert75Pct[eq]:true'),
+  );
+  const designerHours = await readMetric(() =>
+    fetchSumForCurrentMonth("designerTimeEntries", "hoursSpent", "date"),
+  );
 
   const monthLabel = getCurrentMonthLabel();
 
   const cards: MetricCard[] = [
     {
       label: "Open Design Requests",
-      value: formatMetricValue(openDesignRequests),
+      value:
+        openDesignRequests == null
+          ? "Unavailable"
+          : formatMetricValue(openDesignRequests),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/designRequests",
       accent: "#71a7ff",
-      note: "All design requests except done and approved",
+      note:
+        openDesignRequests == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "All design requests except done and approved",
     },
     {
       label: "Content In Queue",
-      value: formatMetricValue(contentInQueue),
+      value:
+        contentInQueue == null ? "Unavailable" : formatMetricValue(contentInQueue),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/contentSchedules",
       accent: "#8b7dff",
-      note: "Content schedules currently waiting in queue",
+      note:
+        contentInQueue == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Content schedules currently waiting in queue",
     },
     {
       label: "Print In Production",
-      value: formatMetricValue(printInProduction),
+      value:
+        printInProduction == null
+          ? "Unavailable"
+          : formatMetricValue(printInProduction),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/printRequests",
       accent: "#4fd1a5",
-      note: "Print requests actively in production",
+      note:
+        printInProduction == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Print requests actively in production",
     },
     {
       label: "Budget Alerts",
-      value: formatMetricValue(budgetAlerts),
+      value: budgetAlerts == null ? "Unavailable" : formatMetricValue(budgetAlerts),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/designerHoursBudgets",
       accent: "#ff8e5a",
-      note: "Designer budget rows over the 75% alert threshold",
+      note:
+        budgetAlerts == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : "Designer budget rows over the 75% alert threshold",
     },
     {
       label: "Designer Hours This Month",
-      value: formatMetricValue(designerHours, { decimals: 2 }),
+      value:
+        designerHours == null
+          ? "Unavailable"
+          : formatMetricValue(designerHours, { decimals: 2 }),
       href: "https://abc-twenty.izcgmb.easypanel.host/objects/designerTimeEntries",
       accent: "#37d6ff",
-      note: `${monthLabel} total from designer time entries`,
+      note:
+        designerHours == null
+          ? "Twenty rate limit or API pressure is preventing a live read"
+          : `${monthLabel} total from designer time entries`,
     },
   ];
 

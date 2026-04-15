@@ -2,6 +2,9 @@ const TWENTY_BASE =
   process.env.TWENTY_API_URL || "https://abc-twenty.izcgmb.easypanel.host";
 const TWENTY_API_KEY = process.env.TWENTY_API_KEY || "";
 const PAGE_SIZE = 100;
+const CACHE_TTL_MS = 60_000;
+
+const metricCache = new Map<string, { value: number; timestamp: number }>();
 
 type RestListResult<T> = {
   records: T[];
@@ -84,8 +87,24 @@ export async function fetchTotalCount(
   endpoint: string,
   filter?: string,
 ): Promise<number> {
-  const result = await twentyFetchJson(endpoint, { filter, limit: 1 });
-  return result.totalCount;
+  const cacheKey = `count:${endpoint}:${filter || "all"}`;
+  const cached = metricCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  try {
+    const result = await twentyFetchJson(endpoint, { filter, limit: 1 });
+    metricCache.set(cacheKey, { value: result.totalCount, timestamp: Date.now() });
+    return result.totalCount;
+  } catch (error) {
+    if (cached) {
+      return cached.value;
+    }
+
+    throw error;
+  }
 }
 
 export async function fetchSumForCurrentMonth(
@@ -93,6 +112,13 @@ export async function fetchSumForCurrentMonth(
   field: string,
   dateField: string,
 ): Promise<number> {
+  const cacheKey = `sum:${endpoint}:${field}:${dateField}`;
+  const cached = metricCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.value;
+  }
+
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -124,6 +150,7 @@ export async function fetchSumForCurrentMonth(
     cursor = pageResult.pageInfo.endCursor;
   }
 
+  metricCache.set(cacheKey, { value: total, timestamp: Date.now() });
   return total;
 }
 
