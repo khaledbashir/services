@@ -501,12 +501,22 @@ RETURN ONLY JSON
   }
 
   const aiData = await aiRes.json()
-  const content = aiData.choices?.[0]?.message?.content || '[]'
-  const jsonMatch = content.match(/\[[\s\S]*\]/)
-  if (!jsonMatch) return []
+  const rawContent: string = aiData.choices?.[0]?.message?.content || '[]'
+  // Strip any reasoning scaffolding the provider slipped into `content`:
+  //   - <think>…</think> blocks (MiniMax)
+  //   - ```json … ``` code fences (GLM, most providers)
+  const content = rawContent
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1')
+    .trim()
+
+  // Prefer the last JSON array in the response — thinking text may quote
+  // example arrays before the real payload.
+  const matches = [...content.matchAll(/\[[\s\S]*?\](?=\s*$|\s*\n\s*$)/g)]
+  const candidate = (matches.length > 0 ? matches[matches.length - 1][0] : content.match(/\[[\s\S]*\]/)?.[0]) || '[]'
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as RawDiscoveryCandidate[]
+    const parsed = JSON.parse(candidate) as RawDiscoveryCandidate[]
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
