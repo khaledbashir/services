@@ -67,6 +67,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Status gate — only generate share when record is in CLIENT_REVIEW.
+    // Workflow filter steps in Twenty are unreliable for .updated trigger output,
+    // so we re-check here against the live record. Other updates are no-ops.
+    const TRIGGER_STATUS_BY_TYPE: Record<string, string> = {
+      designRequest: 'STATUS_CLIENT_REVIEW',
+      cgDesignRequest: 'STATUS_REVIEW',
+      contentSchedule: 'STATUS_REQUEST_SUBMITTED',
+      printRequest: 'STATUS_AWAITING_APPROVAL',
+    }
+    const requiredStatus = TRIGGER_STATUS_BY_TYPE[twentyObjectType]
+    const currentStatus = (record as any).status
+    if (requiredStatus && currentStatus !== requiredStatus) {
+      return NextResponse.json({
+        skipped: true,
+        reason: `status is ${currentStatus ?? 'null'}, requires ${requiredStatus}`,
+      })
+    }
+
+    // Idempotency — if a live (unanswered, unexpired) share already exists for
+    // this record, return it instead of creating a duplicate. This makes the
+    // workflow safe to fire multiple times for the same status change.
+    const { rows: existing } = await query(
+      `SELECT token FROM proof_shares
+       WHERE twenty_object_type = $1
+         AND twenty_record_id = $2
+         AND client_response IS NULL
+         AND (expires_at IS NULL OR expires_at > NOW())
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [twentyObjectType, twentyRecordId]
+    )
+    if (existing.length > 0) {
+      const existingToken = existing[0].token
+      return NextResponse.json({
+        token: existingToken,
+        url: buildPublicUrl(existingToken),
+        reused: true,
+      })
+    }
+
     const attachments = await fetchAttachmentsForRecord(twentyObjectType, twentyRecordId)
     const hasFtpLink = !!(record as any).ftpProofLink
     if (attachments.length === 0 && !hasFtpLink) {
@@ -82,15 +122,6 @@ export async function POST(request: NextRequest) {
       (days > 0 && Number.isFinite(days))
         ? new Date(Date.now() + days * 86_400_000)
         : null
-
-    await query(
-      `UPDATE proof_shares
-       SET expires_at = NOW()
-       WHERE twenty_object_type = $1
-         AND twenty_record_id = $2
-         AND (expires_at IS NULL OR expires_at > NOW())`,
-      [twentyObjectType, twentyRecordId]
-    )
 
     const recipientEmail = clientEmail || (record as any).proofClientEmail || null
 
