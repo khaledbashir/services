@@ -34,6 +34,8 @@ export default function WalkthroughsPage() {
     venue_id: '', log_date: new Date().toISOString().split('T')[0], log_time: '',
     locations_visited: '', issues_found: '', result: 'good', in_person: true, notes: '',
   })
+  const [quick, setQuick] = useState({ venue_id: '', locations_visited: '', result: 'good' })
+  const [quickSaving, setQuickSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -57,6 +59,25 @@ export default function WalkthroughsPage() {
       setForm({ venue_id: '', log_date: new Date().toISOString().split('T')[0], log_time: '', locations_visited: '', issues_found: '', result: 'good', in_person: true, notes: '' })
       load()
     } else { alert('Failed') }
+  }
+
+  const quickSubmit = async () => {
+    if (!quick.venue_id || quickSaving) return
+    setQuickSaving(true)
+    const r = await fetch('/api/walkthroughs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        venue_id: quick.venue_id,
+        result: quick.result,
+        locations_visited: quick.locations_visited.trim() || null,
+        log_date: new Date().toISOString().split('T')[0],
+      }),
+    })
+    if (r.ok) {
+      setQuick({ venue_id: quick.venue_id, locations_visited: '', result: quick.result })
+      load()
+    }
+    setQuickSaving(false)
   }
 
   return (
@@ -118,6 +139,29 @@ export default function WalkthroughsPage() {
             <button onClick={submit} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium">Create</button>
           </div>
         )}
+
+        {/* Inline quick-log */}
+        <div className="rounded-2xl border border-[#E8E8E8] bg-white p-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 pl-1">Quick log</span>
+          <select value={quick.venue_id} onChange={e => setQuick({ ...quick, venue_id: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs max-w-[180px]">
+            <option value="">Venue *</option>
+            {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+          <input value={quick.locations_visited} onChange={e => setQuick({ ...quick, locations_visited: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter') quickSubmit() }}
+            placeholder="Locations walked (press Enter)"
+            className="flex-1 min-w-[200px] px-3 py-1.5 border border-[#E8E8E8] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            disabled={quickSaving} />
+          <select value={quick.result} onChange={e => setQuick({ ...quick, result: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs">
+            <option value="good">Good</option>
+            <option value="problem_detected">Problem</option>
+            <option value="partial">Partial</option>
+          </select>
+          <button onClick={quickSubmit} disabled={!quick.venue_id || quickSaving}
+            className="px-3 py-1.5 bg-[#0A52EF] text-white rounded-lg text-xs font-medium disabled:opacity-50">
+            {quickSaving ? 'Saving…' : 'Log'}
+          </button>
+        </div>
 
         <div className="rounded-2xl border border-[#E8E8E8] bg-white overflow-hidden">
           {loading ? (

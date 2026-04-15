@@ -42,6 +42,8 @@ export default function MaintenancePage() {
     venue_id: '', maintenance_type: 'reactive', issue: '', issue_summary: '',
     location_reported: '', techs_scheduled: '', scheduled_date: '', status: 'open',
   })
+  const [quick, setQuick] = useState({ venue_id: '', issue: '', maintenance_type: 'reactive' })
+  const [quickSaving, setQuickSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -75,6 +77,26 @@ export default function MaintenancePage() {
   const updateStatus = async (id: string, status: string) => {
     await fetch(`/api/maintenance/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, completed_date: status === 'completed' ? new Date().toISOString().split('T')[0] : null }) })
     load()
+  }
+
+  const quickSubmit = async () => {
+    if (!quick.venue_id || !quick.issue.trim() || quickSaving) return
+    setQuickSaving(true)
+    const r = await fetch('/api/maintenance', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        venue_id: quick.venue_id,
+        issue: quick.issue.trim(),
+        maintenance_type: quick.maintenance_type,
+        status: 'open',
+        reported_date: new Date().toISOString().split('T')[0],
+      }),
+    })
+    if (r.ok) {
+      setQuick({ venue_id: quick.venue_id, issue: '', maintenance_type: quick.maintenance_type })
+      load()
+    }
+    setQuickSaving(false)
   }
 
   return (
@@ -139,6 +161,29 @@ export default function MaintenancePage() {
             <button onClick={submit} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium">Create</button>
           </div>
         )}
+
+        {/* Inline quick-add. Pick venue, type issue, Enter → saved as open/reactive. */}
+        <div className="rounded-2xl border border-[#E8E8E8] bg-white p-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 pl-1">Quick log</span>
+          <select value={quick.venue_id} onChange={e => setQuick({ ...quick, venue_id: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs max-w-[180px]">
+            <option value="">Venue *</option>
+            {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+          <input value={quick.issue} onChange={e => setQuick({ ...quick, issue: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter') quickSubmit() }}
+            placeholder="Describe the issue (press Enter)"
+            className="flex-1 min-w-[220px] px-3 py-1.5 border border-[#E8E8E8] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            disabled={quickSaving} />
+          <select value={quick.maintenance_type} onChange={e => setQuick({ ...quick, maintenance_type: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs">
+            <option value="reactive">Reactive</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="preventive">Preventive</option>
+          </select>
+          <button onClick={quickSubmit} disabled={!quick.venue_id || !quick.issue.trim() || quickSaving}
+            className="px-3 py-1.5 bg-[#0A52EF] text-white rounded-lg text-xs font-medium disabled:opacity-50">
+            {quickSaving ? 'Saving…' : 'Log'}
+          </button>
+        </div>
 
         <div className="rounded-2xl border border-[#E8E8E8] bg-white overflow-hidden">
           {loading ? (

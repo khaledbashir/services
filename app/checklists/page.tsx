@@ -28,6 +28,14 @@ const STATUS_STYLE: Record<string, string> = {
 
 const LEAGUES = ['NBA', 'NHL', 'MLB', 'NFL', 'NCAAM', 'MLS', 'MiLB']
 
+interface QuickAdd {
+  task_description: string
+  days_out: string
+  league: string
+  venue_id: string
+  due_date: string
+}
+
 export default function ChecklistsPage() {
   const [items, setItems] = useState<Item[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
@@ -40,6 +48,8 @@ export default function ChecklistsPage() {
     venue_id: '', days_out: '30', league: '', team_name: '',
     task_description: '', prompt: '', assignee_id: '', due_date: '', status: 'not_started',
   })
+  const [quick, setQuick] = useState<QuickAdd>({ task_description: '', days_out: '30', league: '', venue_id: '', due_date: '' })
+  const [quickSaving, setQuickSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -77,6 +87,25 @@ export default function ChecklistsPage() {
   const updateStatus = async (id: string, status: string) => {
     await fetch(`/api/checklists/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     load()
+  }
+
+  const quickSubmit = async () => {
+    if (!quick.task_description.trim() || quickSaving) return
+    setQuickSaving(true)
+    const payload = {
+      task_description: quick.task_description.trim(),
+      days_out: quick.days_out,
+      league: quick.league || null,
+      venue_id: quick.venue_id || null,
+      due_date: quick.due_date || null,
+      status: 'not_started',
+    }
+    const r = await fetch('/api/checklists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    if (r.ok) {
+      setQuick({ task_description: '', days_out: quick.days_out, league: quick.league, venue_id: quick.venue_id, due_date: '' })
+      load()
+    }
+    setQuickSaving(false)
   }
 
   const filtered = daysFilter === 'all' ? items : items.filter(i => i.days_out === daysFilter)
@@ -160,6 +189,38 @@ export default function ChecklistsPage() {
             <button onClick={submit} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium">Create</button>
           </div>
         )}
+
+        {/* Inline quick-add: type a task, pick days out, Enter → saved. */}
+        <div className="rounded-2xl border border-[#E8E8E8] bg-white p-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 pl-1">Quick add</span>
+          <input
+            value={quick.task_description}
+            onChange={e => setQuick({ ...quick, task_description: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter') quickSubmit() }}
+            placeholder="What needs to be done? (press Enter)"
+            className="flex-1 min-w-[200px] px-3 py-1.5 border border-[#E8E8E8] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            disabled={quickSaving}
+          />
+          <select value={quick.days_out} onChange={e => setQuick({ ...quick, days_out: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs">
+            <option value="30">30 days out</option>
+            <option value="60">60 days out</option>
+            <option value="90">90 days out</option>
+            <option value="other">Other</option>
+          </select>
+          <select value={quick.league} onChange={e => setQuick({ ...quick, league: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs">
+            <option value="">League</option>
+            {LEAGUES.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <select value={quick.venue_id} onChange={e => setQuick({ ...quick, venue_id: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs max-w-[160px]">
+            <option value="">Venue</option>
+            {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+          <input type="date" value={quick.due_date} onChange={e => setQuick({ ...quick, due_date: e.target.value })} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs" />
+          <button onClick={quickSubmit} disabled={!quick.task_description.trim() || quickSaving}
+            className="px-3 py-1.5 bg-[#0A52EF] text-white rounded-lg text-xs font-medium disabled:opacity-50">
+            {quickSaving ? 'Saving…' : 'Add'}
+          </button>
+        </div>
 
         <div className="rounded-2xl border border-[#E8E8E8] bg-white overflow-hidden">
           {loading ? (
