@@ -652,6 +652,12 @@ function EventsPageInner() {
                     if (!search) return true
                     const q = search.toLowerCase()
                     return e.summary.toLowerCase().includes(q) || (e.venue_name || '').toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
+                  }).sort((a, b) => {
+                    // Within a day, always order by actual start time so the
+                    // calendar reads top-to-bottom earliest-to-latest.
+                    const ta = a.start_time ? new Date(a.start_time).getTime() : 0
+                    const tb = b.start_time ? new Date(b.start_time).getTime() : 0
+                    return ta - tb
                   })
 
                   return (

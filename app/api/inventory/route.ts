@@ -31,7 +31,13 @@ export async function GET(request: NextRequest) {
     const result = await query(
       `SELECT i.id, i.item_name, i.sku, i.quantity, i.threshold_low,
               i.last_updated, v.name as venue_name, v.id as venue_id,
-              s.full_name as updated_by_name
+              s.full_name as updated_by_name,
+              i.manufacturer, i.model_name, i.model_number, i.part_number, i.part_name,
+              i.asset_number, i.ip_address, i.location_code, i.location_room,
+              i.screen_number, i.screen_location, i.physical_dimensions, i.display_type,
+              i.orientation, i.install_phase, i.ownership_group, i.render_name,
+              i.timeline_url, i.three_letter_code, i.resolution, i.connected_devices,
+              i.project_code, i.notes
        FROM inventory i
        JOIN venues v ON i.venue_id = v.id
        LEFT JOIN staff s ON i.updated_by = s.id

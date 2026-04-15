@@ -90,6 +90,19 @@ export function Sidebar() {
           </>
         )}
 
+        {/* Service Ops */}
+        {(isManager || isTechnician) && (
+          <>
+            {sectionLabel('Service Ops')}
+            <Link href="/maintenance" className={linkClass('/maintenance')}>Maintenance</Link>
+            <Link href="/walkthroughs" className={linkClass('/walkthroughs')}>Walkthroughs</Link>
+            <Link href="/checklists" className={linkClass('/checklists')}>Checklists</Link>
+            {isManager && <Link href="/rma" className={linkClass('/rma')}>RMA Tracker</Link>}
+            {isManager && <Link href="/parts-orders" className={linkClass('/parts-orders')}>Parts Orders</Link>}
+            {isManager && <Link href="/parts" className={subLinkClass('/parts')}>Parts Catalog</Link>}
+          </>
+        )}
+
         {/* People */}
         {isAdmin && (
           <>
