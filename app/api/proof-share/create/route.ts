@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       createdByName,
       createdByEmail,
       clientEmail,
+      triggerWorkspaceMemberId,
     } = body
 
     if (!twentyObjectType || !twentyRecordId) {
@@ -98,12 +99,62 @@ export async function POST(request: NextRequest) {
        LIMIT 1`,
       [twentyObjectType, twentyRecordId]
     )
+    // ---- Personalization placeholders for the email body ----
+    // Resolve a friendly client name (Company name → email local-part → "there")
+    let resolvedClientName: string | null = null
+    const designClientId = (record as any).designClientId
+    if (designClientId) {
+      try {
+        const co = await fetchTwentyRecord('company' as any, designClientId).catch(() => null)
+        if (co && (co as any).name) resolvedClientName = String((co as any).name)
+      } catch {}
+    }
+    if (!resolvedClientName) {
+      const ce = clientEmail || (record as any).proofClientEmail
+      if (ce && typeof ce === 'string') {
+        const local = ce.split('@')[0]
+        // "john.smith" → "John", "marketing" → "Marketing"
+        const first = local.split(/[._-]/)[0] || local
+        if (first) resolvedClientName =
+          first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+      }
+    }
+    if (!resolvedClientName) resolvedClientName = 'there'
+
+    // Resolve sender name from the workspace member who triggered the change
+    let resolvedSenderName: string | null = createdByName || null
+    if (!resolvedSenderName && triggerWorkspaceMemberId) {
+      try {
+        const wm = await fetch(
+          `${process.env.TWENTY_API_URL || 'https://abc-twenty.izcgmb.easypanel.host'}/rest/workspaceMembers/${triggerWorkspaceMemberId}`,
+          { headers: { Authorization: `Bearer ${process.env.TWENTY_API_TOKEN || ''}` } }
+        ).then((r) => r.json())
+        const m = wm?.data?.workspaceMember
+        if (m?.name?.firstName || m?.name?.lastName) {
+          resolvedSenderName = `${m.name.firstName ?? ''} ${m.name.lastName ?? ''}`.trim()
+        }
+      } catch {}
+    }
+    if (!resolvedSenderName) resolvedSenderName = 'ANC Sports'
+
+    // Other useful template placeholders pulled from the record
+    const dueDateRaw = (record as any).dueDate
+    const dueDateFormatted = dueDateRaw
+      ? new Date(dueDateRaw).toLocaleDateString('en-US', {
+          month: 'long', day: 'numeric', year: 'numeric',
+        })
+      : ''
+
     if (existing.length > 0) {
       const existingToken = existing[0].token
       return NextResponse.json({
         token: existingToken,
         url: buildPublicUrl(existingToken),
         reused: true,
+        clientName: resolvedClientName,
+        senderName: resolvedSenderName,
+        recordName: record.name,
+        dueDate: dueDateFormatted,
       })
     }
 
@@ -159,6 +210,9 @@ export async function POST(request: NextRequest) {
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
       attachmentCount: attachments.length,
       recordName: record.name,
+      clientName: resolvedClientName,
+      senderName: resolvedSenderName,
+      dueDate: dueDateFormatted,
     })
   } catch (err) {
     console.error('[proof-share/create] error:', err)
