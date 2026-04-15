@@ -159,10 +159,9 @@ export async function POST(request: NextRequest) {
     }
 
     const attachments = await fetchAttachmentsForRecord(twentyObjectType, twentyRecordId)
-    const hasFtpLink = !!(record as any).ftpProofLink
-    if (attachments.length === 0 && !hasFtpLink) {
+    if (attachments.length === 0) {
       return NextResponse.json(
-        { error: 'This record has no attachments or FTP link. Upload a proof file to Twenty first.' },
+        { error: 'This record has no attachments. Drop the proof file into the record in Twenty first.' },
         { status: 400 }
       )
     }

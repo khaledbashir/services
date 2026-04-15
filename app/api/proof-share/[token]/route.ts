@@ -84,15 +84,9 @@ export async function GET(
       }
     })
 
-    if ((record as any).ftpProofLink) {
-      attachmentsForClient.unshift({
-        id: 'ftp-link',
-        name: 'View Proof (External Link)',
-        extension: 'link',
-        category: 'link' as any,
-        fileUrl: (record as any).ftpProofLink,
-      })
-    }
+    // FTP proof links are intentionally not surfaced — proofs live in
+    // Twenty attachments now. Legacy ftpProofLink values stay on the
+    // record for reference but we never render them to clients.
 
     return NextResponse.json({
       token,
