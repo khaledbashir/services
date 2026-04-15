@@ -19,6 +19,7 @@ import { writeDiscoveryLogs } from '@/lib/discovery-log'
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
+  const triggeredByUserId = auth.userId
 
   const body = await request.json().catch(() => ({}))
   const venueId = typeof body.venue_id === 'string' ? body.venue_id : ''
@@ -112,6 +113,8 @@ export async function POST(request: NextRequest) {
                 include_existing: includeExisting,
               },
               importedByVenue: { [venue.id]: importedCount },
+              triggeredByUserId,
+              trigger: 'manual',
             }).catch((err) => console.error('writeDiscoveryLogs failed for', venue.name, err))
 
             allDiscovered.push(...result.discovered)

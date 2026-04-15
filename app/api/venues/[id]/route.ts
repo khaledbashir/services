@@ -180,6 +180,7 @@ export async function PATCH(
     // response returns instantly; the UI will pick up new events on its
     // next refetch.
     if (feedChanged) {
+      const savingUserId = (auth as { userId: string }).userId
       import('@/lib/feed-sync').then(async ({ syncVenueFeed }) => {
         const venueRow = await query(
           `SELECT v.id, v.name, v.address, v.feed_url,
@@ -192,7 +193,10 @@ export async function PATCH(
           [venueId]
         )
         if (venueRow.rows[0]) {
-          await syncVenueFeed(venueRow.rows[0])
+          // syncVenueFeed writes its own discovery_log row, stamped with the
+          // saving user + trigger='auto_save' so the audit page knows who
+          // pasted the URL.
+          await syncVenueFeed(venueRow.rows[0], { triggeredByUserId: savingUserId, trigger: 'auto_save' })
         }
       }).catch((err) => console.warn('Post-save feed auto-sync failed:', err))
     }

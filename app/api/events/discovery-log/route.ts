@@ -17,9 +17,13 @@ export async function GET(request: NextRequest) {
          dl.events_found,
          dl.events_imported,
          dl.status,
-         dl.created_at
+         dl.created_at,
+         COALESCE(dl.trigger, 'manual') as trigger,
+         s.full_name as triggered_by_name,
+         s.email as triggered_by_email
        FROM discovery_log dl
        LEFT JOIN venues v ON v.id = dl.venue_id
+       LEFT JOIN staff s ON s.id = dl.triggered_by_user_id
        ORDER BY dl.discovered_at DESC, dl.created_at DESC
        LIMIT 100`
     )

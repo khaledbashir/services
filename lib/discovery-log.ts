@@ -20,7 +20,11 @@ export async function writeDiscoveryLogs(params: {
   importedByVenue?: Record<string, number>
   statusOverride?: DiscoveryLogStatus
   failureError?: unknown
+  triggeredByUserId?: string | null
+  trigger?: 'manual' | 'cron' | 'auto_save' | 'api'
 }) {
+  const triggeredBy = params.triggeredByUserId || null
+  const trigger = params.trigger || 'manual'
   const importedByVenue = params.importedByVenue || {}
   const eventsByVenue = new Map<string, DiscoveryCandidate[]>()
 
@@ -34,8 +38,8 @@ export async function writeDiscoveryLogs(params: {
 
   if (venueRows.length === 0 && params.statusOverride === 'failed') {
     await query(
-      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response)
-       VALUES (NULL, NOW(), $1, $2, $3, $4, $5)`,
+      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response, triggered_by_user_id, trigger)
+       VALUES (NULL, NOW(), $1, $2, $3, $4, $5, $6, $7)`,
       [
         'system',
         0,
@@ -45,6 +49,8 @@ export async function writeDiscoveryLogs(params: {
           error: params.failureError instanceof Error ? params.failureError.message : String(params.failureError || 'Unknown error'),
           result: params.result,
         }),
+        triggeredBy,
+        trigger,
       ]
     )
     return
@@ -57,8 +63,8 @@ export async function writeDiscoveryLogs(params: {
     const status = params.statusOverride || statusForVenueRun(venueEvents, importedCount)
 
     await query(
-      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response)
-       VALUES ($1, NOW(), $2, $3, $4, $5, $6)`,
+      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response, triggered_by_user_id, trigger)
+       VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8)`,
       [
         venue.id,
         source,
@@ -72,6 +78,8 @@ export async function writeDiscoveryLogs(params: {
           events: venueEvents,
           imported_count: importedCount,
         }),
+        triggeredBy,
+        trigger,
       ]
     )
   }

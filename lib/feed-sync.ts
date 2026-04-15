@@ -156,7 +156,10 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
   return result.rows.map(withComputedAutomation)
 }
 
-export async function syncVenueFeed(venue: FeedVenue): Promise<{
+export async function syncVenueFeed(
+  venue: FeedVenue,
+  audit?: { triggeredByUserId?: string | null; trigger?: 'manual' | 'cron' | 'auto_save' | 'api' }
+): Promise<{
   venue: FeedVenue
   discovered: DiscoveryCandidate[]
   imported: number
@@ -166,6 +169,8 @@ export async function syncVenueFeed(venue: FeedVenue): Promise<{
 }> {
   const today = new Date().toISOString().split('T')[0]
   const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+  const triggeredBy = audit?.triggeredByUserId || null
+  const trigger = audit?.trigger || 'cron'
 
   try {
     const parsedEvents = await parseVenueFeed(venue.feed_type, {
@@ -199,8 +204,8 @@ export async function syncVenueFeed(venue: FeedVenue): Promise<{
           : 'success'
 
     await query(
-      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response)
-       VALUES ($1, NOW(), $2, $3, $4, $5, $6)`,
+      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response, triggered_by_user_id, trigger)
+       VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8)`,
       [
         venue.id,
         `feed_sync:${venue.feed_type}`,
@@ -214,6 +219,8 @@ export async function syncVenueFeed(venue: FeedVenue): Promise<{
           imported_count: imported.imported,
           skipped_count: imported.skipped,
         }),
+        triggeredBy,
+        trigger,
       ]
     )
 
@@ -236,12 +243,14 @@ export async function syncVenueFeed(venue: FeedVenue): Promise<{
     const message = error instanceof Error ? error.message : 'Unknown feed sync error'
 
     await query(
-      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response)
-       VALUES ($1, NOW(), $2, 0, 0, 'failed', $3)`,
+      `INSERT INTO discovery_log (venue_id, discovered_at, source, events_found, events_imported, status, raw_response, triggered_by_user_id, trigger)
+       VALUES ($1, NOW(), $2, 0, 0, 'failed', $3, $4, $5)`,
       [
         venue.id,
         `feed_sync:${venue.feed_type}`,
         JSON.stringify({ mode: 'feed_sync', venue, error: message }),
+        triggeredBy,
+        trigger,
       ]
     )
     await query(

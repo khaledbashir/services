@@ -13,6 +13,16 @@ interface DiscoveryLogRow {
   events_found: number
   events_imported: number
   status: 'success' | 'partial' | 'failed'
+  trigger?: 'manual' | 'cron' | 'auto_save' | 'api'
+  triggered_by_name?: string | null
+  triggered_by_email?: string | null
+}
+
+const triggerLabels: Record<string, { label: string; className: string }> = {
+  manual: { label: 'Discover Click', className: 'bg-sky-50 text-sky-700 border-sky-200' },
+  auto_save: { label: 'URL Saved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  cron: { label: 'Auto (Cron)', className: 'bg-zinc-50 text-zinc-600 border-zinc-200' },
+  api: { label: 'API', className: 'bg-amber-50 text-amber-700 border-amber-200' },
 }
 
 const statusStyles: Record<string, string> = {
@@ -104,7 +114,8 @@ export default function DiscoveryLogPage() {
                   <tr className="border-b border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Run Time</th>
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Venue</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Sources</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Triggered By</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Source</th>
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Found</th>
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Imported</th>
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Status</th>
@@ -123,7 +134,27 @@ export default function DiscoveryLogPage() {
                         })}
                       </td>
                       <td className="px-5 py-4 font-medium text-zinc-900">{row.venue_name}</td>
-                      <td className="px-5 py-4 text-zinc-600">{row.source}</td>
+                      <td className="px-5 py-4">
+                        {(() => {
+                          const t = row.trigger || 'manual'
+                          const label = triggerLabels[t] || triggerLabels.manual
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${label.className}`}>
+                                {label.label}
+                              </span>
+                              {row.triggered_by_name ? (
+                                <span className="text-xs text-zinc-600">{row.triggered_by_name}</span>
+                              ) : t === 'cron' ? (
+                                <span className="text-xs text-zinc-400">automated</span>
+                              ) : (
+                                <span className="text-xs text-zinc-400">—</span>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-600 text-xs">{row.source}</td>
                       <td className="px-5 py-4 text-zinc-900">{row.events_found}</td>
                       <td className="px-5 py-4 text-zinc-900">{row.events_imported}</td>
                       <td className="px-5 py-4">
