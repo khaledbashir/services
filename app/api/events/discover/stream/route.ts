@@ -7,6 +7,7 @@ import {
   getActiveDiscoveryVenues,
   getDiscoveryConcurrency,
   getDiscoveryVenue,
+  importDiscoveryEvents,
 } from '@/lib/event-discovery'
 import { writeDiscoveryLogs } from '@/lib/discovery-log'
 
@@ -75,6 +76,27 @@ export async function POST(request: NextRequest) {
             const result = await discoverForVenue(venue, discoveryHint, includeExisting, onProgress)
             const found = result.discovered.length
             const dupes = result.discovered.filter(c => c.duplicate).length
+            const toImport = result.discovered.filter(c => !c.duplicate)
+
+            // Immediate import: as soon as a venue finishes discovery, push
+            // its non-duplicate candidates into the events table so the
+            // calendar UI repopulates live instead of waiting for the full
+            // 55-venue run to finish.
+            let importedCount = 0
+            if (toImport.length > 0) {
+              try {
+                const imp = await importDiscoveryEvents({
+                  defaultVenueId: venue.id,
+                  events: toImport,
+                  status: 'imported',
+                })
+                importedCount = imp.imported
+              } catch (err) {
+                // Import failure shouldn't kill the whole run — surface via
+                // the venue_error channel later.
+                console.error('Live import failed for venue', venue.name, err)
+              }
+            }
 
             allDiscovered.push(...result.discovered)
             totalFound += found
@@ -91,6 +113,7 @@ export async function POST(request: NextRequest) {
               found,
               new: found - dupes,
               duplicates: dupes,
+              imported: importedCount,
               running_total: allDiscovered.filter(c => !c.duplicate).length,
             })
           } catch (err) {

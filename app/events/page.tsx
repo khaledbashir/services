@@ -389,8 +389,11 @@ function EventsPageInner() {
                 completed: event.completed ?? prev.completed + 1,
                 runningTotal: event.running_total,
                 activeVenues: prev.activeVenues.filter(v => v.name !== event.venue.name),
-                venueLog: [...prev.venueLog, { name: event.venue.name, found: event.new, ok: true }],
+                venueLog: [...prev.venueLog, { name: event.venue.name, found: event.imported ?? event.new, ok: true }],
               })
+              // Live import already happened server-side — refetch the
+              // events list so the calendar populates as venues finish.
+              refreshEvents().catch(() => {})
             } else if (event.type === 'venue_error') {
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
