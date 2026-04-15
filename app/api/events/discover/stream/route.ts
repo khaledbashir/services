@@ -5,6 +5,7 @@ import {
   DiscoveryProgress,
   discoverForVenue,
   getActiveDiscoveryVenues,
+  getDiscoveryConcurrency,
   getDiscoveryVenue,
 } from '@/lib/event-discovery'
 import { writeDiscoveryLogs } from '@/lib/discovery-log'
@@ -52,10 +53,11 @@ export async function POST(request: NextRequest) {
         let totalExisting = 0
         let completedCount = 0
 
-        // Process up to 3 venues in parallel — each venue call is dominated by
-        // a ~60-90s LLM request, so concurrency turns 5×90s=7.5min serial into
-        // ~3min. Higher would hammer Ollama's rate limits.
-        const CONCURRENCY = 3
+        // Process venues in parallel. With a single provider we stick to 3
+        // (Ollama rate-limit friendly). With multiple providers we scale up
+        // — each added provider buys us 3 more concurrent slots without
+        // hammering any single rate limit.
+        const CONCURRENCY = getDiscoveryConcurrency()
         const runVenue = async (venue: typeof venues[number], idx: number) => {
           const index = idx + 1
           emit({ type: 'venue_start', index, total: venues.length, venue: { id: venue.id, name: venue.name } })

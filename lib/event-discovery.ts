@@ -7,6 +7,47 @@ const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
 const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
 
+interface AiProvider {
+  name: string
+  baseUrl: string
+  apiKey: string
+  model: string
+}
+
+/**
+ * Round-robin pool of OpenAI-compatible providers. Set AI_PROVIDERS_JSON as
+ * a JSON array like:
+ *   [{"name":"kimi","baseUrl":"https://ollama.com/v1","apiKey":"k","model":"kimi-k2.5:cloud"},
+ *    {"name":"glm","baseUrl":"https://api.z.ai/api/coding/paas/v4","apiKey":"k","model":"glm-4.7"}]
+ * Falls back to the single AI_* vars if not set.
+ */
+function loadProviders(): AiProvider[] {
+  const raw = process.env.AI_PROVIDERS_JSON || ''
+  if (raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as AiProvider[]
+      const valid = parsed.filter(p => p && p.baseUrl && p.apiKey && p.model)
+      if (valid.length > 0) return valid
+    } catch {
+      // fall through
+    }
+  }
+  return [{ name: 'default', baseUrl: AI_BASE_URL, apiKey: AI_API_KEY, model: AI_MODEL }]
+}
+
+const AI_PROVIDERS: AiProvider[] = loadProviders()
+let providerCursor = 0
+function nextProvider(): AiProvider {
+  const p = AI_PROVIDERS[providerCursor % AI_PROVIDERS.length]
+  providerCursor++
+  return p
+}
+
+/** Suggested parallel-venue concurrency given the configured providers. */
+export function getDiscoveryConcurrency(): number {
+  return Math.max(3, AI_PROVIDERS.length * 3)
+}
+
 export type DiscoveryEventType = 'game' | 'concert' | 'other'
 export type DiscoveryStatus = 'discovered' | 'confirmed' | 'imported'
 export type DiscoveryMatchType = 'official_source' | 'ai_inferred'
@@ -548,15 +589,16 @@ RETURN ONLY JSON
   "confidence": 0.94
 }]`
 
-  onProgress?.('thinking', { model: AI_MODEL, prompt_chars: prompt.length, pages: fetchedPages.filter(p => p.text).length })
-  const aiRes = await fetch(`${AI_BASE_URL}/chat/completions`, {
+  const provider = nextProvider()
+  onProgress?.('thinking', { model: provider.model, provider: provider.name, prompt_chars: prompt.length, pages: fetchedPages.filter(p => p.text).length })
+  const aiRes = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${AI_API_KEY}`,
+      'Authorization': `Bearer ${provider.apiKey}`,
     },
     body: JSON.stringify({
-      model: AI_MODEL,
+      model: provider.model,
       max_tokens: 8000,
       temperature: 0.1,
       messages: [
