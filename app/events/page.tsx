@@ -112,7 +112,7 @@ function EventsPageInner() {
     totalVenues: number
     activeVenues: Array<{ name: string; step: string }>
     runningTotal: number
-    venueLog: Array<{ name: string; found: number; ok: boolean; error?: string }>
+    venueLog: Array<{ name: string; found: number; duplicates: number; imported: number; ok: boolean; error?: string }>
   } | null>(null)
   const [importingDiscovery, setImportingDiscovery] = useState(false)
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
@@ -400,7 +400,13 @@ function EventsPageInner() {
                 completed: event.completed ?? prev.completed + 1,
                 runningTotal: event.running_total,
                 activeVenues: prev.activeVenues.filter(v => v.name !== event.venue.name),
-                venueLog: [...prev.venueLog, { name: event.venue.name, found: event.imported ?? event.new, ok: true }],
+                venueLog: [...prev.venueLog, {
+                  name: event.venue.name,
+                  found: event.found ?? 0,
+                  duplicates: event.duplicates ?? 0,
+                  imported: event.imported ?? 0,
+                  ok: true,
+                }],
               })
               // Live import already happened server-side — refetch the
               // events list so the calendar populates as venues finish.
@@ -410,7 +416,7 @@ function EventsPageInner() {
                 ...prev,
                 completed: event.completed ?? prev.completed + 1,
                 activeVenues: prev.activeVenues.filter(v => v.name !== event.venue.name),
-                venueLog: [...prev.venueLog, { name: event.venue.name, found: 0, ok: false, error: event.message }],
+                venueLog: [...prev.venueLog, { name: event.venue.name, found: 0, duplicates: 0, imported: 0, ok: false, error: event.message }],
               })
             } else if (event.type === 'done') {
               const data = event.result
@@ -970,7 +976,9 @@ function EventsPageInner() {
                     <div key={i} className={`flex items-center justify-between ${entry.ok ? 'text-zinc-700' : 'text-red-600'}`}>
                       <span>{entry.ok ? '✓' : '✗'} {entry.name}</span>
                       <span className="tabular-nums">
-                        {entry.ok ? `${entry.found} events` : (entry.error || 'failed').slice(0, 60)}
+                        {entry.ok
+                          ? `${entry.found} found · ${entry.duplicates} dupes · ${entry.imported} imported`
+                          : (entry.error || 'failed').slice(0, 60)}
                       </span>
                     </div>
                   ))}
