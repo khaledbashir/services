@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
   }
   
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/api/webhooks', '/api/showcase', '/api/cron', '/api/schedule/export', '/api/slack', '/api/internal', '/api/kb', '/presentation', '/proof', '/api/proof-share', '/_next', '/favicon', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
+  const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/api/webhooks', '/api/showcase', '/api/cron', '/api/schedule/export', '/api/slack', '/api/internal', '/api/kb', '/presentation', '/proof', '/api/proof-share', '/dashboard/ops-overview', '/dashboard/design-content', '/_next', '/favicon', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
   
   if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     return NextResponse.next()
