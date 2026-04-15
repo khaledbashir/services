@@ -730,6 +730,22 @@ function EventsPageInner() {
               {discovering ? 'Discovering...' : 'Discover Active Venues'}
             </button>
             <button
+              onClick={async () => {
+                if (!confirm('Delete ALL events across every venue? This cannot be undone. Tickets attached to events will remain but lose their event link.')) return
+                const res = await fetch('/api/events/wipe', { method: 'POST' })
+                if (res.ok) {
+                  const data = await res.json()
+                  alert(`Deleted ${data.deleted} events. Run Discover to repopulate.`)
+                  window.location.reload()
+                } else {
+                  alert('Failed to delete. You may not have admin permissions.')
+                }
+              }}
+              className="px-4 py-2 border border-red-200 bg-white text-red-600 rounded text-sm font-medium hover:bg-red-50 transition-colors"
+            >
+              Delete All Events
+            </button>
+            <button
               onClick={() => setShowCreate(!showCreate)}
               className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
             >

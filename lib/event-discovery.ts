@@ -286,31 +286,33 @@ function decodeDuckDuckGoHref(href: string): string | null {
   }
 }
 
+// Ollama Cloud's web_search returns real, live results (DuckDuckGo HTML
+// scraping started returning 0 bytes once their bot-filter tightened).
+// Falls back to empty results on any error so discovery degrades
+// gracefully — LLM still runs, just without grounding.
+const OLLAMA_SEARCH_URL = process.env.OLLAMA_SEARCH_URL || 'https://ollama.com/api/web_search'
+const OLLAMA_SEARCH_KEY = process.env.OLLAMA_API_KEY || process.env.AI_API_KEY || ''
+
 async function searchWeb(queryStr: string): Promise<SearchEvidence[]> {
+  if (!OLLAMA_SEARCH_KEY) return []
   try {
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(queryStr)}`
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
-      signal: AbortSignal.timeout(10000),
+    const res = await fetch(OLLAMA_SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OLLAMA_SEARCH_KEY}`,
+      },
+      body: JSON.stringify({ query: queryStr }),
+      signal: AbortSignal.timeout(20000),
     })
     if (!res.ok) return []
-    const html = await res.text()
-    const cleanHtml = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-
-    const links = [...cleanHtml.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
-    const snippets = [...cleanHtml.matchAll(/<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/gi)]
-
-    return links.slice(0, 6).map((match, index) => {
-      const resultUrl = decodeDuckDuckGoHref(match[1])
-      return {
-        query: queryStr,
-        result_url: resultUrl,
-        source_domain: sourceDomainFromUrl(resultUrl),
-        snippet: stripHtml(snippets[index]?.[1] || match[2] || '').slice(0, 280),
-      }
-    }).filter((entry) => entry.snippet || entry.result_url)
+    const data = await res.json() as { results?: Array<{ title?: string; url?: string; content?: string }> }
+    return (data.results || []).slice(0, 6).map((result) => ({
+      query: queryStr,
+      result_url: result.url || null,
+      source_domain: sourceDomainFromUrl(result.url || null),
+      snippet: [(result.title || ''), stripHtml(result.content || '')].filter(Boolean).join(' — ').slice(0, 280),
+    })).filter((entry) => entry.snippet || entry.result_url)
   } catch {
     return []
   }

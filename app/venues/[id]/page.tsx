@@ -30,7 +30,8 @@ interface VenueDetail {
   venue_manager_name: string | null
   lead_field_rep_name: string | null
   feed_url: string | null
-  feed_type: 'ticketmaster' | 'team-website' | 'league-page' | 'ical' | 'other'
+  feed_type: 'ticketmaster' | 'team-website' | 'league-page' | 'mlb-schedule' | 'ical' | 'other'
+  timezone: string | null
   last_feed_synced_at: string | null
   last_feed_sync_status: string | null
 }
@@ -293,7 +294,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     } catch {}
   }
 
-  const saveFeedSettings = async (payload: { feed_url?: string | null; feed_type?: string }) => {
+  const saveFeedSettings = async (payload: { feed_url?: string | null; feed_type?: string; timezone?: string }) => {
     setSavingFeed(true)
     try {
       const res = await fetch(`/api/venues/${params.id}`, {
@@ -1490,6 +1491,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
                     >
                       <option value="ticketmaster">Ticketmaster</option>
+                      <option value="mlb-schedule">MLB Schedule API</option>
                       <option value="team-website">Team Website</option>
                       <option value="league-page">League Page</option>
                       <option value="ical">iCal</option>
@@ -1509,6 +1511,22 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       placeholder="https://..."
                       className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 block mb-1">Timezone</label>
+                    <select
+                      value={venue.timezone || 'America/New_York'}
+                      onChange={(e) => saveFeedSettings({ timezone: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    >
+                      <option value="America/New_York">Eastern (ET)</option>
+                      <option value="America/Chicago">Central (CT)</option>
+                      <option value="America/Denver">Mountain (MT)</option>
+                      <option value="America/Phoenix">Arizona (MST, no DST)</option>
+                      <option value="America/Los_Angeles">Pacific (PT)</option>
+                      <option value="America/Anchorage">Alaska (AKT)</option>
+                      <option value="Pacific/Honolulu">Hawaii (HST)</option>
+                    </select>
                   </div>
                   <div className="flex items-center justify-between text-xs text-zinc-500">
                     <span>

@@ -36,6 +36,7 @@ export async function GET(
         COALESCE(v.is_active, true) as is_active,
         v.feed_url,
         COALESCE(v.feed_type, 'other') as feed_type,
+        COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
         v.last_feed_sync_status
       FROM venues v
@@ -163,9 +164,14 @@ export async function PATCH(
     }
 
     if (body.feed_type !== undefined) {
-      const validFeedTypes = ['ticketmaster', 'team-website', 'league-page', 'ical', 'other']
+      const validFeedTypes = ['ticketmaster', 'team-website', 'league-page', 'mlb-schedule', 'ical', 'other']
       const nextFeedType = validFeedTypes.includes(body.feed_type) ? body.feed_type : 'other'
       await query(`UPDATE venues SET feed_type = $1 WHERE id = $2`, [nextFeedType, venueId])
+    }
+
+    if (body.timezone !== undefined) {
+      const tz = typeof body.timezone === 'string' && body.timezone.trim() ? body.timezone.trim() : 'America/New_York'
+      await query(`UPDATE venues SET timezone = $1 WHERE id = $2`, [tz, venueId])
     }
 
     // Geocode if address changed
@@ -277,6 +283,7 @@ export async function PATCH(
         COALESCE(v.is_active, true) as is_active,
         v.feed_url,
         COALESCE(v.feed_type, 'other') as feed_type,
+        COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
         v.last_feed_sync_status
       FROM venues v
