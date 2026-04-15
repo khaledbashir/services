@@ -159,9 +159,10 @@ export async function PATCH(
     }
 
     let feedChanged = false
+    let normalizedFeedUrl: string | null = null
     if (body.feed_url !== undefined) {
       // Strip any whitespace the user accidentally pasted inside the URL.
-      const normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim()
+      normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim()
         ? body.feed_url.trim().replace(/\s+/g, '')
         : null
       await query(`UPDATE venues SET feed_url = $1 WHERE id = $2`, [normalizedFeedUrl, venueId])
@@ -173,6 +174,21 @@ export async function PATCH(
       const nextFeedType = validFeedTypes.includes(body.feed_type) ? body.feed_type : 'other'
       await query(`UPDATE venues SET feed_type = $1 WHERE id = $2`, [nextFeedType, venueId])
       feedChanged = true
+    }
+
+    // Smart auto-detect: if the URL obviously belongs to a different
+    // parser than what the user selected, overwrite feed_type to match.
+    // Saves Chris from the "picked Ticketmaster but pasted mlb.com" trap.
+    if (feedChanged) {
+      const row = await query(`SELECT feed_url, feed_type FROM venues WHERE id = $1`, [venueId])
+      const url = (row.rows[0]?.feed_url || '').toLowerCase()
+      let inferred: string | null = null
+      if (/statsapi\.mlb\.com|mlb\.com\/[^/]+\/schedule/.test(url)) inferred = 'mlb-schedule'
+      else if (/ticketmaster\.(com|ca)/.test(url)) inferred = 'ticketmaster'
+      else if (/\.(ics|ical)(\?|$)/.test(url) || /\/ical/.test(url)) inferred = 'ical'
+      if (inferred && inferred !== row.rows[0]?.feed_type) {
+        await query(`UPDATE venues SET feed_type = $1 WHERE id = $2`, [inferred, venueId])
+      }
     }
 
     // Auto-sync the feed right after the manager saves it — Joe's team
