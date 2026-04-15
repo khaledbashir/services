@@ -901,7 +901,7 @@ function EventsPageInner() {
             <div className="px-5 py-4 bg-[linear-gradient(180deg,#FFFFFF,#F8FAFC)] border-b border-[#E8E8E8]">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Live Discovery</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Live Discovery · Window: Next 90 days</div>
                   <h3 className="mt-1 text-lg font-semibold text-zinc-900">
                     {discoveryProgress.completed} / {discoveryProgress.totalVenues || '?'} venues complete
                   </h3>
