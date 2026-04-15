@@ -10,7 +10,10 @@ import {
   patchTwentyRecord,
 } from '@/lib/proof-share'
 
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
+
 async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
+  if (request.headers.get('x-webhook-secret') === WEBHOOK_SECRET) return true
   const token = request.cookies.get('token')?.value
   if (!token) return false
   try {
