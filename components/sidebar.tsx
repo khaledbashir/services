@@ -103,6 +103,16 @@ export function Sidebar() {
           </>
         )}
 
+        {/* Creative Ops */}
+        {(isManager || isTechnician) && (
+          <>
+            {sectionLabel('Creative')}
+            <Link href="/cg-designs" className={linkClass('/cg-designs')}>CG Designs</Link>
+            <Link href="/content-schedules" className={linkClass('/content-schedules')}>Content Schedule</Link>
+            {isManager && <Link href="/prints" className={linkClass('/prints')}>Print Requests</Link>}
+          </>
+        )}
+
         {/* People */}
         {isAdmin && (
           <>
