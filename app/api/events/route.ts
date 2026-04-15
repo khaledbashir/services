@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
         e.league,
         e.source,
         e.start_time,
+        COALESCE(v.timezone, 'America/New_York') as venue_timezone,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         COALESCE(e.workflow_status, 'pending') as workflow_status,
         e.requires_staffing as event_requires_staffing,
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       ${whereClause} ${venueFilter} ${assignmentFilter}
-      GROUP BY e.id, v.name, v.requires_assignment
+      GROUP BY e.id, v.name, v.requires_assignment, v.timezone
       ORDER BY e.start_time ASC
       LIMIT $${limitIndex}`,
       [...params, ...vf.params, ...af.params, parseInt(limit)]

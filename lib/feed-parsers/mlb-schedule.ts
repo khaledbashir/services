@@ -40,8 +40,9 @@ export async function parseMlbScheduleFeed(params: {
       events.push({
         name: `${away} vs ${home}`,
         date: game.officialDate,
-        time: typeof game.gameDate === 'string'
-          ? new Date(game.gameDate).toISOString().slice(11, 16)
+        time: null,
+        startIso: typeof game.gameDate === 'string'
+          ? new Date(game.gameDate).toISOString()
           : null,
         teams: [away, home],
         eventType: 'game',

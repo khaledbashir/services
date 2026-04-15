@@ -16,6 +16,7 @@ interface EventDetail {
   workflow_status: string
   venue_id: string
   venue_name: string
+  venue_timezone?: string
   requires_staffing: boolean | null
   venue_requires_assignment: boolean
   source: string | null
@@ -105,9 +106,11 @@ export default function EventDetailPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const formatTime = (timeStr: string) => {
+  const formatTime = (timeStr: string, timeZone?: string) => {
     const date = new Date(timeStr)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) + ' ET'
+    const tz = timeZone || 'America/New_York'
+    const label = tz === 'America/New_York' ? 'ET' : tz === 'America/Los_Angeles' ? 'PT' : tz === 'America/Chicago' ? 'CT' : tz === 'America/Denver' ? 'MT' : 'local'
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }) + ' ' + label
   }
 
   const getCountdown = (eventDate: string, startTime: string) => {
@@ -314,7 +317,7 @@ export default function EventDetailPage() {
                   </div>
                 ) : (
                   <p className="text-sm font-semibold text-zinc-900">
-                    {formatTime(event.start_time)}
+                    {formatTime(event.start_time, event.venue_timezone)}
                     {isManager && (
                       <button onClick={() => startEditing('start_time', extractTime(event.start_time))} className="ml-1.5 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -340,7 +343,7 @@ export default function EventDetailPage() {
                   </div>
                 ) : (
                   <p className="text-sm font-semibold text-zinc-900">
-                    {formatTime(event.end_time)}
+                    {formatTime(event.end_time, event.venue_timezone)}
                     {isManager && (
                       <button onClick={() => startEditing('end_time', extractTime(event.end_time))} className="ml-1.5 text-zinc-300 hover:text-[#0A52EF] opacity-0 group-hover:opacity-100 transition-opacity">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>

@@ -15,6 +15,7 @@ interface Event {
   source?: string | null
   start_time: string
   event_date: string
+  venue_timezone?: string
   workflow_status: string
   date?: string
   time?: string
@@ -292,9 +293,14 @@ function EventsPageInner() {
     return `${months[date.getMonth()]} ${date.getDate()}`
   }
 
-  const formatTime = (dateTimeStr: string) => {
+  const formatTime = (dateTimeStr: string, timeZone?: string) => {
     const date = new Date(dateTimeStr)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: timeZone || 'America/New_York',
+    })
   }
 
   const getLeagueBadge = (league: string) => {
@@ -660,7 +666,7 @@ function EventsPageInner() {
                     onClick={() => router.push(`/events/${event.id}`)}
                   >
                     <td className="py-3 px-6 text-zinc-600 text-xs">{formatDate(event.event_date)}</td>
-                    <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time)}</td>
+                    <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time, event.venue_timezone)}</td>
                     <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
                     <td className="py-3 px-6 text-zinc-600">{event.venue_name}</td>
                     <td className="py-3 px-6">

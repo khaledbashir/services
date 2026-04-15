@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { combineLocalToUtc } from '@/lib/timezone'
 
 // Map recurrence patterns to day-of-week arrays (0=Sunday, 6=Saturday)
 function getRecurrenceDays(recurrence: string, customDays: number[]): number[] {
@@ -44,6 +45,9 @@ export async function POST(
 
     const template = templateResult.rows[0]
     const activeDays = getRecurrenceDays(template.recurrence, template.custom_days)
+
+    const venueTzRes = await query(`SELECT timezone FROM venues WHERE id = $1`, [template.venue_id])
+    const venueTimezone = venueTzRes.rows[0]?.timezone || 'America/New_York'
 
     // Generate dates
     const shifts: Array<{
@@ -107,8 +111,10 @@ export async function POST(
         continue
       }
 
-      const startTimestamp = `${shift.date}T${template.start_time}`
-      const endTimestamp = `${shift.date}T${template.end_time}`
+      const startTimestamp = combineLocalToUtc(shift.date, template.start_time, venueTimezone)
+        ?? new Date(`${shift.date}T00:00:00Z`)
+      const endTimestamp = combineLocalToUtc(shift.date, template.end_time, venueTimezone)
+        ?? new Date(startTimestamp.getTime() + 3 * 3600_000)
 
       const eventResult = await query(
         `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, workflow_status, event_type)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
+import { combineLocalToUtc } from '@/lib/timezone'
 
 export async function GET(
   request: NextRequest,
@@ -19,6 +20,7 @@ export async function GET(
         e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league,
         e.workflow_status, e.venue_id, e.requires_staffing, e.source,
         v.name as venue_name,
+        COALESCE(v.timezone, 'America/New_York') as venue_timezone,
         COALESCE(v.requires_assignment, true) as venue_requires_assignment
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
@@ -130,24 +132,39 @@ export async function PATCH(
       values.push(body.event_date)
     }
 
+    // start_time/end_time updates come in as "HH:MM" wall-clock in the
+    // venue's timezone; convert to real UTC before writing.
+    const needsTimeUpdate = ('start_time' in body || 'end_time' in body)
+    let venueTimezone = 'America/New_York'
+    let eventDateForTime: string | null = null
+    if (needsTimeUpdate) {
+      const ctxRes = await query(
+        `SELECT TO_CHAR(e.event_date, 'YYYY-MM-DD') as d, COALESCE(v.timezone, 'America/New_York') as tz
+         FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = $1`,
+        [id]
+      )
+      venueTimezone = ctxRes.rows[0]?.tz || 'America/New_York'
+      eventDateForTime = body.event_date || ctxRes.rows[0]?.d || null
+    }
+
     if ('start_time' in body && typeof body.start_time === 'string') {
       const timeMatch = body.start_time.match(/^(\d{2}:\d{2})$/)
-      if (timeMatch) {
-        const eventDate = body.event_date || (await query(`SELECT TO_CHAR(event_date, 'YYYY-MM-DD') as d FROM events WHERE id = $1`, [id])).rows[0]?.d
-        if (eventDate) {
+      if (timeMatch && eventDateForTime) {
+        const utc = combineLocalToUtc(eventDateForTime, timeMatch[1], venueTimezone)
+        if (utc) {
           updates.push(`start_time = $${paramIndex++}`)
-          values.push(`${eventDate}T${timeMatch[1]}:00`)
+          values.push(utc)
         }
       }
     }
 
     if ('end_time' in body && typeof body.end_time === 'string') {
       const timeMatch = body.end_time.match(/^(\d{2}:\d{2})$/)
-      if (timeMatch) {
-        const eventDate = body.event_date || (await query(`SELECT TO_CHAR(event_date, 'YYYY-MM-DD') as d FROM events WHERE id = $1`, [id])).rows[0]?.d
-        if (eventDate) {
+      if (timeMatch && eventDateForTime) {
+        const utc = combineLocalToUtc(eventDateForTime, timeMatch[1], venueTimezone)
+        if (utc) {
           updates.push(`end_time = $${paramIndex++}`)
-          values.push(`${eventDate}T${timeMatch[1]}:00`)
+          values.push(utc)
         }
       }
     }

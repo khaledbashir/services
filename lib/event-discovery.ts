@@ -1,6 +1,7 @@
 import { query } from '@/lib/db'
 import { extractStateFromAddress } from '@/lib/geocode'
 import { buildAutomationSelect, getVenueAutomationInfo, withComputedAutomation } from '@/lib/venue-automation'
+import { combineLocalToUtc } from '@/lib/timezone'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
@@ -41,6 +42,11 @@ export interface DiscoveryCandidate {
   event_date: string
   start_time: string | null
   end_time: string | null
+  // Full UTC ISO for the start (and optional end). When present, the importer
+  // trusts these verbatim and skips local-HH:MM → UTC conversion. Set by
+  // parsers that already hold an absolute instant (MLB statsapi, etc.).
+  start_iso?: string | null
+  end_iso?: string | null
   event_type: DiscoveryEventType
   league: string | null
   home_team: string | null
@@ -725,6 +731,7 @@ export async function importDiscoveryEvents(
   const eventIds: string[] = []
   const byVenue: Record<string, number> = {}
   const automationByVenue = new Map<string, Awaited<ReturnType<typeof getVenueAutomationInfo>>>()
+  const venueTimezoneCache = new Map<string, string>()
   let imported = 0
   let skipped = 0
 
@@ -738,6 +745,13 @@ export async function importDiscoveryEvents(
       automationByVenue.set(venueId, await getVenueAutomationInfo(venueId))
     }
     const automation = automationByVenue.get(venueId)!
+
+    let venueTimezone: string = venueTimezoneCache.get(venueId) || ''
+    if (!venueTimezone) {
+      const tzRes = await query(`SELECT timezone FROM venues WHERE id = $1`, [venueId])
+      venueTimezone = tzRes.rows[0]?.timezone || 'America/New_York'
+      venueTimezoneCache.set(venueId, venueTimezone)
+    }
 
     const existing = await loadExistingEvents(venueId, event.event_date, event.event_date)
     const hydrated = { ...event, venue_id: venueId }
@@ -763,15 +777,31 @@ export async function importDiscoveryEvents(
       }
     }
 
-    const startTimestamp = event.start_time
-      ? `${event.event_date}T${event.start_time}:00`
-      : `${event.event_date}T00:00:00`
-    let endTimestamp = `${event.event_date}T03:00:00`
-    if (event.end_time) {
-      endTimestamp = `${event.event_date}T${event.end_time}:00`
+    // Resolve to a proper UTC instant. If the candidate already carries a
+    // full UTC ISO (e.g. MLB statsapi), trust it. Otherwise treat the HH:MM
+    // as wall-clock in the venue's timezone.
+    let startUtc: Date
+    if (event.start_iso) {
+      startUtc = new Date(event.start_iso)
     } else if (event.start_time) {
-      const [hours, minutes] = event.start_time.split(':').map(Number)
-      endTimestamp = `${event.event_date}T${String((hours + 3) % 24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`
+      startUtc = combineLocalToUtc(event.event_date, event.start_time, venueTimezone)
+        ?? new Date(`${event.event_date}T00:00:00Z`)
+    } else {
+      startUtc = combineLocalToUtc(event.event_date, '00:00', venueTimezone)
+        ?? new Date(`${event.event_date}T00:00:00Z`)
+    }
+
+    let endUtc: Date
+    if (event.end_iso) {
+      endUtc = new Date(event.end_iso)
+    } else if (event.end_time) {
+      endUtc = combineLocalToUtc(event.event_date, event.end_time, venueTimezone)
+        ?? new Date(startUtc.getTime() + 3 * 3600_000)
+    } else {
+      endUtc = new Date(startUtc.getTime() + 3 * 3600_000)
+    }
+    if (endUtc.getTime() <= startUtc.getTime()) {
+      endUtc = new Date(startUtc.getTime() + 3 * 3600_000)
     }
 
     const result = await query(
@@ -784,8 +814,8 @@ export async function importDiscoveryEvents(
       [
         event.summary,
         event.event_date,
-        startTimestamp,
-        endTimestamp,
+        startUtc,
+        endUtc,
         venueId,
         event.league || null,
         event.event_type,

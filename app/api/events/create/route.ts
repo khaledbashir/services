@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { buildEventTimestamps } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,21 +15,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Event name, date, and venue are required' }, { status: 400 })
     }
 
-    // Build start/end timestamps from date + time
-    const startTimestamp = start_time
-      ? `${event_date}T${start_time}:00`
-      : `${event_date}T00:00:00`
-    // Default end_time to start + 3 hours if not provided (DB has NOT NULL constraint)
-    let endTimestamp: string
-    if (end_time) {
-      endTimestamp = `${event_date}T${end_time}:00`
-    } else if (start_time) {
-      const [h, m] = start_time.split(':').map(Number)
-      const endH = String((h + 3) % 24).padStart(2, '0')
-      endTimestamp = `${event_date}T${endH}:${String(m).padStart(2, '0')}:00`
-    } else {
-      endTimestamp = `${event_date}T03:00:00`
-    }
+    // Interpret start/end wall-clock times in the venue's timezone so the DB
+    // stores the correct UTC instant (events.start_time is timestamptz).
+    const venueTzRes = await query(`SELECT timezone FROM venues WHERE id = $1`, [venue_id])
+    const venueTimezone = venueTzRes.rows[0]?.timezone || 'America/New_York'
+    const { startUtc, endUtc } = buildEventTimestamps(event_date, start_time || null, end_time || null, venueTimezone)
 
     const validEventTypes = ['event', 'shift']
     const eType = validEventTypes.includes(event_type) ? event_type : 'event'
@@ -37,7 +28,7 @@ export async function POST(request: NextRequest) {
       `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
        RETURNING id`,
-      [summary, event_date, startTimestamp, endTimestamp, venue_id, league || null, eType]
+      [summary, event_date, startUtc, endUtc, venue_id, league || null, eType]
     )
 
     const eventId = result.rows[0].id

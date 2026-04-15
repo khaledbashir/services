@@ -102,6 +102,8 @@ function feedEventToCandidate(feedEvent: FeedEvent, venue: FeedVenue): Discovery
     event_date: feedEvent.date,
     start_time: feedEvent.time,
     end_time: null,
+    start_iso: feedEvent.startIso ?? null,
+    end_iso: null,
     event_type: feedEvent.eventType,
     league: feedEvent.league,
     home_team: feedEvent.teams[1] || null,
