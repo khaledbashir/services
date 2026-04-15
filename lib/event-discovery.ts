@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { extractStateFromAddress } from '@/lib/geocode'
+import { parseVenueFeed, type FeedType } from '@/lib/feed-parsers'
 import { buildAutomationSelect, getVenueAutomationInfo, withComputedAutomation } from '@/lib/venue-automation'
 import { combineLocalToUtc } from '@/lib/timezone'
 
@@ -57,6 +58,8 @@ export interface DiscoveryVenue {
   name: string
   address: string | null
   market_name: string | null
+  feed_url?: string | null
+  feed_type?: FeedType | null
   slack_channel_id?: string | null
   requires_assignment: boolean
   active_service_count: number
@@ -74,6 +77,11 @@ interface ExistingEventRow {
   event_type: string | null
   league: string | null
   source: string | null
+}
+
+interface FeedBackedDiscoveryVenue extends DiscoveryVenue {
+  feed_url: string
+  feed_type: FeedType
 }
 
 export interface DiscoveryCandidate {
@@ -482,6 +490,85 @@ function buildExistingDemoCandidates(
   })
 }
 
+function feedEventToDiscoveryCandidate(feedEvent: Awaited<ReturnType<typeof parseVenueFeed>>[number], venue: DiscoveryVenue): DiscoveryCandidate {
+  const matchType = feedEvent.source === 'other' ? 'ai_inferred' : 'official_source'
+  const trustScore = matchType === 'official_source'
+    ? Math.max(feedEvent.confidence, 0.9)
+    : Math.max(Math.min(feedEvent.confidence, 0.82), 0.68)
+
+  return {
+    venue_id: venue.id,
+    venue_name: venue.name,
+    summary: feedEvent.name,
+    event_date: feedEvent.date,
+    start_time: feedEvent.time,
+    end_time: null,
+    start_iso: feedEvent.startIso ?? null,
+    end_iso: null,
+    event_type: feedEvent.eventType,
+    league: feedEvent.league,
+    home_team: feedEvent.teams[1] || null,
+    away_team: feedEvent.teams[0] || null,
+    source_url: feedEvent.sourceUrl || venue.feed_url || null,
+    source_domain: (() => {
+      try {
+        return new URL(feedEvent.sourceUrl || venue.feed_url || '').hostname.replace(/^www\./, '').toLowerCase()
+      } catch {
+        return null
+      }
+    })(),
+    source_label: feedEvent.sourceLabel || feedEvent.source,
+    source_kind: feedEvent.source,
+    source: feedEvent.source,
+    match_type: matchType,
+    matched_query: venue.feed_type ? `feed:${venue.feed_type}` : 'feed',
+    evidence_snippet: feedEvent.evidenceSnippet || `${feedEvent.name} from ${venue.feed_url || venue.name}`,
+    confidence: feedEvent.confidence,
+    trust_score: trustScore,
+    trust_reasons: [
+      venue.feed_type ? `Pulled from configured ${venue.feed_type} feed` : 'Pulled from configured venue feed',
+      `Feed URL: ${feedEvent.sourceUrl || venue.feed_url || 'unknown'}`,
+    ],
+    duplicate: false,
+    duplicate_reason: null,
+    requires_staffing: venue.requires_staffing_default,
+    status: 'discovered',
+    auto_importable: matchType === 'official_source' && trustScore >= 0.78 && feedEvent.confidence >= 0.85,
+  }
+}
+
+async function discoverFromConfiguredFeed(
+  venue: DiscoveryVenue,
+  existingEvents: ExistingEventRow[]
+): Promise<DiscoveryCandidate[]> {
+  if (!venue.feed_url || !venue.feed_type) return []
+
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+    const parsedEvents = await parseVenueFeed(venue.feed_type, {
+      venueName: venue.name,
+      feedUrl: venue.feed_url,
+      venueAddress: venue.address,
+    })
+
+    return parsedEvents
+      .filter((event) => event.date >= today && event.date <= ninetyDaysOut)
+      .map((event) => {
+        const candidate = feedEventToDiscoveryCandidate(event, venue)
+        const duplicate = findDuplicate(candidate, existingEvents)
+        return {
+          ...candidate,
+          duplicate: duplicate.duplicate,
+          duplicate_reason: duplicate.reason,
+        }
+      })
+  } catch (error) {
+    console.warn(`Configured feed discovery failed for ${venue.name}:`, error)
+    return []
+  }
+}
+
 export type DiscoveryProgress = (step: 'searching' | 'fetching' | 'thinking' | 'parsing', detail?: Record<string, unknown>) => void
 
 async function discoverWithAI(
@@ -738,11 +825,15 @@ export async function discoverForVenue(
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
   const existingEvents = await loadExistingEvents(venue.id, today, sixtyDaysOut)
+  const feedCandidates = await discoverFromConfiguredFeed(venue, existingEvents)
   const raw = await discoverWithAI(venue, existingEvents, discoveryHint, includeExisting, onProgress)
 
-  const candidates = raw
+  const candidates = [
+    ...feedCandidates,
+    ...raw
     .map(candidate => hydrateCandidate(candidate, venue))
-    .filter((candidate): candidate is DiscoveryCandidate => Boolean(candidate))
+    .filter((candidate): candidate is DiscoveryCandidate => Boolean(candidate)),
+  ]
 
   if (includeExisting && existingEvents.length > 0) {
     candidates.push(...buildExistingDemoCandidates(venue, existingEvents))
@@ -841,6 +932,8 @@ export async function getDiscoveryVenue(venueId: string): Promise<DiscoveryVenue
        v.name,
        v.address,
        m.name as market_name,
+       v.feed_url,
+       COALESCE(v.feed_type, 'other') as feed_type,
        v.slack_channel_id,
        COALESCE(v.requires_assignment, true) as requires_assignment,
        ${buildAutomationSelect('v', 'vs', 'st')},
@@ -864,6 +957,8 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
        v.name,
        v.address,
        m.name as market_name,
+       v.feed_url,
+       COALESCE(v.feed_type, 'other') as feed_type,
        v.slack_channel_id,
        COALESCE(v.requires_assignment, true) as requires_assignment,
        ${buildAutomationSelect('v', 'vs', 'st')},
