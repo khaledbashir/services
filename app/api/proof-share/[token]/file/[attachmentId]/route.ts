@@ -65,7 +65,7 @@ export async function GET(
     const headers = new Headers({
       'Content-Type': contentType,
       'Cache-Control': 'private, max-age=300', // 5 minutes
-      'Content-Disposition': `inline; filename="${(matching.name || 'proof').replace(/"/g, '')}"`,
+      'Content-Disposition': `inline; filename="${(matching.name || 'proof').replace(/[\r\n"\\]/g, '')}"`,
     })
     const contentLength = upstream.headers.get('content-length')
     if (contentLength) headers.set('Content-Length', contentLength)

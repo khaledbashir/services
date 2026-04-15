@@ -7,7 +7,7 @@ interface Attachment {
   id: string
   name: string
   extension: string
-  category: 'image' | 'video' | 'pdf' | 'other'
+  category: 'image' | 'video' | 'pdf' | 'link' | 'other'
   fileUrl: string
 }
 

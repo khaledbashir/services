@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { jwtVerify } from 'jose'
 import { query } from '@/lib/db'
 import {
   OBJECT_CONFIGS,
@@ -9,6 +10,18 @@ import {
   patchTwentyRecord,
   sendProofEmailToClient,
 } from '@/lib/proof-share'
+
+async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get('token')?.value
+  if (!token) return false
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'anc-services-secret-key-change-me')
+    await jwtVerify(token, secret)
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * POST /api/proof-share/create
@@ -26,6 +39,10 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!(await verifyRequestAuth(request))) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const body = await request.json()
     const {
       twentyObjectType,
@@ -75,13 +92,14 @@ export async function POST(request: NextRequest) {
 
     // Generate a unique token + optional expiration
     const token = generateToken()
+    const days = Number(expiresInDays)
     const expiresAt =
-      expiresInDays && Number.isFinite(Number(expiresInDays))
-        ? new Date(Date.now() + Number(expiresInDays) * 86_400_000)
+      (days > 0 && Number.isFinite(days))
+        ? new Date(Date.now() + days * 86_400_000)
         : null
 
     // Auto-expire any prior shares on this record — a new version obsoletes old links
-    await query(
+    const expireResult = await query(
       `UPDATE proof_shares
        SET expires_at = NOW()
        WHERE twenty_object_type = $1
@@ -89,6 +107,7 @@ export async function POST(request: NextRequest) {
          AND (expires_at IS NULL OR expires_at > NOW())`,
       [twentyObjectType, twentyRecordId]
     )
+    const isRenewal = (expireResult.rowCount ?? 0) > 0
 
     await query(
       `INSERT INTO proof_shares (
@@ -132,8 +151,7 @@ export async function POST(request: NextRequest) {
         designerEmail: createdByEmail || null,
         expiresAt,
         attachments,
-        // If this record already had a prior share (auto-expired above), treat as a renewal
-        isRenewal: false,
+        isRenewal,
       })
     }
 

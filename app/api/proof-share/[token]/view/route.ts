@@ -30,6 +30,7 @@ export async function POST(
            last_viewed_at = NOW(),
            last_viewed_ip = $2
        WHERE token = $1
+         AND (expires_at IS NULL OR expires_at > NOW())
        RETURNING twenty_object_type, twenty_record_id, view_count, last_viewed_at`,
       [token, ip]
     )

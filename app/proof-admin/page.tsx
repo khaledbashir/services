@@ -15,6 +15,7 @@ export default function ProofAdminPage() {
   const [message, setMessage] = useState('')
   const [createdByName, setCreatedByName] = useState('')
   const [createdByEmail, setCreatedByEmail] = useState('')
+  const [clientEmail, setClientEmail] = useState('')
   const [expiresInDays, setExpiresInDays] = useState<number | ''>(14)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ url: string; expiresAt: string | null; attachmentCount: number; recordName: string } | null>(null)
@@ -35,6 +36,7 @@ export default function ProofAdminPage() {
           message: message || undefined,
           createdByName: createdByName || undefined,
           createdByEmail: createdByEmail || undefined,
+          clientEmail: clientEmail || undefined,
         }),
       })
       const data = await res.json()
@@ -133,6 +135,16 @@ export default function ProofAdminPage() {
               />
             </Field>
           </div>
+
+          <Field label="Client email (optional)" hint="Auto-sends the proof link with Approve/Request Changes buttons">
+            <input
+              type="email"
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value)}
+              placeholder="client@company.com"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--anc-brand)] focus:border-transparent"
+            />
+          </Field>
 
           <Field label="Expires in (days)" hint="Leave blank for no expiration">
             <input

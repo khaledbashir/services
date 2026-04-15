@@ -13,3 +13,10 @@ ANC_Mission_Control (1).pdf
 Service Dashboard.zip
 wrike-export/
 airtable-export/
+records.json
+container_env.txt
+local_env.sh
+query-twenty.js
+process-proofs.js
+test-db.ts
+tsconfig.tsbuildinfo

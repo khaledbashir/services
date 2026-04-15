@@ -8,6 +8,15 @@ import {
   buildPublicUrl,
 } from '@/lib/proof-share'
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' :
+    c === '<' ? '&lt;' :
+    c === '>' ? '&gt;' :
+    c === '"' ? '&quot;' : '&#39;'
+  )
+}
+
 // Scheduler: run hourly. Finds proofs sent >48h ago that haven't been
 // opened (or opened but not responded to) and pings:
 //   - designer/Slack: "client hasn't opened"
@@ -109,7 +118,7 @@ export async function GET() {
             <p style="margin:6px 0 0;opacity:0.8;font-size:13px">${cfg.displayLabel}</p>
           </div>
           <div style="background:#fff;padding:22px 24px;border:1px solid #E5E5E8;border-top:none;border-radius:0 0 8px 8px">
-            <p style="margin:0 0 14px;font-size:15px;color:#111">Hi — we sent you a proof for <strong>${recordName}</strong> a couple days ago. It's still waiting for your approval.</p>
+            <p style="margin:0 0 14px;font-size:15px;color:#111">Hi — we sent you a proof for <strong>${escapeHtml(recordName)}</strong> a couple days ago. It's still waiting for your approval.</p>
             <p style="margin:0 0 20px;font-size:14px;color:#555">Quick click to review and respond:</p>
             <a href="${proofUrl}" style="display:inline-block;background:#16A34A;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600;font-size:15px">Open Proof</a>
             <p style="margin:20px 0 0;font-size:12px;color:#999">If you've already responded elsewhere, please let us know so we can update our records.</p>
@@ -118,7 +127,7 @@ export async function GET() {
         </div>`
         await sendEmail(
           [share.client_email],
-          `Reminder: proof ready — ${recordName}`,
+          `Reminder: proof ready — ${escapeHtml(recordName)}`,
           html,
           share.created_by_email || undefined
         ).catch((e) => console.error('[proof-nudge] email failed:', e))

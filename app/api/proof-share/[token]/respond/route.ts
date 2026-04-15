@@ -50,6 +50,16 @@ export async function POST(
       return NextResponse.json({ error: 'This proof link has expired.' }, { status: 410 })
     }
 
+    if (share.client_response) {
+      return NextResponse.json(
+        {
+          error: 'This proof has already been responded to.',
+          state: share.client_response === 'approved' ? 'approved' : 'changes_requested',
+        },
+        { status: 409 }
+      )
+    }
+
     const cfg = OBJECT_CONFIGS[share.twenty_object_type]
     if (!cfg) {
       return NextResponse.json({ error: 'Invalid record type' }, { status: 500 })
