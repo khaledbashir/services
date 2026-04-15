@@ -102,7 +102,7 @@ function EventsPageInner() {
   const [showVenueFilter, setShowVenueFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'needs_staffing' | 'warranty_only'>('all')
-  const [aiFilter, setAiFilter] = useState<'all' | 'ai_only'>('all')
+  const [aiFilter, setAiFilter] = useState<'all' | 'ai_only' | 'url_only'>('all')
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [creating, setCreating] = useState(false)
   const [discovering, setDiscovering] = useState(false)
@@ -257,7 +257,11 @@ function EventsPageInner() {
   }
 
   const isAiImportedEvent = (e: Event): boolean => {
-    return ['ai_discovery', 'ticketmaster', 'league_schedule', 'venue_calendar', 'team_website'].includes(e.source || '')
+    return (e.source || '') === 'ai_discovery'
+  }
+
+  const isUrlFeedEvent = (e: Event): boolean => {
+    return ['ticketmaster', 'league_schedule', 'venue_calendar', 'team_website', 'mlb-schedule', 'ical'].includes(e.source || '')
   }
 
   // Filter events by selected venues and staffing filter (client-side)
@@ -271,6 +275,8 @@ function EventsPageInner() {
     }
     if (aiFilter === 'ai_only') {
       filtered = filtered.filter((e) => isAiImportedEvent(e))
+    } else if (aiFilter === 'url_only') {
+      filtered = filtered.filter((e) => isUrlFeedEvent(e))
     }
     if (staffingFilter === 'needs_staffing') {
       filtered = filtered.filter(e => eventNeedsStaffing(e) && (Number((e as any).assigned_count) || 0) === 0)
@@ -679,6 +685,10 @@ function EventsPageInner() {
                                   AI
                                 </span>
                               )}
+                              {isUrlFeedEvent(event) && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                  URL</span>
+                              )}
                               {event.league && (
                                 <span className="text-[9px] font-medium px-1 rounded ml-auto" style={{ backgroundColor: leagueColor.hex + '20', color: leagueColor.hex }}>{event.league}</span>
                               )}
@@ -754,7 +764,13 @@ function EventsPageInner() {
                         {isAiImportedEvent(event) && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
-                            AI Imported
+                            AI
+                          </span>
+                        )}
+                        {isUrlFeedEvent(event) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            URL
                           </span>
                         )}
                       </div>
@@ -1134,6 +1150,17 @@ function EventsPageInner() {
             >
               <span className={`w-1.5 h-1.5 rounded-full ${aiFilter === 'ai_only' ? 'bg-white' : 'bg-sky-500'}`} />
               AI Imported
+            </button>
+            <button
+              onClick={() => setAiFilter(aiFilter === 'url_only' ? 'all' : 'url_only')}
+              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
+                aiFilter === 'url_only'
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${aiFilter === 'url_only' ? 'bg-white' : 'bg-emerald-500'}`} />
+              URL Feed
             </button>
             <span className="w-px h-6 bg-zinc-200" />
           </div>
