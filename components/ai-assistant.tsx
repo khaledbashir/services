@@ -36,6 +36,10 @@ interface Provider { name: string; model: string }
 const STORAGE_KEY = 'ai-panel-open'
 const PROVIDER_KEY = 'ai-panel-provider'
 const ACTIVE_CHAT_KEY = 'ai-active-chat'
+const WIDTH_KEY = 'ai-panel-width'
+const MIN_WIDTH = 360
+const MAX_WIDTH = 900
+const DEFAULT_WIDTH = 440
 
 export function AiAssistant() {
   const [open, setOpen] = useState(false)
@@ -57,15 +61,43 @@ export function AiAssistant() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
+  const [width, setWidth] = useState<number>(DEFAULT_WIDTH)
+  const [resizing, setResizing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     setOpen(localStorage.getItem(STORAGE_KEY) === '1')
     setSelectedProvider(localStorage.getItem(PROVIDER_KEY) || '')
     const stored = localStorage.getItem(ACTIVE_CHAT_KEY)
     if (stored) setActiveChatId(stored)
+    const savedWidth = Number(localStorage.getItem(WIDTH_KEY))
+    if (savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) setWidth(savedWidth)
   }, [])
+
+  // Resize drag handler: grabs the left edge and tracks mouse X globally.
+  useEffect(() => {
+    if (!resizing) return
+    const onMove = (e: MouseEvent) => {
+      const next = Math.min(Math.max(window.innerWidth - e.clientX, MIN_WIDTH), MAX_WIDTH)
+      setWidth(next)
+    }
+    const onUp = () => {
+      setResizing(false)
+      try { localStorage.setItem(WIDTH_KEY, String(width)) } catch {}
+    }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [resizing, width])
 
   // Persist activeChatId so chat survives reload.
   useEffect(() => {
@@ -116,6 +148,8 @@ export function AiAssistant() {
         setActiveChatId(null)
       })
     }
+    // Autofocus the composer when the panel opens.
+    setTimeout(() => inputRef.current?.focus(), 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -261,6 +295,8 @@ export function AiAssistant() {
     } finally {
       setSending(false)
       abortRef.current = null
+      // Refocus so the user can keep typing without reaching for the mouse.
+      setTimeout(() => inputRef.current?.focus(), 30)
     }
   }
 
@@ -282,7 +318,16 @@ export function AiAssistant() {
       </button>
 
       {open && (
-        <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[440px] bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col">
+        <div
+          className="fixed inset-y-0 right-0 z-40 bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col"
+          style={{ width: `min(100vw, ${width}px)` }}
+        >
+          {/* Resize handle — drag the left edge to make the panel wider. */}
+          <div
+            onMouseDown={(e) => { e.preventDefault(); setResizing(true) }}
+            className={`hidden sm:block absolute inset-y-0 left-0 w-1.5 cursor-col-resize hover:bg-[#0A52EF]/20 ${resizing ? 'bg-[#0A52EF]/30' : ''}`}
+            title="Drag to resize"
+          />
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0A52EF]">ANC Assistant</span>
@@ -435,13 +480,13 @@ export function AiAssistant() {
           <div className="p-3 border-t border-[#E8E8E8] space-y-2">
             <div className="flex items-end gap-2">
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
                 placeholder="Ask, search, or make anything…"
                 rows={1}
                 className="flex-1 resize-none rounded-xl border border-[#E8E8E8] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 max-h-32"
-                disabled={sending}
               />
               {sending ? (
                 <button onClick={stop} className="rounded-xl bg-red-50 text-red-600 border border-red-200 px-3 py-2 text-sm font-medium hover:bg-red-100" title="Stop">
