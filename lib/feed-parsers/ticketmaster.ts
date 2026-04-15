@@ -5,6 +5,157 @@ const SERPER_API_KEY = process.env.SERPER_API_KEY || ''
 const AI_API_KEY = process.env.AI_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
 const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
+const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY || ''
+const TICKETMASTER_DISCOVERY_BASE = process.env.TICKETMASTER_DISCOVERY_BASE || 'https://app.ticketmaster.com/discovery/v2'
+
+interface TicketmasterDiscoveryVenue {
+  id: string
+  name?: string
+  city?: { name?: string }
+  state?: { stateCode?: string }
+}
+
+interface TicketmasterDiscoveryEvent {
+  name?: string
+  dates?: { start?: { localDate?: string; localTime?: string; dateTime?: string } }
+  url?: string
+  classifications?: Array<{ segment?: { name?: string } }>
+  _embedded?: {
+    attractions?: Array<{ name?: string }>
+  }
+}
+
+function ticketmasterVenueIdFromUrl(url: string): string | null {
+  const match = url.match(/\/venue\/(\d+)(?:[/?#]|$)/i)
+  return match?.[1] || null
+}
+
+function parseCityState(address?: string | null): { city: string | null; stateCode: string | null } {
+  if (!address) return { city: null, stateCode: null }
+  const parts = address.split(',').map((part) => part.trim()).filter(Boolean)
+  if (parts.length < 2) return { city: null, stateCode: null }
+  const city = parts[parts.length - 2] || null
+  const stateCodeMatch = parts[parts.length - 1]?.match(/\b([A-Z]{2})\b/)
+  return { city, stateCode: stateCodeMatch?.[1] || null }
+}
+
+function classifyTicketmasterEvent(name: string, segmentName?: string | null): FeedEvent['eventType'] {
+  const lowerName = name.toLowerCase()
+  const lowerSegment = (segmentName || '').toLowerCase()
+  if (lowerSegment.includes('sports')) return 'game'
+  if (lowerSegment.includes('music')) return 'concert'
+  if (/ vs\. | at /i.test(name)) return 'game'
+  if (/concert|tour|live/i.test(lowerName)) return 'concert'
+  return 'other'
+}
+
+function normalizeDiscoveryEvent(event: TicketmasterDiscoveryEvent, params: ParseFeedParams): FeedEvent | null {
+  const name = (event.name || '').trim()
+  const localDate = event.dates?.start?.localDate || null
+  if (!name || !localDate) return null
+
+  const attractionNames = (event._embedded?.attractions || [])
+    .map((attraction) => (attraction.name || '').trim())
+    .filter(Boolean)
+  const teams = attractionNames.length === 2
+    ? attractionNames
+    : name.includes(' vs. ')
+      ? name.split(/\s+vs\.\s+/i).map((part) => part.trim()).filter(Boolean)
+      : []
+  const segmentName = event.classifications?.[0]?.segment?.name || null
+  const localTime = normalizeClock(event.dates?.start?.localTime || null)
+
+  return {
+    name,
+    date: localDate,
+    time: localTime,
+    startIso: event.dates?.start?.dateTime || null,
+    teams,
+    eventType: classifyTicketmasterEvent(name, segmentName),
+    league: inferLeague(name),
+    source: 'ticketmaster',
+    confidence: 0.97,
+    sourceUrl: event.url || params.feedUrl,
+    sourceLabel: 'Ticketmaster API',
+    evidenceSnippet: `${name} on ${localDate}`,
+  }
+}
+
+async function fetchTicketmasterJson<T>(pathname: string, searchParams: URLSearchParams): Promise<T> {
+  if (!TICKETMASTER_API_KEY) {
+    throw new Error('TICKETMASTER_API_KEY is not configured')
+  }
+
+  const url = new URL(`${TICKETMASTER_DISCOVERY_BASE}${pathname}`)
+  url.search = searchParams.toString()
+  const res = await fetch(url.toString(), {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'anc-services/1.0',
+    },
+    signal: AbortSignal.timeout(15000),
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    throw new Error(`Ticketmaster API request failed: ${res.status}`)
+  }
+
+  return res.json() as Promise<T>
+}
+
+async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<TicketmasterDiscoveryVenue | null> {
+  const { city, stateCode } = parseCityState(params.venueAddress)
+  const search = new URLSearchParams({
+    apikey: TICKETMASTER_API_KEY,
+    keyword: params.venueName,
+    size: '10',
+    sort: 'name,asc',
+  })
+  if (city) search.set('city', city)
+  if (stateCode) search.set('stateCode', stateCode)
+
+  const data = await fetchTicketmasterJson<{ _embedded?: { venues?: TicketmasterDiscoveryVenue[] } }>(
+    '/venues.json',
+    search
+  )
+  const venues = data._embedded?.venues || []
+  if (venues.length === 0) return null
+
+  const normalizedTarget = params.venueName.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const exact = venues.find((venue) => (venue.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalizedTarget)
+  if (exact) return exact
+
+  return venues[0]
+}
+
+async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<FeedEvent[]> {
+  if (!TICKETMASTER_API_KEY) return []
+
+  let venueId = ticketmasterVenueIdFromUrl(params.feedUrl)
+  if (!venueId) {
+    const venue = await lookupTicketmasterVenue(params)
+    venueId = venue?.id || null
+  }
+
+  const search = new URLSearchParams({
+    apikey: TICKETMASTER_API_KEY,
+    size: '200',
+    sort: 'date,asc',
+  })
+  if (venueId) search.set('venueId', venueId)
+  else search.set('keyword', params.venueName)
+
+  const data = await fetchTicketmasterJson<{ _embedded?: { events?: TicketmasterDiscoveryEvent[] } }>(
+    '/events.json',
+    search
+  )
+  const events = (data._embedded?.events || [])
+    .map((event) => normalizeDiscoveryEvent(event, params))
+    .filter((event): event is FeedEvent => Boolean(event))
+
+  return dedupeFeedEvents(events)
+}
 
 /**
  * When TM direct scraping is blocked, use Serper (Google) to search for
@@ -97,6 +248,13 @@ function absoluteUrl(baseUrl: string, href: string | null): string | null {
 }
 
 export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<FeedEvent[]> {
+  try {
+    const official = await ticketmasterViaOfficialApi(params)
+    if (official.length > 0) return official
+  } catch (error) {
+    console.warn('Ticketmaster Discovery API failed, falling back to page parsing:', error)
+  }
+
   let text = ''
   let fetchError: Error | null = null
   try {

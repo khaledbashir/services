@@ -176,6 +176,7 @@ export async function syncVenueFeed(
     const parsedEvents = await parseVenueFeed(venue.feed_type, {
       venueName: venue.name,
       feedUrl: venue.feed_url,
+      venueAddress: venue.address,
     })
 
     const windowedEvents = parsedEvents.filter((event) => event.date >= today && event.date <= ninetyDaysOut)

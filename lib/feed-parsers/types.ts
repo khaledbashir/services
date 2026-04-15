@@ -25,4 +25,5 @@ export interface FeedEvent {
 export interface ParseFeedParams {
   venueName: string
   feedUrl: string
+  venueAddress?: string | null
 }
