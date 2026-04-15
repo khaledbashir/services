@@ -98,6 +98,22 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // Write a per-venue row to discovery_log NOW (not at end of run)
+            // so the audit page reflects progress in real time and captures
+            // the correct imported count for each venue.
+            await writeDiscoveryLogs({
+              result: {
+                venues: [{ id: venue.id, name: venue.name }],
+                discovered: result.discovered,
+                total_found: found,
+                duplicates_skipped: dupes,
+                existing_count: result.existing_count || 0,
+                discovery_hint: discoveryHint || null,
+                include_existing: includeExisting,
+              },
+              importedByVenue: { [venue.id]: importedCount },
+            }).catch((err) => console.error('writeDiscoveryLogs failed for', venue.name, err))
+
             allDiscovered.push(...result.discovered)
             totalFound += found
             totalDuplicates += dupes
@@ -150,7 +166,8 @@ export async function POST(request: NextRequest) {
           include_existing: includeExisting,
         }
 
-        await writeDiscoveryLogs({ result: finalResult }).catch(() => {})
+        // Per-venue logs already written above during the run; skip the
+        // end-of-run bulk write to avoid duplicate entries.
 
         emit({ type: 'done', result: finalResult })
       } catch (err) {
