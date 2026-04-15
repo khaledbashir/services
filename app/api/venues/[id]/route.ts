@@ -158,15 +158,40 @@ export async function PATCH(
       }
     }
 
+    let feedChanged = false
     if (body.feed_url !== undefined) {
       const normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim() ? body.feed_url.trim() : null
       await query(`UPDATE venues SET feed_url = $1 WHERE id = $2`, [normalizedFeedUrl, venueId])
+      feedChanged = feedChanged || !!normalizedFeedUrl
     }
 
     if (body.feed_type !== undefined) {
       const validFeedTypes = ['ticketmaster', 'team-website', 'league-page', 'mlb-schedule', 'ical', 'other']
       const nextFeedType = validFeedTypes.includes(body.feed_type) ? body.feed_type : 'other'
       await query(`UPDATE venues SET feed_type = $1 WHERE id = $2`, [nextFeedType, venueId])
+      feedChanged = true
+    }
+
+    // Auto-sync the feed right after the manager saves it — Joe's team
+    // shouldn't need to know about cron URLs. Fire-and-forget so the PATCH
+    // response returns instantly; the UI will pick up new events on its
+    // next refetch.
+    if (feedChanged) {
+      import('@/lib/feed-sync').then(async ({ syncVenueFeed }) => {
+        const venueRow = await query(
+          `SELECT v.id, v.name, v.address, v.feed_url,
+                  COALESCE(v.feed_type, 'other') as feed_type,
+                  0 AS active_service_count,
+                  ARRAY[]::text[] AS active_service_names,
+                  ARRAY[]::text[] AS active_service_descriptions,
+                  true AS requires_staffing_default
+           FROM venues v WHERE v.id = $1 AND COALESCE(v.feed_url,'') <> ''`,
+          [venueId]
+        )
+        if (venueRow.rows[0]) {
+          await syncVenueFeed(venueRow.rows[0])
+        }
+      }).catch((err) => console.warn('Post-save feed auto-sync failed:', err))
     }
 
     if (body.timezone !== undefined) {
