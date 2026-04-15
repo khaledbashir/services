@@ -60,30 +60,45 @@ export async function POST(
       )
     }
 
-    const cfg = OBJECT_CONFIGS[share.twenty_object_type]
-    if (!cfg) {
-      return NextResponse.json({ error: 'Invalid record type' }, { status: 500 })
+    // Native anc-services design requests — update our DB directly.
+    if (share.twenty_object_type === 'localDesignRequest') {
+      await query(
+        `UPDATE proof_shares
+         SET client_response = $2, client_response_at = NOW(), client_response_note = $3
+         WHERE token = $1`,
+        [token, response, note || null]
+      )
+      const newStatus = response === 'approved' ? 'approved' : 'in_progress'
+      await query(
+        `UPDATE design_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
+        [newStatus, share.twenty_record_id]
+      )
+    } else {
+      const cfg = OBJECT_CONFIGS[share.twenty_object_type]
+      if (!cfg) {
+        return NextResponse.json({ error: 'Invalid record type' }, { status: 500 })
+      }
+
+      // Update proof_shares
+      await query(
+        `UPDATE proof_shares
+         SET client_response = $2, client_response_at = NOW(), client_response_note = $3
+         WHERE token = $1`,
+        [token, response, note || null]
+      )
+
+      // Update Twenty record status + proof-response fields
+      const newStatus =
+        response === 'approved' ? cfg.approvedValue : cfg.revisionsValue
+      await updateTwentyRecordStatus(
+        share.twenty_object_type,
+        share.twenty_record_id,
+        newStatus
+      )
+      void patchTwentyRecord(share.twenty_object_type, share.twenty_record_id, {
+        proofRespondedAt: new Date().toISOString(),
+      })
     }
-
-    // Update proof_shares
-    await query(
-      `UPDATE proof_shares
-       SET client_response = $2, client_response_at = NOW(), client_response_note = $3
-       WHERE token = $1`,
-      [token, response, note || null]
-    )
-
-    // Update Twenty record status + proof-response fields
-    const newStatus =
-      response === 'approved' ? cfg.approvedValue : cfg.revisionsValue
-    await updateTwentyRecordStatus(
-      share.twenty_object_type,
-      share.twenty_record_id,
-      newStatus
-    )
-    void patchTwentyRecord(share.twenty_object_type, share.twenty_record_id, {
-      proofRespondedAt: new Date().toISOString(),
-    })
 
     // Slack notify the designer (if we have Slack configured)
     const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
@@ -94,6 +109,9 @@ export async function POST(
       const designerLabel = share.created_by_name || share.created_by_email || 'a designer'
       const bodyPreview = note ? `\n\n> ${note.slice(0, 500)}` : ''
       const respondentLabel = name ? ` from ${name}` : ''
+      const displayLabel = share.twenty_object_type === 'localDesignRequest'
+        ? 'Design Request'
+        : (OBJECT_CONFIGS[share.twenty_object_type]?.displayLabel || share.twenty_object_type)
       await sendSlackMessage({
         channel: slackChannel,
         text: `${emoji} ${title}${respondentLabel}`,
@@ -108,7 +126,7 @@ export async function POST(
           {
             type: 'section',
             fields: [
-              { type: 'mrkdwn', text: `*Record type:*\n${cfg.displayLabel}` },
+              { type: 'mrkdwn', text: `*Record type:*\n${displayLabel}` },
               { type: 'mrkdwn', text: `*Response:*\n${response}` },
               { type: 'mrkdwn', text: `*Sent by:*\n${designerLabel}` },
               { type: 'mrkdwn', text: `*Token:*\n\`${token.slice(0, 12)}...\`` },

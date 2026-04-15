@@ -52,6 +52,54 @@ export async function GET(
       )
     }
 
+    // Native anc-services design requests don't live in Twenty — serve
+    // them directly from our own DB so the public proof page works without
+    // CRM round-trips.
+    if (share.twenty_object_type === 'localDesignRequest') {
+      const dr = await query(
+        `SELECT dr.id, dr.job_title, dr.status, dr.client_name, dr.client_email,
+                dr.ftp_proof_link, dr.ftp_final_link, dr.notes, v.name AS venue_name,
+                dr.company_name
+         FROM design_requests dr LEFT JOIN venues v ON v.id = dr.venue_id
+         WHERE dr.id = $1`,
+        [share.twenty_record_id]
+      )
+      if (dr.rows.length === 0) {
+        return NextResponse.json({ error: 'The design request this proof references no longer exists.' }, { status: 404 })
+      }
+      const row = dr.rows[0]
+      const attachments: Array<{ id: string; name: string; extension: string; category: string; fileUrl: string }> = []
+      if (row.ftp_proof_link) {
+        attachments.push({
+          id: 'proof-link',
+          name: 'Proof',
+          extension: 'link',
+          category: 'link',
+          fileUrl: row.ftp_proof_link,
+        })
+      }
+      return NextResponse.json({
+        token,
+        state: share.client_response
+          ? share.client_response === 'approved' ? 'approved' : 'changes_requested'
+          : 'pending',
+        recordType: 'Design Request',
+        recordName: row.job_title || 'Design Request',
+        clientName: row.client_name || row.company_name || row.venue_name || null,
+        message: share.message,
+        createdByName: share.created_by_name,
+        createdByEmail: share.created_by_email,
+        createdAt: share.created_at,
+        expiresAt: share.expires_at,
+        viewCount: share.view_count,
+        lastViewedAt: share.last_viewed_at,
+        clientResponse: share.client_response,
+        clientResponseAt: share.client_response_at,
+        clientResponseNote: share.client_response_note,
+        attachments,
+      })
+    }
+
     const cfg = OBJECT_CONFIGS[share.twenty_object_type]
     if (!cfg) {
       return NextResponse.json({ error: 'Invalid record type' }, { status: 500 })

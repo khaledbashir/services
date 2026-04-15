@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { createDesignProofShare } from '@/lib/design-proof'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
   'company_name',
+  'client_name',
+  'client_email',
   'job_title',
   'tricode',
   'ftp_proof_link',
@@ -36,7 +39,7 @@ const ALLOWED_STATUSES = new Set([
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'designer_id', 'enterprise_contact_id'].includes(key)) return value || null
-  if (['company_name', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'final_file_name', 'final_duration', 'notes', 'boards_requested', 'sizes_requested'].includes(key)) {
+  if (['company_name', 'client_name', 'client_email', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'final_file_name', 'final_duration', 'notes', 'boards_requested', 'sizes_requested'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
@@ -119,9 +122,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
-    if (body.status === 'client_review' && access.record.status !== 'client_review') {
-      // TODO(ahmad): hook up client-review email notification
-    }
+    const transitioningToClientReview =
+      body.status === 'client_review' && access.record.status !== 'client_review'
 
     const previousThresholdState = getBudgetThresholdState(access.record.hours_spent, access.record.hours_estimated)
     const nextHoursSpent = body.hours_spent !== undefined ? normalizeValue('hours_spent', body.hours_spent) : access.record.hours_spent
@@ -141,7 +143,30 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values,
     )
 
-    return NextResponse.json({ design_request: result.rows[0] })
+    // When a designer moves the card into Client Review, auto-mint a public
+    // proof link and email the client. Idempotent: if a live share already
+    // exists for this record we reuse it, so dragging back and forth doesn't
+    // spam the client.
+    let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null
+    if (transitioningToClientReview) {
+      try {
+        proofShare = await createDesignProofShare({
+          designRequestId: params.id,
+          createdByName: access.auth.fullName || null,
+          createdByEmail: access.auth.email || null,
+        })
+        // Keep the denormalized ftp_proof_link field in sync so the detail
+        // page shows the generated URL immediately without a refetch.
+        await query(
+          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2 AND (ftp_proof_link IS NULL OR ftp_proof_link = '')`,
+          [proofShare.url, params.id]
+        )
+      } catch (err) {
+        console.error('Proof share creation failed:', err)
+      }
+    }
+
+    return NextResponse.json({ design_request: result.rows[0], proof_share: proofShare })
   } catch (err) {
     console.error('Error updating design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
