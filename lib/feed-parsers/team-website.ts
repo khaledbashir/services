@@ -4,7 +4,14 @@ import type { FeedEvent, ParseFeedParams } from '@/lib/feed-parsers/types'
 
 export async function parseTeamWebsiteFeed(params: ParseFeedParams): Promise<FeedEvent[]> {
   if (params.feedUrl.includes('statsapi.mlb.com')) {
-    const res = await fetch(params.feedUrl, {
+    const today = new Date().toISOString().split('T')[0]
+    const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+    const parsed = new URL(params.feedUrl)
+    if (!parsed.searchParams.has('startDate')) parsed.searchParams.set('startDate', today)
+    if (!parsed.searchParams.has('endDate')) parsed.searchParams.set('endDate', ninetyDaysOut)
+    if (!parsed.searchParams.has('sportId')) parsed.searchParams.set('sportId', '1')
+    if (!parsed.searchParams.has('hydrate')) parsed.searchParams.set('hydrate', 'venue,team')
+    const res = await fetch(parsed.toString(), {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
       signal: AbortSignal.timeout(15000),
       cache: 'no-store',

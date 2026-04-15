@@ -15,7 +15,18 @@ export async function parseMlbScheduleFeed(params: {
   const today = new Date().toISOString().split('T')[0]
   const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
 
-  const url = params.feedUrl || `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${today}&endDate=${ninetyDaysOut}&hydrate=venue,team`
+  // statsapi defaults to "today only" when startDate/endDate are missing.
+  // Auto-inject a 90-day window so managers can paste the bare endpoint
+  // without knowing the query-param dance.
+  let url = params.feedUrl || `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${today}&endDate=${ninetyDaysOut}&hydrate=venue,team`
+  if (params.feedUrl && /statsapi\.mlb\.com/i.test(params.feedUrl)) {
+    const parsed = new URL(params.feedUrl)
+    if (!parsed.searchParams.has('startDate')) parsed.searchParams.set('startDate', today)
+    if (!parsed.searchParams.has('endDate')) parsed.searchParams.set('endDate', ninetyDaysOut)
+    if (!parsed.searchParams.has('sportId')) parsed.searchParams.set('sportId', '1')
+    if (!parsed.searchParams.has('hydrate')) parsed.searchParams.set('hydrate', 'venue,team')
+    url = parsed.toString()
+  }
 
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
