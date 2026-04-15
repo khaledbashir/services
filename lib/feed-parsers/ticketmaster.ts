@@ -98,12 +98,14 @@ function absoluteUrl(baseUrl: string, href: string | null): string | null {
 
 export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<FeedEvent[]> {
   let text = ''
+  let fetchError: Error | null = null
   try {
     const fetched = await fetchFeedText(params.feedUrl)
     text = fetched.text
-  } catch {
+  } catch (error) {
     // Both direct + Ollama fetch failed (TM blocks both). Fall through to
     // search-based extraction.
+    fetchError = error instanceof Error ? error : new Error('Ticketmaster feed fetch failed')
     text = ''
   }
 
@@ -122,7 +124,19 @@ export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<Fe
       const generic = await parseGenericFeed(params)
       return generic.map((event) => ({ ...event, source: 'ticketmaster', sourceLabel: event.sourceLabel || 'Ticketmaster' }))
     }
-    return []
+    const hostname = (() => {
+      try {
+        return new URL(params.feedUrl).hostname.replace(/^www\./, '')
+      } catch {
+        return params.feedUrl
+      }
+    })()
+
+    throw new Error(
+      fetchError?.message.includes('direct fetch blocked')
+        ? `Ticketmaster blocked this feed URL (${hostname}) and no working fallback could read it. Try the venue's public events page instead of a ticketmaster.com venue page, or configure the search/browser fallback.`
+        : `Could not read Ticketmaster feed URL (${hostname}).`
+    )
   }
 
   const events: FeedEvent[] = []
