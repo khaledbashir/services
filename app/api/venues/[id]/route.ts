@@ -160,7 +160,10 @@ export async function PATCH(
 
     let feedChanged = false
     if (body.feed_url !== undefined) {
-      const normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim() ? body.feed_url.trim() : null
+      // Strip any whitespace the user accidentally pasted inside the URL.
+      const normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim()
+        ? body.feed_url.trim().replace(/\s+/g, '')
+        : null
       await query(`UPDATE venues SET feed_url = $1 WHERE id = $2`, [normalizedFeedUrl, venueId])
       feedChanged = feedChanged || !!normalizedFeedUrl
     }

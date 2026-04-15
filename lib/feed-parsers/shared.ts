@@ -1,20 +1,59 @@
 import type { FeedEvent } from '@/lib/feed-parsers/types'
 
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
 export async function fetchFeedText(url: string): Promise<{ text: string; contentType: string | null }> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
-    signal: AbortSignal.timeout(15000),
-    cache: 'no-store',
-  })
-
-  if (!res.ok) {
-    throw new Error(`Feed request failed: ${res.status}`)
+  const cleanUrl = url.trim().replace(/\s+/g, '')
+  // First try a direct fetch with a real browser UA. Ticketmaster and other
+  // large venues 403 anything identifying itself as a bot, so we cosplay as
+  // Chrome. If we still get 403/blocked, fall through to Ollama web_fetch
+  // which renders the page in a real browser.
+  try {
+    const res = await fetch(cleanUrl, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(15000),
+      cache: 'no-store',
+    })
+    if (res.ok) {
+      return { text: await res.text(), contentType: res.headers.get('content-type') }
+    }
+    if (res.status !== 403 && res.status !== 429 && res.status !== 503) {
+      throw new Error(`Feed request failed: ${res.status}`)
+    }
+  } catch (err) {
+    // network-level failure — try fallback
+    if (!(err instanceof Error) || !/Feed request failed/.test(err.message)) {
+      // fall through
+    }
   }
 
-  return {
-    text: await res.text(),
-    contentType: res.headers.get('content-type'),
+  // Fallback: Ollama web_fetch. Uses a real browser so TM's bot filter
+  // passes. Returns plain text content which our HTML parsers can still
+  // regex over (they don't need raw markup for snippet extraction).
+  const ollamaKey = process.env.OLLAMA_API_KEY || process.env.AI_API_KEY || ''
+  if (ollamaKey) {
+    try {
+      const res = await fetch(process.env.OLLAMA_FETCH_URL || 'https://ollama.com/api/web_fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ollamaKey}` },
+        body: JSON.stringify({ url: cleanUrl }),
+        signal: AbortSignal.timeout(25000),
+      })
+      if (res.ok) {
+        const data = await res.json() as { content?: string; text?: string; error?: string }
+        const text = data.content || data.text || ''
+        if (text) return { text, contentType: 'text/plain' }
+      }
+    } catch {
+      // fall through to error
+    }
   }
+
+  throw new Error(`Feed request failed: direct fetch blocked and Ollama fallback unavailable`)
 }
 
 export function toIsoDate(month: string, day: string): string | null {

@@ -12,6 +12,17 @@ function absoluteUrl(baseUrl: string, href: string | null): string | null {
 
 export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<FeedEvent[]> {
   const { text } = await fetchFeedText(params.feedUrl)
+
+  // If the fetch went through the Ollama web_fetch fallback we get plain
+  // text instead of Ticketmaster's HTML markup. Detect that (no TM DOM
+  // classes present) and hand off to the generic AI-backed parser, which
+  // extracts events from rendered text.
+  if (!text.includes('class="element-item')) {
+    const { parseGenericFeed } = await import('@/lib/feed-parsers/generic')
+    const generic = await parseGenericFeed(params)
+    return generic.map((event) => ({ ...event, source: 'ticketmaster', sourceLabel: event.sourceLabel || 'Ticketmaster' }))
+  }
+
   const events: FeedEvent[] = []
   const blocks = text.split('<div class="element-item').slice(1).map((block) => `<div class="element-item${block}`)
 
