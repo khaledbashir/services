@@ -441,15 +441,19 @@ function buildExistingDemoCandidates(
   })
 }
 
+export type DiscoveryProgress = (step: 'searching' | 'fetching' | 'thinking' | 'parsing', detail?: Record<string, unknown>) => void
+
 async function discoverWithAI(
   venue: DiscoveryVenue,
   existingEvents: ExistingEventRow[],
   discoveryHint?: string | null,
-  includeExisting?: boolean
+  includeExisting?: boolean,
+  onProgress?: DiscoveryProgress
 ): Promise<RawDiscoveryCandidate[]> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
   const searchQueries = buildSearchQueriesWithHint(venue, discoveryHint)
+  onProgress?.('searching', { queries: searchQueries.length })
   const searchResults = (await Promise.all(searchQueries.map(searchWeb))).flat()
 
   // Pull full page text for the top distinct URLs so the LLM gets real
@@ -463,6 +467,7 @@ async function discoverWithAI(
     fetchTargets.push(r.result_url)
     if (fetchTargets.length >= 3) break
   }
+  onProgress?.('fetching', { urls: fetchTargets.length, search_results: searchResults.length })
   const fetchedPages = await Promise.all(fetchTargets.map(async (url) => ({ url, text: await fetchPageText(url) })))
   const pagesBlock = fetchedPages
     .filter((p) => p.text)
@@ -543,6 +548,7 @@ RETURN ONLY JSON
   "confidence": 0.94
 }]`
 
+  onProgress?.('thinking', { model: AI_MODEL, prompt_chars: prompt.length, pages: fetchedPages.filter(p => p.text).length })
   const aiRes = await fetch(`${AI_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -582,8 +588,11 @@ RETURN ONLY JSON
 
   try {
     const parsed = JSON.parse(candidate) as RawDiscoveryCandidate[]
-    return Array.isArray(parsed) ? parsed : []
+    const events = Array.isArray(parsed) ? parsed : []
+    onProgress?.('parsing', { events: events.length })
+    return events
   } catch {
+    onProgress?.('parsing', { events: 0, error: 'parse_failed' })
     return []
   }
 }
@@ -642,12 +651,13 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
 export async function discoverForVenue(
   venue: DiscoveryVenue,
   discoveryHint?: string | null,
-  includeExisting = false
+  includeExisting = false,
+  onProgress?: DiscoveryProgress
 ): Promise<DiscoveryBatchResult> {
   const today = new Date().toISOString().split('T')[0]
   const sixtyDaysOut = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0]
   const existingEvents = await loadExistingEvents(venue.id, today, sixtyDaysOut)
-  const raw = await discoverWithAI(venue, existingEvents, discoveryHint, includeExisting)
+  const raw = await discoverWithAI(venue, existingEvents, discoveryHint, includeExisting, onProgress)
 
   const candidates = raw
     .map(candidate => hydrateCandidate(candidate, venue))

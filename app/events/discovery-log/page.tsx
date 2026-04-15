@@ -36,12 +36,30 @@ export default function DiscoveryLogPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#0A52EF]">Phase 4a</p>
-          <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Discovery Audit Log</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            Recent AI discovery runs across manual review and cron automation.
-          </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#0A52EF]">Phase 4a</p>
+            <h1 className="mt-2 text-2xl font-semibold text-zinc-900">Discovery Audit Log</h1>
+            <p className="mt-2 text-sm text-zinc-500">
+              Recent AI discovery runs across manual review and cron automation.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (!confirm(`Clear all ${logs.length} discovery log entries? This does not affect actual events — just the audit history.`)) return
+              const res = await fetch('/api/events/discovery-log/clear', { method: 'POST' })
+              if (res.ok) {
+                const data = await res.json()
+                alert(`Cleared ${data.deleted} log entries.`)
+                setLogs([])
+              } else {
+                alert('Failed to clear. Admin role required.')
+              }
+            }}
+            className="px-4 py-2 border border-red-200 bg-white text-red-600 rounded text-sm font-medium hover:bg-red-50 transition-colors"
+          >
+            Clear Logs
+          </button>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">

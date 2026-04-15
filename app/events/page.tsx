@@ -366,10 +366,23 @@ function EventsPageInner() {
             } else if (event.type === 'venue_start') {
               setDiscoveryProgress((prev) => prev && {
                 ...prev,
-                status: `Searching the web for ${event.venue.name}…`,
+                status: `Starting ${event.venue.name}…`,
                 venueIndex: event.index,
                 totalVenues: event.total,
                 currentVenue: event.venue.name,
+              })
+            } else if (event.type === 'venue_step') {
+              const labels: Record<string, string> = {
+                searching: `Searching Google for ${event.venue.name} (${event.detail?.queries ?? '?'} queries)…`,
+                fetching: `Fetching ${event.detail?.urls ?? '?'} pages of venue content…`,
+                thinking: `Asking Kimi to extract events from ${event.detail?.pages ?? '?'} pages (${Math.round(((event.detail?.prompt_chars ?? 0) as number) / 1000)}k chars)…`,
+                parsing: event.detail?.error
+                  ? `JSON parse failed — retrying…`
+                  : `Parsed ${event.detail?.events ?? 0} raw events, normalizing…`,
+              }
+              setDiscoveryProgress((prev) => prev && {
+                ...prev,
+                status: labels[event.step] || event.step,
               })
             } else if (event.type === 'venue_done') {
               setDiscoveryProgress((prev) => prev && {

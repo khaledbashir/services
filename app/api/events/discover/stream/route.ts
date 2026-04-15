@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import {
   DiscoveryCandidate,
+  DiscoveryProgress,
   discoverForVenue,
   getActiveDiscoveryVenues,
   getDiscoveryVenue,
@@ -55,7 +56,17 @@ export async function POST(request: NextRequest) {
           emit({ type: 'venue_start', index: i + 1, total: venues.length, venue: { id: venue.id, name: venue.name } })
 
           try {
-            const result = await discoverForVenue(venue, discoveryHint, includeExisting)
+            const onProgress: DiscoveryProgress = (step, detail) => {
+              emit({
+                type: 'venue_step',
+                index: i + 1,
+                total: venues.length,
+                venue: { id: venue.id, name: venue.name },
+                step,
+                detail: detail || {},
+              })
+            }
+            const result = await discoverForVenue(venue, discoveryHint, includeExisting, onProgress)
             const found = result.discovered.length
             const dupes = result.discovered.filter(c => c.duplicate).length
 
