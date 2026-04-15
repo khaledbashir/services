@@ -286,22 +286,46 @@ function decodeDuckDuckGoHref(href: string): string | null {
   }
 }
 
-// Ollama Cloud's web_search returns real, live results (DuckDuckGo HTML
-// scraping started returning 0 bytes once their bot-filter tightened).
-// Falls back to empty results on any error so discovery degrades
-// gracefully — LLM still runs, just without grounding.
+// Search grounding for AI discovery.
+// Prefers Serper (Google Search API) — rich organic snippets with actual
+// event details. Falls back to Ollama web_search if Serper isn't configured.
+// For each venue run we also pull the top 1–2 result pages via Ollama
+// web_fetch so the LLM sees real calendar content, not just snippets.
+const SERPER_API_KEY = process.env.SERPER_API_KEY || ''
 const OLLAMA_SEARCH_URL = process.env.OLLAMA_SEARCH_URL || 'https://ollama.com/api/web_search'
+const OLLAMA_FETCH_URL = process.env.OLLAMA_FETCH_URL || 'https://ollama.com/api/web_fetch'
 const OLLAMA_SEARCH_KEY = process.env.OLLAMA_API_KEY || process.env.AI_API_KEY || ''
 
 async function searchWeb(queryStr: string): Promise<SearchEvidence[]> {
+  // Preferred: Serper / Google.
+  if (SERPER_API_KEY) {
+    try {
+      const res = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-KEY': SERPER_API_KEY },
+        body: JSON.stringify({ q: queryStr, num: 8 }),
+        signal: AbortSignal.timeout(12000),
+      })
+      if (res.ok) {
+        const data = await res.json() as { organic?: Array<{ title?: string; link?: string; snippet?: string }> }
+        return (data.organic || []).slice(0, 6).map((result) => ({
+          query: queryStr,
+          result_url: result.link || null,
+          source_domain: sourceDomainFromUrl(result.link || null),
+          snippet: [(result.title || ''), (result.snippet || '')].filter(Boolean).join(' — ').slice(0, 400),
+        })).filter((entry) => entry.snippet || entry.result_url)
+      }
+    } catch {
+      // fall through to Ollama
+    }
+  }
+
+  // Fallback: Ollama web_search.
   if (!OLLAMA_SEARCH_KEY) return []
   try {
     const res = await fetch(OLLAMA_SEARCH_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OLLAMA_SEARCH_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OLLAMA_SEARCH_KEY}` },
       body: JSON.stringify({ query: queryStr }),
       signal: AbortSignal.timeout(20000),
     })
@@ -311,10 +335,29 @@ async function searchWeb(queryStr: string): Promise<SearchEvidence[]> {
       query: queryStr,
       result_url: result.url || null,
       source_domain: sourceDomainFromUrl(result.url || null),
-      snippet: [(result.title || ''), stripHtml(result.content || '')].filter(Boolean).join(' — ').slice(0, 280),
+      snippet: [(result.title || ''), stripHtml(result.content || '')].filter(Boolean).join(' — ').slice(0, 400),
     })).filter((entry) => entry.snippet || entry.result_url)
   } catch {
     return []
+  }
+}
+
+/** Pull the rendered text of a page via Ollama web_fetch. Empty on failure. */
+async function fetchPageText(url: string): Promise<string> {
+  if (!OLLAMA_SEARCH_KEY || !url) return ''
+  try {
+    const res = await fetch(OLLAMA_FETCH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OLLAMA_SEARCH_KEY}` },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(20000),
+    })
+    if (!res.ok) return ''
+    const data = await res.json() as { content?: string; text?: string; error?: string }
+    if (data.error) return ''
+    return (data.content || data.text || '').slice(0, 4000)
+  } catch {
+    return ''
   }
 }
 
@@ -409,6 +452,23 @@ async function discoverWithAI(
   const searchQueries = buildSearchQueriesWithHint(venue, discoveryHint)
   const searchResults = (await Promise.all(searchQueries.map(searchWeb))).flat()
 
+  // Pull full page text for the top distinct URLs so the LLM gets real
+  // calendar content, not just snippet headers.
+  const seenDomains = new Set<string>()
+  const fetchTargets: string[] = []
+  for (const r of searchResults) {
+    if (!r.result_url || !r.source_domain) continue
+    if (seenDomains.has(r.source_domain)) continue
+    seenDomains.add(r.source_domain)
+    fetchTargets.push(r.result_url)
+    if (fetchTargets.length >= 3) break
+  }
+  const fetchedPages = await Promise.all(fetchTargets.map(async (url) => ({ url, text: await fetchPageText(url) })))
+  const pagesBlock = fetchedPages
+    .filter((p) => p.text)
+    .map((p, i) => `PAGE ${i + 1} (${p.url})\n${p.text}`)
+    .join('\n\n---\n\n')
+
   const city = parseCityFromAddress(venue.address)
   const state = extractStateFromAddress(venue.address || '') || venue.market_name || ''
   const location = [city, state].filter(Boolean).join(', ')
@@ -434,6 +494,9 @@ DISCOVERY WINDOW
 
 EXISTING EVENTS IN DATABASE
 ${existingList}
+
+FETCHED PAGE CONTENT
+${pagesBlock || 'No pages fetched'}
 
 SEARCH RESULTS
 ${searchResults.length > 0

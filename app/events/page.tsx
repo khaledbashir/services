@@ -106,6 +106,14 @@ function EventsPageInner() {
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [creating, setCreating] = useState(false)
   const [discovering, setDiscovering] = useState(false)
+  const [discoveryProgress, setDiscoveryProgress] = useState<{
+    status: string
+    venueIndex: number
+    totalVenues: number
+    currentVenue: string | null
+    runningTotal: number
+    venueLog: Array<{ name: string; found: number; ok: boolean; error?: string }>
+  } | null>(null)
   const [importingDiscovery, setImportingDiscovery] = useState(false)
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
   const [discoveryRows, setDiscoveryRows] = useState<DiscoveryEventRow[]>([])
@@ -322,36 +330,86 @@ function EventsPageInner() {
     setDiscoveryVenueFilter('all')
     setShowDiscoveryDuplicates(true)
     setCollapsedDiscoveryVenues(new Set())
+    setDiscoveryProgress({ status: 'Starting…', venueIndex: 0, totalVenues: 0, currentVenue: null, runningTotal: 0, venueLog: [] })
+
     try {
-      const res = await fetch('/api/events/discover', {
+      const res = await fetch('/api/events/discover/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
           all_active: true,
           discovery_hint: discoveryHint.trim() || undefined,
           include_existing: includeExistingDiscovery,
         }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        const rows = (data.discovered || []).map((event: Omit<DiscoveryEventRow, 'selected'>) => ({
-          ...event,
-          selected: !event.duplicate,
-        }))
-        setDiscoveryRows(rows)
-        setDiscoverySummary({
-          venues: (data.venues || []).length,
-          total_found: data.total_found || 0,
-          duplicates_skipped: data.duplicates_skipped || 0,
-        })
-        setActiveDiscoveryHint(data.discovery_hint || discoveryHint.trim() || null)
-        setShowDiscoverySummaryCard(true)
-        setShowDiscoveryModal(true)
+
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || ''
+
+        for (const raw of events) {
+          const line = raw.split('\n').find((l) => l.startsWith('data: '))
+          if (!line) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.type === 'start') {
+              setDiscoveryProgress((prev) => prev && { ...prev, status: `Scanning ${event.total_venues} venues…`, totalVenues: event.total_venues })
+            } else if (event.type === 'venue_start') {
+              setDiscoveryProgress((prev) => prev && {
+                ...prev,
+                status: `Searching the web for ${event.venue.name}…`,
+                venueIndex: event.index,
+                totalVenues: event.total,
+                currentVenue: event.venue.name,
+              })
+            } else if (event.type === 'venue_done') {
+              setDiscoveryProgress((prev) => prev && {
+                ...prev,
+                runningTotal: event.running_total,
+                venueLog: [...prev.venueLog, { name: event.venue.name, found: event.new, ok: true }],
+              })
+            } else if (event.type === 'venue_error') {
+              setDiscoveryProgress((prev) => prev && {
+                ...prev,
+                venueLog: [...prev.venueLog, { name: event.venue.name, found: 0, ok: false, error: event.message }],
+              })
+            } else if (event.type === 'done') {
+              const data = event.result
+              const rows = (data.discovered || []).map((evt: Omit<DiscoveryEventRow, 'selected'>) => ({
+                ...evt,
+                selected: !evt.duplicate,
+              }))
+              setDiscoveryRows(rows)
+              setDiscoverySummary({
+                venues: (data.venues || []).length,
+                total_found: data.total_found || 0,
+                duplicates_skipped: data.duplicates_skipped || 0,
+              })
+              setActiveDiscoveryHint(data.discovery_hint || discoveryHint.trim() || null)
+              setShowDiscoverySummaryCard(true)
+              setShowDiscoveryModal(true)
+            } else if (event.type === 'error') {
+              console.error('Discovery stream error:', event.message)
+            }
+          } catch (err) {
+            console.error('Failed to parse SSE chunk:', err, raw)
+          }
+        }
       }
     } catch (err) {
       console.error('Bulk discovery failed:', err)
     } finally {
       setDiscovering(false)
+      setDiscoveryProgress(null)
     }
   }
 
@@ -815,17 +873,52 @@ function EventsPageInner() {
           </div>
         </div>
 
-        {discovering && (
-          <DiscoveryLoader
-            title="Discovering Across Active Venues"
-            subtitle="Pulling live event candidates from public sources and shaping them into import-ready rows."
-            hints={[
-              'Ticketmaster',
-              'Team Sites',
-              'Venue Calendars',
-              'AI Normalization',
-            ]}
-          />
+        {discovering && discoveryProgress && (
+          <div className="rounded-2xl border border-[#E8E8E8] bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 bg-[linear-gradient(180deg,#FFFFFF,#F8FAFC)] border-b border-[#E8E8E8]">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Live Discovery</div>
+                  <h3 className="mt-1 text-lg font-semibold text-zinc-900">
+                    {discoveryProgress.currentVenue
+                      ? `Venue ${discoveryProgress.venueIndex}/${discoveryProgress.totalVenues} — ${discoveryProgress.currentVenue}`
+                      : discoveryProgress.status}
+                  </h3>
+                  <p className="mt-1 text-sm text-zinc-500">{discoveryProgress.status}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Events Found</div>
+                    <div className="text-3xl font-bold text-[#0A52EF] tabular-nums">{discoveryProgress.runningTotal}</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full border-4 border-zinc-200 border-t-[#0A52EF] animate-spin" />
+                </div>
+              </div>
+              {discoveryProgress.totalVenues > 0 && (
+                <div className="mt-3 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                  <div
+                    className="h-full bg-[#0A52EF] transition-all"
+                    style={{ width: `${Math.min(100, (discoveryProgress.venueIndex / Math.max(1, discoveryProgress.totalVenues)) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+            {discoveryProgress.venueLog.length > 0 && (
+              <div className="px-5 py-3 max-h-64 overflow-auto">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 mb-2">Log</div>
+                <div className="space-y-1.5 font-mono text-xs">
+                  {discoveryProgress.venueLog.map((entry, i) => (
+                    <div key={i} className={`flex items-center justify-between ${entry.ok ? 'text-zinc-700' : 'text-red-600'}`}>
+                      <span>{entry.ok ? '✓' : '✗'} {entry.name}</span>
+                      <span className="tabular-nums">
+                        {entry.ok ? `${entry.found} events` : (entry.error || 'failed').slice(0, 60)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {!discovering && showDiscoverySummaryCard && discoverySummary && (
