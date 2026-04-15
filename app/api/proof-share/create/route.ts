@@ -8,7 +8,6 @@ import {
   generateToken,
   buildPublicUrl,
   patchTwentyRecord,
-  sendProofEmailToClient,
 } from '@/lib/proof-share'
 
 async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
@@ -23,20 +22,6 @@ async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
   }
 }
 
-/**
- * POST /api/proof-share/create
- *
- * Body:
- *   twentyObjectType: 'printRequest' | 'designRequest' | 'cgDesignRequest' | 'contentSchedule'
- *   twentyRecordId:   UUID of the record
- *   expiresInDays?:   number — optional expiration (default: no expiration)
- *   message?:         string — optional message from the designer to the client
- *   createdByName?:   string — designer's name (for the UI)
- *   createdByEmail?:  string — designer's email (for the UI)
- *
- * Returns:
- *   { token, url, expiresAt, attachmentCount }
- */
 export async function POST(request: NextRequest) {
   try {
     if (!(await verifyRequestAuth(request))) {
@@ -71,7 +56,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the record exists in Twenty
     const record = await fetchTwentyRecord(twentyObjectType, twentyRecordId)
     if (!record) {
       return NextResponse.json(
@@ -80,7 +64,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify at least one attachment exists or ftpProofLink exists
     const attachments = await fetchAttachmentsForRecord(twentyObjectType, twentyRecordId)
     const hasFtpLink = !!(record as any).ftpProofLink
     if (attachments.length === 0 && !hasFtpLink) {
@@ -90,7 +73,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate a unique token + optional expiration
     const token = generateToken()
     const days = Number(expiresInDays)
     const expiresAt =
@@ -98,8 +80,7 @@ export async function POST(request: NextRequest) {
         ? new Date(Date.now() + days * 86_400_000)
         : null
 
-    // Auto-expire any prior shares on this record — a new version obsoletes old links
-    const expireResult = await query(
+    await query(
       `UPDATE proof_shares
        SET expires_at = NOW()
        WHERE twenty_object_type = $1
@@ -107,7 +88,8 @@ export async function POST(request: NextRequest) {
          AND (expires_at IS NULL OR expires_at > NOW())`,
       [twentyObjectType, twentyRecordId]
     )
-    const isRenewal = (expireResult.rowCount ?? 0) > 0
+
+    const recipientEmail = clientEmail || (record as any).proofClientEmail || null
 
     await query(
       `INSERT INTO proof_shares (
@@ -122,38 +104,20 @@ export async function POST(request: NextRequest) {
         message || null,
         createdByName || null,
         createdByEmail || null,
-        clientEmail || null,
+        recipientEmail,
       ]
     )
 
     const publicUrl = buildPublicUrl(token)
 
-    // Sync state back to Twenty so designers see it on the record
     void patchTwentyRecord(twentyObjectType, twentyRecordId, {
       proofShareUrl: publicUrl,
       proofSentAt: new Date().toISOString(),
       proofViewCount: 0,
       proofLastViewedAt: null,
       proofRespondedAt: null,
-      proofClientEmail: clientEmail || null,
+      proofClientEmail: recipientEmail,
     })
-
-    // Auto-email the client with a thumbnail + Approve/Request Changes buttons
-    let emailed = false
-    if (clientEmail) {
-      emailed = await sendProofEmailToClient({
-        token,
-        clientEmail,
-        recordName: record.name || 'Your proof',
-        recordTypeLabel: OBJECT_CONFIGS[twentyObjectType].displayLabel,
-        message: message || null,
-        designerName: createdByName || null,
-        designerEmail: createdByEmail || null,
-        expiresAt,
-        attachments,
-        isRenewal,
-      })
-    }
 
     return NextResponse.json({
       token,
@@ -161,7 +125,6 @@ export async function POST(request: NextRequest) {
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
       attachmentCount: attachments.length,
       recordName: record.name,
-      emailed,
     })
   } catch (err) {
     console.error('[proof-share/create] error:', err)
