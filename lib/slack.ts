@@ -1,5 +1,18 @@
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || ''
 
+// Global kill switch. Set SLACK_NOTIFICATIONS_ENABLED=false on EasyPanel to
+// mute every outbound Slack message during setup / staging. Also supports
+// SLACK_VENUE_NOTIFICATIONS_ENABLED=false to mute only per-venue channels
+// while keeping the default-channel digests flowing.
+function globalMuted(): boolean {
+  const v = (process.env.SLACK_NOTIFICATIONS_ENABLED || '').trim().toLowerCase()
+  return v === 'false' || v === '0' || v === 'off' || v === 'no'
+}
+function venueMuted(): boolean {
+  const v = (process.env.SLACK_VENUE_NOTIFICATIONS_ENABLED || '').trim().toLowerCase()
+  return v === 'false' || v === '0' || v === 'off' || v === 'no'
+}
+
 interface SlackMessage {
   channel: string
   text: string
@@ -9,6 +22,10 @@ interface SlackMessage {
 export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
   if (!SLACK_BOT_TOKEN) {
     console.warn('SLACK_BOT_TOKEN not set, skipping Slack notification')
+    return false
+  }
+  if (globalMuted()) {
+    console.log('[slack-muted]', msg.channel, msg.text.slice(0, 80))
     return false
   }
 
@@ -39,6 +56,15 @@ const DEFAULT_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 
 /** Fire-and-forget operational notification for any dashboard action */
 export function notifyOps(emoji: string, text: string, link?: { label: string; url: string }, channel?: string) {
+  const isVenueChannel = !!channel && channel !== DEFAULT_CHANNEL
+  if (globalMuted()) {
+    console.log('[slack-muted]', channel || DEFAULT_CHANNEL, text.slice(0, 80))
+    return
+  }
+  if (isVenueChannel && venueMuted()) {
+    console.log('[slack-venue-muted]', channel, text.slice(0, 80))
+    return
+  }
   const blocks: any[] = [
     { type: 'section', text: { type: 'mrkdwn', text: `${emoji} ${text}` } },
   ]
