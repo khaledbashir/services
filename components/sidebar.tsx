@@ -2,27 +2,185 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, ReactNode } from 'react'
+
+type Role = 'admin' | 'manager' | 'technician' | 'any'
+
+interface NavLink {
+  href: string
+  label: string
+  role?: Role      // minimum role required
+  exact?: boolean  // use exact path match instead of startsWith
+}
+
+interface NavSection {
+  key: string
+  label: string
+  icon: ReactNode
+  role?: Role       // minimum role to see the whole section
+  links: NavLink[]
+}
+
+// --- icons ---
+const IC = {
+  operations: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M6 12h12M9 17h6" />
+  ),
+  support: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  ),
+  service: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  ),
+  creative: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+  ),
+  people: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0zm6 3a3 3 0 11-6 0 3 3 0 016 0z" />
+  ),
+  system: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2z" />
+  ),
+  chevron: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+  ),
+}
+
+function Icon({ children, className = 'h-4 w-4' }: { children: ReactNode; className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      {children}
+    </svg>
+  )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [userName, setUserName] = useState('')
-  const [userRole, setUserRole] = useState('')
+  const [userRole, setUserRole] = useState<Role>('any')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    const name = localStorage.getItem('userName')
-    const role = localStorage.getItem('userRole')
-    if (name) setUserName(name)
-    if (role) setUserRole(role)
+    setUserName(localStorage.getItem('userName') || '')
+    setUserRole((localStorage.getItem('userRole') as Role) || 'any')
+    try {
+      const stored = localStorage.getItem('sidebarSections')
+      if (stored) setOpenSections(JSON.parse(stored))
+    } catch {}
+    setHydrated(true)
   }, [])
 
-  useEffect(() => {
-    setMobileOpen(false)
-  }, [pathname])
+  useEffect(() => { setMobileOpen(false) }, [pathname])
 
-  const isActive = (path: string) => pathname.startsWith(path)
+  const isAdmin = userRole === 'admin'
+  const isManager = userRole === 'manager' || isAdmin
+  const isTechnician = userRole === 'technician'
+
+  const roleAllows = (min?: Role): boolean => {
+    if (!min || min === 'any') return true
+    if (min === 'admin') return isAdmin
+    if (min === 'manager') return isManager
+    if (min === 'technician') return isManager || isTechnician
+    return false
+  }
+
+  const sections: NavSection[] = useMemo(() => [
+    {
+      key: 'operations',
+      label: 'Operations',
+      icon: <Icon>{IC.operations}</Icon>,
+      links: [
+        isTechnician
+          ? { href: '/my-events', label: 'My Assignments', role: 'technician' }
+          : { href: '/events', label: 'Events', role: 'manager' },
+        { href: '/shifts', label: 'Shift Templates', role: 'manager' },
+        { href: '/venues', label: 'Venues', role: 'manager' },
+        { href: '/venues/map', label: 'Map View', role: 'manager' },
+      ],
+    },
+    {
+      key: 'support',
+      label: 'Support',
+      icon: <Icon>{IC.support}</Icon>,
+      role: 'manager',
+      links: [
+        { href: '/tickets', label: 'Tickets' },
+        { href: '/kb', label: 'Knowledge Base' },
+        { href: '/gallery', label: 'Visual Gallery' },
+        { href: '/reports', label: 'Reports' },
+      ],
+    },
+    {
+      key: 'service-ops',
+      label: 'Service Ops',
+      icon: <Icon>{IC.service}</Icon>,
+      role: 'technician',
+      links: [
+        { href: '/maintenance', label: 'Maintenance' },
+        { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/checklists', label: 'Checklists' },
+        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
+        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
+        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
+      ],
+    },
+    {
+      key: 'creative',
+      label: 'Creative',
+      icon: <Icon>{IC.creative}</Icon>,
+      role: 'technician',
+      links: [
+        { href: '/designs', label: 'Design Requests' },
+        { href: '/cg-designs', label: 'CG Designs' },
+        { href: '/content-schedules', label: 'Content Schedule' },
+        { href: '/prints', label: 'Print Requests', role: 'manager' },
+      ],
+    },
+    {
+      key: 'people',
+      label: isAdmin ? 'People' : 'External',
+      icon: <Icon>{IC.people}</Icon>,
+      role: 'manager',
+      links: [
+        { href: '/staff', label: 'Staff', role: 'admin' },
+        { href: '/portals', label: 'Client Portals' },
+      ],
+    },
+    {
+      key: 'system',
+      label: 'System',
+      icon: <Icon>{IC.system}</Icon>,
+      role: 'admin',
+      links: [
+        { href: '/inventory', label: 'Inventory' },
+        { href: '/settings', label: 'Settings' },
+      ],
+    },
+  ], [userRole, isTechnician, isAdmin])
+
+  const isLinkActive = (href: string, exact = false) =>
+    exact ? pathname === href : pathname === href || pathname.startsWith(href + '/') || pathname === href
+
+  // Auto-open section that contains the current page (once hydrated).
+  useEffect(() => {
+    if (!hydrated) return
+    const sectionToOpen = sections.find(s => s.links.some(l => isLinkActive(l.href)))
+    if (sectionToOpen && openSections[sectionToOpen.key] === undefined) {
+      setOpenSections(prev => ({ ...prev, [sectionToOpen.key]: true }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, hydrated])
+
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem('sidebarSections', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -32,124 +190,97 @@ export function Sidebar() {
     router.push('/login')
   }
 
-  const isAdmin = userRole === 'admin'
-  const isManager = userRole === 'manager' || isAdmin
-  const isTechnician = userRole === 'technician'
-
-  const linkClass = (path: string) =>
-    isActive(path)
-      ? 'block px-4 py-2 rounded text-[13px] font-medium bg-[#0A52EF]/15 text-white border-l-2 border-[#0A52EF] pl-3 transition-all'
-      : 'block px-4 py-2 rounded text-[13px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-all'
-
-  const subLinkClass = (path: string) =>
-    isActive(path)
-      ? 'block pl-9 pr-4 py-1.5 rounded text-[12px] font-medium text-white bg-[#0A52EF]/10 transition-all'
-      : 'block pl-9 pr-4 py-1.5 rounded text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all'
-
-  const sectionLabel = (text: string) => (
-    <div className="pt-4 pb-1">
-      <p className="px-4 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">{text}</p>
-    </div>
-  )
-
   const sidebarContent = (
     <>
-      {/* Logo Area */}
-      <Link href="/dashboard" className="block p-6 border-b border-[#0A1628] hover:bg-[#0A1628]/50 transition-colors">
-        <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-8" />
-        <p className="text-zinc-500 text-xs mt-2 font-medium">Services</p>
+      <Link href="/dashboard" className="block p-6 border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+        <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7" />
+        <p className="text-zinc-500 text-[11px] mt-1.5 font-medium tracking-wider uppercase">Services</p>
       </Link>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-3 overflow-y-auto space-y-0.5">
+        {/* Top-level: Dashboard / My Events */}
         {isManager ? (
-          <Link href="/dashboard" className={linkClass('/dashboard')}>Dashboard</Link>
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${
+              isLinkActive('/dashboard', true)
+                ? 'bg-[#0A52EF]/15 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10h14V10" /></Icon>
+            Dashboard
+          </Link>
         ) : (
-          <Link href="/my-events" className={linkClass('/my-events')}>My Events</Link>
+          <Link
+            href="/my-events"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${
+              isLinkActive('/my-events')
+                ? 'bg-[#0A52EF]/15 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            My Events
+          </Link>
         )}
 
-        {/* Operations */}
-        {sectionLabel('Operations')}
-        {isTechnician ? (
-          <Link href="/my-events" className={linkClass('/my-events')}>My Assignments</Link>
-        ) : (
-          <Link href="/events" className={linkClass('/events')}>Events</Link>
-        )}
-        {isManager && <Link href="/shifts" className={subLinkClass('/shifts')}>Shift Templates</Link>}
-        {!isTechnician && <Link href="/venues" className={linkClass('/venues')}>Venues</Link>}
-        {isManager && <Link href="/venues/map" className={subLinkClass('/venues/map')}>Map View</Link>}
+        {sections.map(section => {
+          if (!roleAllows(section.role)) return null
+          const visibleLinks = section.links.filter(l => roleAllows(l.role))
+          if (visibleLinks.length === 0) return null
 
-        {/* Support */}
-        {isManager && (
-          <>
-            {sectionLabel('Support')}
-            <Link href="/tickets" className={linkClass('/tickets')}>Tickets</Link>
-            <Link href="/kb" className={subLinkClass('/kb')}>Knowledge Base</Link>
-            <Link href="/gallery" className={subLinkClass('/gallery')}>Visual Gallery</Link>
-            <Link href="/reports" className={linkClass('/reports')}>Reports</Link>
-          </>
-        )}
+          const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))
+          const isOpen = openSections[section.key] ?? containsActive
 
-        {/* Service Ops */}
-        {(isManager || isTechnician) && (
-          <>
-            {sectionLabel('Service Ops')}
-            <Link href="/maintenance" className={linkClass('/maintenance')}>Maintenance</Link>
-            <Link href="/walkthroughs" className={linkClass('/walkthroughs')}>Walkthroughs</Link>
-            <Link href="/checklists" className={linkClass('/checklists')}>Checklists</Link>
-            {isManager && <Link href="/rma" className={linkClass('/rma')}>RMA Tracker</Link>}
-            {isManager && <Link href="/parts-orders" className={linkClass('/parts-orders')}>Parts Orders</Link>}
-            {isManager && <Link href="/parts" className={subLinkClass('/parts')}>Parts Catalog</Link>}
-          </>
-        )}
-
-        {/* Creative Ops */}
-        {(isManager || isTechnician) && (
-          <>
-            {sectionLabel('Creative')}
-            <Link href="/cg-designs" className={linkClass('/cg-designs')}>CG Designs</Link>
-            <Link href="/content-schedules" className={linkClass('/content-schedules')}>Content Schedule</Link>
-            {isManager && <Link href="/prints" className={linkClass('/prints')}>Print Requests</Link>}
-          </>
-        )}
-
-        {/* People */}
-        {isAdmin && (
-          <>
-            {sectionLabel('People')}
-            <Link href="/staff" className={linkClass('/staff')}>Staff</Link>
-            <Link href="/portals" className={linkClass('/portals')}>Client Portals</Link>
-          </>
-        )}
-        {isManager && !isAdmin && (
-          <>
-            {sectionLabel('External')}
-            <Link href="/portals" className={linkClass('/portals')}>Client Portals</Link>
-          </>
-        )}
-
-        {/* System */}
-        {isAdmin && (
-          <>
-            {sectionLabel('System')}
-            <Link href="/inventory" className={linkClass('/inventory')}>Inventory</Link>
-            <Link href="/settings" className={linkClass('/settings')}>Settings</Link>
-          </>
-        )}
+          return (
+            <div key={section.key} className="pt-2">
+              <button
+                onClick={() => toggleSection(section.key)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="opacity-70">{section.icon}</span>
+                  {section.label}
+                </span>
+                <Icon className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}>{IC.chevron}</Icon>
+              </button>
+              {isOpen && (
+                <div className="mt-1 space-y-0.5">
+                  {visibleLinks.map(link => {
+                    const active = isLinkActive(link.href, link.exact)
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={`block pl-9 pr-3 py-1.5 rounded-md text-[13px] transition-colors ${
+                          active
+                            ? 'bg-[#0A52EF]/15 text-white font-medium'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {link.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </nav>
 
-      {/* User Info + Logout */}
-      <div className="p-4 border-t border-[#0A1628] space-y-4">
+      <div className="p-3 border-t border-white/5">
         {userName && (
-          <div className="px-2 py-3">
-            <p className="text-zinc-500 text-xs font-medium uppercase tracking-wide">Logged in as</p>
-            <p className="text-white text-sm font-medium truncate mt-1">{userName}</p>
+          <div className="px-3 py-2 mb-1">
+            <p className="text-zinc-500 text-[10px] font-medium uppercase tracking-wider">Signed in</p>
+            <p className="text-white text-[13px] font-medium truncate mt-0.5">{userName}</p>
           </div>
         )}
         <button
           onClick={handleLogout}
-          className="w-full text-left px-4 py-2.5 text-zinc-500 hover:text-zinc-300 text-[13px] font-medium transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
         >
+          <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></Icon>
           Sign out
         </button>
       </div>
@@ -158,38 +289,30 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded-md shadow-lg"
         aria-label="Open menu"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
+        <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></Icon>
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)} />
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Mobile sidebar */}
-      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-60 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
           aria-label="Close menu"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></Icon>
         </button>
         {sidebarContent}
       </div>
 
-      {/* Desktop sidebar */}
-      <div className="hidden lg:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-[#0A1628]">
+      <div className="hidden lg:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-white/5">
         {sidebarContent}
       </div>
     </>
