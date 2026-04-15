@@ -354,7 +354,13 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
     return true
   })
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const formatDate = (d: string) => {
+    // Parse YYYY-MM-DD parts directly to avoid the UTC-midnight shift
+    // that pushes dates one day west in non-UTC zones.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
+    const dt = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d)
+    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  }
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })
   const getInitials = (name: string | null | undefined) => { if (!name) return '?'; const p = name.split(' '); return (p[0]?.[0] + (p[1]?.[0] || '')).toUpperCase() }
 

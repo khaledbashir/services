@@ -261,7 +261,9 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
   )
 
   const formatDate = (d: string) => {
-    const date = new Date(d)
+    // Parse YYYY-MM-DD parts directly to avoid UTC-midnight shift.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
+    const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d)
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   }
 
