@@ -36,6 +36,17 @@ interface ChatMsg {
   name?: string
 }
 
+function sanitizeForProvider(messages: ChatMsg[]): ChatMsg[] {
+  // Gemini's OpenAI-compat endpoint rejects content: null on assistant
+  // tool-call turns. Coerce nulls to empty strings — OpenAI/Kimi/GLM all
+  // still accept the empty string shape. Strip empty tool_calls arrays too.
+  return messages.map((m) => {
+    const out: ChatMsg = { ...m, content: m.content == null ? '' : m.content }
+    if (out.tool_calls && out.tool_calls.length === 0) delete out.tool_calls
+    return out
+  })
+}
+
 async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Promise<ChatMsg> {
   const provider = pickProvider()
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
@@ -43,7 +54,7 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Prom
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
     body: JSON.stringify({
       model: provider.model,
-      messages,
+      messages: sanitizeForProvider(messages),
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       temperature: 0.2,
@@ -53,8 +64,11 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Prom
   })
   if (!res.ok) {
     const body = await res.text()
-    const rateLimited = res.status === 429 || /rate|1302|quota/i.test(body)
-    if (rateLimited && attempt < PROVIDERS.length - 1) return callLlm(messages, tools, attempt + 1)
+    // Roll to the next provider on any non-2xx. Providers disagree about
+    // edge-cases (Gemini 400 on null content, MiniMax 1302 rate limit,
+    // Ollama 503). Cycling gives us resilience without guessing which
+    // provider hates which input shape.
+    if (attempt < PROVIDERS.length - 1) return callLlm(messages, tools, attempt + 1)
     throw new Error(`AI API ${provider.name} ${res.status}: ${body.slice(0, 300)}`)
   }
   const data = await res.json() as { choices?: Array<{ message?: ChatMsg }> }
@@ -63,13 +77,25 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Prom
   return msg
 }
 
-const SYSTEM_PROMPT = `You are the ANC Services in-dashboard assistant.
+function buildSystemPrompt(userName: string | undefined, userRole: AgentRole): string {
+  const today = new Date().toISOString().slice(0, 10)
+  const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
+  return `You are the ANC Services in-dashboard assistant.
 You help ANC staff manage events, venues, tickets, maintenance, design
 requests, and more across the services platform. You have tools/skills
 for reading and writing dashboard data — prefer using a tool to answer
 rather than guessing. When the user asks for something, use the
 relevant skill, then summarize the result concisely. Use markdown
-lightly (bullets are fine). Never invent UUIDs.`
+lightly (bullets are fine). Never invent UUIDs.
+
+Today is ${weekday}, ${today} (America/New_York). Resolve relative
+dates yourself — "tomorrow" = the next calendar day, "Friday" = the
+next upcoming Friday, etc. Always pass YYYY-MM-DD to skills. If a
+user gives a vague reference and you can reasonably infer it, do so
+without asking; only ask for clarification if it's truly ambiguous.
+
+User: ${userName || 'unknown'} (role: ${userRole}).`
+}
 
 export interface StreamEvent {
   type: 'text' | 'tool_call' | 'tool_result' | 'done' | 'error'
@@ -110,7 +136,7 @@ export async function runChat(params: {
   const tools = await toolDefinitions(userRole)
 
   // Build messages array
-  const messages: ChatMsg[] = [{ role: 'system', content: SYSTEM_PROMPT + `\nUser: ${userName || 'unknown'}, role: ${userRole}.` }]
+  const messages: ChatMsg[] = [{ role: 'system', content: buildSystemPrompt(userName, userRole) }]
   for (const row of history.rows) {
     if (row.role === 'assistant') {
       messages.push({
