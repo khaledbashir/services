@@ -45,6 +45,13 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
+    // Hard cap — the table now has ~20k rows after the CRM import and the
+    // Kanban page blows up if we try to render everything. Default to a
+    // usable page; caller can bump via ?limit=.
+    const requestedLimit = Number(searchParams.get('limit')) || 200
+    const limit = Math.min(Math.max(requestedLimit, 1), 500)
+    params.push(limit)
+
     const result = await query(
       `SELECT dr.id, dr.job_title, dr.company_name, dr.tricode, dr.ftp_proof_link, dr.ftp_final_link,
               dr.final_file_name, dr.final_duration, dr.notes, dr.boards_requested, dr.sizes_requested,
@@ -59,11 +66,21 @@ export async function GET(request: NextRequest) {
        LEFT JOIN staff d ON dr.designer_id = d.id
        LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
        ${whereClause}
-       ORDER BY COALESCE(dr.due_date, CURRENT_DATE + INTERVAL '365 days'), dr.created_at DESC`,
+       ORDER BY COALESCE(dr.due_date, CURRENT_DATE + INTERVAL '365 days'), dr.created_at DESC
+       LIMIT $${params.length}`,
       params,
     )
 
-    return NextResponse.json({ design_requests: result.rows })
+    const countResult = await query(
+      `SELECT COUNT(*) FROM design_requests dr ${whereClause.replace(/\$(\d+)/g, (_, n) => `$${n}`) || ''}`,
+      params.slice(0, -1),
+    )
+
+    return NextResponse.json({
+      design_requests: result.rows,
+      total: Number(countResult.rows[0]?.count || 0),
+      limit,
+    })
   } catch (err) {
     console.error('Error fetching design requests:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
