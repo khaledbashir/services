@@ -4,14 +4,21 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface Chat { id: string; title: string; updated_at: string }
 
+interface ThoughtStep {
+  kind: 'tool_call' | 'tool_result' | 'text' | 'error'
+  name?: string
+  args?: string
+  result?: string
+  text?: string
+  at: number
+}
+
 interface MessageRow {
   id?: string
   role: 'user' | 'assistant' | 'tool' | 'system'
   content: string | null
-  tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> | null
-  tool_call_id?: string | null
-  tool_name?: string | null
   pending?: boolean
+  steps?: ThoughtStep[]
 }
 
 interface Skill {
@@ -22,43 +29,64 @@ interface Skill {
   role: string
 }
 
+interface Provider { name: string; model: string }
+
 const STORAGE_KEY = 'ai-panel-open'
+const PROVIDER_KEY = 'ai-panel-provider'
 
 export function AiAssistant() {
   const [open, setOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [showSkills, setShowSkills] = useState(false)
   const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [skills, setSkills] = useState<Skill[]>([])
-  const [showSkills, setShowSkills] = useState(false)
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [selectedProvider, setSelectedProvider] = useState<string>('')
+  const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
+  const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => { setOpen(localStorage.getItem(STORAGE_KEY) === '1') }, [])
+  useEffect(() => {
+    setOpen(localStorage.getItem(STORAGE_KEY) === '1')
+    setSelectedProvider(localStorage.getItem(PROVIDER_KEY) || '')
+  }, [])
   useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, open ? '1' : '0') }, [open])
+  useEffect(() => { if (selectedProvider && typeof window !== 'undefined') localStorage.setItem(PROVIDER_KEY, selectedProvider) }, [selectedProvider])
 
   const loadChats = useCallback(async () => {
     const r = await fetch('/api/ai/chats')
     if (r.ok) setChats((await r.json()).chats || [])
   }, [])
-
   const loadSkills = useCallback(async () => {
     const r = await fetch('/api/ai/skills')
     if (r.ok) setSkills((await r.json()).skills || [])
   }, [])
+  const loadProviders = useCallback(async () => {
+    const r = await fetch('/api/ai/providers')
+    if (r.ok) {
+      const data = await r.json()
+      setProviders(data.providers || [])
+      if (!selectedProvider && data.providers?.[0]) setSelectedProvider(data.providers[0].name)
+    }
+  }, [selectedProvider])
 
   const loadChat = useCallback(async (id: string) => {
     const r = await fetch(`/api/ai/chats/${id}`)
     if (r.ok) {
       const d = await r.json()
       setActiveChatId(id)
-      setMessages(d.messages || [])
+      // Hydrate historical messages (no step stream on reload).
+      setMessages((d.messages || []).map((m: MessageRow) => ({ ...m, steps: [] })))
     }
   }, [])
 
-  useEffect(() => { if (open) { loadChats(); loadSkills() } }, [open, loadChats, loadSkills])
+  useEffect(() => {
+    if (open) { loadChats(); loadSkills(); loadProviders() }
+  }, [open, loadChats, loadSkills, loadProviders])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -78,6 +106,18 @@ export function AiAssistant() {
     loadChats()
   }
 
+  const stop = () => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setSending(false)
+    setMessages(prev => {
+      const copy = [...prev]
+      const last = copy[copy.length - 1]
+      if (last?.pending) copy[copy.length - 1] = { ...last, pending: false, content: (last.content || '') + '\n\n_(stopped)_' }
+      return copy
+    })
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
@@ -85,30 +125,34 @@ export function AiAssistant() {
     setInput('')
 
     const optimisticUser: MessageRow = { role: 'user', content: text }
-    const pendingAssistant: MessageRow = { role: 'assistant', content: '', pending: true }
+    const pendingAssistant: MessageRow = { role: 'assistant', content: '', pending: true, steps: [] }
     setMessages(prev => [...prev, optimisticUser, pendingAssistant])
+
+    const controller = new AbortController()
+    abortRef.current = controller
 
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({ chat_id: activeChatId, message: text }),
+        body: JSON.stringify({ chat_id: activeChatId, message: text, provider: selectedProvider || undefined }),
+        signal: controller.signal,
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let sawText = false
       let assistantText = ''
 
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split('\n\n')
-        buffer = events.pop() || ''
-        for (const chunk of events) {
+        const chunks = buffer.split('\n\n')
+        buffer = chunks.pop() || ''
+
+        for (const chunk of chunks) {
           const line = chunk.split('\n').find(l => l.startsWith('data: '))
           if (!line) continue
           try {
@@ -117,34 +161,49 @@ export function AiAssistant() {
               setActiveChatId(ev.data.id)
             } else if (ev.type === 'text') {
               if (typeof ev.data === 'string' && ev.data.length > 0) {
-                assistantText += ev.data + '\n\n'
-                sawText = true
+                assistantText = assistantText ? assistantText + '\n\n' + ev.data : ev.data
                 setMessages(prev => {
                   const copy = [...prev]
                   const last = copy[copy.length - 1]
-                  if (last && last.pending) copy[copy.length - 1] = { ...last, content: assistantText.trim() }
+                  if (last?.pending) copy[copy.length - 1] = { ...last, content: assistantText }
                   return copy
                 })
               }
             } else if (ev.type === 'tool_call') {
+              const step: ThoughtStep = {
+                kind: 'tool_call',
+                name: ev.data.name,
+                args: ev.data.args,
+                at: Date.now(),
+              }
               setMessages(prev => {
                 const copy = [...prev]
                 const last = copy[copy.length - 1]
-                if (last && last.pending) {
-                  copy[copy.length - 1] = {
-                    ...last,
-                    content: (last.content || '') + `\n\n🔧 Running \`${ev.data.name}\`…`,
-                  }
-                }
+                if (last?.pending) copy[copy.length - 1] = { ...last, steps: [...(last.steps || []), step] }
                 return copy
               })
             } else if (ev.type === 'tool_result') {
-              // Leave the running line; tool result is persisted server-side.
+              setMessages(prev => {
+                const copy = [...prev]
+                const last = copy[copy.length - 1]
+                if (last?.pending) {
+                  const steps = [...(last.steps || [])]
+                  // Pair into the most recent matching tool_call.
+                  for (let i = steps.length - 1; i >= 0; i--) {
+                    if (steps[i].kind === 'tool_call' && steps[i].name === ev.data.name && !steps[i].result) {
+                      steps[i] = { ...steps[i], result: ev.data.result }
+                      break
+                    }
+                  }
+                  copy[copy.length - 1] = { ...last, steps }
+                }
+                return copy
+              })
             } else if (ev.type === 'error') {
               setMessages(prev => {
                 const copy = [...prev]
                 const last = copy[copy.length - 1]
-                if (last && last.pending) copy[copy.length - 1] = { ...last, content: `⚠️ ${ev.data}`, pending: false }
+                if (last?.pending) copy[copy.length - 1] = { ...last, pending: false, content: `⚠️ ${ev.data}` }
                 return copy
               })
             }
@@ -155,27 +214,26 @@ export function AiAssistant() {
       setMessages(prev => {
         const copy = [...prev]
         const last = copy[copy.length - 1]
-        if (last?.pending) {
-          copy[copy.length - 1] = {
-            ...last,
-            pending: false,
-            content: sawText ? assistantText.trim() : 'Done.',
-          }
-        }
+        if (last?.pending) copy[copy.length - 1] = { ...last, pending: false, content: assistantText || 'Done.' }
         return copy
       })
       loadChats()
-    } catch (err) {
-      setMessages(prev => {
-        const copy = [...prev]
-        const last = copy[copy.length - 1]
-        if (last?.pending) copy[copy.length - 1] = { role: 'assistant', content: `⚠️ ${err instanceof Error ? err.message : String(err)}` }
-        return copy
-      })
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name !== 'AbortError') {
+        setMessages(prev => {
+          const copy = [...prev]
+          const last = copy[copy.length - 1]
+          if (last?.pending) copy[copy.length - 1] = { ...last, pending: false, content: `⚠️ ${err instanceof Error ? err.message : String(err)}` }
+          return copy
+        })
+      }
     } finally {
       setSending(false)
+      abortRef.current = null
     }
   }
+
+  const toggleStep = (key: string) => setExpandedSteps(prev => ({ ...prev, [key]: !prev[key] }))
 
   const skillsByCategory: Record<string, Skill[]> = {}
   for (const s of skills) (skillsByCategory[s.category] ||= []).push(s)
@@ -193,31 +251,25 @@ export function AiAssistant() {
       </button>
 
       {open && (
-        <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[420px] bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col">
+        <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[440px] bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0A52EF]">ANC Assistant</span>
               {activeChatId ? (
-                <span className="text-xs text-zinc-500 truncate max-w-[160px]">
-                  {chats.find(c => c.id === activeChatId)?.title || 'Chat'}
-                </span>
+                <span className="text-xs text-zinc-500 truncate">{chats.find(c => c.id === activeChatId)?.title || 'Chat'}</span>
               ) : null}
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={newChat} title="New chat"
-                className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600" aria-label="New chat">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m-3-3h6m7-3A9 9 0 11 3 12a9 9 0 0118 0z" /></svg>
+              <button onClick={newChat} title="New chat" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               </button>
-              <button onClick={() => setHistoryOpen(v => !v)} title="Chat history"
-                className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600" aria-label="History">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+              <button onClick={() => setHistoryOpen(v => !v)} title="History" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </button>
-              <button onClick={() => setShowSkills(v => !v)} title="Skills"
-                className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600" aria-label="Skills">
+              <button onClick={() => setShowSkills(v => !v)} title="Skills" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               </button>
-              <button onClick={() => setOpen(false)} title="Close"
-                className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600" aria-label="Close">
+              <button onClick={() => setOpen(false)} title="Close" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -233,7 +285,7 @@ export function AiAssistant() {
                     className={`flex-1 text-left text-sm truncate ${activeChatId === c.id ? 'text-[#0A52EF] font-medium' : 'text-zinc-700'}`}>
                     {c.title}
                   </button>
-                  <button onClick={() => deleteChat(c.id)} className="text-zinc-400 hover:text-red-600 p-1" aria-label="Delete chat">
+                  <button onClick={() => deleteChat(c.id)} className="text-zinc-400 hover:text-red-600 p-1">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -243,16 +295,19 @@ export function AiAssistant() {
 
           {showSkills && (
             <div className="border-b border-[#E8E8E8] bg-zinc-50/60 max-h-72 overflow-y-auto p-3 space-y-3">
+              <div className="text-[11px] text-zinc-500">
+                <strong>{skills.length}</strong> skills available to you
+              </div>
               {Object.keys(skillsByCategory).sort().map(cat => (
                 <div key={cat}>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-1">{cat}</div>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {skillsByCategory[cat].map(s => (
-                      <div key={s.name} className="flex items-start gap-2 text-xs text-zinc-600 px-2 py-1.5 rounded hover:bg-white">
+                      <div key={s.name} className="flex items-start gap-2 text-xs text-zinc-600 px-2 py-1 rounded hover:bg-white">
                         <span className="text-sm">{s.icon}</span>
-                        <div>
-                          <div className="font-medium text-zinc-800">{s.name}</div>
-                          <div className="text-zinc-500">{s.description}</div>
+                        <div className="min-w-0">
+                          <div className="font-mono font-medium text-zinc-800 truncate">{s.name}</div>
+                          <div className="text-zinc-500 truncate">{s.description}</div>
                         </div>
                       </div>
                     ))}
@@ -270,35 +325,96 @@ export function AiAssistant() {
               </div>
             ) : messages.filter(m => m.role !== 'tool' && m.role !== 'system').map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words ${
-                  m.role === 'user'
-                    ? 'bg-[#0A52EF] text-white'
-                    : 'bg-zinc-100 text-zinc-800'
-                }`}>
-                  {m.content || (m.pending ? '…' : '')}
-                </div>
+                {m.role === 'user' ? (
+                  <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words bg-[#0A52EF] text-white">
+                    {m.content}
+                  </div>
+                ) : (
+                  <div className="max-w-[90%] w-full space-y-1.5">
+                    {(m.steps || []).map((step, si) => {
+                      const key = `${i}-${si}`
+                      const expanded = !!expandedSteps[key]
+                      return (
+                        <div key={si} className="rounded-lg border border-[#E8E8E8] bg-zinc-50 text-xs">
+                          <button
+                            onClick={() => toggleStep(key)}
+                            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-zinc-100 rounded-lg"
+                          >
+                            <span className="flex items-center gap-2 text-zinc-700">
+                              <span className="text-sm">{step.result ? '✓' : '🔧'}</span>
+                              <span className="font-mono font-medium">{step.name}</span>
+                            </span>
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                          </button>
+                          {expanded && (
+                            <div className="px-3 pb-2 space-y-1 font-mono text-[11px]">
+                              {step.args ? (
+                                <div>
+                                  <div className="text-zinc-400">Args:</div>
+                                  <div className="text-zinc-700 break-all">{step.args}</div>
+                                </div>
+                              ) : null}
+                              {step.result ? (
+                                <div>
+                                  <div className="text-zinc-400">Result:</div>
+                                  <div className="text-zinc-700 break-all max-h-40 overflow-y-auto">{step.result.length > 1200 ? step.result.slice(0, 1200) + '…' : step.result}</div>
+                                </div>
+                              ) : (
+                                <div className="text-zinc-400">Running…</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {m.content ? (
+                      <div className="rounded-2xl bg-zinc-100 text-zinc-800 px-4 py-2.5 text-sm whitespace-pre-wrap break-words">
+                        {m.content}
+                      </div>
+                    ) : m.pending ? (
+                      <div className="rounded-2xl bg-zinc-100 text-zinc-400 px-4 py-2.5 text-sm italic">Thinking…</div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
-          <div className="p-3 border-t border-[#E8E8E8]">
+          <div className="p-3 border-t border-[#E8E8E8] space-y-2">
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-                placeholder="Message the assistant…"
+                placeholder="Ask, search, or make anything…"
                 rows={1}
                 className="flex-1 resize-none rounded-xl border border-[#E8E8E8] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 max-h-32"
                 disabled={sending}
               />
-              <button
-                onClick={send}
-                disabled={sending || !input.trim()}
-                className="rounded-xl bg-[#0A52EF] text-white px-3 py-2 text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {sending ? '…' : 'Send'}
-              </button>
+              {sending ? (
+                <button onClick={stop} className="rounded-xl bg-red-50 text-red-600 border border-red-200 px-3 py-2 text-sm font-medium hover:bg-red-100" title="Stop">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                </button>
+              ) : (
+                <button onClick={send} disabled={!input.trim()}
+                  className="rounded-xl bg-[#0A52EF] text-white px-3 py-2 text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 disabled:cursor-not-allowed">
+                  Send
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-zinc-400">
+              <span>{skills.length} skills loaded</span>
+              {providers.length > 0 && (
+                <select
+                  value={selectedProvider}
+                  onChange={e => setSelectedProvider(e.target.value)}
+                  className="text-[11px] text-zinc-600 bg-transparent border-0 focus:outline-none cursor-pointer"
+                  title="AI provider"
+                  disabled={sending}
+                >
+                  {providers.map(p => <option key={p.name} value={p.name}>{p.model} ({p.name})</option>)}
+                </select>
+              )}
             </div>
           </div>
         </div>

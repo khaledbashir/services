@@ -43,6 +43,19 @@ async function loadSkills(): Promise<Skill[]> {
     }
   }
 
+  // Auto-generated CRUD skills (find_many / find_one / create / update /
+  // delete) for every dashboard table we care about. Lives in
+  // _auto-crud.ts — underscore prefix keeps the fs-scan fallback from
+  // trying to interpret it as a single-skill file.
+  try {
+    const { autoCrudSkills } = await import('@/lib/ai/skills/_auto-crud')
+    for (const s of autoCrudSkills()) {
+      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
+    }
+  } catch (err) {
+    console.warn('[ai/registry] failed to load auto-CRUD skills:', err instanceof Error ? err.message : err)
+  }
+
   // Fallback fs scan for files that aren't in the static map yet (dev mode).
   try {
     const entries = fs.readdirSync(SKILLS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'))

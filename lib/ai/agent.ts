@@ -47,8 +47,10 @@ function sanitizeForProvider(messages: ChatMsg[]): ChatMsg[] {
   })
 }
 
-async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Promise<ChatMsg> {
-  const provider = pickProvider()
+async function callLlm(messages: ChatMsg[], tools: unknown[], preferredProvider?: string, attempt = 0): Promise<ChatMsg> {
+  const provider = preferredProvider && attempt === 0
+    ? PROVIDERS.find(p => p.name === preferredProvider) || pickProvider()
+    : pickProvider()
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
@@ -68,7 +70,7 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Prom
     // edge-cases (Gemini 400 on null content, MiniMax 1302 rate limit,
     // Ollama 503). Cycling gives us resilience without guessing which
     // provider hates which input shape.
-    if (attempt < PROVIDERS.length - 1) return callLlm(messages, tools, attempt + 1)
+    if (attempt < PROVIDERS.length - 1) return callLlm(messages, tools, preferredProvider, attempt + 1)
     throw new Error(`AI API ${provider.name} ${res.status}: ${body.slice(0, 300)}`)
   }
   const data = await res.json() as { choices?: Array<{ message?: ChatMsg }> }
@@ -108,9 +110,10 @@ export async function runChat(params: {
   userRole: AgentRole
   userName?: string
   userMessage: string
+  preferredProvider?: string
   emit: (event: StreamEvent) => void
 }): Promise<void> {
-  const { chatId, userId, userRole, userName, userMessage, emit } = params
+  const { chatId, userId, userRole, userName, userMessage, preferredProvider, emit } = params
 
   // Persist user message
   await query(
@@ -160,7 +163,7 @@ export async function runChat(params: {
     // Tool loop: keep calling until the assistant returns a message with no tool_calls.
     const MAX_ITERS = 6
     for (let i = 0; i < MAX_ITERS; i++) {
-      const reply = await callLlm(messages, tools)
+      const reply = await callLlm(messages, tools, preferredProvider)
       messages.push(reply)
 
       // Persist assistant turn

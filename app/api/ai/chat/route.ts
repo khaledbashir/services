@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   let chatId = typeof body.chat_id === 'string' ? body.chat_id : ''
   const message = typeof body.message === 'string' ? body.message.trim() : ''
+  const preferredProvider = typeof body.provider === 'string' ? body.provider : undefined
   if (!message) return new Response(JSON.stringify({ error: 'message is required' }), { status: 400 })
 
   if (!chatId) {
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
           userRole: auth.role,
           userName: auth.fullName,
           userMessage: message,
+          preferredProvider,
           emit,
         })
       } catch (err) {
