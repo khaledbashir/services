@@ -1,6 +1,6 @@
 # ANC Twenty CRM — Unified Platform Architecture
 
-> **Status:** Design Document (not yet implemented)
+> **Status:** Phase 1–4 Complete (schema, views, sync, integrations, Wrike cutover — 2026-04-08)
 > **Author:** Ahmad Basheer
 > **Date:** 2026-04-06
 > **Audience:** Ahmad (architect), Joe (ops review), Nick & Gianni (Wrike replacement validation)
@@ -725,7 +725,7 @@ Issues discovered from Twenty CRM API research (April 2026):
 | Technician | `2b49694c-f341-4992-9675-a1f3b8e1e898` | Yes |
 | VenueEvent | `25371460-c4b4-42f8-80f1-78f14a895818` | Yes |
 | ServiceTicket | `c91ebea2-7dc1-4498-bd54-ebfe89e38c41` | Yes |
-| Service | *TBD — not yet created* | Yes |
+| Service | `acdef7d4-9be2-4a3e-b671-235f9ee0bbb8` | Yes |
 
 ## Appendix B: API Quick Reference
 

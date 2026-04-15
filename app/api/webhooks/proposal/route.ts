@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import {
+  findOrCreateTwentyCompany,
+  findOrCreateTwentyVenue,
+  createOrUpdateOpportunity,
+  createServiceRecords,
+  twentyFetch,
+} from '@/lib/twenty-sync'
 
 // Webhook receiver: when a proposal is won in rag2, auto-create the venue/service account
 export async function POST(request: NextRequest) {
@@ -112,6 +119,49 @@ export async function POST(request: NextRequest) {
           },
         ],
       })
+    }
+
+    // --- Twenty CRM Integration ---
+    const TWENTY_API_KEY = process.env.TWENTY_API_KEY || ''
+    if (TWENTY_API_KEY) {
+      try {
+        const twentyCompanyId = await findOrCreateTwentyCompany(proposal.clientName)
+        const twentyVenueId = await findOrCreateTwentyVenue(proposal.venue, venueId, twentyCompanyId)
+
+        const opportunityId = await createOrUpdateOpportunity({
+          name: `${proposal.clientName} — ${proposal.venue}`,
+          bidStatus: 'WON',
+          stage: 'CUSTOMER',
+          amount: proposal.totalAmount || undefined,
+          proposalUrl: proposal.proposalUrl || undefined,
+          ledSqFt: proposal.totalSqFt || undefined,
+          manufacturer: proposal.manufacturer || undefined,
+          companyId: twentyCompanyId,
+          venueId: twentyVenueId,
+        })
+
+        await createServiceRecords(twentyVenueId, twentyCompanyId, ['LED_MAINTENANCE'])
+
+        await twentyFetch(`companies/${twentyCompanyId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ serviceStatus: 'ACTIVE_INSTALL' }),
+        })
+
+        // Log to activity_log
+        await query(
+          `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+           VALUES ('twenty_opportunity_created', 'opportunity', NULL, NULL, $1)`,
+          [JSON.stringify({
+            client: proposal.clientName,
+            venue: proposal.venue,
+            twentyOpportunityId: opportunityId,
+            twentyCompanyId,
+            twentyVenueId,
+          })]
+        )
+      } catch (err) {
+        console.error('Twenty CRM integration error (non-fatal):', err)
+      }
     }
 
     return NextResponse.json({

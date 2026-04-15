@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
 import { geocodeAddress } from '@/lib/geocode'
+import { twentyClient } from '@/lib/twenty-client'
 
 export async function GET(
   request: NextRequest,
@@ -99,11 +100,38 @@ export async function GET(
       [venueId]
     )
 
+    // Enrich with Twenty CRM data (non-fatal)
+    let twentyCrm: Record<string, unknown> | null = null
+    if (twentyClient.isConfigured()) {
+      try {
+        const twentyVenues = await twentyClient.getVenues()
+        const matched = twentyVenues.find(
+          tv => tv.servicesId === venueId || tv.name.toLowerCase() === venue.name.toLowerCase()
+        )
+        if (matched) {
+          const [crmServices, company] = await Promise.all([
+            twentyClient.getServices(`venueId[eq]:"${matched.id}"`),
+            matched.companyId ? twentyClient.getCompany(matched.companyId) : null,
+          ])
+          twentyCrm = {
+            venueId: matched.id,
+            venueStatus: matched.venueStatus,
+            hasContractedServices: matched.hasContractedServices,
+            services: crmServices,
+            company,
+          }
+        }
+      } catch (err) {
+        console.warn('Twenty CRM enrichment failed (non-fatal):', err)
+      }
+    }
+
     return NextResponse.json({
       venue,
       upcomingEvents: eventsResult.rows,
       assignedStaff: staffResult.rows,
       venueServices: servicesResult.rows,
+      twentyCrm,
     })
   } catch (err) {
     console.error('Error fetching venue:', err)

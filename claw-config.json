@@ -49,6 +49,13 @@
       "schedule": "7:00 AM ET daily",
       "enabled": true
     }
+    ,{
+      "id": "twenty-notifications",
+      "name": "Twenty CRM Notifications",
+      "description": "Polls Twenty CRM for won deals, high-priority tickets, overdue tasks, and expiring contracts — sends Slack alerts",
+      "schedule": "Every 15 minutes",
+      "enabled": true
+    }
   ],
   "channel": "#external--ai-services"
 }

@@ -84,6 +84,16 @@ export async function GET(
       }
     })
 
+    if ((record as any).ftpProofLink) {
+      attachmentsForClient.unshift({
+        id: 'ftp-link',
+        name: 'View Proof (External Link)',
+        extension: 'link',
+        category: 'link' as any,
+        fileUrl: (record as any).ftpProofLink,
+      })
+    }
+
     return NextResponse.json({
       token,
       state: share.client_response

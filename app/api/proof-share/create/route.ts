@@ -63,11 +63,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify at least one attachment exists
+    // Verify at least one attachment exists or ftpProofLink exists
     const attachments = await fetchAttachmentsForRecord(twentyObjectType, twentyRecordId)
-    if (attachments.length === 0) {
+    const hasFtpLink = !!(record as any).ftpProofLink
+    if (attachments.length === 0 && !hasFtpLink) {
       return NextResponse.json(
-        { error: 'This record has no attachments. Upload a proof file to Twenty first.' },
+        { error: 'This record has no attachments or FTP link. Upload a proof file to Twenty first.' },
         { status: 400 }
       )
     }

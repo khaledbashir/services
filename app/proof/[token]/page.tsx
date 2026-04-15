@@ -415,6 +415,22 @@ function FilePreview({ attachment }: { attachment: Attachment }) {
       </div>
     )
   }
+  if (category === 'link') {
+    return (
+      <div className="p-16 text-center">
+        <div className="text-5xl mb-3">🔗</div>
+        <div className="text-sm text-gray-700 mb-1">External Proof Link</div>
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block mt-4 px-4 py-2 bg-[color:var(--anc-brand)] text-white rounded-lg text-sm font-medium hover:opacity-90"
+        >
+          Open link
+        </a>
+      </div>
+    )
+  }
   return (
     <div className="p-16 text-center">
       <div className="text-5xl mb-3">📄</div>

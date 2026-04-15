@@ -309,14 +309,23 @@ async function migrateWalkthrough() {
     const f = w.fields || {}
     const name = String(f['Log ID'] || `Walk ${w.id}`).slice(0, 255).trim()
     if (existing.has(name)) { skipped++; continue }
+    const resultStr = String(f['Result'] || '')
+    const resultVal = /good/i.test(resultStr) ? 'RESULT_GOOD'
+      : /problem|issue|observ/i.test(resultStr) ? 'RESULT_PROBLEM'
+      : /partial/i.test(resultStr) ? 'RESULT_PARTIAL'
+      : undefined
+    const logDateIso = f['Log Date'] ? String(f['Log Date']).slice(0, 10) : undefined
+    const issuesRaw = Array.isArray(f['Problem Detected']) ? f['Problem Detected'].join(', ') : String(f['Problem Detected'] || '')
+    const notesRaw = String(f['Comments (log issues above)'] || '')
+
     const payload: Record<string, unknown> = {
       name,
-      logDate: f['Log Date'] || undefined,
+      logDate: logDateIso,
       logTime: f['Log Time'] || undefined,
-      result: f['Result'] === 'Good' ? 'RESULT_GOOD' : f['Result'] === 'Problem Detected' ? 'RESULT_PROBLEM' : undefined,
-      issuesFound: f['Problem Detected'] ? String(f['Problem Detected']).slice(0, 2000) : undefined,
-      notes: f['Comments (log issues above)'] ? { blocknote: null, markdown: String(f['Comments (log issues above)']).slice(0, 5000) } : undefined,
-      inPerson: true,
+      result: resultVal,
+      issuesFound: issuesRaw ? { blocknote: null, markdown: issuesRaw.slice(0, 5000) } : undefined,
+      notes: notesRaw ? { blocknote: null, markdown: notesRaw.slice(0, 5000) } : undefined,
+      inPerson: String(f['Type'] || '').toLowerCase().includes('in-person'),
     }
     for (const k of Object.keys(payload)) if (payload[k] === undefined) delete payload[k]
 
