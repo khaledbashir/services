@@ -776,9 +776,13 @@ function EventsPageInner() {
           <div className="flex gap-2 items-center">
             <button
               onClick={() => router.push('/events/discovery-log')}
-              className="px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-zinc-300 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
+              title="See what each discovery run found, imported, or failed on"
             >
-              Discovery Log
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Discovery Logs
             </button>
             <button
               onClick={runBulkDiscovery}
