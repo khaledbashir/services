@@ -57,11 +57,10 @@ export async function GET(request: NextRequest) {
       dbQuery(
         `SELECT v.id::text as id,
                 v.name as title,
-                COALESCE(v.city, v.venue_type, 'Venue') as subtitle,
+                COALESCE(v.venue_type, v.address, 'Venue') as subtitle,
                 '/venues/' || v.id::text as href
          FROM venues v
          WHERE COALESCE(v.name, '') ILIKE $1 ESCAPE '\\'
-            OR COALESCE(v.city, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(v.address, '') ILIKE $1 ESCAPE '\\'
          ORDER BY v.name ASC
          LIMIT 5`,
