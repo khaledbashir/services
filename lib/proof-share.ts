@@ -259,12 +259,13 @@ export function buildPublicUrl(token: string): string {
 
 /**
  * Build the HTML body for a proof-ready email sent to a client.
- * Includes an inline thumbnail for image attachments, a big APPROVE and
- * REQUEST CHANGES button, and the designer's name/message.
+ * Returns a complete, self-contained HTML document so any email client
+ * (and any forwarding path that strips wrappers) renders it correctly
+ * instead of showing raw tags.
  */
 export function buildProofEmailHtml(opts: {
   recordName: string
-  recordTypeLabel: string
+  recordTypeLabel?: string
   proofUrl: string
   message?: string | null
   designerName?: string | null
@@ -272,61 +273,50 @@ export function buildProofEmailHtml(opts: {
   thumbnailUrl?: string | null
   isRenewal?: boolean
 }): string {
-  const {
-    recordName,
-    recordTypeLabel,
-    proofUrl,
-    message,
-    designerName,
-    expiresAt,
-    thumbnailUrl,
-    isRenewal,
-  } = opts
-  const heading = isRenewal
-    ? `New version ready — ${recordName}`
-    : `Your proof is ready — ${recordName}`
-  const subHeading = isRenewal
-    ? `A new version has been uploaded. Any previous link is no longer current.`
-    : `Review and respond below.`
-  const deadlineLine = expiresAt
-    ? `<p style="margin:12px 0 0;font-size:12px;color:#777">This link expires on ${expiresAt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}.</p>`
-    : ''
-  const messageBlock = message
-    ? `<div style="background:#F7F7F9;border-left:3px solid #002C73;padding:12px 14px;margin:16px 0;border-radius:4px;font-size:14px;color:#333">${escapeHtml(message)}</div>`
-    : ''
-  const designerLine = designerName
-    ? `<p style="margin:0 0 8px;font-size:13px;color:#777">from ${escapeHtml(designerName)}</p>`
-    : ''
-  const thumbBlock = thumbnailUrl
-    ? `<div style="text-align:center;margin:20px 0"><a href="${proofUrl}" style="text-decoration:none"><img src="${thumbnailUrl}" alt="Proof preview" style="max-width:100%;max-height:320px;border-radius:6px;border:1px solid #E5E5E8"/></a></div>`
-    : ''
-  return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:0 16px">
-    <div style="background:#002C73;color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">
-      <h2 style="margin:0;font-size:18px;line-height:1.3">${escapeHtml(heading)}</h2>
-      <p style="margin:6px 0 0;opacity:0.8;font-size:13px">${escapeHtml(recordTypeLabel)}</p>
-    </div>
-    <div style="background:#fff;padding:22px 24px;border:1px solid #E5E5E8;border-top:none;border-radius:0 0 8px 8px">
-      ${designerLine}
-      <p style="margin:0 0 6px;font-size:15px;color:#111">${escapeHtml(subHeading)}</p>
-      ${messageBlock}
-      ${thumbBlock}
-      <table style="width:100%;border-collapse:collapse;margin-top:8px">
-        <tr>
-          <td style="padding-right:6px">
-            <a href="${proofUrl}?action=approve" style="display:block;text-align:center;background:#16A34A;color:#fff;text-decoration:none;padding:14px 18px;border-radius:6px;font-weight:600;font-size:15px">✓ Approve</a>
-          </td>
-          <td style="padding-left:6px">
-            <a href="${proofUrl}?action=changes" style="display:block;text-align:center;background:#fff;color:#111;border:1px solid #D4D4D8;text-decoration:none;padding:14px 18px;border-radius:6px;font-weight:600;font-size:15px">✎ Request Changes</a>
-          </td>
-        </tr>
-      </table>
-      <p style="margin:16px 0 0;font-size:13px;color:#555">
-        Or open the full proof: <a href="${proofUrl}" style="color:#002C73">${proofUrl}</a>
-      </p>
-      ${deadlineLine}
-    </div>
-    <p style="margin:16px 0;text-align:center;font-size:11px;color:#999">Sent by ANC Sports · This is a secure client link, do not forward.</p>
-  </div>`
+  const { recordName, proofUrl, expiresAt } = opts
+  const expiresLine = expiresAt
+    ? `This link expires on ${expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
+    : 'This link expires in 30 days.'
+  const safeName = escapeHtml(recordName)
+  const safeUrl = escapeHtml(proofUrl)
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${safeName}</title>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+<tr><td style="padding:0 0 24px 0;">
+  <div style="font-weight:700;font-size:18px;letter-spacing:0.5px;color:#0A52EF;">ANC Sports</div>
+</td></tr>
+<tr><td style="font-size:15px;line-height:1.6;color:#111;padding:0 0 8px 0;">Hi,</td></tr>
+<tr><td style="font-size:15px;line-height:1.6;color:#111;padding:0 0 24px 0;">
+  Your proof for <strong>${safeName}</strong> is ready for review.
+</td></tr>
+<tr><td style="padding:0 0 24px 0;">
+  <a href="${safeUrl}" style="display:inline-block;background:#0A52EF;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:6px;font-weight:600;font-size:15px;">Review Proof</a>
+</td></tr>
+<tr><td style="font-size:13px;line-height:1.6;color:#555;padding:0 0 8px 0;">
+  Or copy this link:
+</td></tr>
+<tr><td style="font-size:13px;line-height:1.6;color:#0A52EF;word-break:break-all;padding:0 0 24px 0;">
+  <a href="${safeUrl}" style="color:#0A52EF;text-decoration:underline;">${safeUrl}</a>
+</td></tr>
+<tr><td style="font-size:12px;line-height:1.6;color:#888;padding:0 0 24px 0;">
+  ${escapeHtml(expiresLine)}
+</td></tr>
+<tr><td style="font-size:14px;line-height:1.6;color:#111;padding:24px 0 0 0;border-top:1px solid #eeeeee;">
+  Best regards,<br>ANC Sports
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
 function escapeHtml(s: string): string {
@@ -379,7 +369,7 @@ export async function sendProofEmailToClient(opts: {
     isRenewal: opts.isRenewal,
   })
   const subject = opts.isRenewal
-    ? `New version: ${opts.recordName}`
-    : `Ready for your review: ${opts.recordName}`
+    ? `ANC Sports — Updated Proof: ${opts.recordName}`
+    : `ANC Sports — Proof Ready for Review: ${opts.recordName}`
   return sendEmail([opts.clientEmail], subject, html, opts.designerEmail || undefined)
 }
