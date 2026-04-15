@@ -1,0 +1,173 @@
+import { query } from '@/lib/db'
+import type { AgentRole } from '@/lib/ai/types'
+import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
+
+interface ProviderConfig { name: string; baseUrl: string; apiKey: string; model: string }
+
+function loadProviders(): ProviderConfig[] {
+  const raw = process.env.AI_PROVIDERS_JSON || ''
+  if (raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as ProviderConfig[]
+      const valid = parsed.filter(p => p?.baseUrl && p?.apiKey && p?.model)
+      if (valid.length > 0) return valid
+    } catch {}
+  }
+  const apiKey = process.env.AI_API_KEY || ''
+  const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1'
+  const model = process.env.AI_MODEL || 'gpt-4.1-mini'
+  return apiKey ? [{ name: 'default', baseUrl, apiKey, model }] : []
+}
+
+const PROVIDERS = loadProviders()
+let cursor = 0
+function pickProvider(): ProviderConfig {
+  if (PROVIDERS.length === 0) throw new Error('No AI providers configured')
+  const p = PROVIDERS[cursor % PROVIDERS.length]
+  cursor++
+  return p
+}
+
+interface ChatMsg {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string | null
+  tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>
+  tool_call_id?: string
+  name?: string
+}
+
+async function callLlm(messages: ChatMsg[], tools: unknown[], attempt = 0): Promise<ChatMsg> {
+  const provider = pickProvider()
+  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
+    body: JSON.stringify({
+      model: provider.model,
+      messages,
+      tools: tools.length > 0 ? tools : undefined,
+      tool_choice: tools.length > 0 ? 'auto' : undefined,
+      temperature: 0.2,
+      max_tokens: 4000,
+    }),
+    signal: AbortSignal.timeout(90000),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    const rateLimited = res.status === 429 || /rate|1302|quota/i.test(body)
+    if (rateLimited && attempt < PROVIDERS.length - 1) return callLlm(messages, tools, attempt + 1)
+    throw new Error(`AI API ${provider.name} ${res.status}: ${body.slice(0, 300)}`)
+  }
+  const data = await res.json() as { choices?: Array<{ message?: ChatMsg }> }
+  const msg = data.choices?.[0]?.message
+  if (!msg) throw new Error('Empty AI response')
+  return msg
+}
+
+const SYSTEM_PROMPT = `You are the ANC Services in-dashboard assistant.
+You help ANC staff manage events, venues, tickets, maintenance, design
+requests, and more across the services platform. You have tools/skills
+for reading and writing dashboard data — prefer using a tool to answer
+rather than guessing. When the user asks for something, use the
+relevant skill, then summarize the result concisely. Use markdown
+lightly (bullets are fine). Never invent UUIDs.`
+
+export interface StreamEvent {
+  type: 'text' | 'tool_call' | 'tool_result' | 'done' | 'error'
+  data: unknown
+}
+
+export async function runChat(params: {
+  chatId: string
+  userId: string
+  userRole: AgentRole
+  userName?: string
+  userMessage: string
+  emit: (event: StreamEvent) => void
+}): Promise<void> {
+  const { chatId, userId, userRole, userName, userMessage, emit } = params
+
+  // Persist user message
+  await query(
+    `INSERT INTO ai_messages (chat_id, role, content) VALUES ($1, 'user', $2)`,
+    [chatId, userMessage]
+  )
+
+  // Bump chat updated_at + auto-title first message
+  await query(
+    `UPDATE ai_chats SET updated_at = NOW(),
+       title = CASE WHEN title = 'New chat' THEN LEFT($2, 60) ELSE title END
+     WHERE id = $1`,
+    [chatId, userMessage]
+  )
+
+  // Load full conversation history for context
+  const history = await query(
+    `SELECT role, content, tool_calls, tool_call_id, tool_name
+     FROM ai_messages WHERE chat_id = $1 ORDER BY created_at ASC`,
+    [chatId]
+  )
+
+  const tools = await toolDefinitions(userRole)
+
+  // Build messages array
+  const messages: ChatMsg[] = [{ role: 'system', content: SYSTEM_PROMPT + `\nUser: ${userName || 'unknown'}, role: ${userRole}.` }]
+  for (const row of history.rows) {
+    if (row.role === 'assistant') {
+      messages.push({
+        role: 'assistant',
+        content: row.content,
+        tool_calls: row.tool_calls || undefined,
+      })
+    } else if (row.role === 'tool') {
+      messages.push({
+        role: 'tool',
+        content: row.content,
+        tool_call_id: row.tool_call_id,
+        name: row.tool_name,
+      })
+    } else if (row.role === 'user') {
+      messages.push({ role: 'user', content: row.content })
+    }
+  }
+
+  try {
+    // Tool loop: keep calling until the assistant returns a message with no tool_calls.
+    const MAX_ITERS = 6
+    for (let i = 0; i < MAX_ITERS; i++) {
+      const reply = await callLlm(messages, tools)
+      messages.push(reply)
+
+      // Persist assistant turn
+      await query(
+        `INSERT INTO ai_messages (chat_id, role, content, tool_calls) VALUES ($1, 'assistant', $2, $3)`,
+        [chatId, reply.content || null, reply.tool_calls ? JSON.stringify(reply.tool_calls) : null]
+      )
+
+      // Stream assistant text if any
+      if (reply.content) emit({ type: 'text', data: reply.content })
+
+      if (!reply.tool_calls || reply.tool_calls.length === 0) break
+
+      // Run tools
+      for (const call of reply.tool_calls) {
+        emit({ type: 'tool_call', data: { id: call.id, name: call.function.name, args: call.function.arguments } })
+        const result = await invokeSkill(call.function.name, call.function.arguments, { userId, userRole, userName })
+        emit({ type: 'tool_result', data: { id: call.id, name: call.function.name, result } })
+        // Persist tool response
+        await query(
+          `INSERT INTO ai_messages (chat_id, role, content, tool_call_id, tool_name) VALUES ($1, 'tool', $2, $3, $4)`,
+          [chatId, result, call.id, call.function.name]
+        )
+        messages.push({ role: 'tool', content: result, tool_call_id: call.id, name: call.function.name })
+      }
+    }
+
+    emit({ type: 'done', data: null })
+  } catch (err) {
+    emit({ type: 'error', data: err instanceof Error ? err.message : String(err) })
+    await query(
+      `INSERT INTO ai_messages (chat_id, role, content) VALUES ($1, 'assistant', $2)`,
+      [chatId, `⚠️ ${err instanceof Error ? err.message : String(err)}`]
+    )
+  }
+}

@@ -1,5 +1,6 @@
 'use client'
 
+import { AiAssistant } from './ai-assistant'
 import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
@@ -17,6 +18,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
+      <AiAssistant />
     </div>
   )
 }
