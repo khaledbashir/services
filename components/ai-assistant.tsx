@@ -312,7 +312,11 @@ export function AiAssistant() {
         const last = copy[copy.length - 1]
         if (last?.pending) {
           const { clean, suggestions } = extractSuggestions(assistantText || 'Done.')
-          copy[copy.length - 1] = { ...last, pending: false, content: clean || 'Done.', suggestions }
+          // The model is supposed to ALWAYS emit a <suggestions> block but it
+          // sometimes skips — fall back to the generic list so users always
+          // have something to click.
+          const final = suggestions && suggestions.length > 0 ? suggestions : DEFAULT_SUGGESTIONS.slice(0, 4)
+          copy[copy.length - 1] = { ...last, pending: false, content: clean || 'Done.', suggestions: final }
         }
         return copy
       })
