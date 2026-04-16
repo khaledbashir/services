@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, FormEvent, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
@@ -118,8 +119,15 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([])
   const [venueServices, setVenueServices] = useState<VenueService[]>([])
   const [screens, setScreens] = useState<VenueScreen[]>([])
+  const [creative, setCreative] = useState<{
+    designRequests: Array<{ id: string; job_title: string; status: string; due_date: string | null; created_at: string; hours_estimated: string | null; hours_spent: string | null }>
+    cgDesigns: Array<{ id: string; job_title: string; league: string | null; team_name: string | null; status: string; due_date: string | null; created_at: string }>
+    printRequests: Array<{ id: string; job_title: string; client_name: string | null; status: string; ship_date: string | null; arrival_date: string | null; created_at: string }>
+    contentSchedules: Array<{ id: string; content_name: string; company_name: string | null; status: string; launch_date: string | null; end_date: string | null; created_at: string }>
+    totalCount: number
+  }>({ designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'documents' | 'settings'>('events')
+  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'documents' | 'creative' | 'settings'>('events')
   const [venueTickets, setVenueTickets] = useState<Array<{ id: string; title: string; ticket_number: number; status: string; priority: string; created_at: string; assigned_to_name: string | null }>>([])
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
@@ -193,6 +201,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setUpcomingEvents(data.upcomingEvents || [])
           setAssignedStaff(data.assignedStaff || [])
           setVenueServices(data.venueServices || [])
+          setCreative(data.creative || { designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
 
@@ -560,7 +569,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
           {/* Tabs */}
           <div className="border-t border-[#E8E8E8] flex px-6 overflow-x-auto">
-            {(['events', 'staff', 'tickets', 'specs', 'documents', 'settings'] as const).map(tab => (
+            {(['events', 'staff', 'tickets', 'specs', 'documents', 'creative', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
                 {tab === 'events' && `Events (${upcomingEvents.length})`}
@@ -568,6 +577,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 {tab === 'tickets' && `Tickets (${venueTickets.length})`}
                 {tab === 'specs' && `Specs${screens.length > 0 ? ` (${screens.length})` : ''}`}
                 {tab === 'documents' && `Docs${documents.length > 0 ? ` (${documents.length})` : ''}`}
+                {tab === 'creative' && `Creative${creative.totalCount > 0 ? ` (${creative.totalCount})` : ''}`}
                 {tab === 'settings' && 'Settings'}
               </button>
             ))}
@@ -1341,6 +1351,152 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   </div>
                 ))
               })()
+            )}
+          </div>
+        )}
+
+        {/* CREATIVE TAB */}
+        {activeTab === 'creative' && (
+          <div className="space-y-6">
+            {creative.totalCount === 0 ? (
+              <div className="bg-white rounded border border-[#E8E8E8] p-12 text-center">
+                <p className="text-sm text-zinc-500">No creative requests linked to this venue yet.</p>
+                <p className="text-xs text-zinc-400 mt-1">Design, CG, print, and content-schedule requests show up here once they're tagged with this venue.</p>
+              </div>
+            ) : (
+              <>
+                {creative.designRequests.length > 0 && (
+                  <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+                    <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-900">Design Requests <span className="text-zinc-400 font-normal">({creative.designRequests.length})</span></h3>
+                      <Link href="/designs" className="text-xs text-[#0A52EF] hover:underline">View all →</Link>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-[#FAFAFA] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <tr>
+                          <th className="px-5 py-2 text-left">Title</th>
+                          <th className="px-5 py-2 text-left">Status</th>
+                          <th className="px-5 py-2 text-left">Due</th>
+                          <th className="px-5 py-2 text-left">Hours</th>
+                          <th className="px-5 py-2 text-left">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F0F0F0]">
+                        {creative.designRequests.map(d => (
+                          <tr key={d.id} className="hover:bg-[#FAFAFA]">
+                            <td className="px-5 py-3">
+                              <Link href={`/designs/${d.id}`} className="text-[#0A52EF] hover:underline">{d.job_title}</Link>
+                            </td>
+                            <td className="px-5 py-3 text-zinc-600">{d.status.replace(/_/g, ' ')}</td>
+                            <td className="px-5 py-3 text-zinc-600">{d.due_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{d.hours_spent ?? 0} / {d.hours_estimated || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-500">{d.created_at}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {creative.cgDesigns.length > 0 && (
+                  <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+                    <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-900">CG Designs <span className="text-zinc-400 font-normal">({creative.cgDesigns.length})</span></h3>
+                      <Link href="/cg-designs" className="text-xs text-[#0A52EF] hover:underline">View all →</Link>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-[#FAFAFA] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <tr>
+                          <th className="px-5 py-2 text-left">Title</th>
+                          <th className="px-5 py-2 text-left">League / Team</th>
+                          <th className="px-5 py-2 text-left">Status</th>
+                          <th className="px-5 py-2 text-left">Due</th>
+                          <th className="px-5 py-2 text-left">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F0F0F0]">
+                        {creative.cgDesigns.map(d => (
+                          <tr key={d.id} className="hover:bg-[#FAFAFA]">
+                            <td className="px-5 py-3">
+                              <Link href={`/cg-designs/${d.id}`} className="text-[#0A52EF] hover:underline">{d.job_title}</Link>
+                            </td>
+                            <td className="px-5 py-3 text-zinc-600">{[d.league, d.team_name].filter(Boolean).join(' · ') || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{d.status.replace(/_/g, ' ')}</td>
+                            <td className="px-5 py-3 text-zinc-600">{d.due_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-500">{d.created_at}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {creative.printRequests.length > 0 && (
+                  <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+                    <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-900">Print Requests <span className="text-zinc-400 font-normal">({creative.printRequests.length})</span></h3>
+                      <Link href="/prints" className="text-xs text-[#0A52EF] hover:underline">View all →</Link>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-[#FAFAFA] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <tr>
+                          <th className="px-5 py-2 text-left">Title</th>
+                          <th className="px-5 py-2 text-left">Client</th>
+                          <th className="px-5 py-2 text-left">Status</th>
+                          <th className="px-5 py-2 text-left">Ship</th>
+                          <th className="px-5 py-2 text-left">Arrival</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F0F0F0]">
+                        {creative.printRequests.map(p => (
+                          <tr key={p.id} className="hover:bg-[#FAFAFA]">
+                            <td className="px-5 py-3">
+                              <Link href={`/prints/${p.id}`} className="text-[#0A52EF] hover:underline">{p.job_title}</Link>
+                            </td>
+                            <td className="px-5 py-3 text-zinc-600">{p.client_name || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{p.status.replace(/_/g, ' ')}</td>
+                            <td className="px-5 py-3 text-zinc-600">{p.ship_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{p.arrival_date || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {creative.contentSchedules.length > 0 && (
+                  <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+                    <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-900">Content Schedule <span className="text-zinc-400 font-normal">({creative.contentSchedules.length})</span></h3>
+                      <Link href="/content-schedules" className="text-xs text-[#0A52EF] hover:underline">View all →</Link>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-[#FAFAFA] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <tr>
+                          <th className="px-5 py-2 text-left">Content</th>
+                          <th className="px-5 py-2 text-left">Company</th>
+                          <th className="px-5 py-2 text-left">Status</th>
+                          <th className="px-5 py-2 text-left">Launch</th>
+                          <th className="px-5 py-2 text-left">End</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F0F0F0]">
+                        {creative.contentSchedules.map(c => (
+                          <tr key={c.id} className="hover:bg-[#FAFAFA]">
+                            <td className="px-5 py-3">
+                              <Link href={`/content-schedules/${c.id}`} className="text-[#0A52EF] hover:underline">{c.content_name}</Link>
+                            </td>
+                            <td className="px-5 py-3 text-zinc-600">{c.company_name || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{c.status.replace(/_/g, ' ')}</td>
+                            <td className="px-5 py-3 text-zinc-600">{c.launch_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{c.end_date || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

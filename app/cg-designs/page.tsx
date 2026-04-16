@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { formatDate } from '@/lib/format-date'
 
 interface CgDesignRequest {
   id: string
@@ -263,7 +264,7 @@ export default function CgDesignsPage() {
                         <p>{item.league || 'No league'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.designer_name || 'No designer assigned'}</p>
-                        {item.due_date && <p>Due {item.due_date}</p>}
+                        {item.due_date && <p>Due {formatDate(item.due_date)}</p>}
                       </div>
                     </Link>
                   ))}

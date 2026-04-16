@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { formatDate } from '@/lib/format-date'
 
 interface ContentSchedule {
   id: string
@@ -255,7 +256,7 @@ export default function ContentSchedulesPage() {
                         <p>{item.company_name || 'No company'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.operator_name || 'No operator assigned'}</p>
-                        {item.launch_date && <p>Launch {item.launch_date}</p>}
+                        {item.launch_date && <p>Launch {formatDate(item.launch_date)}</p>}
                         <p>{item.files_ready ? 'Files ready' : 'Files pending'}</p>
                       </div>
                     </Link>

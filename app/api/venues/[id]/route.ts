@@ -101,6 +101,41 @@ export async function GET(
       [venueId]
     )
 
+    // Creative requests tied to this venue — design / CG / print / content schedule
+    const [designRows, cgRows, printRows, contentRows] = await Promise.all([
+      query(
+        `SELECT id, job_title, status, due_date, hours_estimated, hours_spent,
+                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+         FROM design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [venueId]
+      ),
+      query(
+        `SELECT id, job_title, league, team_name, status, due_date,
+                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+         FROM cg_design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [venueId]
+      ),
+      query(
+        `SELECT id, job_title, client_name, status, ship_date, arrival_date,
+                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+         FROM print_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [venueId]
+      ),
+      query(
+        `SELECT id, content_name, company_name, status, launch_date, end_date,
+                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+         FROM content_schedules WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [venueId]
+      ),
+    ])
+    const creative = {
+      designRequests: designRows.rows,
+      cgDesigns: cgRows.rows,
+      printRequests: printRows.rows,
+      contentSchedules: contentRows.rows,
+      totalCount: designRows.rows.length + cgRows.rows.length + printRows.rows.length + contentRows.rows.length,
+    }
+
     // Enrich with Twenty CRM data (non-fatal)
     let twentyCrm: Record<string, unknown> | null = null
     if (twentyClient.isConfigured()) {
@@ -132,6 +167,7 @@ export async function GET(
       upcomingEvents: eventsResult.rows,
       assignedStaff: staffResult.rows,
       venueServices: servicesResult.rows,
+      creative,
       twentyCrm,
     })
   } catch (err) {

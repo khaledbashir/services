@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
 import { Skeleton } from '@/components/skeleton'
+import { formatDate } from '@/lib/format-date'
 
 interface DesignRequest {
   id: string
@@ -409,7 +410,7 @@ export default function DesignsPage() {
                   <p>{item.company_name || 'No company'}</p>
                   <p>{item.venue_name || 'No venue linked'}</p>
                   <p>{item.designer_name || 'No designer assigned'}</p>
-                  {item.due_date && <p>Due {item.due_date}</p>}
+                  {item.due_date && <p>Due {formatDate(item.due_date)}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] text-zinc-500">

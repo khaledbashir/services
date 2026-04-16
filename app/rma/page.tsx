@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { formatDate } from '@/lib/format-date'
 
 interface Rma {
   id: string
@@ -158,7 +159,7 @@ export default function RmaPage() {
               <tbody>
                 {rmas.map(r => (
                   <tr key={r.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                    <td className="px-5 py-3 text-zinc-600 font-mono text-xs">{r.date_received || '—'}</td>
+                    <td className="px-5 py-3 text-zinc-600">{formatDate(r.date_received)}</td>
                     <td className="px-5 py-3 text-zinc-700">{r.venue_name || r.company_name || '—'}</td>
                     <td className="px-5 py-3 text-zinc-700">{[r.part_name, r.part_number].filter(Boolean).join(' / ') || '—'}</td>
                     <td className="px-5 py-3 text-zinc-600">{r.model_number || '—'}</td>

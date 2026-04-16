@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { formatDate } from '@/lib/format-date'
 
 interface Item {
   id: string
@@ -248,7 +249,7 @@ export default function ChecklistsPage() {
                     <td className="px-5 py-3 font-medium text-zinc-900">{it.task_description}</td>
                     <td className="px-5 py-3 text-zinc-600">{it.venue_name || '—'}</td>
                     <td className="px-5 py-3 text-zinc-600">{it.assignee_name || '—'}</td>
-                    <td className="px-5 py-3 text-zinc-500 font-mono text-xs">{it.due_date || '—'}</td>
+                    <td className="px-5 py-3 text-zinc-500">{formatDate(it.due_date)}</td>
                     <td className="px-5 py-3">
                       <select value={it.status} onChange={e => updateStatus(it.id, e.target.value)}
                         className={`px-2 py-1 rounded-full text-xs font-medium border appearance-none pr-6 ${STATUS_STYLE[it.status]}`}>

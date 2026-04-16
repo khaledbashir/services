@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { formatDate } from '@/lib/format-date'
 
 interface PrintRequest {
   id: string
@@ -399,7 +400,7 @@ export default function PrintsPage() {
                         <p>{item.client_name || 'No client'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.assignee_name || 'No assignee'}</p>
-                        {item.arrival_date && <p>Arrival {item.arrival_date}</p>}
+                        {item.arrival_date && <p>Arrival {formatDate(item.arrival_date)}</p>}
                         {item.tracking_number && <p>Tracking {item.tracking_number}</p>}
                       </div>
                     </Link>
