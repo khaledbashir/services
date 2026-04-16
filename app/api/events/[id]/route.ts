@@ -88,12 +88,25 @@ export async function GET(
       [event.venue_id]
     )
 
+    // Is Event Support contracted for this venue? Drives the assignment-prompt banner.
+    const eventSupportResult = await query(
+      `SELECT COALESCE(vs.enabled, false) as enabled
+       FROM service_types st
+       LEFT JOIN venue_services vs
+         ON vs.service_type_id = st.id AND vs.venue_id = $1
+       WHERE st.name = 'Event Support'
+       LIMIT 1`,
+      [event.venue_id]
+    )
+    const eventSupportContracted = eventSupportResult.rows[0]?.enabled === true
+
     return NextResponse.json({
       event,
       technicians: techResult.rows,
       workflows: workflowResult.rows,
       recentEvents: recentResult.rows,
       openTickets: ticketsResult.rows,
+      eventSupportContracted,
     })
   } catch (err) {
     console.error('Error fetching event:', err)

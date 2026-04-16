@@ -60,6 +60,7 @@ export default function EventDetailPage() {
   const [workflows, setWorkflows] = useState<WorkflowSubmission[]>([])
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([])
   const [openTickets, setOpenTickets] = useState<Ticket[]>([])
+  const [eventSupportContracted, setEventSupportContracted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showAssignDropdown, setShowAssignDropdown] = useState(false)
   const [allStaff, setAllStaff] = useState<Array<{ id: string; full_name: string; role: string; week_hours: number; week_events: number; linked_to_venue: boolean }>>([])
@@ -91,6 +92,7 @@ export default function EventDetailPage() {
         setWorkflows(data.workflows || [])
         setRecentEvents(data.recentEvents || [])
         setOpenTickets(data.openTickets || [])
+        setEventSupportContracted(!!data.eventSupportContracted)
       } catch (err) {
         console.error('Error fetching event:', err)
       } finally {
@@ -270,6 +272,37 @@ export default function EventDetailPage() {
           </div>
           <p className={`text-sm font-medium mt-2 ${countdown.color}`}>{countdown.text}</p>
         </div>
+
+        {eventSupportContracted && technicians.length === 0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-900">Event Support contracted — staff assignment needed</p>
+              <p className="text-xs text-amber-800 mt-1">
+                <Link href={`/venues/${event.venue_id}`} className="font-medium hover:underline">{event.venue_name}</Link> has Event Support in their contract, but no technicians are assigned to this event. Assign someone before the event starts.
+              </p>
+            </div>
+            {isManager && (
+              <button
+                onClick={async () => {
+                  setShowAssignDropdown(true)
+                  if (allStaff.length === 0) {
+                    const res = await fetch(`/api/staff/available${event?.venue_id ? `?venue_id=${event.venue_id}` : ''}`)
+                    if (res.ok) { const d = await res.json(); setAllStaff(d.staff || []) }
+                  }
+                  document.querySelector<HTMLElement>('[data-assigned-techs]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
+                className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+              >
+                Assign staff →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Two-column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -473,7 +506,7 @@ export default function EventDetailPage() {
           {/* Right column */}
           <div className="space-y-6">
             {/* Assigned Technicians */}
-            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+            <div data-assigned-techs className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">Assigned Technicians</h2>
               {technicians.length === 0 ? (
                 <p className="text-xs text-zinc-500 mb-4">No technicians assigned</p>

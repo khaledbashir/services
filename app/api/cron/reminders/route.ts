@@ -201,11 +201,152 @@ export async function GET() {
       }
     }
 
+    // TIER 4: Game Ready not submitted — ping checked-in techs ~30 min before start.
+    // Fires once per assignment, deduped via last_game_ready_reminder_at.
+    const gameReadyWindow = new Date(now.getTime() + 30 * 60000)
+    const tier4Result = await query(
+      `SELECT e.id as event_id, e.summary,
+              TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
+              v.name as venue_name, v.slack_channel_id,
+              s.id as staff_id, s.full_name,
+              ea.id as assignment_id, ea.last_game_ready_reminder_at
+       FROM events e
+       JOIN venues v ON e.venue_id = v.id
+       JOIN event_assignments ea ON e.id = ea.event_id
+       JOIN staff s ON ea.staff_id = s.id
+       WHERE e.event_date = $1
+         AND e.start_time > NOW()
+         AND e.start_time <= $2
+         AND EXISTS (
+           SELECT 1 FROM workflow_submissions ws
+           WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM workflow_submissions ws
+           WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'game_ready'
+         )`,
+      [today, gameReadyWindow.toISOString()]
+    )
+
+    let tier4Sent = 0
+    let tier4Skipped = 0
+    for (const row of tier4Result.rows) {
+      if (row.last_game_ready_reminder_at && new Date(row.last_game_ready_reminder_at) > new Date(dedupCutoff)) {
+        tier4Skipped++
+        continue
+      }
+      const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (!channel) continue
+
+      const sent = await sendSlackMessage({
+        channel,
+        text: `⏰ Game Ready check — ${row.full_name} at ${row.venue_name}`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `⏰ *Game Ready check for ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET*.\n\nPlease submit your *Game Ready* confirmation (equipment check, crew ready, comms test).`,
+            },
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '✅ Submit Game Ready' },
+                url: `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`,
+              },
+            ],
+          },
+        ],
+      })
+
+      if (sent) {
+        await query(`UPDATE event_assignments SET last_game_ready_reminder_at = NOW() WHERE id = $1`, [row.assignment_id])
+        tier4Sent++
+      }
+    }
+
+    // TIER 5: Post Game Ops Report not submitted — ping ~30 min after event end.
+    // Windowed to 6h after end so we stop nagging overnight.
+    const postGameStart = new Date(now.getTime() - 30 * 60000)
+    const postGameEnd = new Date(now.getTime() - 6 * 3600000)
+    const tier5Result = await query(
+      `SELECT e.id as event_id, e.summary,
+              TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as end_time_et,
+              v.name as venue_name, v.slack_channel_id,
+              s.id as staff_id, s.full_name,
+              ea.id as assignment_id, ea.last_post_game_reminder_at
+       FROM events e
+       JOIN venues v ON e.venue_id = v.id
+       JOIN event_assignments ea ON e.id = ea.event_id
+       JOIN staff s ON ea.staff_id = s.id
+       WHERE e.end_time <= $1
+         AND e.end_time >= $2
+         AND EXISTS (
+           SELECT 1 FROM workflow_submissions ws
+           WHERE ws.event_id = e.id AND ws.staff_id = s.id
+             AND ws.type IN ('check_in', 'game_ready')
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM workflow_submissions ws
+           WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'post_game_submitted'
+         )`,
+      [postGameStart.toISOString(), postGameEnd.toISOString()]
+    )
+
+    let tier5Sent = 0
+    let tier5Skipped = 0
+    for (const row of tier5Result.rows) {
+      if (row.last_post_game_reminder_at && new Date(row.last_post_game_reminder_at) > new Date(dedupCutoff)) {
+        tier5Skipped++
+        continue
+      }
+      const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+      if (!channel) continue
+
+      const sent = await sendSlackMessage({
+        channel,
+        text: `📝 Post-Game report pending — ${row.full_name} at ${row.venue_name}`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `📝 *Post-Game Ops Report needed from ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* ended at *${row.end_time_et} ET*.\n\nPlease submit the *Post-Game Ops Report* (notes + incidents) to close out the workflow.`,
+            },
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '📝 Submit Post-Game' },
+                url: `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`,
+              },
+            ],
+          },
+        ],
+      })
+
+      if (sent) {
+        await query(`UPDATE event_assignments SET last_post_game_reminder_at = NOW() WHERE id = $1`, [row.assignment_id])
+        tier5Sent++
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      reminders: { tier1: tier1Sent, tier2: tier2Sent, tier3: tier3Sent },
-      skipped: { tier1: tier1Skipped, tier2: tier2Skipped, tier3: tier3Skipped },
-      message: `Sent ${tier1Sent} reminders, ${tier2Sent} escalations, ${tier3Sent} critical. Skipped ${tier1Skipped + tier2Skipped + tier3Skipped} (already notified).`,
+      reminders: {
+        tier1: tier1Sent, tier2: tier2Sent, tier3: tier3Sent,
+        tier4_game_ready: tier4Sent, tier5_post_game: tier5Sent,
+      },
+      skipped: {
+        tier1: tier1Skipped, tier2: tier2Skipped, tier3: tier3Skipped,
+        tier4_game_ready: tier4Skipped, tier5_post_game: tier5Skipped,
+      },
+      message: `Sent ${tier1Sent} check-in reminders, ${tier2Sent} escalations, ${tier3Sent} critical, ${tier4Sent} game-ready, ${tier5Sent} post-game. Skipped ${tier1Skipped + tier2Skipped + tier3Skipped + tier4Skipped + tier5Skipped} (already notified).`,
     })
   } catch (err) {
     console.error('Error running reminders:', err)
