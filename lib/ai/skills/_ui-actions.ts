@@ -44,19 +44,24 @@ const click: Skill = {
 
 const fill: Skill = {
   name: 'ui_fill',
-  description: 'Type text into an input, textarea, or contenteditable field on the current page. Submits the change with an input + change + blur event.',
+  description: 'Type text into an input, textarea, or contenteditable field on the current page. Submits the change with an input + change + blur event. Pass fast:true (or any value >40 chars) to skip the typewriter animation and just set the value directly.',
   category: 'System',
   icon: '⌨️',
   parameters: {
     type: 'object',
     properties: {
-      selector: { type: 'string', description: 'CSS selector OR label text of the field' },
+      selector: { type: 'string', description: 'CSS selector OR label text of the field. Prefer [data-ai-target="name"] selectors when available.' },
       value: { type: 'string' },
+      fast: { type: 'boolean', description: 'Skip the per-char typewriter animation. Use for long strings or bulk form filling.' },
     },
     required: ['selector', 'value'],
   },
   async handler(args) {
-    return ui('fill', { selector: String(args.selector || ''), value: String(args.value || '') })
+    return ui('fill', {
+      selector: String(args.selector || ''),
+      value: String(args.value || ''),
+      fast: args.fast === true || undefined,
+    })
   },
 }
 

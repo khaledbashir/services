@@ -25,6 +25,10 @@ interface TableSpec {
   roleDelete?: Exclude<AgentRole, 'any'>
   category: Skill['category']
   icon: string
+  /** Detail-page URL prefix, e.g. '/tickets' → link becomes '/tickets/<id>'. */
+  pagePath?: string
+  /** Column to use as the human label for deep-link text (e.g. 'title'). */
+  labelColumn?: string
 }
 
 const TABLES: TableSpec[] = [
@@ -35,6 +39,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['summary', 'event_date', 'venue_id'],
     category: 'Events', icon: '📅',
     roleWrite: 'manager', roleDelete: 'admin',
+    pagePath: '/events', labelColumn: 'summary',
   },
   {
     table: 'venues', singular: 'venue', plural: 'venues',
@@ -43,6 +48,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['name'],
     category: 'Venues', icon: '📍',
     roleWrite: 'manager', roleDelete: 'admin',
+    pagePath: '/venues', labelColumn: 'name',
   },
   {
     table: 'staff', singular: 'staff_member', plural: 'staff_members',
@@ -51,6 +57,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['full_name', 'email'],
     category: 'Staff', icon: '👤',
     roleWrite: 'admin', roleDelete: 'admin',
+    pagePath: '/staff', labelColumn: 'full_name',
   },
   {
     table: 'tickets', singular: 'ticket', plural: 'tickets',
@@ -59,6 +66,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['venue_id', 'title'],
     category: 'Support', icon: '🎫',
     roleWrite: 'technician', roleDelete: 'admin',
+    pagePath: '/tickets', labelColumn: 'title',
   },
   {
     table: 'design_requests', singular: 'design_request', plural: 'design_requests',
@@ -67,6 +75,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['job_title'],
     category: 'Creative', icon: '🎨',
     roleWrite: 'technician', roleDelete: 'admin',
+    pagePath: '/designs', labelColumn: 'job_title',
   },
   {
     table: 'cg_design_requests', singular: 'cg_design_request', plural: 'cg_design_requests',
@@ -75,6 +84,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['job_title'],
     category: 'Creative', icon: '🖼️',
     roleWrite: 'technician', roleDelete: 'admin',
+    pagePath: '/cg-designs', labelColumn: 'job_title',
   },
   {
     table: 'content_schedules', singular: 'content_schedule', plural: 'content_schedules',
@@ -99,6 +109,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['venue_id', 'issue'],
     category: 'Service Ops', icon: '🔧',
     roleWrite: 'technician', roleDelete: 'admin',
+    pagePath: '/maintenance', labelColumn: 'issue',
   },
   {
     table: 'walkthrough_logs', singular: 'walkthrough_log', plural: 'walkthrough_logs',
@@ -107,6 +118,7 @@ const TABLES: TableSpec[] = [
     requireOnCreate: ['venue_id', 'result'],
     category: 'Service Ops', icon: '🚶',
     roleWrite: 'technician', roleDelete: 'manager',
+    pagePath: '/walkthroughs', labelColumn: 'result',
   },
   {
     table: 'checklist_items', singular: 'checklist_item', plural: 'checklist_items',
@@ -186,6 +198,21 @@ function buildPropsSchema(cols: string[]) {
   return props
 }
 
+// Build a { link, text_summary } pair from a freshly-returned row if the
+// table has a pagePath. The agent is instructed in buildSystemPrompt to
+// surface link / text_summary as a clickable markdown hyperlink.
+function deepLinkFor(spec: TableSpec, row: Record<string, unknown>, verb: 'created' | 'updated' | 'opened'): { link?: string; text_summary?: string } {
+  if (!spec.pagePath || !row?.id) return {}
+  const link = `${spec.pagePath}/${row.id}`
+  const rawLabel = (spec.labelColumn && row[spec.labelColumn]) ? String(row[spec.labelColumn]) : String(row.id)
+  const label = rawLabel.length > 60 ? rawLabel.slice(0, 60) + '…' : rawLabel
+  const noun = spec.singular.replace(/_/g, ' ')
+  return {
+    link,
+    text_summary: `${verb === 'opened' ? 'Found' : verb[0].toUpperCase() + verb.slice(1)} ${noun} "${label}" — [open →](${link})`,
+  }
+}
+
 function skillsForTable(spec: TableSpec): Skill[] {
   const { table, singular, plural, columns, searchColumns, category, icon } = spec
 
@@ -227,7 +254,9 @@ function skillsForTable(spec: TableSpec): Skill[] {
     role: spec.roleRead,
     async handler(args) {
       const r = await query(`SELECT * FROM ${table} WHERE id = $1`, [args.id])
-      return r.rows[0] || { ok: false, error: 'not found' }
+      const row = r.rows[0]
+      if (!row) return { ok: false, error: 'not found' }
+      return { ...row, ...deepLinkFor(spec, row, 'opened') }
     },
   }
 
@@ -251,7 +280,8 @@ function skillsForTable(spec: TableSpec): Skill[] {
         `INSERT INTO ${table} (${provided.join(', ')}) VALUES (${placeholders}) RETURNING *`,
         values
       )
-      return { row: r.rows[0], _ui_action: { type: 'refresh' } }
+      const row = r.rows[0]
+      return { row, ...deepLinkFor(spec, row, 'created'), _ui_action: { type: 'refresh' } }
     },
   }
 
@@ -275,7 +305,9 @@ function skillsForTable(spec: TableSpec): Skill[] {
         `UPDATE ${table} SET ${setClauses} WHERE id = $${values.length} RETURNING *`,
         values
       )
-      return r.rows[0] ? { row: r.rows[0], _ui_action: { type: 'refresh' } } : { ok: false, error: 'not found' }
+      const row = r.rows[0]
+      if (!row) return { ok: false, error: 'not found' }
+      return { row, ...deepLinkFor(spec, row, 'updated'), _ui_action: { type: 'refresh' } }
     },
   }
 

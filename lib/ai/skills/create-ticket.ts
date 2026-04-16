@@ -38,7 +38,10 @@ const skill: Skill = {
     )
     const venue = venueRow.rows[0]
     const channel = venue?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
-    if (venue && channel) {
+    // Skip the auto-Slack notification when the caller is already Slack
+    // (OpenClaw) — it will format the final reply itself and we don't want
+    // the user to see two messages for one action.
+    if (venue && channel && ctx.channel !== 'slack') {
       const msg = formatTicketNotification({
         id: ticket.id,
         ticket_number: ticket.ticket_number,
@@ -52,7 +55,14 @@ const skill: Skill = {
       sendSlackMessage(msg)
     }
 
-    return { ticket, _ui_action: { type: 'refresh' } }
+    const venueLabel = venue?.name ? ` @ ${venue.name}` : ''
+    const link = `/tickets/${ticket.id}`
+    return {
+      ticket,
+      link,
+      text_summary: `Ticket **${ticket.ticket_number}** opened${venueLabel}: "${ticket.title}" (${ticket.priority}) — [open →](${link})`,
+      _ui_action: { type: 'refresh' },
+    }
   },
 }
 export default skill

@@ -42,7 +42,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-white">
       <Sidebar />
-      <div className="lg:ml-60 flex-1 flex flex-col overflow-hidden">
+      <div
+        className="lg:ml-60 flex-1 flex flex-col overflow-hidden transition-[padding] duration-200 ease-out"
+        style={{ paddingRight: 'var(--ai-panel-shrink, 0px)' }}
+      >
         <div className="flex-1 overflow-auto">
           {isWip && <WipBanner />}
           <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
@@ -55,6 +58,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </div>
       <AiAssistant />
       <AiUiDriver />
+      {/* Mirror --ai-panel-width into --ai-panel-shrink only above the sm
+          breakpoint so mobile keeps overlay behavior (the panel fills the
+          screen, content underneath doesn't matter). */}
+      <style jsx global>{`
+        :root { --ai-panel-shrink: 0px; }
+        @media (min-width: 640px) {
+          :root { --ai-panel-shrink: var(--ai-panel-width, 0px); }
+        }
+      `}</style>
     </div>
   )
 }

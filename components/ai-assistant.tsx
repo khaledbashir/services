@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { dispatchUiAction, type UiAction } from './ai-ui-driver'
@@ -35,17 +36,74 @@ const DEFAULT_SUGGESTIONS = [
 
 // Strip a <suggestions>[...]</suggestions> block (if present) from the
 // assistant text and return both. The agent emits suggestions inline so
-// we parse them client-side.
+// we parse them client-side. The parser tolerates code fences, stray
+// whitespace, missing closing tag, and single-quote arrays.
 function extractSuggestions(text: string): { clean: string; suggestions?: string[] } {
-  const m = text.match(/<suggestions>([\s\S]*?)<\/suggestions>/i)
+  // Accept open+close, or just open through end-of-text (model truncation).
+  const m =
+    text.match(/<suggestions>([\s\S]*?)<\/suggestions>/i) ||
+    text.match(/<suggestions>([\s\S]*)$/i)
   if (!m) return { clean: text }
-  try {
-    const arr = JSON.parse(m[1])
-    if (Array.isArray(arr)) {
-      return { clean: text.replace(m[0], '').trim(), suggestions: arr.slice(0, 5).map(String) }
+  // Strip code fences the model sometimes adds around the JSON.
+  const raw = m[1]
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
+    .trim()
+  let arr: unknown
+  try { arr = JSON.parse(raw) } catch {
+    // Second chance — swap single quotes for double quotes.
+    try { arr = JSON.parse(raw.replace(/'/g, '"')) } catch {}
+  }
+  const clean = text.replace(m[0], '').trim()
+  if (Array.isArray(arr)) {
+    const cleaned = arr.map(String).map(s => s.trim()).filter(s => s.length > 0 && s.length < 80)
+    if (cleaned.length > 0) return { clean, suggestions: cleaned.slice(0, 5) }
+  }
+  return { clean }
+}
+
+// When the model forgot its <suggestions> block, fall back to contextual
+// chips derived from what it actually said. Order of preference:
+//   1. Any sentences ending in "?" — those are questions the user should answer
+//   2. Bullet points (- xxx) from the text — those are often actionable items
+//   3. Topic-matched defaults (if the text mentions "ticket", "design", ...)
+//   4. Global DEFAULT_SUGGESTIONS
+function buildFallbackSuggestions(text: string, userMessage?: string): string[] {
+  const out: string[] = []
+  const plain = text.replace(/`[^`]+`/g, '').replace(/\*\*/g, '')
+
+  // Questions the model posed back to the user.
+  const questions = plain.match(/([A-Z][^.?!\n]{3,70}\?)/g) || []
+  for (const q of questions.slice(0, 3)) out.push(q.trim())
+
+  // Bullet items (often "next step" lists).
+  const bullets = plain.match(/^[ ]*[-*][ ]+([^\n]{3,60})/gm) || []
+  for (const b of bullets.slice(0, 3)) {
+    const cleaned = b.replace(/^[ ]*[-*][ ]+/, '').trim()
+    if (!out.includes(cleaned)) out.push(cleaned)
+  }
+
+  // Topic-based defaults.
+  const topic = `${text} ${userMessage || ''}`.toLowerCase()
+  const TOPIC_CHIPS: Array<[RegExp, string[]]> = [
+    [/ticket/, ['Show open tickets', 'Create a new ticket', 'Show urgent tickets']],
+    [/design|proof|creative/, ['Show pending designs', 'Move one to client review', 'Create a design request']],
+    [/event|game/, ['Events this week', 'Unassigned events', 'Tomorrow\'s schedule']],
+    [/venue|prudential|stadium|arena/, ['List all venues', 'Venues with no feed', 'Open Prudential']],
+    [/staff|technician|assign/, ['Find a tech near a venue', 'Who\'s working tomorrow']],
+    [/maintenance|walkthrough/, ['Log a walkthrough', 'Log maintenance']],
+  ]
+  for (const [pat, chips] of TOPIC_CHIPS) {
+    if (pat.test(topic)) {
+      for (const c of chips) if (!out.includes(c) && out.length < 4) out.push(c)
     }
-  } catch {}
-  return { clean: text.replace(m[0], '').trim() }
+  }
+
+  // Guaranteed minimum.
+  if (out.length < 2) {
+    for (const d of DEFAULT_SUGGESTIONS) if (!out.includes(d) && out.length < 4) out.push(d)
+  }
+  return out.slice(0, 4)
 }
 
 interface Skill {
@@ -67,6 +125,7 @@ const MAX_WIDTH = 900
 const DEFAULT_WIDTH = 440
 
 export function AiAssistant() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [historyOpen, setHistoryOpenState] = useState(false)
   const setHistoryOpen = (v: boolean | ((prev: boolean) => boolean)) => {
@@ -100,6 +159,15 @@ export function AiAssistant() {
     const savedWidth = Number(localStorage.getItem(WIDTH_KEY))
     if (savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) setWidth(savedWidth)
   }, [])
+
+  // Publish panel width as a CSS variable on <html> so the dashboard layout
+  // can apply `padding-right` and shrink the content area instead of being
+  // covered by an overlay. Mobile ignores this (handled via media query).
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--ai-panel-width', open ? `${width}px` : '0px')
+    return () => { root.style.setProperty('--ai-panel-width', '0px') }
+  }, [open, width])
 
   // Resize drag handler: grabs the left edge and tracks mouse X globally.
   useEffect(() => {
@@ -313,9 +381,11 @@ export function AiAssistant() {
         if (last?.pending) {
           const { clean, suggestions } = extractSuggestions(assistantText || 'Done.')
           // The model is supposed to ALWAYS emit a <suggestions> block but it
-          // sometimes skips — fall back to the generic list so users always
-          // have something to click.
-          const final = suggestions && suggestions.length > 0 ? suggestions : DEFAULT_SUGGESTIONS.slice(0, 4)
+          // sometimes skips — build contextual chips from the text itself so
+          // the user always has useful follow-ups (never a dead end).
+          const final = suggestions && suggestions.length > 0
+            ? suggestions
+            : buildFallbackSuggestions(clean, text)
           copy[copy.length - 1] = { ...last, pending: false, content: clean || 'Done.', suggestions: final }
         }
         return copy
@@ -345,15 +415,15 @@ export function AiAssistant() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(v => !v)}
+      {!open && <button
+        onClick={() => setOpen(true)}
         className="fixed bottom-5 right-5 z-40 h-12 w-12 rounded-full bg-[#0A52EF] text-white shadow-lg hover:bg-[#0840C0] flex items-center justify-center transition-transform hover:scale-105"
         aria-label="Open ANC assistant"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-      </button>
+      </button>}
 
       {open && (
         <div
@@ -514,7 +584,23 @@ export function AiAssistant() {
                             li: (p) => <li className="my-0" {...p} />,
                             strong: (p) => <strong className="font-semibold text-zinc-900" {...p} />,
                             code: ({ children, ...rest }) => <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 text-[11px] font-mono" {...rest}>{children}</code>,
-                            a: (p) => <a className="text-[#0A52EF] underline" target="_blank" rel="noopener noreferrer" {...p} />,
+                            a: ({ href, children, ...rest }) => {
+                              const isInternal = typeof href === 'string' && href.startsWith('/')
+                              return isInternal ? (
+                                <a
+                                  href={href}
+                                  onClick={(e) => { e.preventDefault(); if (href) router.push(href) }}
+                                  className="inline-flex items-center gap-0.5 text-[#0A52EF] font-medium underline decoration-[#0A52EF]/30 underline-offset-2 hover:decoration-[#0A52EF] hover:bg-[#0A52EF]/5 px-0.5 rounded transition-colors"
+                                  {...rest}
+                                >
+                                  {children}
+                                </a>
+                              ) : (
+                                <a href={href} className="text-[#0A52EF] underline" target="_blank" rel="noopener noreferrer" {...rest}>
+                                  {children}
+                                </a>
+                              )
+                            },
                             table: (p) => <div className="my-2 overflow-x-auto"><table className="text-[12px] border-collapse w-full" {...p} /></div>,
                             thead: (p) => <thead className="bg-zinc-200/60" {...p} />,
                             th: (p) => <th className="border border-zinc-300 px-2 py-1 text-left font-semibold" {...p} />,

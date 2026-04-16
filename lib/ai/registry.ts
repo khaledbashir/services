@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Skill, AgentRole } from '@/lib/ai/types'
+import { SkillError, type Skill, type AgentRole, type AgentChannel } from '@/lib/ai/types'
 
 // Skill auto-discovery.
 // Any .ts file in /lib/ai/skills/ that default-exports a Skill is picked
@@ -112,23 +112,77 @@ export async function toolDefinitions(userRole: AgentRole) {
   }))
 }
 
-/** Run a tool by name. Never throws across the boundary. */
+/**
+ * Run a tool by name. Never throws across the boundary — always returns a
+ * JSON string with one of two shapes:
+ *   { ok: true, text_summary?: string, ...handler_result }
+ *   { ok: false, error: { code, message, suggestion? }, text_summary: string }
+ *
+ * `text_summary` is the human-readable one-liner (for Slack / logs / the
+ * thought stream). Handlers can set it themselves; if missing we default
+ * to the error message on failure.
+ */
 export async function invokeSkill(
   name: string,
   argsJson: string,
-  ctx: { userId: string; userRole: AgentRole; userName?: string }
+  ctx: { userId: string; userRole: AgentRole; userName?: string; channel?: AgentChannel }
 ): Promise<string> {
   const all = await loadSkills()
   const skill = all.find(s => s.name === name)
-  if (!skill) return JSON.stringify({ ok: false, error: `Unknown skill: ${name}` })
+  if (!skill) {
+    return JSON.stringify({
+      ok: false,
+      error: { code: 'unknown_skill', message: `Unknown skill: ${name}`, suggestion: 'Check the available skill list.' },
+      text_summary: `Unknown skill: ${name}`,
+    })
+  }
   if (!roleAllows(ctx.userRole, skill.role)) {
-    return JSON.stringify({ ok: false, error: `Skill ${name} requires role: ${skill.role}` })
+    return JSON.stringify({
+      ok: false,
+      error: { code: 'permission_denied', message: `Skill ${name} requires role: ${skill.role}`, suggestion: 'Ask an admin to run this for you.' },
+      text_summary: `Permission denied — ${name} needs ${skill.role}`,
+    })
+  }
+  let args: Record<string, unknown> = {}
+  try {
+    args = argsJson ? JSON.parse(argsJson) : {}
+  } catch {
+    return JSON.stringify({
+      ok: false,
+      error: { code: 'invalid_args', message: `Invalid JSON args for ${name}`, suggestion: 'Retry with valid JSON.' },
+      text_summary: `Bad args for ${name}`,
+    })
   }
   try {
-    const args = argsJson ? JSON.parse(argsJson) : {}
     const result = await skill.handler(args, ctx)
-    return JSON.stringify({ ok: true, ...(typeof result === 'object' && result !== null ? result : { result }) })
+    const obj = (typeof result === 'object' && result !== null ? result : { result }) as Record<string, unknown>
+    return JSON.stringify({ ok: true, ...obj })
   } catch (err) {
-    return JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    if (err instanceof SkillError) {
+      return JSON.stringify({
+        ok: false,
+        error: { code: err.code, message: err.message, suggestion: err.suggestion },
+        text_summary: err.message,
+      })
+    }
+    // Postgres errors: detect common patterns and turn them into useful codes.
+    const raw = err instanceof Error ? err.message : String(err)
+    let code = 'server_error'
+    let suggestion: string | undefined
+    if (/foreign key|violates.*constraint/i.test(raw)) {
+      code = 'constraint_violation'
+      suggestion = 'One of the referenced IDs does not exist — look it up first.'
+    } else if (/not[- ]?found|no rows/i.test(raw)) {
+      code = 'not_found'
+      suggestion = 'Confirm the id or search by name.'
+    } else if (/duplicate|unique/i.test(raw)) {
+      code = 'conflict'
+      suggestion = 'A record with those values already exists.'
+    }
+    return JSON.stringify({
+      ok: false,
+      error: { code, message: raw, suggestion },
+      text_summary: raw.slice(0, 180),
+    })
   }
 }

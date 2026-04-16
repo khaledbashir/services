@@ -79,9 +79,75 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], preferredProvider?
   return msg
 }
 
-function buildSystemPrompt(userName: string | undefined, userRole: AgentRole): string {
+// Quick snapshot of the user's world so the agent doesn't open every chat
+// blind. Kept to ~5 short lines so the prompt stays cheap. Any query that
+// fails or exceeds the 1.5s soft-budget is silently dropped.
+async function loadUserContext(): Promise<string> {
+  const timeout = <T>(p: Promise<T>, ms = 1500): Promise<T | null> =>
+    Promise.race([
+      p.catch(() => null),
+      new Promise<null>(r => setTimeout(() => r(null), ms)),
+    ]) as Promise<T | null>
+
+  const [stats, topTickets, topDesigns, upcomingGames] = await Promise.all([
+    timeout(query(
+      `SELECT
+         (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved'))::int AS open_tickets,
+         (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved') AND priority='urgent')::int AS urgent_tickets,
+         (SELECT COUNT(*) FROM design_requests WHERE status NOT IN ('approved','done'))::int AS open_designs,
+         (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7)::int AS events_this_week,
+         (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
+           AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id=events.id))::int AS unassigned_this_week`
+    )),
+    timeout(query(
+      `SELECT t.title, t.ticket_number, v.name AS venue
+       FROM tickets t LEFT JOIN venues v ON v.id = t.venue_id
+       WHERE t.status NOT IN ('closed','resolved')
+       ORDER BY (t.priority='urgent') DESC, t.created_at DESC LIMIT 3`
+    )),
+    timeout(query(
+      `SELECT title, status FROM design_requests
+       WHERE status NOT IN ('approved','done') ORDER BY updated_at DESC LIMIT 3`
+    )),
+    timeout(query(
+      `SELECT e.title, TO_CHAR(e.event_date,'Dy Mon DD') AS event_date, v.name AS venue
+       FROM events e LEFT JOIN venues v ON v.id = e.venue_id
+       WHERE e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + 7
+       ORDER BY e.event_date ASC LIMIT 3`
+    )),
+  ])
+
+  const lines: string[] = []
+  const s = stats?.rows?.[0]
+  if (s) {
+    lines.push(
+      `- Open tickets: ${s.open_tickets}${s.urgent_tickets > 0 ? ` (${s.urgent_tickets} urgent)` : ''}`,
+      `- Open design requests: ${s.open_designs}`,
+      `- Events this week: ${s.events_this_week}${s.unassigned_this_week > 0 ? ` (${s.unassigned_this_week} unassigned)` : ''}`,
+    )
+  }
+  if (topTickets?.rows?.length) {
+    const tix = topTickets.rows.map(t => `${t.ticket_number} "${t.title}"${t.venue ? ` @ ${t.venue}` : ''}`).join('; ')
+    lines.push(`- Recent open tickets: ${tix}`)
+  }
+  if (topDesigns?.rows?.length) {
+    const ds = topDesigns.rows.map(d => `"${d.title}" (${d.status})`).join('; ')
+    lines.push(`- Recent design requests: ${ds}`)
+  }
+  if (upcomingGames?.rows?.length) {
+    const ev = upcomingGames.rows.map(e => `${e.event_date} ${e.title}${e.venue ? ` @ ${e.venue}` : ''}`).join('; ')
+    lines.push(`- Upcoming events: ${ev}`)
+  }
+  return lines.length > 0 ? lines.join('\n') : ''
+}
+
+async function buildSystemPrompt(userName: string | undefined, userRole: AgentRole): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
   const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
+  const userContext = await loadUserContext()
+  const contextBlock = userContext
+    ? `\nCURRENT STATE (as of ${today}):\n${userContext}\nUse these numbers when relevant (e.g. "you have 3 urgent tickets"). Don't refetch what you already see here — just answer.\n`
+    : ''
   return `You are the ANC Services in-dashboard assistant.
 You help ANC staff manage events, venues, tickets, maintenance, design
 requests, creative workflows, parts, RMAs, and more across the services
@@ -109,6 +175,15 @@ WORKFLOW TIPS:
   venue by name before creating records that need venue_id.
 
 PREFER USING A TOOL over guessing. Never invent UUIDs.
+
+LINKS — Whenever a skill result contains a \`link\` or \`text_summary\` field,
+surface it as a clickable markdown hyperlink in your reply. Do NOT just
+print the raw id — always give the user a one-click path to the record
+you just touched or found. Preferred form:
+  **Lakers Playoff Graphics** — [open →](/designs/abc-123)
+If \`text_summary\` is present, you can use it verbatim; it already contains
+the markdown link. Never strip the link; never replace it with plain
+text. This is load-bearing UX — the user clicks through to verify.
 
 FORMATTING — Responses render as GitHub-flavored markdown in a
 narrow panel. Use it well:
@@ -159,7 +234,8 @@ dates yourself — "tomorrow" = the next calendar day, "Friday" = the
 next upcoming Friday. Always pass YYYY-MM-DD to skills. Only ask for
 clarification if truly ambiguous.
 
-User: ${userName || 'unknown'} (role: ${userRole}).`
+User: ${userName || 'unknown'} (role: ${userRole}).
+${contextBlock}`
 }
 
 export interface StreamEvent {
@@ -202,7 +278,7 @@ export async function runChat(params: {
   const tools = await toolDefinitions(userRole)
 
   // Build messages array
-  const messages: ChatMsg[] = [{ role: 'system', content: buildSystemPrompt(userName, userRole) }]
+  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole) }]
   for (const row of history.rows) {
     if (row.role === 'assistant') {
       messages.push({

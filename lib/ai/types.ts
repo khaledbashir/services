@@ -2,10 +2,32 @@
 
 export type AgentRole = 'admin' | 'manager' | 'technician' | 'any'
 
+/**
+ * Where the skill is being invoked from. Skills can use this to adjust
+ * side-effects — e.g. when ctx.channel === 'slack', suppress the direct
+ * Slack notification since OpenClaw will format the final reply itself.
+ */
+export type AgentChannel = 'web' | 'slack'
+
 export interface SkillContext {
   userId: string
   userRole: AgentRole
   userName?: string
+  channel?: AgentChannel
+}
+
+/**
+ * Structured error skills can throw to give the agent (and the UI / Slack)
+ * a stable error code + a one-line suggestion for recovery.
+ */
+export class SkillError extends Error {
+  code: string
+  suggestion?: string
+  constructor(code: string, message: string, suggestion?: string) {
+    super(message)
+    this.code = code
+    this.suggestion = suggestion
+  }
 }
 
 export interface Skill {

@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 export type UiAction =
   | { type: 'navigate'; path: string }
   | { type: 'click'; selector: string }
-  | { type: 'fill'; selector: string; value: string }
+  | { type: 'fill'; selector: string; value: string; fast?: boolean }
   | { type: 'select'; selector: string; value: string }
   | { type: 'highlight'; selector: string; label?: string }
   | { type: 'wait'; ms: number }
@@ -110,22 +110,32 @@ export function AiUiDriver() {
     setTimeout(() => ring.remove(), 1800)
   }
 
-  const typeIntoField = async (el: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+  const typeIntoField = async (el: HTMLInputElement | HTMLTextAreaElement, value: string, fast = false) => {
     el.focus()
-    // Clear existing
     const nativeSetter =
       el instanceof HTMLTextAreaElement
         ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
         : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+
+    // Fast path: long strings and bulk fills. Skip the typewriter and just
+    // fire the controlled-input events so React state picks up the value.
+    if (fast || value.length > 40) {
+      if (nativeSetter) nativeSetter.call(el, value)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      el.dispatchEvent(new Event('blur', { bubbles: true }))
+      return
+    }
+
     if (nativeSetter) nativeSetter.call(el, '')
     el.dispatchEvent(new Event('input', { bubbles: true }))
-
     let acc = ''
     for (const ch of value) {
       acc += ch
       if (nativeSetter) nativeSetter.call(el, acc)
       el.dispatchEvent(new Event('input', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 18))
+      // 8ms per char: a 30-char name now takes ~240ms instead of 540ms.
+      await new Promise((resolve) => setTimeout(resolve, 8))
     }
     el.dispatchEvent(new Event('change', { bubbles: true }))
     el.dispatchEvent(new Event('blur', { bubbles: true }))
@@ -163,7 +173,7 @@ export function AiUiDriver() {
               el.value = action.value
               el.dispatchEvent(new Event('change', { bubbles: true }))
             } else {
-              await typeIntoField(el, action.value)
+              await typeIntoField(el, action.value, action.fast)
             }
             break
           }

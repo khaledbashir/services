@@ -130,6 +130,12 @@ async function runMigrations() {
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS twenty_technician_id TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS twenty_id TEXT`)
 
+    // Slack user → staff mapping so OpenClaw (Claw bot) can resolve the
+    // inbound Slack user to a real staff record + role when calling skills
+    // via /api/ai/invoke. Array because Ahmad has multiple Slack IDs.
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS slack_user_ids TEXT[] DEFAULT '{}'::text[]`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_slack_user_ids ON staff USING GIN(slack_user_ids)`)
+
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
       DECLARE

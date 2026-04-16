@@ -5,7 +5,10 @@ import { ReactNode, useState } from 'react'
 export interface KanbanColumn {
   key: string
   label: string
-  accent: string // tailwind color class e.g. 'bg-amber-500'
+  /** Tailwind solid color class for the column dot, e.g. 'bg-amber-500'. */
+  accent: string
+  /** Optional override for the column header tint. Derived from accent if omitted. */
+  headerTint?: string
 }
 
 interface Props<T> {
@@ -15,6 +18,13 @@ interface Props<T> {
   onStatusChange: (item: T, newStatus: string) => void | Promise<void>
   renderCard: (item: T) => ReactNode
   keyOf: (item: T) => string
+}
+
+// "bg-amber-500" -> "bg-amber-50/60" for a soft column-header wash.
+function deriveTint(accent: string): string {
+  const m = accent.match(/^bg-([a-z]+)-\d+$/)
+  if (!m) return 'bg-zinc-50/60'
+  return `bg-${m[1]}-50/60`
 }
 
 export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, renderCard, keyOf }: Props<T>) {
@@ -34,6 +44,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
       {columns.map(col => {
         const list = byColumn[col.key] || []
         const isHover = hoverCol === col.key
+        const headerTint = col.headerTint || deriveTint(col.accent)
         return (
           <div
             key={col.key}
@@ -48,16 +59,22 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                 await onStatusChange(dropped, col.key)
               }
             }}
-            className={`rounded-2xl border ${isHover ? 'border-[#0A52EF] bg-[#0A52EF]/5' : 'border-[#E8E8E8] bg-zinc-50/70'} min-h-72`}
+            className={`rounded-2xl ring-1 transition-colors min-h-80 flex flex-col overflow-hidden ${
+              isHover
+                ? 'ring-[#0A52EF] bg-[#0A52EF]/[0.04]'
+                : 'ring-zinc-200/80 bg-white'
+            }`}
           >
-            <div className="px-3 py-2 flex items-center justify-between border-b border-[#E8E8E8]">
+            <div className={`px-3.5 py-2.5 flex items-center justify-between border-b border-zinc-200/70 ${headerTint}`}>
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${col.accent}`} />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">{col.label}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${col.accent} ring-2 ring-white`} />
+                <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-zinc-700">{col.label}</span>
               </div>
-              <span className="text-xs font-medium text-zinc-500 tabular-nums">{list.length}</span>
+              <span className="text-[11px] font-semibold text-zinc-500 tabular-nums bg-white/70 rounded-full px-2 py-0.5 ring-1 ring-zinc-200/60">
+                {list.length}
+              </span>
             </div>
-            <div className="p-2 space-y-2">
+            <div className="p-2 space-y-2 flex-1 bg-zinc-50/40">
               {list.map(item => {
                 const k = keyOf(item)
                 return (
@@ -66,13 +83,17 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                     draggable
                     onDragStart={(e) => { setDragKey(k); e.dataTransfer.setData('text/plain', k); e.dataTransfer.effectAllowed = 'move' }}
                     onDragEnd={() => setDragKey(null)}
-                    className={`rounded-xl bg-white border border-[#E8E8E8] p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragKey === k ? 'opacity-40' : ''}`}
+                    className={`group rounded-xl bg-white ring-1 ring-zinc-200/80 p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_20px_-8px_rgba(15,23,42,0.18)] hover:ring-zinc-300 hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing ${dragKey === k ? 'opacity-40' : ''}`}
                   >
                     {renderCard(item)}
                   </div>
                 )
               })}
-              {list.length === 0 && <div className="text-xs text-zinc-400 text-center py-6">— empty —</div>}
+              {list.length === 0 && (
+                <div className="text-[11px] text-zinc-400 text-center py-8 tracking-wide">
+                  <span className="opacity-60">nothing here</span>
+                </div>
+              )}
             </div>
           </div>
         )
