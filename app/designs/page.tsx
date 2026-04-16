@@ -56,6 +56,7 @@ export default function DesignsPage() {
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [sortKey, setSortKey] = useState<string>('newest')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -73,10 +74,10 @@ export default function DesignsPage() {
     notes: '',
   })
 
-  const fetchData = async () => {
+  const fetchData = async (sort: string = sortKey) => {
     try {
       const [dr, vd, sd] = await Promise.all([
-        fetch('/api/design-requests').then((r) => r.json()),
+        fetch(`/api/design-requests?sort=${encodeURIComponent(sort)}`).then((r) => r.json()),
         fetch('/api/venues').then((r) => r.json()),
         fetch('/api/staff').then((r) => r.json()),
       ])
@@ -91,11 +92,11 @@ export default function DesignsPage() {
   }
 
   useEffect(() => {
-    fetchData()
-    const onRefresh = () => { fetchData() }
+    fetchData(sortKey)
+    const onRefresh = () => { fetchData(sortKey) }
     window.addEventListener('anc:data-refresh', onRefresh)
     return () => window.removeEventListener('anc:data-refresh', onRefresh)
-  }, [])
+  }, [sortKey])
 
   const updateStatus = async (item: DesignRequest, status: string) => {
     try {
@@ -477,17 +478,40 @@ export default function DesignsPage() {
               )
             })}
           </div>
-          <div className="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by title, company, venue, designer…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-72 h-10 pl-10 pr-3 rounded-xl ring-1 ring-zinc-200 bg-white text-sm placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4 4m0 0l4-4m-4 4V4" />
+              </svg>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                className="h-10 pl-9 pr-8 rounded-xl ring-1 ring-zinc-200 bg-white text-sm text-zinc-700 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow appearance-none cursor-pointer"
+                title="Sort order"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="updated">Recently updated</option>
+                <option value="due_asc">Due soonest</option>
+                <option value="due_desc">Due latest</option>
+                <option value="title">Title A–Z</option>
+              </select>
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            <div className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by title, company, venue, designer…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-72 h-10 pl-10 pr-3 rounded-xl ring-1 ring-zinc-200 bg-white text-sm placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
+              />
+            </div>
           </div>
         </div>
 

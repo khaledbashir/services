@@ -50,12 +50,27 @@ export async function GET(request: NextRequest) {
     // usable page; caller can bump via ?limit=.
     const requestedLimit = Number(searchParams.get('limit')) || 200
     const limit = Math.min(Math.max(requestedLimit, 1), 500)
+
+    // Sort: newest (default) puts fresh records at the top so they land at
+    // the top of Submitted when someone creates one — this is what users
+    // expect when "I just made that, where is it?".
+    const sortKey = (searchParams.get('sort') || 'newest').toLowerCase()
+    const orderBy = {
+      newest:   'dr.created_at DESC',
+      oldest:   'dr.created_at ASC',
+      updated:  'dr.updated_at DESC',
+      due_asc:  `COALESCE(dr.due_date, DATE '9999-12-31') ASC, dr.created_at DESC`,
+      due_desc: `COALESCE(dr.due_date, DATE '0001-01-01') DESC, dr.created_at DESC`,
+      title:    'LOWER(dr.job_title) ASC',
+    }[sortKey] || 'dr.created_at DESC'
+
     params.push(limit)
 
     const result = await query(
       `SELECT dr.id, dr.job_title, dr.company_name, dr.tricode, dr.ftp_proof_link, dr.ftp_final_link,
               dr.final_file_name, dr.final_duration, dr.notes, dr.boards_requested, dr.sizes_requested,
               dr.status, dr.hours_estimated, dr.hours_spent, dr.due_date,
+              dr.created_at,
               TO_CHAR(dr.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(dr.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
@@ -66,7 +81,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN staff d ON dr.designer_id = d.id
        LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
        ${whereClause}
-       ORDER BY COALESCE(dr.due_date, CURRENT_DATE + INTERVAL '365 days'), dr.created_at DESC
+       ORDER BY ${orderBy}
        LIMIT $${params.length}`,
       params,
     )

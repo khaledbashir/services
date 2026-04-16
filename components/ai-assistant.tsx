@@ -320,10 +320,17 @@ export function AiAssistant() {
             } else if (ev.type === 'text') {
               if (typeof ev.data === 'string' && ev.data.length > 0) {
                 assistantText = assistantText ? assistantText + '\n\n' + ev.data : ev.data
+                // Strip any <suggestions> block from the displayed text so it
+                // doesn't flash in mid-stream. The final cleanup at stream-end
+                // also strips it but we don't want it visible even for a moment.
+                const visible = assistantText
+                  .replace(/<suggestions>[\s\S]*?<\/suggestions>/gi, '')
+                  .replace(/<suggestions>[\s\S]*$/gi, '')
+                  .trimEnd()
                 setMessages(prev => {
                   const copy = [...prev]
                   const last = copy[copy.length - 1]
-                  if (last?.pending) copy[copy.length - 1] = { ...last, content: assistantText }
+                  if (last?.pending) copy[copy.length - 1] = { ...last, content: visible }
                   return copy
                 })
               }
