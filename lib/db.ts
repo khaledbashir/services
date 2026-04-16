@@ -175,6 +175,46 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
+
+    // ============================================================
+    // service_types + venue_services — per-venue contracted services
+    // (Joe's Apr 16 list: White Glove, Break/Fix, Event Support, etc.)
+    // ============================================================
+    await client.query(`CREATE TABLE IF NOT EXISTS service_types (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS venue_services (
+      venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      service_type_id UUID NOT NULL REFERENCES service_types(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (venue_id, service_type_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_services_venue ON venue_services(venue_id) WHERE enabled = true`)
+
+    // Seed Joe's canonical contracted-service list. Idempotent via ON CONFLICT.
+    const joeServices: Array<[string, string]> = [
+      ['White Glove Maintenance', 'Proactive scheduled maintenance with premium response SLA'],
+      ['Break/Fix Maintenance', 'Reactive repair dispatch when something breaks'],
+      ['Event Support', 'On-site technical support during events — events at this venue must be assigned to staff'],
+      ['Walkthroughs', 'Scheduled venue walkthroughs and inspections'],
+      ['Operations', 'Day-to-day operational support and coordination'],
+      ['Scheduling', 'Shift scheduling and staff dispatch for this venue'],
+      ['Tech Support', 'Remote / on-call technical support'],
+      ['LiveSync', 'LiveSync product — live content / scoreboard sync'],
+      ['VisionStats', 'VisionStats product — statistics integration for displays'],
+      ['Parts', 'Parts inventory and fulfillment for this venue'],
+    ]
+    for (const [name, description] of joeServices) {
+      await client.query(
+        `INSERT INTO service_types (name, description) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description`,
+        [name, description]
+      )
+    }
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)

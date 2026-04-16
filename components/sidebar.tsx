@@ -243,6 +243,11 @@ export function Sidebar() {
                 <span className="flex items-center gap-2">
                   <span className="opacity-70">{section.icon}</span>
                   {section.label}
+                  {(section.key === 'service-ops' || section.key === 'creative') && (
+                    <span className="ml-1 inline-flex items-center rounded-sm bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                      WIP
+                    </span>
+                  )}
                 </span>
                 <Icon className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}>{IC.chevron}</Icon>
               </button>

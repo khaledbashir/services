@@ -9,13 +9,16 @@
 DB_CONTAINER=$(docker ps -q -f name=abc_ancdb)
 
 SERVICES=(
-  "Full Service|Complete on-site technical support for all events"
-  "On-Call Support|Remote/on-call support only — no on-site assignment required"
-  "LED Maintenance|Scheduled LED display maintenance and monitoring"
-  "Content Management|Digital signage and content updates"
-  "Hardware Support|Hardware installation and repair"
-  # ADD JOE'S SERVICES BELOW THIS LINE
-  # "New Service Name|Description of what it covers"
+  "White Glove Maintenance|Proactive scheduled maintenance with premium response SLA"
+  "Break/Fix Maintenance|Reactive repair dispatch when something breaks"
+  "Event Support|On-site technical support during events — events at this venue must be assigned to staff"
+  "Walkthroughs|Scheduled venue walkthroughs and inspections"
+  "Operations|Day-to-day operational support and coordination"
+  "Scheduling|Shift scheduling and staff dispatch for this venue"
+  "Tech Support|Remote / on-call technical support"
+  "LiveSync|LiveSync product — live content / scoreboard sync"
+  "VisionStats|VisionStats product — statistics integration for displays"
+  "Parts|Parts inventory and fulfillment for this venue"
 )
 
 for entry in "${SERVICES[@]}"; do
