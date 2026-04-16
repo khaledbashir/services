@@ -251,7 +251,7 @@ function skillsForTable(spec: TableSpec): Skill[] {
         `INSERT INTO ${table} (${provided.join(', ')}) VALUES (${placeholders}) RETURNING *`,
         values
       )
-      return { row: r.rows[0] }
+      return { row: r.rows[0], _ui_action: { type: 'refresh' } }
     },
   }
 
@@ -275,7 +275,7 @@ function skillsForTable(spec: TableSpec): Skill[] {
         `UPDATE ${table} SET ${setClauses} WHERE id = $${values.length} RETURNING *`,
         values
       )
-      return r.rows[0] ? { row: r.rows[0] } : { ok: false, error: 'not found' }
+      return r.rows[0] ? { row: r.rows[0], _ui_action: { type: 'refresh' } } : { ok: false, error: 'not found' }
     },
   }
 
@@ -287,7 +287,7 @@ function skillsForTable(spec: TableSpec): Skill[] {
     role: spec.roleDelete,
     async handler(args) {
       const r = await query(`DELETE FROM ${table} WHERE id = $1 RETURNING id`, [args.id])
-      return r.rows[0] ? { ok: true, id: r.rows[0].id } : { ok: false, error: 'not found' }
+      return r.rows[0] ? { ok: true, id: r.rows[0].id, _ui_action: { type: 'refresh' } } : { ok: false, error: 'not found' }
     },
   }
 

@@ -26,7 +26,7 @@ const skill: Skill = {
        RETURNING id, result, log_date`,
       [args.venue_id, ctx.userId, args.result, args.locations_visited || null, args.issues_found || null, args.notes || null]
     )
-    return { walkthrough: r.rows[0] }
+    return { walkthrough: r.rows[0], _ui_action: { type: 'refresh' } }
   },
 }
 export default skill

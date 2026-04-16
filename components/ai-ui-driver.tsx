@@ -16,6 +16,7 @@ export type UiAction =
   | { type: 'highlight'; selector: string; label?: string }
   | { type: 'wait'; ms: number }
   | { type: 'toast'; message: string; variant?: 'info' | 'success' | 'warning' }
+  | { type: 'refresh' }
 
 export function dispatchUiAction(action: UiAction) {
   window.dispatchEvent(new CustomEvent<UiAction>('anc:ai-ui', { detail: action }))
@@ -198,6 +199,13 @@ export function AiUiDriver() {
             const id = ++toastIdRef.current
             setToasts((prev) => [...prev, { id, message: action.message, variant: action.variant || 'info' }])
             setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3800)
+            break
+          }
+          case 'refresh': {
+            // Re-fetch server-component data AND notify client components that
+            // own their own fetch state (they subscribe to `anc:data-refresh`).
+            router.refresh()
+            window.dispatchEvent(new Event('anc:data-refresh'))
             break
           }
         }

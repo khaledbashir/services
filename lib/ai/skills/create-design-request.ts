@@ -38,7 +38,7 @@ const skill: Skill = {
         args.hours_estimated || null, args.due_date || null, args.notes || null,
       ]
     )
-    return { design_request: r.rows[0] }
+    return { design_request: r.rows[0], _ui_action: { type: 'refresh' } }
   },
 }
 export default skill

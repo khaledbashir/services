@@ -52,7 +52,7 @@ const skill: Skill = {
       sendSlackMessage(msg)
     }
 
-    return { ticket }
+    return { ticket, _ui_action: { type: 'refresh' } }
   },
 }
 export default skill

@@ -29,7 +29,7 @@ const skill: Skill = {
       [args.venue_id, ctx.userId, args.maintenance_type || null, args.issue,
        args.issue_summary || null, args.location_reported || null, args.status || null]
     )
-    return { maintenance_log: r.rows[0] }
+    return { maintenance_log: r.rows[0], _ui_action: { type: 'refresh' } }
   },
 }
 export default skill

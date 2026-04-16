@@ -82,6 +82,9 @@ export default function CgDesignsPage() {
 
   useEffect(() => {
     fetchData()
+    const onRefresh = () => { fetchData() }
+    window.addEventListener('anc:data-refresh', onRefresh)
+    return () => window.removeEventListener('anc:data-refresh', onRefresh)
   }, [])
 
   const handleSubmit = async (e: FormEvent) => {

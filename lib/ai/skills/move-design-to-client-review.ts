@@ -32,9 +32,14 @@ const skill: Skill = {
         proof_url: share.url,
         emailed: share.emailed,
         client_email: share.client_email,
+        _ui_action: { type: 'refresh' },
       }
     } catch (err) {
-      return { design_request: r.rows[0], proof_error: err instanceof Error ? err.message : String(err) }
+      return {
+        design_request: r.rows[0],
+        proof_error: err instanceof Error ? err.message : String(err),
+        _ui_action: { type: 'refresh' },
+      }
     }
   },
 }

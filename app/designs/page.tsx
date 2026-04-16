@@ -92,6 +92,9 @@ export default function DesignsPage() {
 
   useEffect(() => {
     fetchData()
+    const onRefresh = () => { fetchData() }
+    window.addEventListener('anc:data-refresh', onRefresh)
+    return () => window.removeEventListener('anc:data-refresh', onRefresh)
   }, [])
 
   const updateStatus = async (item: DesignRequest, status: string) => {

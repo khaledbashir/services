@@ -128,6 +128,17 @@ const toast: Skill = {
   },
 }
 
+const refresh: Skill = {
+  name: 'ui_refresh',
+  description: 'Re-fetch the current page so the user sees data you just mutated. Call this AFTER any create/update/delete skill so the UI reflects the new state.',
+  category: 'System',
+  icon: '🔄',
+  parameters: { type: 'object', properties: {} },
+  async handler() {
+    return ui('refresh', {})
+  },
+}
+
 export function uiSkills(): Skill[] {
-  return [navigate, click, fill, select, highlight, wait, toast]
+  return [navigate, click, fill, select, highlight, wait, toast, refresh]
 }

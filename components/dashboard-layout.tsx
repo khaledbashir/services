@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { AiAssistant } from './ai-assistant'
 import { AiUiDriver } from './ai-ui-driver'
@@ -27,6 +28,17 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const isWip = WIP_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   )
+  // When the AI (or any code) fires "anc:data-refresh", remount the page tree
+  // by bumping this key. That forces every child's useEffect/useState to
+  // re-initialize — so any page that fetches on mount re-fetches. The AI
+  // overlay sits outside the keyed subtree so the chat state survives.
+  const [refreshKey, setRefreshKey] = useState(0)
+  useEffect(() => {
+    const bump = () => setRefreshKey((k) => k + 1)
+    window.addEventListener('anc:data-refresh', bump)
+    return () => window.removeEventListener('anc:data-refresh', bump)
+  }, [])
+
   return (
     <div className="flex h-screen bg-white">
       <Sidebar />
@@ -37,7 +49,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="mb-4 flex justify-end lg:mb-6">
               <GlobalSearch />
             </div>
-            {children}
+            <div key={`${pathname}:${refreshKey}`}>{children}</div>
           </div>
         </div>
       </div>
