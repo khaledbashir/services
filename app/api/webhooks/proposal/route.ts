@@ -67,17 +67,6 @@ export async function POST(request: NextRequest) {
       )
 
       venueId = venueResult.rows[0].id
-
-      // If service types exist, enable "Full Service" by default
-      const fullServiceResult = await query(
-        `SELECT id FROM service_types WHERE name = 'Full Service' LIMIT 1`
-      )
-      if (fullServiceResult.rows.length > 0) {
-        await query(
-          `INSERT INTO venue_services (venue_id, service_type_id, enabled) VALUES ($1, $2, true) ON CONFLICT DO NOTHING`,
-          [venueId, fullServiceResult.rows[0].id]
-        )
-      }
     }
 
     // Import installed screens
