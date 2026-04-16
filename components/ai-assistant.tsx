@@ -415,19 +415,27 @@ export function AiAssistant() {
 
   return (
     <>
+      {/* Slim edge tab — sticks out from the right side. Clicking slides the
+          panel in and pushes page content leftwards via --ai-panel-width. */}
       {!open && <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 h-12 w-12 rounded-full bg-[#0A52EF] text-white shadow-lg hover:bg-[#0840C0] flex items-center justify-center transition-transform hover:scale-105"
+        className="group fixed right-0 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-2 py-5 pl-2 pr-1.5 rounded-l-2xl bg-[#0A52EF] text-white shadow-[0_8px_24px_-8px_rgba(10,82,239,0.55)] hover:pr-2.5 hover:bg-[#0840C0] transition-[padding,background-color] duration-200"
         aria-label="Open ANC assistant"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        <span className="text-[10px] font-bold uppercase tracking-[0.3em] [writing-mode:vertical-rl] rotate-180">
+          AI
+        </span>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 opacity-70 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
       </button>}
 
       {open && (
         <div
-          className="fixed inset-y-0 right-0 z-40 bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col"
+          className="fixed inset-y-0 right-0 z-40 bg-white border-l border-[#E8E8E8] shadow-2xl flex flex-col ai-panel-slide"
           style={{ width: `min(100vw, ${width}px)` }}
         >
           {/* Resize handle — drag the left edge to make the panel wider. */}

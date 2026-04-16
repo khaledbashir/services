@@ -51,3 +51,10 @@ body {
 /* Toast animations */
 @keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes toast-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* AI assistant slide-in */
+@keyframes ai-panel-slide {
+  from { transform: translateX(100%); opacity: 0.3; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.ai-panel-slide { animation: ai-panel-slide 220ms cubic-bezier(0.22, 1, 0.36, 1); }
