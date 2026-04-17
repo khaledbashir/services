@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
+import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -178,6 +179,20 @@ export async function POST(request: NextRequest) {
       type: 'created',
       detail: description || title,
     }).catch(err => console.error('[email] Ticket creation email failed:', err))
+
+    syncTicketsToTwenty([{
+      id: ticket.id,
+      title: ticket.title,
+      ticket_number: ticket.ticket_number,
+      status: ticket.status,
+      priority: ticket.priority,
+      category: ticket.category,
+      venue_name: venueName,
+      venue_id: venue_id,
+      assigned_to: effectiveAssignee || '',
+      description: description || '',
+      resolution_notes: resolution_notes || '',
+    }]).catch(err => console.error('[twenty] real-time ticket sync failed:', err))
 
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {
