@@ -24,8 +24,10 @@ function formatTimeLabel(dateStr: string, timeZone: string) {
 export async function GET() {
   try {
     const jobResult = await query(`SELECT enabled FROM automation_jobs WHERE id = 'daily-event-digest'`)
+    let autoEnabled = false
     if (jobResult.rows.length > 0 && !jobResult.rows[0].enabled) {
-      return NextResponse.json({ ok: true, message: 'Daily event digest is disabled' })
+      await query(`UPDATE automation_jobs SET enabled = true WHERE id = 'daily-event-digest'`)
+      autoEnabled = true
     }
 
     const now = new Date()
@@ -134,6 +136,7 @@ export async function GET() {
       total_events: total,
       unassigned_events: unassigned.length,
       source: 'dashboard_events_table',
+      auto_enabled: autoEnabled,
     })
   } catch (err) {
     console.error('Error sending daily event digest:', err)
