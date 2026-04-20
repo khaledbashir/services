@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
 import { buildEventTimestamps } from '@/lib/timezone'
+import { syncEventsToTwenty } from '@/lib/twenty-sync'
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,6 +61,35 @@ export async function POST(request: NextRequest) {
     const venueChannel = venueRes.rows[0]?.slack_channel_id
     const staffCount = staff_ids?.length || 0
     notifyOps(':calendar:', `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`, { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` }, venueChannel)
+
+    // --- CRM SYNC: push new event to Twenty ---
+    ;(async () => {
+      try {
+        // Get assigned tech names for sync
+        let assignedTechs = ''
+        if (staff_ids?.length) {
+          const techRes = await query(
+            `SELECT string_agg(s.full_name, ', ') as names FROM staff s WHERE s.id = ANY($1::uuid[])`,
+            [staff_ids]
+          )
+          assignedTechs = techRes.rows[0]?.names || ''
+        }
+        await syncEventsToTwenty([{
+          id: eventId,
+          name: summary,
+          event_date: event_date,
+          venue_name: venueName,
+          venue_id: venue_id,
+          league: league || '',
+          workflow_status: 'pending',
+          assigned_techs: assignedTechs,
+          summary: summary,
+          start_time: start_time || '',
+        }])
+      } catch (crmErr) {
+        console.error('[twenty] event create sync error:', crmErr)
+      }
+    })()
 
     return NextResponse.json({ id: eventId })
   } catch (err) {

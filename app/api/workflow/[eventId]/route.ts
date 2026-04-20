@@ -4,6 +4,7 @@ import { sendSlackMessage } from '@/lib/slack'
 import { appendFile } from 'fs/promises'
 import { resolve } from 'path'
 import { getAuthUser } from '@/lib/rbac'
+import { syncEventsToTwenty } from '@/lib/twenty-sync'
 
 const workflowLabels: Record<string, { label: string; emoji: string }> = {
   check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
@@ -193,6 +194,42 @@ export async function POST(
       'UPDATE events SET workflow_status = $1 WHERE id = $2',
       [eventStatus, eventId]
     )
+
+    // --- CRM SYNC: push workflow status change to Twenty ---
+    ;(async () => {
+      try {
+        const syncEvent = await query(
+          `SELECT e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
+                  e.league, e.workflow_status, e.start_time,
+                  v.name as venue_name, e.venue_id,
+                  COALESCE(string_agg(s.full_name, ', '), '') as assigned_techs
+           FROM events e
+           LEFT JOIN venues v ON e.venue_id = v.id
+           LEFT JOIN event_assignments ea ON ea.event_id = e.id
+           LEFT JOIN staff s ON ea.staff_id = s.id
+           WHERE e.id = $1
+           GROUP BY e.id, v.name`,
+          [eventId]
+        )
+        if (syncEvent.rows[0]) {
+          const se = syncEvent.rows[0]
+          await syncEventsToTwenty([{
+            id: se.id,
+            name: se.summary,
+            event_date: se.event_date,
+            venue_name: se.venue_name || '',
+            venue_id: se.venue_id,
+            league: se.league || '',
+            workflow_status: se.workflow_status,
+            assigned_techs: se.assigned_techs || '',
+            summary: se.summary,
+            start_time: se.start_time || '',
+          }])
+        }
+      } catch (crmErr) {
+        console.error('[twenty] workflow event sync error:', crmErr)
+      }
+    })()
 
     // Get staff and event names for notification log
     const staffResult = await query('SELECT full_name FROM staff WHERE id = $1', [effectiveStaffId])

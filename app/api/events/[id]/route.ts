@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 import { combineLocalToUtc } from '@/lib/timezone'
+import { syncEventsToTwenty } from '@/lib/twenty-sync'
 
 export async function GET(
   request: NextRequest,
@@ -196,6 +197,42 @@ export async function PATCH(
       `UPDATE events SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramIndex}`,
       values
     )
+
+    // --- CRM SYNC: push updated event to Twenty ---
+    ;(async () => {
+      try {
+        const freshEvent = await query(
+          `SELECT e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
+                  e.league, e.workflow_status, e.start_time,
+                  v.name as venue_name, e.venue_id,
+                  COALESCE(string_agg(s.full_name, ', '), '') as assigned_techs
+           FROM events e
+           LEFT JOIN venues v ON e.venue_id = v.id
+           LEFT JOIN event_assignments ea ON ea.event_id = e.id
+           LEFT JOIN staff s ON ea.staff_id = s.id
+           WHERE e.id = $1
+           GROUP BY e.id, v.name`,
+          [id]
+        )
+        if (freshEvent.rows[0]) {
+          const fe = freshEvent.rows[0]
+          await syncEventsToTwenty([{
+            id: fe.id,
+            name: fe.summary,
+            event_date: fe.event_date,
+            venue_name: fe.venue_name || '',
+            venue_id: fe.venue_id,
+            league: fe.league || '',
+            workflow_status: fe.workflow_status,
+            assigned_techs: fe.assigned_techs || '',
+            summary: fe.summary,
+            start_time: fe.start_time || '',
+          }])
+        }
+      } catch (crmErr) {
+        console.error('[twenty] event update sync error:', crmErr)
+      }
+    })()
 
     return NextResponse.json({ success: true })
   } catch (err) {

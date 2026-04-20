@@ -4,6 +4,7 @@ import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 
 const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
@@ -282,6 +283,41 @@ export async function PATCH(
         resolution: status === 'closed' ? resolution_notes : undefined,
       }).catch(err => console.error('[email] Ticket update email failed:', err))
     }
+
+    // --- CRM SYNC: push updated ticket to Twenty ---
+    ;(async () => {
+      try {
+        const freshTicket = await query(
+          `SELECT t.id, t.title, t.ticket_number, t.status, t.priority, t.category,
+                  t.description, t.resolution_notes,
+                  v.name as venue_name, t.venue_id,
+                  s.full_name as assigned_to_name
+           FROM tickets t
+           LEFT JOIN venues v ON t.venue_id = v.id
+           LEFT JOIN staff s ON t.assigned_to = s.id
+           WHERE t.id = $1`,
+          [params.id]
+        )
+        if (freshTicket.rows[0]) {
+          const ft = freshTicket.rows[0]
+          await syncTicketsToTwenty([{
+            id: ft.id,
+            title: ft.title,
+            ticket_number: ft.ticket_number,
+            status: ft.status,
+            priority: ft.priority,
+            category: ft.category,
+            venue_name: ft.venue_name || '',
+            venue_id: ft.venue_id,
+            assigned_to: ft.assigned_to_name || '',
+            description: ft.description || '',
+            resolution_notes: ft.resolution_notes || '',
+          }])
+        }
+      } catch (crmErr) {
+        console.error('[twenty] ticket update sync error:', crmErr)
+      }
+    })()
 
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {
