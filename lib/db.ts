@@ -9,10 +9,12 @@ const pool = new Pool({
 })
 
 let migrationRan = false
+let migrationRunning: Promise<void> | null = null
 
 async function runMigrations() {
   if (migrationRan) return
-  migrationRan = true
+  if (migrationRunning) return migrationRunning
+  migrationRunning = (async () => {
   const client = await pool.connect()
   try {
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_type TEXT DEFAULT 'sports'`)
@@ -160,6 +162,20 @@ async function runMigrations() {
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS slack_user_ids TEXT[] DEFAULT '{}'::text[]`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_slack_user_ids ON staff USING GIN(slack_user_ids)`)
 
+    // Normalize older client schema versions into the Option B shape.
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_venue_id UUID`)
+    await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`)
+    await client.query(`UPDATE clients SET client_kind = COALESCE(client_kind, client_type, 'client') WHERE client_kind IS NULL`)
+    await client.query(`ALTER TABLE clients ALTER COLUMN client_kind SET DEFAULT 'client'`)
+    await client.query(`UPDATE clients SET updated_at = COALESCE(updated_at, created_at, NOW()) WHERE updated_at IS NULL`)
+    await client.query(`ALTER TABLE client_venues ADD COLUMN IF NOT EXISTS relation_type TEXT`)
+    await client.query(`UPDATE client_venues
+      SET relation_type = CASE WHEN COALESCE(is_primary, false) THEN 'primary' ELSE 'secondary' END
+      WHERE relation_type IS NULL`)
+    await client.query(`ALTER TABLE client_venues ALTER COLUMN relation_type SET DEFAULT 'primary'`)
+    await client.query(`UPDATE client_venues SET created_at = NOW() WHERE created_at IS NULL`)
+
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 AS $$
       DECLARE
@@ -251,6 +267,7 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_parent ON clients(parent_client_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_active ON clients(is_active)`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_legacy_venue ON clients(legacy_venue_id) WHERE legacy_venue_id IS NOT NULL`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_scope
       ON clients (LOWER(name), COALESCE(parent_client_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(LOWER(sport), ''))`)
     await client.query(`CREATE TABLE IF NOT EXISTS client_venues (
@@ -339,12 +356,15 @@ async function runMigrations() {
       WHERE c.legacy_venue_id = e.venue_id
         AND e.client_id IS NULL
     `)
+    migrationRan = true
   } catch (err) {
-    // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)
   } finally {
     client.release()
+    migrationRunning = null
   }
+  })()
+  return migrationRunning
 }
 
 export async function query(text: string, params?: any[]) {

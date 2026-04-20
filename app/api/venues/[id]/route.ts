@@ -75,14 +75,19 @@ export async function GET(
 
     const venue = venueResult.rows[0]
 
-    const linkedClientsResult = await query(
-      `SELECT c.id, c.name, c.client_kind, c.sport, cv.relation_type
-       FROM client_venues cv
-       JOIN clients c ON c.id = cv.client_id
-       WHERE cv.venue_id = $1
-       ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, c.name ASC`,
-      [venueId]
-    )
+    let linkedClientsResult = { rows: [] as any[] }
+    try {
+      linkedClientsResult = await query(
+        `SELECT c.id, c.name, c.client_kind, c.sport, cv.relation_type
+         FROM client_venues cv
+         JOIN clients c ON c.id = cv.client_id
+         WHERE cv.venue_id = $1
+         ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, c.name ASC`,
+        [venueId]
+      )
+    } catch (err) {
+      console.warn('Venue linked-clients lookup failed (non-fatal):', err)
+    }
 
     // Get upcoming events (next 30 days)
     const today = new Date().toISOString().split('T')[0]
@@ -135,32 +140,40 @@ export async function GET(
     )
 
     // Creative requests tied to this venue — design / CG / print / content schedule
-    const [designRows, cgRows, printRows, contentRows] = await Promise.all([
-      query(
-        `SELECT id, job_title, status, due_date, hours_estimated, hours_spent,
-                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-         FROM design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [venueId]
-      ),
-      query(
-        `SELECT id, job_title, league, team_name, status, due_date,
-                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-         FROM cg_design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [venueId]
-      ),
-      query(
-        `SELECT id, job_title, client_name, status, ship_date, arrival_date,
-                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-         FROM print_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [venueId]
-      ),
-      query(
-        `SELECT id, content_name, company_name, status, launch_date, end_date,
-                TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-         FROM content_schedules WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [venueId]
-      ),
-    ])
+    let designRows = { rows: [] as any[] }
+    let cgRows = { rows: [] as any[] }
+    let printRows = { rows: [] as any[] }
+    let contentRows = { rows: [] as any[] }
+    try {
+      ;[designRows, cgRows, printRows, contentRows] = await Promise.all([
+        query(
+          `SELECT id, job_title, status, due_date, hours_estimated, hours_spent,
+                  TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+           FROM design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [venueId]
+        ),
+        query(
+          `SELECT id, job_title, league, team_name, status, due_date,
+                  TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+           FROM cg_design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [venueId]
+        ),
+        query(
+          `SELECT id, job_title, client_name, status, ship_date, arrival_date,
+                  TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+           FROM print_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [venueId]
+        ),
+        query(
+          `SELECT id, content_name, company_name, status, launch_date, end_date,
+                  TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
+           FROM content_schedules WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [venueId]
+        ),
+      ])
+    } catch (err) {
+      console.warn('Venue creative lookups failed (non-fatal):', err)
+    }
     const creative = {
       designRequests: designRows.rows,
       cgDesigns: cgRows.rows,

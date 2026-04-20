@@ -199,6 +199,7 @@ export default function VenueDetailPage() {
   const [importing, setImporting] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const router = useRouter()
   const params = useParams()
   const venueId = params?.id as string
@@ -209,6 +210,7 @@ export default function VenueDetailPage() {
 
     const fetchData = async () => {
       try {
+        setLoadError(null)
         const res = await fetch(`/api/venues/${venueId}`)
         if (res.ok) {
           const data = await res.json()
@@ -255,9 +257,13 @@ export default function VenueDetailPage() {
             const data = await docsRes.json()
             setDocuments(data.documents || [])
           }
+        } else {
+          const data = await res.json().catch(() => null)
+          setLoadError(data?.error || `Unable to load venue (${res.status})`)
         }
       } catch (err) {
         console.error('Failed to fetch venue:', err)
+        setLoadError('Unable to load venue right now')
       } finally {
         setLoading(false)
       }
@@ -394,7 +400,14 @@ export default function VenueDetailPage() {
   }
 
   if (!venue) {
-    return <DashboardLayout><div className="bg-white rounded border border-[#E8E8E8] p-12 text-center"><p className="text-zinc-500">Venue not found</p></div></DashboardLayout>
+    return (
+      <DashboardLayout>
+        <div className="bg-white rounded border border-[#E8E8E8] p-12 text-center">
+          <p className="text-zinc-700 font-medium">{loadError || 'Venue not found'}</p>
+          {loadError && <p className="text-zinc-400 text-sm mt-2">If this should exist, the detail API is failing before the page can hydrate.</p>}
+        </div>
+      </DashboardLayout>
+    )
   }
 
   const enabledServices = venueServices.filter(s => s.enabled)
