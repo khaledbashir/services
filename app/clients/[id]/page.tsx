@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
@@ -33,6 +35,8 @@ interface VenueOption {
 }
 
 export default function ClientDetailPage({ params }: { params: { id: string } }) {
+  const routeParams = useParams()
+  const clientId = (routeParams?.id as string) || params.id
   const [client, setClient] = useState<ClientDetail | null>(null)
   const [linkedVenues, setLinkedVenues] = useState<LinkedVenue[]>([])
   const [services, setServices] = useState<ClientService[]>([])
@@ -41,11 +45,16 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [selectedVenues, setSelectedVenues] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [newSubclientName, setNewSubclientName] = useState('')
+  const [newSubclientSport, setNewSubclientSport] = useState('')
+  const [creatingSubclient, setCreatingSubclient] = useState(false)
 
   const load = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients/${params.id}`)
+      const res = await fetch(`/api/clients/${clientId}`)
       if (res.ok) {
         const data = await res.json()
         setClient(data.client)
@@ -60,12 +69,17 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  useEffect(() => { load() }, [params.id])
+  useEffect(() => {
+    if (!clientId) return
+    load()
+  }, [clientId])
 
   const patch = async (payload: Record<string, unknown>) => {
     setSaving(true)
+    setSaveError(null)
+    setSaveMessage(null)
     try {
-      const res = await fetch(`/api/clients/${params.id}`, {
+      const res = await fetch(`/api/clients/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -77,7 +91,20 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setServices(data.clientServices || [])
         setAvailableVenues(data.availableVenues || [])
         setSubclients(data.subclients || [])
+        if ('linked_venue_ids' in payload) {
+          setSelectedVenues((data.linkedVenues || []).map((v: LinkedVenue) => v.id))
+          setSaveMessage('Venue links saved')
+        } else if ('service_type_id' in payload) {
+          setSaveMessage('Service updated')
+        } else {
+          setSaveMessage('Client updated')
+        }
+      } else {
+        const data = await res.json().catch(() => null)
+        setSaveError(data?.error || 'Unable to save changes')
       }
+    } catch {
+      setSaveError('Unable to save changes')
     } finally {
       setSaving(false)
     }
@@ -88,6 +115,39 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
       ? selectedVenues.filter((id) => id !== venueId)
       : [...selectedVenues, venueId]
     setSelectedVenues(next)
+  }
+
+  const createSubclient = async () => {
+    if (!clientId || !newSubclientName.trim()) return
+    setCreatingSubclient(true)
+    setSaveError(null)
+    setSaveMessage(null)
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newSubclientName.trim(),
+          parent_client_id: clientId,
+          client_kind: 'sub_client',
+          sport: newSubclientSport.trim() || null,
+          linked_venue_ids: selectedVenues,
+        }),
+      })
+      if (res.ok) {
+        setNewSubclientName('')
+        setNewSubclientSport('')
+        setSaveMessage('Sub-client created')
+        await load()
+      } else {
+        const data = await res.json().catch(() => null)
+        setSaveError(data?.error || 'Unable to create sub-client')
+      }
+    } catch {
+      setSaveError('Unable to create sub-client')
+    } finally {
+      setCreatingSubclient(false)
+    }
   }
 
   if (loading) {
@@ -129,15 +189,67 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
               {client.is_active ? 'Active' : 'Inactive'}
             </button>
           </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Option B</div>
+              <p className="mt-2 text-sm text-zinc-700">This client owns the contracted services. Venues underneath are just the physical places this client operates in.</p>
+            </div>
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Primary Venue</div>
+              <p className="mt-2 text-sm text-zinc-700">{linkedVenues[0]?.name || 'No primary venue selected yet'}</p>
+            </div>
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Sub-clients</div>
+              <p className="mt-2 text-sm text-zinc-700">{subclients.length > 0 ? `${subclients.length} linked sport/account variations` : 'No sub-clients yet'}</p>
+            </div>
+          </div>
+          {(saveMessage || saveError) && (
+            <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${saveError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+              {saveError || saveMessage}
+            </div>
+          )}
           {subclients.length > 0 && (
             <div className="mt-4">
               <p className="text-xs font-semibold text-zinc-600 mb-2">Sub-clients</p>
               <div className="flex flex-wrap gap-2">
                 {subclients.map((subclient) => (
-                  <span key={subclient.id} className="px-2.5 py-1 rounded-full bg-zinc-100 text-xs text-zinc-700">
+                  <Link key={subclient.id} href={`/clients/${subclient.id}`} className="px-2.5 py-1 rounded-full bg-zinc-100 text-xs text-zinc-700 hover:bg-zinc-200 transition-colors">
                     {subclient.name}{subclient.sport ? ` • ${subclient.sport}` : ''}
-                  </span>
+                  </Link>
                 ))}
+              </div>
+            </div>
+          )}
+          {!client.parent_client_name && (
+            <div className="mt-5 pt-5 border-t border-zinc-100">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">Add Sub-client</p>
+                  <p className="text-xs text-zinc-500">Use this for sport-specific child accounts like Rutgers Football or Rutgers Soccer.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={newSubclientName}
+                  onChange={(e) => setNewSubclientName(e.target.value)}
+                  placeholder="Sub-client name"
+                  className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                />
+                <input
+                  type="text"
+                  value={newSubclientSport}
+                  onChange={(e) => setNewSubclientSport(e.target.value)}
+                  placeholder="Sport, e.g. Football"
+                  className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                />
+                <button
+                  onClick={createSubclient}
+                  disabled={creatingSubclient || !newSubclientName.trim()}
+                  className="px-4 py-2.5 bg-[#0A52EF] text-white rounded-lg text-sm font-semibold hover:bg-[#0840C0] disabled:opacity-50"
+                >
+                  {creatingSubclient ? 'Creating...' : 'Create Sub-client'}
+                </button>
               </div>
             </div>
           )}
@@ -172,7 +284,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
 
           <div className="bg-white rounded-xl border border-zinc-200 p-6">
             <h2 className="text-lg font-semibold text-zinc-900">Linked Venues</h2>
-            <p className="text-sm text-zinc-500 mt-1">First selected venue becomes the primary venue for this client.</p>
+            <p className="text-sm text-zinc-500 mt-1">Select the physical places this client operates in. The first selected venue becomes the primary venue.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {availableVenues.map((venue) => {
                 const selected = selectedVenues.includes(venue.id)
@@ -188,6 +300,11 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                 )
               })}
             </div>
+            {selectedVenues.length > 0 && (
+              <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                Primary venue: <span className="font-semibold">{availableVenues.find((venue) => venue.id === selectedVenues[0])?.name || 'Not set'}</span>
+              </div>
+            )}
             <div className="mt-4">
               <button
                 onClick={() => patch({ linked_venue_ids: selectedVenues })}
@@ -203,7 +320,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                   {linkedVenues.map((venue) => (
                     <div key={venue.id} className="flex items-center justify-between text-sm">
                       <span className="text-zinc-800">{venue.name}</span>
-                      <span className="text-xs text-zinc-500 uppercase tracking-wide">{venue.relation_type}</span>
+                      <span className={`text-xs uppercase tracking-wide ${venue.relation_type === 'primary' ? 'text-[#0A52EF] font-semibold' : 'text-zinc-500'}`}>{venue.relation_type}</span>
                     </div>
                   ))}
                 </div>

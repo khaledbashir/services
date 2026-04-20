@@ -32,6 +32,8 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '',
     client_kind: 'client',
@@ -82,6 +84,8 @@ export default function ClientsPage() {
   const createClient = async () => {
     if (!form.name.trim()) return
     setCreating(true)
+    setCreateError(null)
+    setCreateSuccess(null)
     try {
       const res = await fetch('/api/clients', {
         method: 'POST',
@@ -96,8 +100,14 @@ export default function ClientsPage() {
       if (res.ok) {
         setForm({ name: '', client_kind: 'client', sport: '', linked_venue_ids: [] })
         setShowCreate(false)
+        setCreateSuccess(`${form.name.trim()} created`)
         await load()
+      } else {
+        const data = await res.json().catch(() => null)
+        setCreateError(data?.error || 'Unable to create client right now')
       }
+    } catch {
+      setCreateError('Unable to create client right now')
     } finally {
       setCreating(false)
     }
@@ -109,7 +119,7 @@ export default function ClientsPage() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">Clients</h1>
-            <p className="text-sm text-zinc-500 mt-1">Client records own services, link to one or more venues, and can roll up sport-specific sub-clients.</p>
+            <p className="text-sm text-zinc-500 mt-1">Option B: clients own services, venues stay physical places, and colleges can have sport-specific sub-clients underneath the parent school.</p>
           </div>
           {auth.isManager && (
             <button
@@ -120,6 +130,30 @@ export default function ClientsPage() {
             </button>
           )}
         </div>
+
+        <div className="bg-[linear-gradient(180deg,#FFFFFF,#F7FAFF)] rounded-xl border border-sky-100 p-5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600">How Option B Works</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-sm">
+            <div className="rounded-lg border border-sky-100 bg-white p-4">
+              <p className="font-semibold text-zinc-900">1. Create the client</p>
+              <p className="text-zinc-600 mt-1">Example: <span className="font-medium">Rutgers University</span> or <span className="font-medium">Florida Panthers</span>.</p>
+            </div>
+            <div className="rounded-lg border border-sky-100 bg-white p-4">
+              <p className="font-semibold text-zinc-900">2. Link the venue(s)</p>
+              <p className="text-zinc-600 mt-1">The first linked venue becomes primary. Shared venues can be linked to multiple clients.</p>
+            </div>
+            <div className="rounded-lg border border-sky-100 bg-white p-4">
+              <p className="font-semibold text-zinc-900">3. Turn on services</p>
+              <p className="text-zinc-600 mt-1">Those client-level service toggles determine what ANC is actually contracted to deliver.</p>
+            </div>
+          </div>
+        </div>
+
+        {(createError || createSuccess) && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${createError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+            {createError || createSuccess}
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-zinc-200 p-3">
           <input
@@ -133,6 +167,10 @@ export default function ClientsPage() {
 
         {showCreate && (
           <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900">Create Client</h2>
+              <p className="text-sm text-zinc-500 mt-1">Use <span className="font-medium text-zinc-700">Client</span> for the account itself. Use <span className="font-medium text-zinc-700">Sub-client</span> when you need a sport-specific child account.</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Client Name</label>
@@ -167,6 +205,7 @@ export default function ClientsPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-zinc-600 mb-2">Linked Venues</label>
+              <p className="text-xs text-zinc-500 mb-3">Click venues to attach them now. The first selected venue is treated as the primary venue for this client.</p>
               <div className="flex flex-wrap gap-2">
                 {venues.map((venue) => {
                   const selected = form.linked_venue_ids.includes(venue.id)
@@ -182,6 +221,11 @@ export default function ClientsPage() {
                   )
                 })}
               </div>
+              {form.linked_venue_ids.length > 0 && (
+                <div className="mt-3 text-xs text-zinc-600">
+                  Primary venue: <span className="font-semibold text-zinc-900">{venues.find((venue) => venue.id === form.linked_venue_ids[0])?.name || 'Not set'}</span>
+                </div>
+              )}
             </div>
             <div>
               <button
