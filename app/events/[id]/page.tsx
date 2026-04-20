@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { useToast } from '@/components/toast'
 import Link from 'next/link'
 import { useAuth } from '@/lib/useAuth'
 
@@ -54,6 +55,7 @@ export default function EventDetailPage() {
   const router = useRouter()
   const params = useParams()
   const eventId = params?.id as string
+  const { showToast } = useToast()
 
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [technicians, setTechnicians] = useState<Technician[]>([])
@@ -69,6 +71,30 @@ export default function EventDetailPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [selectedWorkflowTech, setSelectedWorkflowTech] = useState('')
+  const [workflowSubmitting, setWorkflowSubmitting] = useState<string | null>(null)
+
+  const loadEventData = async () => {
+    if (!eventId) return
+
+    try {
+      const res = await fetch(`/api/events/${eventId}`)
+      if (!res.ok) throw new Error('Failed to fetch')
+
+      const data = await res.json()
+      setEvent(data.event)
+      setTechnicians(data.technicians || [])
+      setWorkflows(data.workflows || [])
+      setRecentEvents(data.recentEvents || [])
+      setOpenTickets(data.openTickets || [])
+      setEventSupportContracted(!!data.eventSupportContracted)
+    } catch (err) {
+      console.error('Error fetching event:', err)
+      showToast('Failed to load event', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (auth.loaded && auth.role === 'technician' && eventId) {
@@ -81,27 +107,20 @@ export default function EventDetailPage() {
     if (!eventId) return
     if (auth.loaded && auth.role === 'technician') return
 
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`/api/events/${eventId}`)
-        if (!res.ok) throw new Error('Failed to fetch')
+    loadEventData()
+  }, [auth.loaded, auth.role, eventId])
 
-        const data = await res.json()
-        setEvent(data.event)
-        setTechnicians(data.technicians || [])
-        setWorkflows(data.workflows || [])
-        setRecentEvents(data.recentEvents || [])
-        setOpenTickets(data.openTickets || [])
-        setEventSupportContracted(!!data.eventSupportContracted)
-      } catch (err) {
-        console.error('Error fetching event:', err)
-      } finally {
-        setLoading(false)
-      }
+  useEffect(() => {
+    if (technicians.length === 0) {
+      setSelectedWorkflowTech('')
+      return
     }
 
-    fetchData()
-  }, [auth.loaded, auth.role, eventId])
+    const hasSelectedTech = technicians.some((tech) => tech.id === selectedWorkflowTech)
+    if (!hasSelectedTech) {
+      setSelectedWorkflowTech(technicians[0].id)
+    }
+  }, [technicians, selectedWorkflowTech])
 
   const formatDate = (dateStr: string) => {
     // YYYY-MM-DD → parse parts directly to avoid the UTC-midnight-shift bug
@@ -193,6 +212,36 @@ export default function EventDetailPage() {
     } finally {
       setSaving(false)
       setEditing(null)
+    }
+  }
+
+  const submitWorkflowStep = async (type: 'checked_in' | 'game_ready' | 'post_game_submitted') => {
+    if (!selectedWorkflowTech) {
+      showToast('Assign or select a technician first', 'error')
+      return
+    }
+
+    setWorkflowSubmitting(type)
+    try {
+      const res = await fetch(`/api/workflow/${eventId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: selectedWorkflowTech, type }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => null)
+        showToast(error?.error || 'Failed to save workflow update', 'error')
+        return
+      }
+
+      await loadEventData()
+      showToast('Workflow updated', 'success')
+    } catch (err) {
+      console.error('Workflow submit error:', err)
+      showToast('Failed to save workflow update', 'error')
+    } finally {
+      setWorkflowSubmitting(null)
     }
   }
 
@@ -433,6 +482,69 @@ export default function EventDetailPage() {
                   )
                 })}
               </div>
+              {isManager && (
+                <div className="mt-6 border-t border-[#E8E8E8] pt-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-900">Update Workflow</p>
+                      <p className="text-xs text-zinc-500 mt-1">Managers can submit workflow steps from this page.</p>
+                    </div>
+                    <Link
+                      href={`/workflow/${eventId}`}
+                      className="text-xs font-medium text-[#0A52EF] hover:text-[#0840C0]"
+                    >
+                      Open workflow view
+                    </Link>
+                  </div>
+
+                  {technicians.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                      Assign a technician before submitting check-in or other workflow updates.
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700 mb-2">Assigned Technician</label>
+                        <select
+                          value={selectedWorkflowTech}
+                          onChange={(e) => setSelectedWorkflowTech(e.target.value)}
+                          className="w-full rounded border border-[#E8E8E8] px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                        >
+                          {technicians.map((tech) => (
+                            <option key={tech.id} value={tech.id}>
+                              {tech.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button
+                          onClick={() => submitWorkflowStep('checked_in')}
+                          disabled={!!workflowSubmitting || workflows.some((w) => w.type === 'check_in')}
+                          className="rounded border border-[#E8E8E8] px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {workflowSubmitting === 'checked_in' ? 'Saving...' : workflows.some((w) => w.type === 'check_in') ? 'Check-in Complete' : 'Submit Check-in'}
+                        </button>
+                        <button
+                          onClick={() => submitWorkflowStep('game_ready')}
+                          disabled={!!workflowSubmitting || workflows.some((w) => w.type === 'game_ready')}
+                          className="rounded border border-[#E8E8E8] px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {workflowSubmitting === 'game_ready' ? 'Saving...' : workflows.some((w) => w.type === 'game_ready') ? 'Game Ready Complete' : 'Submit Game Ready'}
+                        </button>
+                        <button
+                          onClick={() => submitWorkflowStep('post_game_submitted')}
+                          disabled={!!workflowSubmitting || workflows.some((w) => w.type === 'post_game_report')}
+                          className="rounded border border-[#E8E8E8] px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {workflowSubmitting === 'post_game_submitted' ? 'Saving...' : workflows.some((w) => w.type === 'post_game_report') ? 'Post-Game Complete' : 'Submit Post-Game'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Post-Game Report */}
@@ -675,6 +787,12 @@ export default function EventDetailPage() {
             {/* Quick Actions */}
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-900 mb-3">Quick Actions</h2>
+              <button
+                onClick={() => router.push(`/workflow/${eventId}`)}
+                className="w-full text-xs px-3 py-2 border border-[#E8E8E8] rounded hover:bg-zinc-50 text-zinc-700 font-medium"
+              >
+                Open Check-In Workflow
+              </button>
               <button
                 onClick={() => router.push(`/tickets?venue=${event.venue_id}`)}
                 className="w-full text-xs px-3 py-2 border border-[#E8E8E8] rounded hover:bg-zinc-50 text-zinc-700 font-medium"
