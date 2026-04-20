@@ -111,7 +111,8 @@ export async function getVenueAutomationInfo(venueId: string): Promise<VenueAuto
     `SELECT
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
-     LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN client_venues cv ON cv.venue_id = v.id
+     LEFT JOIN client_services vs ON vs.client_id = cv.client_id
      LEFT JOIN service_types st ON st.id = vs.service_type_id
      WHERE v.id = $1
      GROUP BY v.id`,

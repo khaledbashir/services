@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
         COALESCE(v.is_active, true) as is_active,
         v.requires_assignment,
         COUNT(DISTINCT e.id) as event_count,
+        COUNT(DISTINCT cv.client_id)::int as client_count,
         COALESCE(
           array_remove(array_agg(DISTINCT CASE WHEN vs.enabled = true THEN st.name END), NULL),
           '{}'
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest) {
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN events e ON v.id = e.venue_id AND e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '30 days'
-      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+      LEFT JOIN client_venues cv ON cv.venue_id = v.id
+      LEFT JOIN client_services vs ON vs.client_id = cv.client_id
       LEFT JOIN service_types st ON st.id = vs.service_type_id
       WHERE v.is_active = true ${vf.clause}
       GROUP BY v.id, v.name, v.address, m.name, v.venue_type, v.logo_url, v.latitude, v.longitude, v.is_active, v.requires_assignment

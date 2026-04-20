@@ -20,6 +20,7 @@ interface EventDetail {
   venue_timezone?: string
   requires_staffing: boolean | null
   venue_requires_assignment: boolean
+  client_name?: string | null
   source: string | null
 }
 
@@ -734,7 +735,7 @@ export default function EventDetailPage() {
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
               <h2 className="text-sm font-semibold text-zinc-900 mb-2">Staffing Requirement</h2>
               <p className="text-xs text-zinc-500 mb-3">
-                Venue default: <span className="font-medium text-zinc-700">{event.venue_requires_assignment ? 'Requires staffing' : 'Warranty only'}</span>
+                {event.client_name ? `${event.client_name} default:` : 'Venue default:'} <span className="font-medium text-zinc-700">{event.venue_requires_assignment ? 'Requires staffing' : 'Warranty only'}</span>
               </p>
               {(() => {
                 const effective = event.requires_staffing !== null && event.requires_staffing !== undefined

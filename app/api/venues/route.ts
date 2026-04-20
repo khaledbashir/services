@@ -45,12 +45,14 @@ export async function GET(request: NextRequest) {
         v.logo_url,
         COALESCE(v.is_active, true) as is_active,
         v.feed_url,
+        COUNT(DISTINCT cv.client_id)::int as client_count,
         ${buildAutomationSelect('v', 'vs', 'st')},
         COUNT(DISTINCT e.id) as event_count,
         COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as assigned_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
-      LEFT JOIN venue_services vs ON vs.venue_id = v.id
+      LEFT JOIN client_venues cv ON cv.venue_id = v.id
+      LEFT JOIN client_services vs ON vs.client_id = cv.client_id
       LEFT JOIN service_types st ON st.id = vs.service_type_id
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id

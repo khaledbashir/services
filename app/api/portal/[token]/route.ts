@@ -84,7 +84,15 @@ export async function GET(
     const servicesResult = await query(
       `SELECT st.name, st.description, COALESCE(vs.enabled, false) as enabled
        FROM service_types st
-       LEFT JOIN venue_services vs ON st.id = vs.service_type_id AND vs.venue_id = $1
+       LEFT JOIN client_services vs
+         ON st.id = vs.service_type_id
+        AND vs.client_id = (
+          SELECT cv.client_id
+          FROM client_venues cv
+          WHERE cv.venue_id = $1
+          ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, cv.created_at ASC
+          LIMIT 1
+        )
        WHERE COALESCE(vs.enabled, false) = true
        ORDER BY st.name`,
       [venue.id]

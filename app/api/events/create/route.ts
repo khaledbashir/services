@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
 
-    const { summary, event_date, start_time, end_time, venue_id, league, staff_ids, event_type } = await request.json()
+    const { summary, event_date, start_time, end_time, venue_id, client_id, league, staff_ids, event_type } = await request.json()
 
     if (!summary || !event_date || !venue_id) {
       return NextResponse.json({ error: 'Event name, date, and venue are required' }, { status: 400 })
@@ -25,11 +25,25 @@ export async function POST(request: NextRequest) {
     const validEventTypes = ['event', 'shift']
     const eType = validEventTypes.includes(event_type) ? event_type : 'event'
 
+    let resolvedClientId = client_id || null
+    if (!resolvedClientId) {
+      const clientResult = await query(
+        `SELECT cv.client_id
+         FROM client_venues cv
+         WHERE cv.venue_id = $1
+         ORDER BY cv.is_primary DESC, cv.created_at ASC`,
+        [venue_id]
+      )
+      if (clientResult.rows.length === 1) {
+        resolvedClientId = clientResult.rows[0]?.client_id || null
+      }
+    }
+
     const result = await query(
-      `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, league, workflow_status, event_type)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+      `INSERT INTO events (summary, event_date, start_time, end_time, venue_id, client_id, league, workflow_status, event_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
        RETURNING id`,
-      [summary, event_date, startUtc, endUtc, venue_id, league || null, eType]
+      [summary, event_date, startUtc, endUtc, venue_id, resolvedClientId, league || null, eType]
     )
 
     const eventId = result.rows[0].id
@@ -91,7 +105,7 @@ export async function POST(request: NextRequest) {
       }
     })()
 
-    return NextResponse.json({ id: eventId })
+    return NextResponse.json({ id: eventId, client_id: resolvedClientId })
   } catch (err) {
     console.error('Error creating event:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

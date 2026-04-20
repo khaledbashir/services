@@ -84,10 +84,11 @@ export async function GET(request: NextRequest) {
          )::int as inactive_venues
        FROM venues v
        LEFT JOIN (
-         SELECT vs.venue_id, COUNT(*)::int as active_service_count
-         FROM venue_services vs
-         WHERE vs.enabled = true
-         GROUP BY vs.venue_id
+         SELECT cv.venue_id, COUNT(DISTINCT cs.service_type_id)::int as active_service_count
+         FROM client_venues cv
+         JOIN client_services cs ON cs.client_id = cv.client_id
+         WHERE cs.enabled = true
+         GROUP BY cv.venue_id
        ) active ON active.venue_id = v.id`
     )
 

@@ -11,6 +11,8 @@ interface Event {
   id: string
   summary: string
   venue_name: string
+  client_id?: string | null
+  client_name?: string | null
   league: string
   source?: string | null
   start_time: string
@@ -45,6 +47,12 @@ const workflowStatusColors: Record<string, { dot: string; label: string }> = {
 interface VenueOption {
   id: string
   name: string
+}
+
+interface ClientOption {
+  id: string
+  name: string
+  venue_ids: string[]
 }
 
 interface StaffOption {
@@ -98,6 +106,7 @@ function EventsPageInner() {
   const [search, setSearch] = useState('')
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
+  const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
   const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
   const [showVenueFilter, setShowVenueFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
@@ -130,7 +139,7 @@ function EventsPageInner() {
   const [collapsedDiscoveryVenues, setCollapsedDiscoveryVenues] = useState<Set<string>>(new Set())
   const [newEvent, setNewEvent] = useState({
     summary: '', event_date: '', start_time: '', end_time: '',
-    venue_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
+    venue_id: '', client_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
   })
   const router = useRouter()
 
@@ -193,10 +202,17 @@ function EventsPageInner() {
   useEffect(() => {
     const fetchVenues = async () => {
       try {
-        const res = await fetch('/api/venues')
-        if (res.ok) {
-          const data = await res.json()
+        const [venuesRes, clientsRes] = await Promise.all([
+          fetch('/api/venues'),
+          fetch('/api/clients'),
+        ])
+        if (venuesRes.ok) {
+          const data = await venuesRes.json()
           setVenueOptions((data.venues || []).sort((a: VenueOption, b: VenueOption) => a.name.localeCompare(b.name)))
+        }
+        if (clientsRes.ok) {
+          const data = await clientsRes.json()
+          setClientOptions((data.clients || []).sort((a: ClientOption, b: ClientOption) => a.name.localeCompare(b.name)))
         }
       } catch {}
     }
@@ -234,7 +250,7 @@ function EventsPageInner() {
         body: JSON.stringify(newEvent),
       })
       if (res.ok) {
-        setNewEvent({ summary: '', event_date: '', start_time: '', end_time: '', venue_id: '', league: '', staff_ids: [], event_type: 'event' })
+        setNewEvent({ summary: '', event_date: '', start_time: '', end_time: '', venue_id: '', client_id: '', league: '', staff_ids: [], event_type: 'event' })
         setShowCreate(false)
         await refreshEvents()
       }
@@ -249,6 +265,31 @@ function EventsPageInner() {
         : [...prev.staff_ids, id],
     }))
   }
+
+  const availableClients = newEvent.venue_id
+    ? clientOptions.filter((client) => (client.venue_ids || []).includes(newEvent.venue_id))
+    : clientOptions
+
+  useEffect(() => {
+    if (!newEvent.venue_id) {
+      if (newEvent.client_id) {
+        setNewEvent((prev) => ({ ...prev, client_id: '' }))
+      }
+      return
+    }
+
+    const linkedClients = clientOptions.filter((client) => (client.venue_ids || []).includes(newEvent.venue_id))
+    if (linkedClients.length === 1) {
+      if (newEvent.client_id !== linkedClients[0].id) {
+        setNewEvent((prev) => ({ ...prev, client_id: linkedClients[0].id }))
+      }
+      return
+    }
+
+    if (newEvent.client_id && !linkedClients.some((client) => client.id === newEvent.client_id)) {
+      setNewEvent((prev) => ({ ...prev, client_id: '' }))
+    }
+  }, [clientOptions, newEvent.client_id, newEvent.venue_id])
 
   // Determine if an event effectively requires staffing (event override > venue default)
   const eventNeedsStaffing = (e: Event): boolean => {
@@ -662,7 +703,11 @@ function EventsPageInner() {
                     if (eDateStr !== cellStr) return false
                     if (!search) return true
                     const q = search.toLowerCase()
-                    return e.summary.toLowerCase().includes(q) || (e.venue_name || '').toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
+                    return e.summary.toLowerCase().includes(q)
+                      || (e.venue_name || '').toLowerCase().includes(q)
+                      || (e.client_name || '').toLowerCase().includes(q)
+                      || (e.league || '').toLowerCase().includes(q)
+                      || ((e as any).assigned_techs || '').toLowerCase().includes(q)
                   }).sort((a, b) => {
                     // Within a day, always order by actual start time so the
                     // calendar reads top-to-bottom earliest-to-latest.
@@ -759,7 +804,12 @@ function EventsPageInner() {
             <tbody>
               {filterByVenue(events).filter(e => {
                 const q = search.toLowerCase()
-                return !q || e.summary.toLowerCase().includes(q) || e.venue_name.toLowerCase().includes(q) || (e.league || '').toLowerCase().includes(q) || ((e as any).assigned_techs || '').toLowerCase().includes(q)
+                return !q
+                  || e.summary.toLowerCase().includes(q)
+                  || e.venue_name.toLowerCase().includes(q)
+                  || (e.client_name || '').toLowerCase().includes(q)
+                  || (e.league || '').toLowerCase().includes(q)
+                  || ((e as any).assigned_techs || '').toLowerCase().includes(q)
               }).map((event) => {
                 const leagueColor = getLeagueBadge(event.league)
                 const statusColor = getWorkflowStatus(event.workflow_status)
@@ -771,7 +821,12 @@ function EventsPageInner() {
                   >
                     <td className="py-3 px-6 text-zinc-600 text-xs">{formatDate(event.event_date)}</td>
                     <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time, event.venue_timezone)}</td>
-                    <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
+                    <td className="py-3 px-6">
+                      <div className="font-medium text-zinc-900">{event.summary}</div>
+                      {event.client_name && (
+                        <div className="text-xs text-zinc-500 mt-0.5">{event.client_name}</div>
+                      )}
+                    </td>
                     <td className="py-3 px-6 text-zinc-600">{event.venue_name}</td>
                     <td className="py-3 px-6">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1081,11 +1136,23 @@ function EventsPageInner() {
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
                 <select value={newEvent.venue_id}
-                  onChange={e => setNewEvent(prev => ({ ...prev, venue_id: e.target.value }))}
+                  onChange={e => setNewEvent(prev => ({ ...prev, venue_id: e.target.value, client_id: '' }))}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
                   <option value="">Select venue...</option>
                   {venueOptions.map(v => (
                     <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">Client</label>
+                <select value={newEvent.client_id}
+                  onChange={e => setNewEvent(prev => ({ ...prev, client_id: e.target.value }))}
+                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
+                  disabled={!newEvent.venue_id || availableClients.length === 0}>
+                  <option value="">{availableClients.length > 0 ? 'Select client...' : 'Select venue first'}</option>
+                  {availableClients.map(client => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
               </div>

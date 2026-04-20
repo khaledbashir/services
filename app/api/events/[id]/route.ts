@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 import { combineLocalToUtc } from '@/lib/timezone'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
+import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
 
 export async function GET(
   request: NextRequest,
@@ -19,12 +20,14 @@ export async function GET(
     const eventResult = await query(
       `SELECT
         e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league,
-        e.workflow_status, e.venue_id, e.requires_staffing, e.source,
+        e.workflow_status, e.venue_id, e.client_id, e.requires_staffing, e.source,
         v.name as venue_name,
+        c.name as client_name,
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,
-        COALESCE(v.requires_assignment, true) as venue_requires_assignment
+        COALESCE(v.requires_assignment, true) as venue_requires_assignment_legacy
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
+      LEFT JOIN clients c ON e.client_id = c.id
       WHERE e.id = $1`,
       [id]
     )
@@ -34,6 +37,40 @@ export async function GET(
     }
 
     const event = eventResult.rows[0]
+
+    const [clientAutomation, venueAutomation] = await Promise.all([
+      event.client_id
+        ? query(
+            `SELECT
+               COUNT(DISTINCT CASE WHEN cs.enabled = true THEN st.id END)::int as active_service_count,
+               COALESCE(array_remove(array_agg(DISTINCT CASE WHEN cs.enabled = true THEN st.name END), NULL), '{}') as active_service_names,
+               COALESCE(array_remove(array_agg(DISTINCT CASE WHEN cs.enabled = true THEN COALESCE(st.description, '') END), NULL), '{}') as active_service_descriptions
+             FROM client_services cs
+             LEFT JOIN service_types st ON st.id = cs.service_type_id
+             WHERE cs.client_id = $1`,
+            [event.client_id]
+          )
+        : Promise.resolve({ rows: [{ active_service_count: 0, active_service_names: [], active_service_descriptions: [] }] }),
+      query(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN cs.enabled = true THEN st.id END)::int as active_service_count,
+           COALESCE(array_remove(array_agg(DISTINCT CASE WHEN cs.enabled = true THEN st.name END), NULL), '{}') as active_service_names,
+           COALESCE(array_remove(array_agg(DISTINCT CASE WHEN cs.enabled = true THEN COALESCE(st.description, '') END), NULL), '{}') as active_service_descriptions
+         FROM client_venues cv
+         LEFT JOIN client_services cs ON cs.client_id = cv.client_id
+         LEFT JOIN service_types st ON st.id = cs.service_type_id
+         WHERE cv.venue_id = $1`,
+        [event.venue_id]
+      ),
+    ])
+
+    const clientDefault = computeRequiresStaffingFromRow(clientAutomation.rows[0] || {})
+    const venueDefault = computeRequiresStaffingFromRow(venueAutomation.rows[0] || {})
+    event.venue_requires_assignment = event.client_id
+      ? clientDefault
+      : (Number(venueAutomation.rows[0]?.active_service_count || 0) > 0
+          ? venueDefault
+          : event.venue_requires_assignment_legacy !== false)
 
     if (user.role === 'technician') {
       const accessResult = await query(
@@ -93,11 +130,19 @@ export async function GET(
     const eventSupportResult = await query(
       `SELECT COALESCE(vs.enabled, false) as enabled
        FROM service_types st
-       LEFT JOIN venue_services vs
-         ON vs.service_type_id = st.id AND vs.venue_id = $1
+       LEFT JOIN client_services vs
+         ON vs.service_type_id = st.id AND vs.client_id = COALESCE($2, (
+           SELECT derived.client_id
+           FROM (
+             SELECT MIN(cv.client_id) as client_id, COUNT(DISTINCT cv.client_id) as client_count
+             FROM client_venues cv
+             WHERE cv.venue_id = $1
+           ) derived
+           WHERE derived.client_count = 1
+         ))
        WHERE st.name = 'Event Support'
        LIMIT 1`,
-      [event.venue_id]
+      [event.venue_id, event.client_id]
     )
     const eventSupportContracted = eventSupportResult.rows[0]?.enabled === true
 
@@ -186,6 +231,11 @@ export async function PATCH(
     if ('league' in body) {
       updates.push(`league = $${paramIndex++}`)
       values.push(body.league || null)
+    }
+
+    if ('client_id' in body) {
+      updates.push(`client_id = $${paramIndex++}`)
+      values.push(body.client_id || null)
     }
 
     if (updates.length === 0) {

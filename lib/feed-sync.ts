@@ -9,6 +9,7 @@ export interface FeedVenue {
   address: string | null
   feed_url: string
   feed_type: FeedType
+  client_count?: number
   active_service_count: number
   active_service_names: string[]
   active_service_descriptions: string[]
@@ -146,7 +147,8 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
        COALESCE(v.feed_type, 'other') as feed_type,
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
-     LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN client_venues cv ON cv.venue_id = v.id
+     LEFT JOIN client_services vs ON vs.client_id = cv.client_id
      LEFT JOIN service_types st ON st.id = vs.service_type_id
      WHERE COALESCE(v.feed_url, '') <> ''
        AND COALESCE(v.is_active, true) = true

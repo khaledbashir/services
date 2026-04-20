@@ -35,6 +35,8 @@ interface VenueDetail {
   timezone: string | null
   last_feed_synced_at: string | null
   last_feed_sync_status: string | null
+  primary_client_id?: string | null
+  primary_client_name?: string | null
 }
 
 interface VenueService {
@@ -107,6 +109,14 @@ interface AllStaff {
   role: string
 }
 
+interface LinkedClient {
+  id: string
+  name: string
+  client_kind: string
+  sport: string | null
+  relation_type: string
+}
+
 const roleColors: Record<string, string> = {
   admin: 'bg-blue-500',
   manager: 'bg-emerald-500',
@@ -140,6 +150,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [savingDist, setSavingDist] = useState(false)
   const [savingFeed, setSavingFeed] = useState(false)
   const [linkedStaff, setLinkedStaff] = useState<LinkedStaff[]>([])
+  const [linkedClients, setLinkedClients] = useState<LinkedClient[]>([])
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
   const [staffSearch, setStaffSearch] = useState('')
   const [showStaffDropdown, setShowStaffDropdown] = useState(false)
@@ -198,6 +209,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
         if (res.ok) {
           const data = await res.json()
           setVenue(data.venue)
+          setLinkedClients(data.linkedClients || [])
           setUpcomingEvents(data.upcomingEvents || [])
           setAssignedStaff(data.assignedStaff || [])
           setVenueServices(data.venueServices || [])
@@ -434,6 +446,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       <span className={`w-1.5 h-1.5 rounded-full ${venue.requires_assignment ? 'bg-blue-500' : 'bg-zinc-400'}`}></span>
                       {venue.requires_assignment ? 'Assignment Required' : 'Support Only'}
                     </span>
+                    {venue.primary_client_name && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200">
+                        Client: {venue.primary_client_name}
+                      </span>
+                    )}
                     {enabledServices.length > 0 && enabledServices.map(svc => (
                       <span key={svc.service_type_id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                         {svc.name}
@@ -1768,7 +1785,9 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
               {/* Contracted Services */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
                 <h3 className="text-sm font-semibold text-zinc-900 mb-2">Contracted Services</h3>
-                <p className="text-xs text-zinc-500 mb-4">Toggle which services this venue is contracted for</p>
+                <p className="text-xs text-zinc-500 mb-4">
+                  These now belong to the venue&apos;s primary client{venue.primary_client_name ? ` (${venue.primary_client_name})` : ''}.
+                </p>
                 {venueServices.length === 0 ? (
                   <p className="text-zinc-400 text-sm">No service types configured</p>
                 ) : (
@@ -1785,6 +1804,22 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+                {linkedClients.length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-zinc-100">
+                    <p className="text-xs font-semibold text-zinc-600 mb-2">Linked clients</p>
+                    <div className="flex flex-wrap gap-2">
+                      {linkedClients.map((client) => (
+                        <a
+                          key={client.id}
+                          href={`/clients/${client.id}`}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition-colors"
+                        >
+                          {client.name}{client.sport ? ` • ${client.sport}` : ''}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

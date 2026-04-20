@@ -147,6 +147,7 @@ export function Sidebar() {
       icon: <Icon>{IC.people}</Icon>,
       role: 'manager',
       links: [
+        { href: '/clients', label: 'Clients' },
         { href: '/staff', label: 'Staff', role: 'admin' },
         { href: '/portals', label: 'Client Portals' },
       ],

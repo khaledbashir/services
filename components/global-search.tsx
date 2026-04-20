@@ -13,6 +13,7 @@ type SearchItem = {
 
 type SearchResponse = {
   events: SearchItem[]
+  clients: SearchItem[]
   venues: SearchItem[]
   staff: SearchItem[]
   tickets: SearchItem[]
@@ -23,6 +24,7 @@ type SearchResponse = {
 
 const EMPTY_RESULTS: SearchResponse = {
   events: [],
+  clients: [],
   venues: [],
   staff: [],
   tickets: [],
@@ -33,6 +35,7 @@ const EMPTY_RESULTS: SearchResponse = {
 
 const GROUPS: Array<{ key: keyof SearchResponse; label: string }> = [
   { key: 'events', label: 'Events' },
+  { key: 'clients', label: 'Clients' },
   { key: 'venues', label: 'Venues' },
   { key: 'staff', label: 'Staff' },
   { key: 'tickets', label: 'Tickets' },
@@ -117,6 +120,7 @@ export function GlobalSearch() {
         }
         setResults({
           events: data.events || [],
+          clients: data.clients || [],
           venues: data.venues || [],
           staff: data.staff || [],
           tickets: data.tickets || [],
@@ -183,7 +187,7 @@ export function GlobalSearch() {
                   ref={inputRef}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search events, venues, staff, tickets..."
+                  placeholder="Search clients, events, venues, staff, tickets..."
                   className="w-full border-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
                 />
                 <button

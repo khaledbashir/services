@@ -940,7 +940,8 @@ export async function getDiscoveryVenue(venueId: string): Promise<DiscoveryVenue
        COALESCE(array_remove(array_agg(DISTINCT e.league), NULL), '{}') as likely_leagues
      FROM venues v
      LEFT JOIN markets m ON v.market_id = m.id
-     LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN client_venues cv ON cv.venue_id = v.id
+     LEFT JOIN client_services vs ON vs.client_id = cv.client_id
      LEFT JOIN service_types st ON st.id = vs.service_type_id
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE v.id = $1
@@ -965,7 +966,8 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
        COALESCE(array_remove(array_agg(DISTINCT e.league), NULL), '{}') as likely_leagues
      FROM venues v
      LEFT JOIN markets m ON v.market_id = m.id
-     LEFT JOIN venue_services vs ON vs.venue_id = v.id
+     LEFT JOIN client_venues cv ON cv.venue_id = v.id
+     LEFT JOIN client_services vs ON vs.client_id = cv.client_id
      LEFT JOIN service_types st ON st.id = vs.service_type_id
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE COALESCE(v.is_active, true) = true
@@ -1064,12 +1066,22 @@ export async function importDiscoveryEvents(
       endUtc = new Date(startUtc.getTime() + 3 * 3600_000)
     }
 
+    const clientResult = await query(
+      `SELECT MIN(cv.client_id) as client_id, COUNT(DISTINCT cv.client_id)::int as client_count
+       FROM client_venues cv
+       WHERE cv.venue_id = $1`,
+      [venueId]
+    )
+    const resolvedClientId = Number(clientResult.rows[0]?.client_count || 0) === 1
+      ? clientResult.rows[0]?.client_id || null
+      : null
+
     const result = await query(
       `INSERT INTO events (
-         summary, event_date, start_time, end_time, venue_id, league,
+         summary, event_date, start_time, end_time, venue_id, client_id, league,
          workflow_status, event_type, source, requires_staffing
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10)
        RETURNING id`,
       [
         event.summary,
@@ -1077,6 +1089,7 @@ export async function importDiscoveryEvents(
         startUtc,
         endUtc,
         venueId,
+        resolvedClientId,
         event.league || null,
         event.event_type,
         event.source || 'ai_discovery',

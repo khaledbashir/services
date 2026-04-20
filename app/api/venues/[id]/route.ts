@@ -5,6 +5,18 @@ import { notifyOps } from '@/lib/slack'
 import { geocodeAddress } from '@/lib/geocode'
 import { twentyClient } from '@/lib/twenty-client'
 
+async function getVenuePrimaryClientId(venueId: string): Promise<string | null> {
+  const result = await query(
+    `SELECT cv.client_id
+     FROM client_venues cv
+     WHERE cv.venue_id = $1
+     ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, cv.created_at ASC
+     LIMIT 1`,
+    [venueId]
+  )
+  return result.rows[0]?.client_id || null
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -38,11 +50,21 @@ export async function GET(
         COALESCE(v.feed_type, 'other') as feed_type,
         COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
-        v.last_feed_sync_status
+        v.last_feed_sync_status,
+        primary_client.id as primary_client_id,
+        primary_client.name as primary_client_name
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
       LEFT JOIN staff sl ON v.lead_field_rep_id = sl.id
+      LEFT JOIN LATERAL (
+        SELECT c.id, c.name
+        FROM client_venues cv
+        JOIN clients c ON c.id = cv.client_id
+        WHERE cv.venue_id = v.id
+        ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, c.name ASC
+        LIMIT 1
+      ) primary_client ON true
       WHERE v.id = $1`,
       [venueId]
     )
@@ -52,6 +74,15 @@ export async function GET(
     }
 
     const venue = venueResult.rows[0]
+
+    const linkedClientsResult = await query(
+      `SELECT c.id, c.name, c.client_kind, c.sport, cv.relation_type
+       FROM client_venues cv
+       JOIN clients c ON c.id = cv.client_id
+       WHERE cv.venue_id = $1
+       ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, c.name ASC`,
+      [venueId]
+    )
 
     // Get upcoming events (next 30 days)
     const today = new Date().toISOString().split('T')[0]
@@ -91,14 +122,16 @@ export async function GET(
       [venueId]
     )
 
+    const primaryClientId = venue.primary_client_id || await getVenuePrimaryClientId(venueId)
+
     // Get venue services
     const servicesResult = await query(
       `SELECT st.id as service_type_id, st.name, st.description,
               COALESCE(vs.enabled, false) as enabled
        FROM service_types st
-       LEFT JOIN venue_services vs ON st.id = vs.service_type_id AND vs.venue_id = $1
+       LEFT JOIN client_services vs ON st.id = vs.service_type_id AND vs.client_id = $1
        ORDER BY st.name`,
-      [venueId]
+      [primaryClientId]
     )
 
     // Creative requests tied to this venue — design / CG / print / content schedule
@@ -164,6 +197,7 @@ export async function GET(
 
     return NextResponse.json({
       venue,
+      linkedClients: linkedClientsResult.rows,
       upcomingEvents: eventsResult.rows,
       assignedStaff: staffResult.rows,
       venueServices: servicesResult.rows,
@@ -267,21 +301,26 @@ export async function PATCH(
       }).catch(err => console.warn('Geocoding failed:', err))
     }
 
+    const primaryClientId = await getVenuePrimaryClientId(venueId)
+
     // Handle service toggle
     if (body.service_type_id !== undefined) {
+      if (!primaryClientId) {
+        return NextResponse.json({ error: 'Link a client to this venue before toggling services' }, { status: 400 })
+      }
       if (body.enabled) {
         await query(
-          `INSERT INTO venue_services (venue_id, service_type_id, enabled)
+          `INSERT INTO client_services (client_id, service_type_id, enabled)
            VALUES ($1, $2, true)
-           ON CONFLICT (venue_id, service_type_id) DO UPDATE SET enabled = true`,
-          [venueId, body.service_type_id]
+           ON CONFLICT (client_id, service_type_id) DO UPDATE SET enabled = true, updated_at = NOW()`,
+          [primaryClientId, body.service_type_id]
         )
       } else {
         await query(
-          `INSERT INTO venue_services (venue_id, service_type_id, enabled)
+          `INSERT INTO client_services (client_id, service_type_id, enabled)
            VALUES ($1, $2, false)
-           ON CONFLICT (venue_id, service_type_id) DO UPDATE SET enabled = false`,
-          [venueId, body.service_type_id]
+           ON CONFLICT (client_id, service_type_id) DO UPDATE SET enabled = false, updated_at = NOW()`,
+          [primaryClientId, body.service_type_id]
         )
       }
     }
@@ -369,11 +408,21 @@ export async function PATCH(
         COALESCE(v.feed_type, 'other') as feed_type,
         COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
-        v.last_feed_sync_status
+        v.last_feed_sync_status,
+        primary_client.id as primary_client_id,
+        primary_client.name as primary_client_name
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN staff sm ON v.venue_manager_id = sm.id
       LEFT JOIN staff sl ON v.lead_field_rep_id = sl.id
+      LEFT JOIN LATERAL (
+        SELECT c.id, c.name
+        FROM client_venues cv
+        JOIN clients c ON c.id = cv.client_id
+        WHERE cv.venue_id = v.id
+        ORDER BY CASE WHEN cv.relation_type = 'primary' THEN 0 ELSE 1 END, c.name ASC
+        LIMIT 1
+      ) primary_client ON true
       WHERE v.id = $1`,
       [venueId]
     )
@@ -387,9 +436,9 @@ export async function PATCH(
       `SELECT st.id as service_type_id, st.name, st.description,
               COALESCE(vs.enabled, false) as enabled
        FROM service_types st
-       LEFT JOIN venue_services vs ON st.id = vs.service_type_id AND vs.venue_id = $1
+       LEFT JOIN client_services vs ON st.id = vs.service_type_id AND vs.client_id = $1
        ORDER BY st.name`,
-      [venueId]
+      [primaryClientId]
     )
 
     const v = fullVenue.rows[0]

@@ -20,7 +20,31 @@ async function runMigrations() {
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type TEXT DEFAULT 'event'`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS source TEXT`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'confirmed'`)
+    await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS client_id UUID`)
     await client.query(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`)
+    await client.query(`CREATE TABLE IF NOT EXISTS clients (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      parent_client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+      client_type TEXT NOT NULL DEFAULT 'client',
+      sport TEXT,
+      primary_contact_name TEXT,
+      primary_contact_email TEXT,
+      notes TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_parent ON clients(parent_client_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_active ON clients(is_active)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS client_venues (
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (client_id, venue_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_venues_venue ON client_venues(venue_id)`)
     await client.query(`CREATE TABLE IF NOT EXISTS staff_venues (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       staff_id UUID NOT NULL REFERENCES staff(id),
@@ -201,7 +225,67 @@ async function runMigrations() {
       updated_at TIMESTAMP DEFAULT NOW(),
       PRIMARY KEY (venue_id, service_type_id)
     )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS client_services (
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      service_type_id UUID NOT NULL REFERENCES service_types(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (client_id, service_type_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_services_client ON client_services(client_id) WHERE enabled = true`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_services_venue ON venue_services(venue_id) WHERE enabled = true`)
+
+    // ============================================================
+    // clients + client_venues + client_services — Option B model
+    // ============================================================
+    await client.query(`CREATE TABLE IF NOT EXISTS clients (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      parent_client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+      client_kind TEXT NOT NULL DEFAULT 'client',
+      sport TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      legacy_venue_id UUID UNIQUE REFERENCES venues(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_parent ON clients(parent_client_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_active ON clients(is_active)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_clients_scope
+      ON clients (LOWER(name), COALESCE(parent_client_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(LOWER(sport), ''))`)
+    await client.query(`CREATE TABLE IF NOT EXISTS client_venues (
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      relation_type TEXT NOT NULL DEFAULT 'primary',
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (client_id, venue_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_venues_venue ON client_venues(venue_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS client_services (
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      service_type_id UUID NOT NULL REFERENCES service_types(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (client_id, service_type_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_services_client ON client_services(client_id) WHERE enabled = true`)
+    await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id) ON DELETE SET NULL`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_events_client_id ON events(client_id)`)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'events_client_id_fkey'
+        ) THEN
+          ALTER TABLE events
+            ADD CONSTRAINT events_client_id_fkey
+            FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL;
+        END IF;
+      END
+      $$;
+    `)
 
     // Seed Joe's canonical contracted-service list. Idempotent via ON CONFLICT.
     const joeServices: Array<[string, string]> = [
@@ -223,6 +307,38 @@ async function runMigrations() {
         [name, description]
       )
     }
+
+    // Backfill an initial 1:1 client for legacy venue-based records so the
+    // app can start using client-level services immediately without data loss.
+    await client.query(`
+      INSERT INTO clients (name, legacy_venue_id)
+      SELECT v.name, v.id
+      FROM venues v
+      LEFT JOIN clients c ON c.legacy_venue_id = v.id
+      WHERE c.id IS NULL
+    `)
+    await client.query(`
+      INSERT INTO client_venues (client_id, venue_id, relation_type)
+      SELECT c.id, v.id, 'primary'
+      FROM clients c
+      JOIN venues v ON v.id = c.legacy_venue_id
+      ON CONFLICT (client_id, venue_id) DO NOTHING
+    `)
+    await client.query(`
+      INSERT INTO client_services (client_id, service_type_id, enabled)
+      SELECT c.id, vs.service_type_id, vs.enabled
+      FROM venue_services vs
+      JOIN clients c ON c.legacy_venue_id = vs.venue_id
+      ON CONFLICT (client_id, service_type_id)
+      DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = NOW()
+    `)
+    await client.query(`
+      UPDATE events e
+      SET client_id = c.id
+      FROM clients c
+      WHERE c.legacy_venue_id = e.venue_id
+        AND e.client_id IS NULL
+    `)
   } catch (err) {
     // Non-fatal — columns/tables may already exist or we lack permissions
     console.warn('Migration check:', err)

@@ -12,6 +12,7 @@ type SearchItem = {
 
 const emptyResults = {
   events: [] as SearchItem[],
+  clients: [] as SearchItem[],
   venues: [] as SearchItem[],
   staff: [] as SearchItem[],
   tickets: [] as SearchItem[],
@@ -40,17 +41,34 @@ export async function GET(request: NextRequest) {
 
     const like = `%${escapeLike(q)}%`
 
-    const [events, venues, staff, tickets, maintenance, designs, parts] = await Promise.all([
+    const [events, clients, venues, staff, tickets, maintenance, designs, parts] = await Promise.all([
       dbQuery(
         `SELECT e.id::text as id,
                 COALESCE(e.summary, 'Event') as title,
-                COALESCE(v.name, 'Unknown venue') || ' • ' || TO_CHAR(e.event_date, 'Mon DD, YYYY') as subtitle,
+                COALESCE(c.name || ' • ', '') || COALESCE(v.name, 'Unknown venue') || ' • ' || TO_CHAR(e.event_date, 'Mon DD, YYYY') as subtitle,
                 '/events/' || e.id::text as href
          FROM events e
          LEFT JOIN venues v ON v.id = e.venue_id
+         LEFT JOIN clients c ON c.id = e.client_id
          WHERE COALESCE(e.summary, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(v.name, '') ILIKE $1 ESCAPE '\\'
+            OR COALESCE(c.name, '') ILIKE $1 ESCAPE '\\'
          ORDER BY e.event_date DESC NULLS LAST, e.created_at DESC
+         LIMIT 5`,
+        [like],
+      ),
+      dbQuery(
+        `SELECT c.id::text as id,
+                c.name as title,
+                COALESCE(parent.name || ' • ', '') || COALESCE(c.sport || 'Client', c.client_type) as subtitle,
+                '/clients/' || c.id::text as href
+         FROM clients c
+         LEFT JOIN clients parent ON parent.id = c.parent_client_id
+         WHERE COALESCE(c.name, '') ILIKE $1 ESCAPE '\\'
+            OR COALESCE(c.primary_contact_name, '') ILIKE $1 ESCAPE '\\'
+            OR COALESCE(c.primary_contact_email, '') ILIKE $1 ESCAPE '\\'
+            OR COALESCE(c.sport, '') ILIKE $1 ESCAPE '\\'
+         ORDER BY c.name ASC
          LIMIT 5`,
         [like],
       ),
@@ -143,6 +161,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       events: events.rows,
+      clients: clients.rows,
       venues: venues.rows,
       staff: staff.rows,
       tickets: tickets.rows,
