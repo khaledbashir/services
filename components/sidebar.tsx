@@ -89,6 +89,17 @@ export function Sidebar() {
 
   const sections: NavSection[] = useMemo(() => [
     {
+      key: 'people',
+      label: isAdmin ? 'People' : 'External',
+      icon: <Icon>{IC.people}</Icon>,
+      role: 'manager',
+      links: [
+        { href: '/clients', label: 'Clients' },
+        { href: '/staff', label: 'Staff', role: 'admin' },
+        { href: '/portals', label: 'Client Portals' },
+      ],
+    },
+    {
       key: 'operations',
       label: 'Operations',
       icon: <Icon>{IC.operations}</Icon>,
@@ -139,17 +150,6 @@ export function Sidebar() {
         { href: '/prints', label: 'Print Requests', role: 'manager' },
         { href: '/hours-budgets', label: 'Hours Budgets', role: 'manager' },
         { href: '/time-entries', label: 'Time Entries' },
-      ],
-    },
-    {
-      key: 'people',
-      label: isAdmin ? 'People' : 'External',
-      icon: <Icon>{IC.people}</Icon>,
-      role: 'manager',
-      links: [
-        { href: '/clients', label: 'Clients' },
-        { href: '/staff', label: 'Staff', role: 'admin' },
-        { href: '/portals', label: 'Client Portals' },
       ],
     },
     {
