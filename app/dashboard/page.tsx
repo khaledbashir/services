@@ -25,6 +25,7 @@ interface Event {
   league: string
   start_time: string
   event_date: string
+  venue_timezone?: string
   workflow_status: string
 }
 
@@ -123,9 +124,15 @@ export default function DashboardPage() {
     fetchData()
   }, [auth.loaded, auth.isManager])
 
-  const formatTime = (dateTimeStr: string) => {
+  const formatTime = (dateTimeStr: string, timeZone?: string) => {
     const date = new Date(dateTimeStr)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    const tz = timeZone || 'America/New_York'
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: tz,
+    })
   }
 
   const formatRelativeTime = (dateStr: string) => {
@@ -298,7 +305,7 @@ export default function DashboardPage() {
                             <p className="text-sm font-medium text-zinc-900 truncate">{event.summary}</p>
                             <p className="text-xs text-zinc-500">{event.venue_name}</p>
                           </div>
-                          <div className="text-xs font-mono text-zinc-400 flex-shrink-0">{formatTime(event.start_time)}</div>
+                          <div className="text-xs font-mono text-zinc-400 flex-shrink-0">{formatTime(event.start_time, event.venue_timezone)}</div>
                         </div>
                       )
                     })}
@@ -334,7 +341,7 @@ export default function DashboardPage() {
                             className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors"
                             onClick={() => router.push(`/events/${event.id}`)}
                           >
-                            <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time)}</td>
+                            <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time, event.venue_timezone)}</td>
                             <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
                             <td className="py-3 px-6 text-zinc-600 text-sm">{event.venue_name}</td>
                             <td className="py-3 px-6">
