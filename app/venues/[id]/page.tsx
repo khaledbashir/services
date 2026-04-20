@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
 import { DiscoveryReviewCard } from '@/components/discovery-review-card'
@@ -123,7 +123,7 @@ const roleColors: Record<string, string> = {
   technician: 'bg-zinc-500',
 }
 
-export default function VenueDetailPage({ params }: { params: { id: string } }) {
+export default function VenueDetailPage() {
   const [venue, setVenue] = useState<VenueDetail | null>(null)
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([])
@@ -200,12 +200,16 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const router = useRouter()
+  const params = useParams()
+  const venueId = params?.id as string
   const auth = useAuth()
 
   useEffect(() => {
+    if (!venueId) return
+
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/venues/${params.id}`)
+        const res = await fetch(`/api/venues/${venueId}`)
         if (res.ok) {
           const data = await res.json()
           setVenue(data.venue)
@@ -218,18 +222,18 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
           setDistEmails(data.venue.distribution_emails || [])
 
           // Fetch briefing
-          fetch(`/api/venues/${params.id}/briefing`).then(r => {
+          fetch(`/api/venues/${venueId}/briefing`).then(r => {
             if (!r.ok) { console.warn('Briefing fetch failed:', r.status); return null }
             return r.json()
           }).then(d => { if (d) setBriefing(d) }).catch(err => console.warn('Briefing error:', err))
 
           // Fetch screens, linked staff, and tickets
           const [screensRes, linkedStaffRes, allStaffRes, ticketsRes, docsRes] = await Promise.all([
-            fetch(`/api/venues/${params.id}/screens`),
-            fetch(`/api/venues/${params.id}/staff`),
+            fetch(`/api/venues/${venueId}/screens`),
+            fetch(`/api/venues/${venueId}/staff`),
             fetch(`/api/staff`),
-            fetch(`/api/tickets?venue_id=${params.id}`),
-            fetch(`/api/venues/${params.id}/documents`),
+            fetch(`/api/tickets?venue_id=${venueId}`),
+            fetch(`/api/venues/${venueId}/documents`),
           ])
           if (screensRes.ok) {
             const screensData = await screensRes.json()
@@ -259,14 +263,14 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
       }
     }
     fetchData()
-  }, [params.id])
+  }, [venueId])
 
   const handleSlackUpdate = async (e: FormEvent) => {
     e.preventDefault()
     if (!venue) return
     setSavingSlack(true)
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slack_channel_id: slackChannelId || null }),
       })
@@ -277,7 +281,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const toggleService = async (serviceTypeId: string, enabled: boolean) => {
     setTogglingService(serviceTypeId)
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ service_type_id: serviceTypeId, enabled }),
       })
@@ -287,7 +291,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const toggleRequiresAssignment = async (val: boolean) => {
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requires_assignment: val }),
       })
@@ -297,7 +301,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const updateVenueField = async (field: string, value: any) => {
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
       })
@@ -307,7 +311,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const updateVenueType = async (venueType: string) => {
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ venue_type: venueType }),
       })
@@ -318,7 +322,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
   const saveFeedSettings = async (payload: { feed_url?: string | null; feed_type?: string; timezone?: string }) => {
     setSavingFeed(true)
     try {
-      const res = await fetch(`/api/venues/${params.id}`, {
+      const res = await fetch(`/api/venues/${venueId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -334,7 +338,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const linkStaff = async (staffId: string) => {
     try {
-      const res = await fetch(`/api/venues/${params.id}/staff`, {
+      const res = await fetch(`/api/venues/${venueId}/staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ staff_id: staffId }),
@@ -350,7 +354,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
 
   const unlinkStaff = async (staffId: string) => {
     try {
-      const res = await fetch(`/api/venues/${params.id}/staff`, {
+      const res = await fetch(`/api/venues/${venueId}/staff`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ staff_id: staffId }),
@@ -515,7 +519,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   <button
                     onClick={async () => {
                       setRefreshingBriefing(true)
-                      const res = await fetch(`/api/venues/${params.id}/briefing`, { method: 'POST' })
+                      const res = await fetch(`/api/venues/${venueId}/briefing`, { method: 'POST' })
                       if (res.ok) setBriefing(await res.json())
                       setRefreshingBriefing(false)
                     }}
@@ -635,7 +639,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        venue_id: params.id,
+                        venue_id: venueId,
                         discovery_hint: discoveryHint.trim() || undefined,
                         include_existing: includeExistingDiscovery,
                       }),
@@ -664,7 +668,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                 {discovering ? 'Searching...' : 'Discover Events'}
               </button>
               <a
-                href={`/api/schedule/export?venue_id=${params.id}&period=30`}
+                href={`/api/schedule/export?venue_id=${venueId}&period=30`}
                 download
                 className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition-colors inline-flex items-center gap-1.5"
               >
@@ -678,7 +682,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   onClick={async () => {
                     setEmailingSchedule(true)
                     try {
-                      const res = await fetch(`/api/schedule/export?venue_id=${params.id}&period=30&action=email`)
+                      const res = await fetch(`/api/schedule/export?venue_id=${venueId}&period=30&action=email`)
                       if (res.ok) {
                         setEmailSent(true)
                         setTimeout(() => setEmailSent(false), 3000)
@@ -922,7 +926,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
-                                venue_id: params.id,
+                                venue_id: venueId,
                                 status: 'confirmed',
                                 events: selected.map(({ selected: _, ...e }) => e),
                               }),
@@ -932,7 +936,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               setShowDiscoverModal(false)
                               setDiscoveredEvents([])
                               // Refresh venue data to show new events
-                              const venueRes = await fetch(`/api/venues/${params.id}`)
+                              const venueRes = await fetch(`/api/venues/${venueId}`)
                               if (venueRes.ok) {
                                 const vData = await venueRes.json()
                                 setUpcomingEvents(vData.upcomingEvents || [])
@@ -1227,7 +1231,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                           fd.append('file', file)
                           fd.append('file_type', docType)
                           fd.append('description', docDescription)
-                          const res = await fetch(`/api/venues/${params.id}/documents`, { method: 'POST', body: fd })
+                          const res = await fetch(`/api/venues/${venueId}/documents`, { method: 'POST', body: fd })
                           if (res.ok) {
                             const data = await res.json()
                             setDocuments(prev => [data.document, ...prev])
@@ -1250,7 +1254,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       fd.append('file', file)
                       fd.append('file_type', docType)
                       fd.append('description', docDescription)
-                      const res = await fetch(`/api/venues/${params.id}/documents`, { method: 'POST', body: fd })
+                      const res = await fetch(`/api/venues/${venueId}/documents`, { method: 'POST', body: fd })
                       if (res.ok) {
                         const data = await res.json()
                         setDocuments(prev => [data.document, ...prev])
@@ -1347,7 +1351,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                               <button
                                 onClick={async () => {
                                   if (!confirm(`Delete "${doc.original_name}"?`)) return
-                                  const res = await fetch(`/api/venues/${params.id}/documents`, {
+                                  const res = await fetch(`/api/venues/${venueId}/documents`, {
                                     method: 'DELETE',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ document_id: doc.id }),
@@ -1538,7 +1542,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                         onFile={async (file) => {
                           setUploadingLogo(true)
                           const fd = new FormData(); fd.append('file', file); fd.append('type', 'logo')
-                          const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
+                          const res = await fetch(`/api/venues/${venueId}/branding`, { method: 'POST', body: fd })
                           if (res.ok) { const d = await res.json(); setVenue({ ...venue, logo_url: d.url }) }
                           setUploadingLogo(false)
                         }}
@@ -1553,7 +1557,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       </DropZone>
                       {venue.logo_url && (
                         <button onClick={async () => {
-                          await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'logo' }) })
+                          await fetch(`/api/venues/${venueId}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'logo' }) })
                           setVenue({ ...venue, logo_url: null })
                         }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                       )}
@@ -1568,7 +1572,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       onFile={async (file) => {
                         setUploadingCover(true)
                         const fd = new FormData(); fd.append('file', file); fd.append('type', 'cover')
-                        const res = await fetch(`/api/venues/${params.id}/branding`, { method: 'POST', body: fd })
+                        const res = await fetch(`/api/venues/${venueId}/branding`, { method: 'POST', body: fd })
                         if (res.ok) { const d = await res.json(); setVenue({ ...venue, cover_image_url: d.url }) }
                         setUploadingCover(false)
                       }}
@@ -1583,7 +1587,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                     </DropZone>
                     {venue.cover_image_url && (
                       <button onClick={async () => {
-                        await fetch(`/api/venues/${params.id}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover' }) })
+                        await fetch(`/api/venues/${venueId}/branding`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover' }) })
                         setVenue({ ...venue, cover_image_url: null })
                       }} className="text-xs text-red-500 hover:text-red-700 mt-1">Remove</button>
                     )}
@@ -1743,7 +1747,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                           setDistEmails(updated)
                           setSavingDist(true)
                           try {
-                            await fetch(`/api/venues/${params.id}`, {
+                            await fetch(`/api/venues/${venueId}`, {
                               method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ distribution_emails: updated }),
                             })
@@ -1763,7 +1767,7 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                   setNewDistEmail('')
                   setSavingDist(true)
                   try {
-                    await fetch(`/api/venues/${params.id}`, {
+                    await fetch(`/api/venues/${venueId}`, {
                       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ distribution_emails: updated }),
                     })
@@ -1835,11 +1839,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       value={venue.venue_manager_id || ''}
                       onChange={async (e) => {
                         const val = e.target.value || null
-                        await fetch(`/api/venues/${params.id}`, {
+                        await fetch(`/api/venues/${venueId}`, {
                           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ venue_manager_id: val }),
                         })
-                        const res = await fetch(`/api/venues/${params.id}`)
+                        const res = await fetch(`/api/venues/${venueId}`)
                         if (res.ok) { const d = await res.json(); setVenue(d.venue) }
                       }}
                       className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
@@ -1854,11 +1858,11 @@ export default function VenueDetailPage({ params }: { params: { id: string } }) 
                       value={venue.lead_field_rep_id || ''}
                       onChange={async (e) => {
                         const val = e.target.value || null
-                        await fetch(`/api/venues/${params.id}`, {
+                        await fetch(`/api/venues/${venueId}`, {
                           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ lead_field_rep_id: val }),
                         })
-                        const res = await fetch(`/api/venues/${params.id}`)
+                        const res = await fetch(`/api/venues/${venueId}`)
                         if (res.ok) { const d = await res.json(); setVenue(d.venue) }
                       }}
                       className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
