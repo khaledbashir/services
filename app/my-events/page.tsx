@@ -33,7 +33,7 @@ export default function MyEventsPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('/api/events?filter=all&limit=250')
+        const res = await fetch('/api/events?filter=all&limit=250&mine=true')
         if (!res.ok) throw new Error('Failed to load assignments')
         const data = await res.json()
         setEvents(data.events || [])

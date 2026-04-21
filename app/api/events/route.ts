@@ -12,9 +12,17 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get('limit') || '100'
 
     const user = await getAuthUser(request)
+    // `mine=true` forces personal-assignment scope even for admin/manager/tech_support —
+    // used by the "My Assignments" view so a manager can preview their own technician load.
+    const forceMine = searchParams.get('mine') === 'true' || searchParams.get('mine') === '1'
+    // `preview_as=<staffId>` lets an admin/manager see exactly what a given staff
+    // member would see on their own dashboard. Non-managers ignore this param.
+    const previewAsStaffId = (user && (user.role === 'admin' || user.role === 'tech_support' || user.role === 'manager'))
+      ? searchParams.get('preview_as')
+      : null
     // Technicians should see events they are assigned to even if they are not linked
     // to the venue in staff_venues. Venue scoping still applies for managers/admins.
-    const venueIds = user && user.role !== 'technician'
+    const venueIds = user && user.role !== 'technician' && !forceMine && !previewAsStaffId
       ? await getStaffVenueIds(user.userId, user.role)
       : null
 
@@ -53,9 +61,15 @@ export async function GET(request: NextRequest) {
       venueFilter = ''
     }
 
-    // Technicians only see events they are personally assigned to
+    // Technicians only see events they are personally assigned to.
+    // If `mine=true` is set we force the personal filter regardless of role
+    // so /my-events works for admins viewing their own assignment load.
     const af = user
-      ? buildAssignmentFilterClause(user.role, user.userId, 'e.id', params.length + vf.params.length + 1)
+      ? (previewAsStaffId
+          ? { clause: `AND e.id IN (SELECT event_id FROM event_assignments WHERE staff_id = $${params.length + vf.params.length + 1})`, params: [previewAsStaffId], nextIdx: params.length + vf.params.length + 2 }
+          : forceMine
+            ? { clause: `AND e.id IN (SELECT event_id FROM event_assignments WHERE staff_id = $${params.length + vf.params.length + 1})`, params: [user.userId], nextIdx: params.length + vf.params.length + 2 }
+            : buildAssignmentFilterClause(user.role, user.userId, 'e.id', params.length + vf.params.length + 1))
       : { clause: '', params: [], nextIdx: params.length + vf.params.length + 1 }
     let assignmentFilter = af.clause
     if (!whereClause && assignmentFilter) {

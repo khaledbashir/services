@@ -109,10 +109,12 @@ export function Sidebar() {
         isTechnician
           ? { href: '/my-events', label: 'My Assignments', role: 'technician' }
           : { href: '/events', label: 'Events', role: 'manager' },
+        !isTechnician ? { href: '/my-events', label: 'My Assignments', role: 'manager' } : null,
         { href: '/shifts', label: 'Shift Templates', role: 'manager' },
         { href: '/venues', label: 'Venues', role: 'manager' },
         { href: '/venues/map', label: 'Map View', role: 'manager' },
-      ],
+        { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
+      ].filter(Boolean) as NavLink[],
     },
     {
       key: 'support',
