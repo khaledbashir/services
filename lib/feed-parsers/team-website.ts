@@ -25,7 +25,7 @@ export async function parseTeamWebsiteFeed(params: ParseFeedParams): Promise<Fee
         const home = game.teams?.home?.team?.name || null
         const away = game.teams?.away?.team?.name || null
         const venueName = game.venue?.name || params.venueName
-        if (!home || !away || !venueName || venueName.toLowerCase() !== params.venueName.toLowerCase()) continue
+        if (!home || !away || !venueName || !venueMatches(venueName, params.venueName)) continue
         events.push({
           name: `${away} vs ${home}`,
           date: game.officialDate,
@@ -53,4 +53,16 @@ export async function parseTeamWebsiteFeed(params: ParseFeedParams): Promise<Fee
     sourceLabel: event.sourceLabel || 'Team Website',
     confidence: Math.max(event.confidence, 0.82),
   }))
+}
+
+function venueMatches(foundVenue: string, targetVenue: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+
+  return normalize(foundVenue).join(' ') === normalize(targetVenue).join(' ')
 }

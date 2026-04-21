@@ -22,6 +22,8 @@ Venue: ${params.venueName}
 Source URL: ${params.feedUrl}
 
 Return upcoming events only. Respond with JSON only.
+- Only include events that are explicitly happening at this venue.
+- Exclude team road schedules, away games, opponent schedules, and league-wide schedules unless the source clearly says the game is at this venue.
 [{
   "name": "Boston Red Sox vs New York Yankees",
   "date": "2026-04-10",

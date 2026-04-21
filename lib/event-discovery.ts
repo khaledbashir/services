@@ -646,6 +646,8 @@ INSTRUCTIONS
 - Be EXHAUSTIVE. Return every distinct upcoming event you can extract from the FETCHED PAGE CONTENT above, plus any additional events you can identify from SEARCH RESULTS. Aim for 15-40 events per venue when the source material supports it — do not stop at 3 or 4.
 - Do not invent events without evidence, but if a page lists a schedule of games or concerts, extract all of them.
 - Favor official sources: team websites, Ticketmaster, league schedule pages, and the venue calendar.
+- Only include events that are physically happening at the venue being reviewed.
+- Exclude away games, road schedules, opponent schedules, and league-wide schedule entries unless the evidence clearly places the event at this venue.
 - Return both home_team and away_team when the event is a game and the matchup is known.
 - Use event_type values: "game", "concert", or "other".
 - Use source_kind values: "ticketmaster", "team_website", "league_schedule", "venue_calendar", or "ai_discovery".

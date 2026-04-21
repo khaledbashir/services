@@ -76,12 +76,49 @@ export async function parseMlbScheduleFeed(params: {
  * "JetBlue Park at Fenway South" matching "jetblue park"
  */
 function venueMatches(gameVenue: string, ancVenue: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+
+  const genericWords = new Set([
+    'at',
+    'the',
+    'park',
+    'field',
+    'stadium',
+    'arena',
+    'center',
+    'centre',
+    'ballpark',
+    'grounds',
+    'complex',
+    'pavilion',
+    'coliseum',
+  ])
+
+  const gWords = normalize(gameVenue)
+  const aWords = normalize(ancVenue)
+  const gDistinct = gWords.filter((word) => !genericWords.has(word))
+  const aDistinct = aWords.filter((word) => !genericWords.has(word))
+
   if (gameVenue === ancVenue) return true
-  if (gameVenue.includes(ancVenue) || ancVenue.includes(gameVenue)) return true
-  // Word overlap: at least 2 shared words and >60% overlap
-  const gWords = new Set(gameVenue.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean))
-  const aWords = new Set(ancVenue.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean))
+  if (gDistinct.length > 0 && aDistinct.length > 0 && gDistinct.join(' ') === aDistinct.join(' ')) return true
+
+  const gSet = new Set(gDistinct)
+  const aSet = new Set(aDistinct)
   let overlap = 0
-  for (const w of gWords) { if (aWords.has(w)) overlap++ }
-  return overlap >= 2 && overlap / Math.max(gWords.size, aWords.size) > 0.6
+  for (const word of gSet) {
+    if (aSet.has(word)) overlap++
+  }
+
+  if (overlap === 0) return false
+
+  const overlapRatio = overlap / Math.max(gSet.size || 1, aSet.size || 1)
+  const smallerSize = Math.min(gSet.size || 0, aSet.size || 0)
+
+  return smallerSize >= 2 && overlap === smallerSize && overlapRatio >= 0.8
 }

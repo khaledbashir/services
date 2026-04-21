@@ -96,11 +96,14 @@ export async function GET(
 
     // Workflow submissions with staff and details
     const workflowResult = await query(
-      `SELECT 
-        ws.id, ws.type, ws.submitted_at, s.full_name as staff_name,
+      `SELECT
+        ws.id,
+        ws.type,
+        ws.submitted_at,
+        COALESCE(s.full_name, 'Former staff') as staff_name,
         ws.data as submission_data
       FROM workflow_submissions ws
-      JOIN staff s ON ws.staff_id = s.id
+      LEFT JOIN staff s ON ws.staff_id = s.id
       WHERE ws.event_id = $1
       ORDER BY ws.submitted_at ASC`,
       [id]
@@ -126,25 +129,14 @@ export async function GET(
       [event.venue_id]
     )
 
-    // Is Event Support contracted for this venue? Drives the assignment-prompt banner.
-    const eventSupportResult = await query(
-      `SELECT COALESCE(vs.enabled, false) as enabled
-       FROM service_types st
-       LEFT JOIN client_services vs
-         ON vs.service_type_id = st.id AND vs.client_id = COALESCE($2, (
-           SELECT derived.client_id
-           FROM (
-             SELECT MIN(cv.client_id) as client_id, COUNT(DISTINCT cv.client_id) as client_count
-             FROM client_venues cv
-             WHERE cv.venue_id = $1
-           ) derived
-           WHERE derived.client_count = 1
-         ))
-       WHERE st.name = 'Event Support'
-       LIMIT 1`,
-      [event.venue_id, event.client_id]
-    )
-    const eventSupportContracted = eventSupportResult.rows[0]?.enabled === true
+    const clientServiceNames = Array.isArray(clientAutomation.rows[0]?.active_service_names)
+      ? clientAutomation.rows[0].active_service_names
+      : []
+    const venueServiceNames = Array.isArray(venueAutomation.rows[0]?.active_service_names)
+      ? venueAutomation.rows[0].active_service_names
+      : []
+    const eventSupportContracted = (event.client_id ? clientServiceNames : venueServiceNames)
+      .some((name: string) => name === 'Event Support')
 
     return NextResponse.json({
       event,
