@@ -233,16 +233,33 @@ function skillsForTable(spec: TableSpec): Skill[] {
       const selectCols = columns.join(', ')
       if (args.q && searchColumns.length > 0) {
         const likeClauses = searchColumns.map((c, i) => `COALESCE(${c}::text, '') ILIKE $${i + 1}`).join(' OR ')
-        const params = searchColumns.map(() => `%${args.q}%`)
-        params.push(String(limit))
+        const searchParams = searchColumns.map(() => `%${args.q}%`)
+        const params = [...searchParams, String(limit)]
+        const countResult = await query(
+          `SELECT COUNT(*)::int AS total_count FROM ${table} WHERE ${likeClauses}`,
+          searchParams
+        )
         const r = await query(
           `SELECT id, ${selectCols} FROM ${table} WHERE ${likeClauses} ORDER BY id DESC LIMIT $${params.length}`,
           params
         )
-        return { rows: r.rows, count: r.rows.length }
+        return {
+          rows: r.rows,
+          count: Number(countResult.rows[0]?.total_count || 0),
+          total_count: Number(countResult.rows[0]?.total_count || 0),
+          returned_count: r.rows.length,
+        }
       }
-      const r = await query(`SELECT id, ${selectCols} FROM ${table} ORDER BY id DESC LIMIT $1`, [limit])
-      return { rows: r.rows, count: r.rows.length }
+      const [countResult, r] = await Promise.all([
+        query(`SELECT COUNT(*)::int AS total_count FROM ${table}`),
+        query(`SELECT id, ${selectCols} FROM ${table} ORDER BY id DESC LIMIT $1`, [limit]),
+      ])
+      return {
+        rows: r.rows,
+        count: Number(countResult.rows[0]?.total_count || 0),
+        total_count: Number(countResult.rows[0]?.total_count || 0),
+        returned_count: r.rows.length,
+      }
     },
   }
 
