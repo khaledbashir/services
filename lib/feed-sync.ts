@@ -67,7 +67,7 @@ async function loadExistingEvents(venueId: string, startDate: string, endDate: s
   return result.rows
 }
 
-const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd)/i
+const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd|home game (one|two|three|four|five|six|seven|[1-7])\b|round (one|two|three|four|[1-4]).*(home game|game [1-7]))/i
 
 function isPlaceholderSummary(summary: string | null | undefined): boolean {
   if (!summary) return false

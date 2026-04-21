@@ -768,7 +768,7 @@ RETURN ONLY JSON
   }
 }
 
-const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd)/i
+const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd|home game (one|two|three|four|five|six|seven|[1-7])\b|round (one|two|three|four|[1-4]).*(home game|game [1-7]))/i
 
 function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): DiscoveryCandidate | null {
   if (!raw.summary || !raw.event_date || !/^\d{4}-\d{2}-\d{2}$/.test(raw.event_date)) return null
