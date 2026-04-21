@@ -19,15 +19,37 @@ export async function POST(request: NextRequest) {
       caller_number?: string
       caller_name?: string
       transcription?: string
+      email_body?: string
       audio_url?: string
       received_at?: string
       extension?: string
       priority?: 'low' | 'medium' | 'high' | 'critical' | 'urgent'
     }
 
-    const callerNumber = (body.caller_number || '').toString().trim() || 'Unknown'
-    const callerName = (body.caller_name || '').toString().trim() || null
     const transcription = (body.transcription || '').toString().trim()
+    const emailBody = (body.email_body || '').toString().trim()
+
+    // Caller-number resolution ladder: explicit field → extract from transcription
+    // → extract from email body. Zoom/Zapier sometimes leaves caller_number blank
+    // when the parser template doesn't have that field trained; the phone number
+    // almost always appears in the transcription ("callback number 404-555-1212").
+    const phoneRegex = /(?:\+?1[\s.-]?)?\(?([2-9]\d{2})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})/
+    const extractPhone = (text: string): string | null => {
+      const m = text.match(phoneRegex)
+      return m ? `(${m[1]}) ${m[2]}-${m[3]}` : null
+    }
+
+    let callerNumber = (body.caller_number || '').toString().trim()
+    if (!callerNumber || /^unknown$/i.test(callerNumber)) {
+      callerNumber = extractPhone(transcription) || extractPhone(emailBody) || 'Unknown'
+    }
+
+    // Caller-name: explicit → "my name is ..." in transcription
+    let callerName = (body.caller_name || '').toString().trim() || null
+    if (!callerName && transcription) {
+      const nameMatch = transcription.match(/\bmy name is\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,3})/i)
+      if (nameMatch) callerName = nameMatch[1].trim()
+    }
     const audioUrl = (body.audio_url || '').toString().trim()
     const extension = (body.extension || '').toString().trim()
     // Zapier / Zendesk convention uses "urgent"; our ticket priority ladder
