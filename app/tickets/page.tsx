@@ -58,6 +58,8 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [showForm, setShowForm] = useState(false)
   const [selectedVenueId, setSelectedVenueId] = useState('')
+  const [venueQuery, setVenueQuery] = useState('')
+  const [venueMenuOpen, setVenueMenuOpen] = useState(false)
   const [formData, setFormData] = useState({
     venue_id: '', event_id: '', title: '', description: '',
     category: 'general', priority: 'medium', assigned_to: ''
@@ -94,6 +96,8 @@ export default function TicketsPage() {
         const fresh = await fetch('/api/tickets').then(r => r.json())
         setTickets(fresh.tickets || [])
         setFormData({ venue_id: '', event_id: '', title: '', description: '', category: 'general', priority: 'medium', assigned_to: '' })
+        setSelectedVenueId('')
+        setVenueQuery('')
         setShowForm(false)
       }
     } catch (err) { console.error(err) }
@@ -170,13 +174,38 @@ export default function TicketsPage() {
                   className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 outline-none bg-white" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Venue *</label>
-                  <select value={formData.venue_id} onChange={e => { setFormData(prev => ({ ...prev, venue_id: e.target.value, event_id: '' })); setSelectedVenueId(e.target.value) }}
-                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" required>
-                    <option value="">Select venue...</option>
-                    {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
+                  <input
+                    type="text"
+                    value={venueQuery}
+                    onChange={e => { setVenueQuery(e.target.value); setVenueMenuOpen(true); if (formData.venue_id) { setFormData(prev => ({ ...prev, venue_id: '', event_id: '' })); setSelectedVenueId('') } }}
+                    onFocus={() => setVenueMenuOpen(true)}
+                    onBlur={() => setTimeout(() => setVenueMenuOpen(false), 150)}
+                    placeholder="Type to search venues..."
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                    required
+                  />
+                  {venueMenuOpen && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 max-h-60 overflow-auto border border-zinc-200 bg-white shadow-lg rounded">
+                      {venues
+                        .filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim()))
+                        .slice(0, 50)
+                        .map(v => (
+                          <button
+                            type="button"
+                            key={v.id}
+                            onMouseDown={(e) => { e.preventDefault(); setFormData(prev => ({ ...prev, venue_id: v.id, event_id: '' })); setSelectedVenueId(v.id); setVenueQuery(v.name); setVenueMenuOpen(false) }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 ${formData.venue_id === v.id ? 'bg-[#0A52EF]/10 text-[#0A52EF]' : 'text-zinc-700'}`}
+                          >
+                            {v.name}
+                          </button>
+                        ))}
+                      {venues.filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim())).length === 0 && (
+                        <div className="px-3 py-2 text-sm text-zinc-400">No venues match "{venueQuery}"</div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Event (optional)</label>
