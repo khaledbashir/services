@@ -89,8 +89,9 @@ export async function GET(
       console.warn('Venue linked-clients lookup failed (non-fatal):', err)
     }
 
-    // Get upcoming events (next 30 days)
+    // Get recent event history: past 30 days plus next 30 days.
     const today = new Date().toISOString().split('T')[0]
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const eventsResult = await query(
@@ -106,11 +107,15 @@ export async function GET(
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       WHERE e.venue_id = $1 
-        AND e.event_date >= $2 
+        AND e.event_date >= $2
         AND e.event_date <= $3
       GROUP BY e.id, e.summary, e.league, e.event_date, e.start_time, e.workflow_status
-      ORDER BY e.start_time`,
-      [venueId, today, thirtyDaysFromNow]
+      ORDER BY
+        CASE WHEN e.event_date >= $4 THEN 0 ELSE 1 END,
+        CASE WHEN e.event_date >= $4 THEN e.event_date END ASC,
+        CASE WHEN e.event_date < $4 THEN e.event_date END DESC,
+        e.start_time ASC`,
+      [venueId, thirtyDaysAgo, thirtyDaysFromNow, today]
     )
 
     // Get assigned staff at this venue

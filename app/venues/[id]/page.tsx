@@ -479,7 +479,7 @@ export default function VenueDetailPage() {
               {/* Stats */}
               <div className="flex gap-5 flex-shrink-0">
                 {[
-                  { val: upcomingEvents.length, label: 'Upcoming' },
+                  { val: upcomingEvents.length, label: 'Events' },
                   { val: assignedStaff.length, label: 'Staff' },
                   { val: upcomingEvents.filter(e => e.assigned_techs).length, label: 'Assigned' },
                 ].map(s => (
@@ -775,8 +775,12 @@ export default function VenueDetailPage() {
               </div>
             )}
             {upcomingEvents.length === 0 ? (
-              <div className="p-12 text-center text-zinc-400 text-sm">No upcoming events in the next 30 days</div>
+              <div className="p-12 text-center text-zinc-400 text-sm">No events in the past 30 days or next 30 days</div>
             ) : (
+              <>
+                <div className="border-b border-[#E8E8E8] bg-zinc-50 px-6 py-3 text-xs font-medium text-zinc-500">
+                  Showing recent history: past 30 days and next 30 days
+                </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#E8E8E8] bg-zinc-50">
@@ -792,8 +796,9 @@ export default function VenueDetailPage() {
                   {upcomingEvents.map(event => {
                     const lc = leagueColors[event.league] || { bg: 'bg-zinc-100', text: 'text-zinc-500' }
                     const wf = workflowConfig[event.workflow_status] || workflowConfig.pending
+                    const isPastEvent = new Date(`${event.event_date}T23:59:59`).getTime() < Date.now()
                     return (
-                      <tr key={event.id} onClick={() => router.push(`/events/${event.id}`)} className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors">
+                      <tr key={event.id} onClick={() => router.push(`/events/${event.id}`)} className={`border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors ${isPastEvent ? 'bg-zinc-50/40' : ''}`}>
                         <td className="py-3 px-6 text-zinc-600 text-xs whitespace-nowrap">{formatDate(event.event_date)}</td>
                         <td className="py-3 px-6 font-medium text-zinc-900">{event.event_name}</td>
                         <td className="py-3 px-6"><span className={`text-xs font-medium px-2 py-0.5 rounded ${lc.bg} ${lc.text}`}>{event.league}</span></td>
@@ -803,12 +808,18 @@ export default function VenueDetailPage() {
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1.5 w-fit ${wf.bg} ${wf.text}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${wf.dot}`}></span>{wf.label}
                           </span>
+                          {isPastEvent && (
+                            <span className="mt-1 inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500">
+                              Past
+                            </span>
+                          )}
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+              </>
             )}
           </div>
 
