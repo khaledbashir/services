@@ -92,9 +92,14 @@ async function loadUserContext(): Promise<string> {
   const [stats, topTickets, topDesigns, upcomingGames] = await Promise.all([
     timeout(query(
       `SELECT
+         (SELECT COUNT(*) FROM venues WHERE COALESCE(is_active,true)=true)::int AS active_venues,
+         (SELECT COUNT(*) FROM clients WHERE COALESCE(is_active,true)=true)::int AS active_clients,
+         (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true)::int AS active_staff,
          (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved'))::int AS open_tickets,
          (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved') AND priority='urgent')::int AS urgent_tickets,
          (SELECT COUNT(*) FROM design_requests WHERE status NOT IN ('approved','done'))::int AS open_designs,
+         (SELECT COUNT(*) FROM maintenance_logs WHERE status NOT IN ('completed','cancelled'))::int AS open_maintenance,
+         (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE)::int AS events_today,
          (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7)::int AS events_this_week,
          (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
            AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id=events.id))::int AS unassigned_this_week`
@@ -106,11 +111,11 @@ async function loadUserContext(): Promise<string> {
        ORDER BY (t.priority='urgent') DESC, t.created_at DESC LIMIT 3`
     )),
     timeout(query(
-      `SELECT title, status FROM design_requests
+      `SELECT job_title, status FROM design_requests
        WHERE status NOT IN ('approved','done') ORDER BY updated_at DESC LIMIT 3`
     )),
     timeout(query(
-      `SELECT e.title, TO_CHAR(e.event_date,'Dy Mon DD') AS event_date, v.name AS venue
+      `SELECT e.summary, TO_CHAR(e.event_date,'Dy Mon DD') AS event_date, v.name AS venue
        FROM events e LEFT JOIN venues v ON v.id = e.venue_id
        WHERE e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + 7
        ORDER BY e.event_date ASC LIMIT 3`
@@ -121,9 +126,10 @@ async function loadUserContext(): Promise<string> {
   const s = stats?.rows?.[0]
   if (s) {
     lines.push(
+      `- Active venues: ${s.active_venues} · clients: ${s.active_clients} · staff: ${s.active_staff}`,
       `- Open tickets: ${s.open_tickets}${s.urgent_tickets > 0 ? ` (${s.urgent_tickets} urgent)` : ''}`,
-      `- Open design requests: ${s.open_designs}`,
-      `- Events this week: ${s.events_this_week}${s.unassigned_this_week > 0 ? ` (${s.unassigned_this_week} unassigned)` : ''}`,
+      `- Open design requests: ${s.open_designs}${s.open_maintenance > 0 ? ` · maintenance: ${s.open_maintenance}` : ''}`,
+      `- Events today: ${s.events_today} · this week: ${s.events_this_week}${s.unassigned_this_week > 0 ? ` (${s.unassigned_this_week} unassigned)` : ''}`,
     )
   }
   if (topTickets?.rows?.length) {
@@ -131,11 +137,11 @@ async function loadUserContext(): Promise<string> {
     lines.push(`- Recent open tickets: ${tix}`)
   }
   if (topDesigns?.rows?.length) {
-    const ds = topDesigns.rows.map(d => `"${d.title}" (${d.status})`).join('; ')
+    const ds = topDesigns.rows.map(d => `"${d.job_title}" (${d.status})`).join('; ')
     lines.push(`- Recent design requests: ${ds}`)
   }
   if (upcomingGames?.rows?.length) {
-    const ev = upcomingGames.rows.map(e => `${e.event_date} ${e.title}${e.venue ? ` @ ${e.venue}` : ''}`).join('; ')
+    const ev = upcomingGames.rows.map(e => `${e.event_date} ${e.summary}${e.venue ? ` @ ${e.venue}` : ''}`).join('; ')
     lines.push(`- Upcoming events: ${ev}`)
   }
   return lines.length > 0 ? lines.join('\n') : ''
@@ -167,6 +173,11 @@ WORKFLOW TIPS:
   request", "task test 2"), first run find_many_* to resolve the id.
 - When asked to "move X to <status>", use update_<singular>. Don't
   ask the user for the id if they gave you a title — look it up.
+- When the user asks for totals, counts, "how many", "do we have", or
+  other high-level dashboard numbers, use dashboard_stats or the
+  relevant find_many_* tool and read the real \`count\`/\`total_count\`
+  field. Never infer the total from the number of rows shown in a
+  limited result set.
 - Design request statuses: request_submitted → in_queue → in_progress
   → in_qc → client_review → approved → done. The dedicated skill
   move_design_to_client_review also fires the proof email; use it
