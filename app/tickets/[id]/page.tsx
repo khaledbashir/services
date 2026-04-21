@@ -65,21 +65,27 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [showCanned, setShowCanned] = useState(false)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
   const [activeTab, setActiveTab] = useState<ContentTab>('timeline')
+  const [venueOptions, setVenueOptions] = useState<Array<{ id: string; name: string; client_name?: string | null }>>([])
+  const [editingVenue, setEditingVenue] = useState(false)
+  const [venueQuery, setVenueQuery] = useState('')
   const router = useRouter()
 
   const fetchData = async () => {
     try {
-      const [ticketRes, staffRes] = await Promise.all([
+      const [ticketRes, staffRes, venuesRes] = await Promise.all([
         fetch(`/api/tickets/${params.id}`),
         fetch('/api/staff'),
+        fetch('/api/venues'),
       ])
       const ticketData = await ticketRes.json()
       const staffData = await staffRes.json()
+      const venuesData = await venuesRes.json().catch(() => ({ venues: [] }))
       setTicket(ticketData.ticket)
       setComments(ticketData.comments || [])
       setActivity(ticketData.activity || [])
       setRelatedTickets(ticketData.related_tickets || [])
       setStaffList(staffData.staff || [])
+      setVenueOptions(venuesData.venues || [])
       setResolutionNotes(ticketData.ticket?.resolution_notes || '')
       const cannedRes = await fetch('/api/tickets/canned')
       if (cannedRes.ok) { const cd = await cannedRes.json(); setCannedResponses(cd.responses || []) }
@@ -336,9 +342,63 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             {/* Case Information — SF-style two-column grid */}
             <div className="space-y-3 pt-5 border-t border-zinc-100">
               <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Case Information</h3>
+              {/* Editable Venue row: shows current venue, click to change (supports voicemail tickets landing unassigned) */}
+              <div className="py-1.5 px-2 rounded hover:bg-zinc-50 group transition-colors relative">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-zinc-400 flex-shrink-0">Venue</span>
+                  <div className="flex items-center gap-2 ml-4 min-w-0">
+                    {ticket.venue_id && ticket.venue_name ? (
+                      <Link href={`/venues/${ticket.venue_id}`} className="text-blue-600 hover:text-blue-800 font-medium truncate">{ticket.venue_name}</Link>
+                    ) : (
+                      <span className="text-zinc-400 italic">Not linked</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setEditingVenue(!editingVenue); setVenueQuery('') }}
+                      className="opacity-0 group-hover:opacity-100 text-[10px] text-blue-600 hover:text-blue-800 transition-opacity"
+                    >
+                      {editingVenue ? 'Cancel' : (ticket.venue_id ? 'Change' : 'Link')}
+                    </button>
+                  </div>
+                </div>
+                {editingVenue && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={venueQuery}
+                      onChange={(e) => setVenueQuery(e.target.value)}
+                      placeholder="Type to search venues..."
+                      className="w-full border border-zinc-300 px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none rounded"
+                    />
+                    <div className="max-h-48 overflow-auto mt-1 border border-zinc-200 rounded bg-white">
+                      {venueOptions
+                        .filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim()))
+                        .slice(0, 40)
+                        .map(v => (
+                          <button
+                            type="button"
+                            key={v.id}
+                            onClick={async () => {
+                              await updateField('venue_id', v.id)
+                              setEditingVenue(false)
+                              setVenueQuery('')
+                            }}
+                            className={`w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 ${ticket.venue_id === v.id ? 'bg-blue-50 text-blue-700' : 'text-zinc-700'}`}
+                          >
+                            {v.name}
+                            {v.client_name && <span className="text-zinc-400 ml-2">· {v.client_name}</span>}
+                          </button>
+                        ))}
+                      {venueOptions.filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim())).length === 0 && (
+                        <div className="px-2 py-2 text-xs text-zinc-400">No venues match "{venueQuery}"</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 gap-2">
                 {[
-                  { label: 'Venue', value: ticket.venue_name, href: `/venues/${ticket.venue_id}` },
                   ticket.event_name ? { label: 'Event', value: ticket.event_name, href: `/events/${ticket.event_id}` } : null,
                   { label: 'Source', value: (ticket.source || 'web').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
                   { label: 'Type', value: (ticket.ticket_type || 'support').replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) },
