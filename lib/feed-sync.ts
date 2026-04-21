@@ -67,6 +67,13 @@ async function loadExistingEvents(venueId: string, startDate: string, endDate: s
   return result.rows
 }
 
+const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd)/i
+
+function isPlaceholderSummary(summary: string | null | undefined): boolean {
+  if (!summary) return false
+  return PLACEHOLDER_PATTERN.test(summary)
+}
+
 function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEventRow[]): { duplicate: boolean; reason: string | null } {
   const normalizedSummary = normalizeSummary(candidate.summary)
   const normalizedTime = normalizeTimeForKey(candidate.start_time)
@@ -181,7 +188,7 @@ export async function syncVenueFeed(
       venueAddress: venue.address,
     })
 
-    const windowedEvents = parsedEvents.filter((event) => event.date >= today && event.date <= ninetyDaysOut)
+    const windowedEvents = parsedEvents.filter((event) => event.date >= today && event.date <= ninetyDaysOut && !isPlaceholderSummary(event.name))
     const existingEvents = await loadExistingEvents(venue.id, today, ninetyDaysOut)
     const discovered = windowedEvents.map((event) => {
       const candidate = feedEventToCandidate(event, venue)

@@ -607,6 +607,7 @@ export default function StaffPage() {
                   >
                     <option value="technician">Technician</option>
                     <option value="manager">Manager</option>
+                    <option value="tech_support">Tech Support</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
@@ -653,6 +654,7 @@ export default function StaffPage() {
           >
             <option value="all">All Roles</option>
             <option value="admin">Admin</option>
+            <option value="tech_support">Tech Support</option>
             <option value="manager">Manager</option>
             <option value="technician">Technician</option>
           </select>

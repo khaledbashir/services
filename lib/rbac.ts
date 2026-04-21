@@ -7,14 +7,18 @@ export interface AuthUser {
   userId: string
   email: string
   fullName: string
-  role: 'admin' | 'manager' | 'technician'
+  role: 'admin' | 'tech_support' | 'manager' | 'technician'
 }
 
-// Permission levels — higher includes all lower
+// Permission levels — higher includes all lower.
+// tech_support sits between manager and admin: sees all venues/tickets like
+// a manager, plus gets access to admin-only operational endpoints, but is
+// blocked from true admin surfaces (user mgmt, system settings, destructive ops).
 const ROLE_LEVEL: Record<string, number> = {
   technician: 1,
   manager: 2,
-  admin: 3,
+  tech_support: 3,
+  admin: 4,
 }
 
 /**
@@ -54,7 +58,7 @@ export async function requireAuth(request: NextRequest): Promise<AuthUser | Next
  */
 export async function requireRole(
   request: NextRequest,
-  minRole: 'technician' | 'manager' | 'admin'
+  minRole: 'technician' | 'manager' | 'tech_support' | 'admin'
 ): Promise<AuthUser | NextResponse> {
   const result = await requireAuth(request)
   if (result instanceof NextResponse) return result

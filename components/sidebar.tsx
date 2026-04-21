@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo, ReactNode } from 'react'
 
-type Role = 'admin' | 'manager' | 'technician' | 'any'
+type Role = 'admin' | 'tech_support' | 'manager' | 'technician' | 'any'
 
 interface NavLink {
   href: string
@@ -76,12 +76,14 @@ export function Sidebar() {
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   const isAdmin = userRole === 'admin'
-  const isManager = userRole === 'manager' || isAdmin
+  const isTechSupport = userRole === 'tech_support' || isAdmin
+  const isManager = userRole === 'manager' || isTechSupport
   const isTechnician = userRole === 'technician'
 
   const roleAllows = (min?: Role): boolean => {
     if (!min || min === 'any') return true
     if (min === 'admin') return isAdmin
+    if (min === 'tech_support') return isTechSupport
     if (min === 'manager') return isManager
     if (min === 'technician') return isManager || isTechnician
     return false
@@ -156,13 +158,13 @@ export function Sidebar() {
       key: 'system',
       label: 'System',
       icon: <Icon>{IC.system}</Icon>,
-      role: 'admin',
+      role: 'tech_support',
       links: [
         { href: '/inventory', label: 'Inventory' },
-        { href: '/settings', label: 'Settings' },
+        { href: '/settings', label: 'Settings', role: 'admin' },
       ],
     },
-  ], [userRole, isTechnician, isAdmin])
+  ], [userRole, isTechnician, isAdmin, isTechSupport])
 
   const isLinkActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + '/') || pathname === href

@@ -358,6 +358,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                   <option value="technician">Technician</option>
                   <option value="manager">Manager</option>
+                  <option value="tech_support">Tech Support</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

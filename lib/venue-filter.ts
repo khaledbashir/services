@@ -9,7 +9,7 @@ export async function getStaffVenueIds(
   staffId: string,
   role: string
 ): Promise<string[] | null> {
-  if (role === 'admin' || role === 'manager') return null
+  if (role === 'admin' || role === 'tech_support' || role === 'manager') return null
 
   const result = await query(
     `SELECT venue_id FROM staff_venues WHERE staff_id = $1`,
@@ -34,7 +34,7 @@ export function buildAssignmentFilterClause(
   eventColumn: string,
   startIdx: number
 ): { clause: string; params: string[]; nextIdx: number } {
-  if (role === 'admin' || role === 'manager') {
+  if (role === 'admin' || role === 'tech_support' || role === 'manager') {
     return { clause: '', params: [], nextIdx: startIdx }
   }
 

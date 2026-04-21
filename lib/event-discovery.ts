@@ -768,8 +768,11 @@ RETURN ONLY JSON
   }
 }
 
+const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd)/i
+
 function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): DiscoveryCandidate | null {
   if (!raw.summary || !raw.event_date || !/^\d{4}-\d{2}-\d{2}$/.test(raw.event_date)) return null
+  if (PLACEHOLDER_PATTERN.test(raw.summary)) return null
   const sourceKind = raw.source_kind || sourceKindFromUrl(raw.source_url || null, venue.name)
   const sourceUrl = raw.source_url || null
   const sourceDomain = sourceDomainFromUrl(sourceUrl)

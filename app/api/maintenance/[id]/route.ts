@@ -23,7 +23,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole(request, 'admin')
+  const auth = await requireRole(request, 'tech_support')
   if (isAuthError(auth)) return auth
   await query(`DELETE FROM maintenance_logs WHERE id = $1`, [params.id])
   return NextResponse.json({ ok: true })

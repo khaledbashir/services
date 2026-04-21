@@ -6,18 +6,20 @@ import { useRouter } from 'next/navigation'
 export interface AuthInfo {
   userId: string
   userName: string
-  role: 'admin' | 'manager' | 'technician'
+  role: 'admin' | 'tech_support' | 'manager' | 'technician'
   isAdmin: boolean
+  isTechSupport: boolean
   isManager: boolean
   loaded: boolean
 }
 
-export function useAuth(minRole?: 'manager' | 'admin'): AuthInfo {
+export function useAuth(minRole?: 'manager' | 'tech_support' | 'admin'): AuthInfo {
   const [auth, setAuth] = useState<AuthInfo>({
     userId: '',
     userName: '',
     role: 'technician',
     isAdmin: false,
+    isTechSupport: false,
     isManager: false,
     loaded: false,
   })
@@ -28,12 +30,14 @@ export function useAuth(minRole?: 'manager' | 'admin'): AuthInfo {
     const userName = localStorage.getItem('userName') || ''
     const role = (localStorage.getItem('userRole') || 'technician') as AuthInfo['role']
     const isAdmin = role === 'admin'
-    const isManager = role === 'manager' || isAdmin
+    const isTechSupport = role === 'tech_support' || isAdmin
+    const isManager = role === 'manager' || isTechSupport
 
     const ROLE_LEVEL: Record<string, number> = {
       technician: 1,
       manager: 2,
-      admin: 3,
+      tech_support: 3,
+      admin: 4,
     }
 
     if (minRole && ROLE_LEVEL[role] < ROLE_LEVEL[minRole]) {
@@ -41,7 +45,7 @@ export function useAuth(minRole?: 'manager' | 'admin'): AuthInfo {
       return
     }
 
-    setAuth({ userId, userName, role, isAdmin, isManager, loaded: true })
+    setAuth({ userId, userName, role, isAdmin, isTechSupport, isManager, loaded: true })
   }, [minRole, router])
 
   return auth

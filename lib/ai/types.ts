@@ -1,6 +1,6 @@
 // Shared types for the in-dashboard AI agent.
 
-export type AgentRole = 'admin' | 'manager' | 'technician' | 'any'
+export type AgentRole = 'admin' | 'tech_support' | 'manager' | 'technician' | 'any'
 
 /**
  * Where the skill is being invoked from. Skills can use this to adjust

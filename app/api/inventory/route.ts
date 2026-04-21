@@ -116,7 +116,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await requireRole(request, 'admin')
+    const auth = await requireRole(request, 'tech_support')
     if (isAuthError(auth)) return auth
 
     const { id } = await request.json()
