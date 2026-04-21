@@ -5,6 +5,7 @@ export interface VenueAutomationInfo {
   active_service_names: string[]
   active_service_descriptions: string[]
   requires_staffing_default: boolean
+  venue_type?: string | null
 }
 
 function serviceText(name: string, description: string): string {
@@ -89,6 +90,7 @@ export function withComputedAutomation<T extends {
   active_service_count?: number | string
   active_service_names?: string[]
   active_service_descriptions?: string[]
+  venue_type?: string | null
 }>(row: T): T & VenueAutomationInfo {
   const active_service_count = Number(row.active_service_count || 0)
   const active_service_names = row.active_service_names || []
@@ -99,6 +101,7 @@ export function withComputedAutomation<T extends {
     active_service_count,
     active_service_names,
     active_service_descriptions,
+    venue_type: row.venue_type ?? null,
     requires_staffing_default: computeRequiresStaffingDefault({
       active_service_names,
       active_service_descriptions,
@@ -109,6 +112,7 @@ export function withComputedAutomation<T extends {
 export async function getVenueAutomationInfo(venueId: string): Promise<VenueAutomationInfo> {
   const result = await query(
     `SELECT
+       COALESCE(v.venue_type, 'sports') as venue_type,
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
      LEFT JOIN client_venues cv ON cv.venue_id = v.id

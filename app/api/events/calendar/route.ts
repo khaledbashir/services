@@ -57,6 +57,10 @@ export async function GET(request: NextRequest) {
         WHERE cv.venue_id = e.venue_id
       ) venue_automation ON TRUE
       WHERE e.event_date BETWEEN $1 AND $2
+        AND NOT (
+          COALESCE(v.venue_type, 'sports') <> 'sports'
+          AND COALESCE(e.event_type, 'event') = 'game'
+        )
       ORDER BY e.start_time`,
       [start, end]
     )

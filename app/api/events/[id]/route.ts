@@ -282,3 +282,28 @@ export async function PATCH(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const auth = await requireRole(request, 'admin')
+    if (isAuthError(auth)) return auth
+
+    const { id } = params
+    await query(`UPDATE tickets SET event_id = NULL WHERE event_id = $1`, [id])
+    await query(`DELETE FROM event_assignments WHERE event_id = $1`, [id])
+    await query(`DELETE FROM workflow_submissions WHERE event_id = $1`, [id])
+    const result = await query(`DELETE FROM events WHERE id = $1`, [id])
+
+    if ((result.rowCount || 0) === 0) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Error deleting event:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

@@ -99,6 +99,7 @@ export async function GET(
         e.id,
         e.summary as event_name,
         e.league,
+        COALESCE(e.event_type, 'event') as event_type,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         e.start_time,
         e.workflow_status,
@@ -109,7 +110,7 @@ export async function GET(
       WHERE e.venue_id = $1 
         AND e.event_date >= $2
         AND e.event_date <= $3
-      GROUP BY e.id, e.summary, e.league, e.event_date, e.start_time, e.workflow_status
+      GROUP BY e.id, e.summary, e.league, e.event_type, e.event_date, e.start_time, e.workflow_status
       ORDER BY
         CASE WHEN e.event_date >= $4 THEN 0 ELSE 1 END,
         CASE WHEN e.event_date >= $4 THEN e.event_date END ASC,
@@ -117,6 +118,9 @@ export async function GET(
         e.start_time ASC`,
       [venueId, thirtyDaysAgo, thirtyDaysFromNow, today]
     )
+    const filteredUpcomingEvents = venue.venue_type !== 'sports'
+      ? eventsResult.rows.filter((row) => row.event_type !== 'game')
+      : eventsResult.rows
 
     // Get assigned staff at this venue
     const staffResult = await query(
@@ -216,7 +220,7 @@ export async function GET(
     return NextResponse.json({
       venue,
       linkedClients: linkedClientsResult.rows,
-      upcomingEvents: eventsResult.rows,
+      upcomingEvents: filteredUpcomingEvents,
       assignedStaff: staffResult.rows,
       venueServices: servicesResult.rows,
       creative,

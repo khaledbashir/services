@@ -58,6 +58,7 @@ export interface DiscoveryVenue {
   name: string
   address: string | null
   market_name: string | null
+  venue_type?: string | null
   feed_url?: string | null
   feed_type?: FeedType | null
   slack_channel_id?: string | null
@@ -934,6 +935,7 @@ export async function getDiscoveryVenue(venueId: string): Promise<DiscoveryVenue
        v.name,
        v.address,
        m.name as market_name,
+       COALESCE(v.venue_type, 'sports') as venue_type,
        v.feed_url,
        COALESCE(v.feed_type, 'other') as feed_type,
        v.slack_channel_id,
@@ -960,6 +962,7 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
        v.name,
        v.address,
        m.name as market_name,
+       COALESCE(v.venue_type, 'sports') as venue_type,
        v.feed_url,
        COALESCE(v.feed_type, 'other') as feed_type,
        v.slack_channel_id,
@@ -1009,6 +1012,10 @@ export async function importDiscoveryEvents(
       automationByVenue.set(venueId, await getVenueAutomationInfo(venueId))
     }
     const automation = automationByVenue.get(venueId)!
+    if ((automation.venue_type || 'sports') !== 'sports' && event.event_type === 'game') {
+      skipped++
+      continue
+    }
 
     let venueTimezone: string = venueTimezoneCache.get(venueId) || ''
     if (!venueTimezone) {

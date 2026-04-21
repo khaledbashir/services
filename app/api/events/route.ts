@@ -111,12 +111,18 @@ export async function GET(request: NextRequest) {
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       ${whereClause} ${venueFilter} ${assignmentFilter}
+      ${whereClause || venueFilter || assignmentFilter ? 'AND' : 'WHERE'}
+      NOT (
+        COALESCE(v.venue_type, 'sports') <> 'sports'
+        AND COALESCE(e.event_type, 'event') = 'game'
+      )
       GROUP BY
         e.id,
         v.name,
         c.id,
         c.name,
         v.requires_assignment,
+        v.venue_type,
         v.timezone,
         client_automation.active_service_names,
         client_automation.active_service_descriptions,
