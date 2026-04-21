@@ -41,6 +41,13 @@ function isSlackId(value) {
   return typeof value === 'string' && /^C[A-Z0-9]+$/i.test(value.trim())
 }
 
+function mapVenueType(rawType) {
+  const value = String(rawType || '').trim().toLowerCase()
+  if (value === 'ooh') return 'ooh'
+  if (value === 'sports' || value === 'college') return 'sports'
+  return null
+}
+
 function getWorkbookRows(inputPath) {
   const workbook = XLSX.readFile(inputPath)
   const firstSheetName = workbook.SheetNames[0]
@@ -133,6 +140,7 @@ async function main() {
   try {
     const venuesResult = await client.query(
       `SELECT id, name, slack_channel_id
+              , COALESCE(venue_type, 'sports') as venue_type
        FROM venues
        ORDER BY name`
     )
@@ -159,11 +167,13 @@ async function main() {
         venue: matched.venue,
         method: matched.method,
         needsUpdate: matched.venue.slack_channel_id !== row.slackId,
+        desiredVenueType: mapVenueType(row.type),
+        venueTypeNeedsUpdate: mapVenueType(row.type) && matched.venue.venue_type !== mapVenueType(row.type),
       })
     }
 
-    const updates = matches.filter((entry) => entry.needsUpdate)
-    const unchanged = matches.filter((entry) => !entry.needsUpdate)
+    const updates = matches.filter((entry) => entry.needsUpdate || entry.venueTypeNeedsUpdate)
+    const unchanged = matches.filter((entry) => !entry.needsUpdate && !entry.venueTypeNeedsUpdate)
 
     console.log(`Spreadsheet rows: ${spreadsheetRows.length}`)
     console.log(`Rows with Slack ID: ${spreadsheetRows.length - skippedNoSlackId.length}`)
@@ -184,7 +194,7 @@ async function main() {
     }
 
     if (!args.apply) {
-      console.log('\nDry run only. Re-run with --apply to update venues.slack_channel_id.')
+      console.log('\nDry run only. Re-run with --apply to update venues.slack_channel_id and venues.venue_type.')
       return
     }
 
@@ -197,9 +207,10 @@ async function main() {
     for (const entry of updates) {
       await client.query(
         `UPDATE venues
-         SET slack_channel_id = $1
-         WHERE id = $2`,
-        [entry.row.slackId, entry.venue.id]
+         SET slack_channel_id = $1,
+             venue_type = COALESCE($2, venue_type)
+         WHERE id = $3`,
+        [entry.row.slackId, entry.desiredVenueType, entry.venue.id]
       )
     }
     await client.query('COMMIT')

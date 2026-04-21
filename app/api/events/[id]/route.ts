@@ -4,6 +4,7 @@ import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 import { combineLocalToUtc } from '@/lib/timezone'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
 import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
+import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(
   request: NextRequest,
@@ -22,6 +23,8 @@ export async function GET(
         e.id, e.summary, TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date, e.start_time, e.end_time, e.league,
         e.workflow_status, e.venue_id, e.client_id, e.requires_staffing, e.source,
         v.name as venue_name,
+        COALESCE(e.event_type, 'event') as event_type,
+        COALESCE(v.venue_type, 'sports') as venue_type,
         c.name as client_name,
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,
         COALESCE(v.requires_assignment, true) as venue_requires_assignment_legacy
@@ -37,6 +40,11 @@ export async function GET(
     }
 
     const event = eventResult.rows[0]
+    event.summary = formatVenueEventSummary({
+      summary: event.summary,
+      eventType: event.event_type,
+      venueType: event.venue_type,
+    })
 
     const [clientAutomation, venueAutomation] = await Promise.all([
       event.client_id

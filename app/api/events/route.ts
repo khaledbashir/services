@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
 import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
+import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,7 +68,9 @@ export async function GET(request: NextRequest) {
       `SELECT
         e.id,
         e.summary,
+        COALESCE(e.event_type, 'event') as event_type,
         v.name as venue_name,
+        COALESCE(v.venue_type, 'sports') as venue_type,
         c.id as client_id,
         c.name as client_name,
         e.league,
@@ -148,6 +151,11 @@ export async function GET(request: NextRequest) {
       })
       return {
         ...row,
+        summary: formatVenueEventSummary({
+          summary: row.summary,
+          eventType: row.event_type,
+          venueType: row.venue_type,
+        }),
         venue_requires_assignment: row.client_name
           ? clientDefault
           : (Number(row.venue_service_count || 0) > 0 ? venueDefault : row.venue_requires_assignment_legacy !== false),

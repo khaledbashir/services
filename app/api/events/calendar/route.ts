@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
+import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,12 +17,14 @@ export async function GET(request: NextRequest) {
       `SELECT
         e.id,
         e.summary,
+        COALESCE(e.event_type, 'event') as event_type,
         e.league,
         e.source,
         c.name as client_name,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as date,
         TO_CHAR(e.start_time AT TIME ZONE COALESCE(v.timezone, 'America/New_York'), 'HH12:MI AM') as time,
         v.name as venue, v.name as venue_name,
+        COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,
         e.workflow_status,
         e.requires_staffing as event_requires_staffing,
@@ -78,6 +81,11 @@ export async function GET(request: NextRequest) {
       })
       return {
         ...row,
+        summary: formatVenueEventSummary({
+          summary: row.summary,
+          eventType: row.event_type,
+          venueType: row.venue_type,
+        }),
         venue_requires_assignment: row.client_name
           ? clientDefault
           : (Number(row.venue_service_count || 0) > 0 ? venueDefault : row.venue_requires_assignment_legacy !== false),

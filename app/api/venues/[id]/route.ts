@@ -4,6 +4,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
 import { geocodeAddress } from '@/lib/geocode'
 import { twentyClient } from '@/lib/twenty-client'
+import { formatVenueEventSummary } from '@/lib/event-display'
 
 async function getVenuePrimaryClientId(venueId: string): Promise<string | null> {
   const result = await query(
@@ -118,9 +119,17 @@ export async function GET(
         e.start_time ASC`,
       [venueId, thirtyDaysAgo, thirtyDaysFromNow, today]
     )
-    const filteredUpcomingEvents = venue.venue_type !== 'sports'
+    const filteredUpcomingEvents = (venue.venue_type !== 'sports'
       ? eventsResult.rows.filter((row) => row.event_type !== 'game')
-      : eventsResult.rows
+      : eventsResult.rows)
+      .map((row) => ({
+        ...row,
+        event_name: formatVenueEventSummary({
+          summary: row.event_name,
+          eventType: row.event_type,
+          venueType: venue.venue_type,
+        }),
+      }))
 
     // Get assigned staff at this venue
     const staffResult = await query(
