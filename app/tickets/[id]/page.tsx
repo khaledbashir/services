@@ -14,6 +14,10 @@ interface TicketDetail {
   event_id: string | null; event_name: string | null; venue_name: string; venue_id: string
   created_by: string; created_by_name: string; assigned_to_name: string | null; assigned_to: string | null
   created_date: string; updated_date: string; resolved_date: string | null
+  merged_into_ticket_id?: string | null
+  merged_into_ticket_number?: number | null
+  merged_into_title?: string | null
+  merged_from_numbers?: number[]
   sla_response_due: string | null; sla_resolution_due: string | null
   sla_response_met: boolean | null; sla_resolution_met: boolean | null
   first_response_at: string | null
@@ -68,6 +72,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [venueOptions, setVenueOptions] = useState<Array<{ id: string; name: string; client_name?: string | null }>>([])
   const [editingVenue, setEditingVenue] = useState(false)
   const [venueQuery, setVenueQuery] = useState('')
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [mergeQuery, setMergeQuery] = useState('')
+  const [mergeCandidates, setMergeCandidates] = useState<Array<{ id: string; ticket_number: number; title: string; venue_name?: string | null }>>([])
+  const [merging, setMerging] = useState(false)
   const router = useRouter()
 
   const fetchData = async () => {
@@ -94,6 +102,36 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
 
   useEffect(() => { fetchData() }, [params.id])
+
+  useEffect(() => {
+    if (!showMergeModal) return
+    fetch('/api/tickets?limit=500')
+      .then(r => r.json())
+      .then(d => setMergeCandidates((d.tickets || []).filter((t: any) => t.id !== params.id && t.status !== 'closed')))
+      .catch(() => setMergeCandidates([]))
+  }, [showMergeModal, params.id])
+
+  const doMerge = async (targetId: string) => {
+    if (merging) return
+    if (!confirm('Merge this ticket into the selected one? This ticket will be closed and its comments moved to the target.')) return
+    setMerging(true)
+    try {
+      const res = await fetch(`/api/tickets/${params.id}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_ticket_id: targetId }),
+      })
+      if (res.ok) {
+        setShowMergeModal(false)
+        router.push(`/tickets/${targetId}`)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || 'Merge failed')
+      }
+    } finally {
+      setMerging(false)
+    }
+  }
 
   const updateField = async (field: string, value: any) => {
     try {
@@ -173,6 +211,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto space-y-8 py-2">
+
+        {ticket.merged_into_ticket_id && ticket.merged_into_ticket_number && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-center justify-between">
+            <span>This ticket was merged into <span className="font-semibold">T-{String(ticket.merged_into_ticket_number).padStart(5, '0')}</span>. Continue the conversation there.</span>
+            <Link href={`/tickets/${ticket.merged_into_ticket_id}`} className="text-amber-900 font-medium underline">Open primary →</Link>
+          </div>
+        )}
+        {!!(ticket.merged_from_numbers?.length) && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            Merged from: {ticket.merged_from_numbers.map((n) => `T-${String(n).padStart(5, '0')}`).join(', ')}
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div className="space-y-4">
@@ -262,6 +312,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           if (res.ok) { const d = await res.json(); router.push(`/tickets/${d.id}`) }
                           setShowActions(false)
                         }},
+                        { label: 'Merge into another ticket…', action: () => { setShowActions(false); setShowMergeModal(true) } },
                         { label: 'Print View', action: () => { window.print(); setShowActions(false) } },
                       ].map((item, i) => (
                         <button key={i} onClick={item.action}
@@ -1027,6 +1078,65 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
         </div>
       </div>
+
+      {showMergeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowMergeModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-zinc-200">
+              <h3 className="text-sm font-semibold text-zinc-900">Merge this ticket into another</h3>
+              <p className="text-xs text-zinc-500 mt-1">Pick the primary ticket. Comments will move to it; this ticket will be closed with a link back.</p>
+            </div>
+            <div className="px-5 py-3 border-b border-zinc-200">
+              <input
+                type="text"
+                autoFocus
+                value={mergeQuery}
+                onChange={(e) => setMergeQuery(e.target.value)}
+                placeholder="Search by ticket number, title, or venue..."
+                className="w-full border border-zinc-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+              />
+            </div>
+            <div className="flex-1 overflow-auto">
+              {mergeCandidates
+                .filter((t) => {
+                  const q = mergeQuery.toLowerCase().trim()
+                  if (!q) return true
+                  return (
+                    String(t.ticket_number).includes(q) ||
+                    t.title.toLowerCase().includes(q) ||
+                    (t.venue_name || '').toLowerCase().includes(q)
+                  )
+                })
+                .slice(0, 40)
+                .map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => doMerge(t.id)}
+                    disabled={merging}
+                    className="w-full text-left px-5 py-3 hover:bg-blue-50 border-b border-zinc-100 last:border-b-0 disabled:opacity-50"
+                  >
+                    <div className="text-xs text-zinc-500 font-mono">T-{String(t.ticket_number).padStart(5, '0')}</div>
+                    <div className="text-sm text-zinc-900 mt-0.5 truncate">{t.title}</div>
+                    {t.venue_name && <div className="text-xs text-zinc-500 mt-0.5">{t.venue_name}</div>}
+                  </button>
+                ))}
+              {mergeCandidates.length === 0 && (
+                <div className="px-5 py-8 text-center text-sm text-zinc-500">No open tickets available to merge into.</div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-zinc-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMergeModal(false)}
+                className="px-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-900"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }

@@ -44,13 +44,18 @@ export async function GET(
               COALESCE(t.ticket_type, 'support') as ticket_type,
               t.contact_name, t.contact_email, t.contact_phone,
               t.parent_ticket_id, t.sf_case_number, t.image_url,
-              pt.ticket_number as parent_ticket_number, pt.title as parent_ticket_title
+              pt.ticket_number as parent_ticket_number, pt.title as parent_ticket_title,
+              t.merged_into_ticket_id,
+              mt.ticket_number as merged_into_ticket_number, mt.title as merged_into_title,
+              (SELECT COALESCE(array_agg(mfrom.ticket_number ORDER BY mfrom.ticket_number), ARRAY[]::int[])
+                 FROM tickets mfrom WHERE mfrom.merged_into_ticket_id = t.id) as merged_from_numbers
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        LEFT JOIN events e ON t.event_id = e.id
        LEFT JOIN staff s1 ON t.created_by = s1.id
        LEFT JOIN staff s2 ON t.assigned_to = s2.id
        LEFT JOIN tickets pt ON t.parent_ticket_id = pt.id
+       LEFT JOIN tickets mt ON t.merged_into_ticket_id = mt.id
        WHERE t.id = $1`,
       [params.id]
     )
