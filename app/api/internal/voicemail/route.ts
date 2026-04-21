@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       audio_url?: string
       received_at?: string
       extension?: string
-      priority?: 'low' | 'medium' | 'high' | 'urgent'
+      priority?: 'low' | 'medium' | 'high' | 'critical' | 'urgent'
     }
 
     const callerNumber = (body.caller_number || '').toString().trim() || 'Unknown'
@@ -30,7 +30,10 @@ export async function POST(request: NextRequest) {
     const transcription = (body.transcription || '').toString().trim()
     const audioUrl = (body.audio_url || '').toString().trim()
     const extension = (body.extension || '').toString().trim()
-    const priority = body.priority || 'urgent'
+    // Zapier / Zendesk convention uses "urgent"; our ticket priority ladder
+    // is low / medium / high / critical. Map urgent → critical, default to critical.
+    const rawPriority = body.priority || 'critical'
+    const priority = rawPriority === 'urgent' ? 'critical' : rawPriority
 
     const title = callerName
       ? `Voicemail from ${callerName} (${callerNumber})`
