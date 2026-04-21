@@ -192,8 +192,8 @@ async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<Ticketm
   return best
 }
 
-async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<FeedEvent[]> {
-  if (!TICKETMASTER_API_KEY) return []
+async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<{ events: FeedEvent[]; resolvedVenueId: boolean }> {
+  if (!TICKETMASTER_API_KEY) return { events: [], resolvedVenueId: false }
 
   const venue = await lookupTicketmasterVenue(params)
   const venueId = venue?.id || null
@@ -220,7 +220,7 @@ async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<Feed
     .map((event) => normalizeDiscoveryEvent(event, params))
     .filter((event): event is FeedEvent => Boolean(event))
 
-  return dedupeFeedEvents(events)
+  return { events: dedupeFeedEvents(events), resolvedVenueId: Boolean(venueId) }
 }
 
 /**
@@ -228,6 +228,17 @@ async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<Feed
  * the venue's events — Google indexes TM listings plus StubHub, SeatGeek,
  * team sites, etc. Feed the combined snippets to the LLM for extraction.
  */
+function snippetMentionsVenue(snippet: { title?: string; snippet?: string; link?: string }, venueName: string): boolean {
+  const normalized = (text: string) => text.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const target = normalized(venueName)
+  if (!target) return false
+  const haystack = [snippet.title, snippet.snippet, snippet.link].filter(Boolean).map((v) => normalized(String(v))).join(' ')
+  if (haystack.includes(target)) return true
+  const targetWords = target.split(' ').filter((w) => w.length >= 4)
+  if (targetWords.length === 0) return false
+  return targetWords.every((word) => haystack.includes(word))
+}
+
 async function ticketmasterFallbackViaSearch(params: ParseFeedParams): Promise<FeedEvent[]> {
   if (!SERPER_API_KEY || !AI_API_KEY) return []
   const queries = [
@@ -248,7 +259,7 @@ async function ticketmasterFallbackViaSearch(params: ParseFeedParams): Promise<F
       return (data.organic || []).slice(0, 6)
     } catch { return [] }
   }))
-  const snippets = searches.flat()
+  const snippets = searches.flat().filter((snippet) => snippetMentionsVenue(snippet, params.venueName))
   if (snippets.length === 0) return []
 
   const prompt = `Extract upcoming events at ${params.venueName} from these search snippets. Return JSON array only.
@@ -316,7 +327,12 @@ function absoluteUrl(baseUrl: string, href: string | null): string | null {
 export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<FeedEvent[]> {
   try {
     const official = await ticketmasterViaOfficialApi(params)
-    if (official.length > 0) return official
+    // If the Discovery API resolved a venueId, its response is authoritative:
+    // an empty list means this venue truly has no upcoming events, not that
+    // we should go guess via Google search (which conflates team road games
+    // with home-venue events).
+    if (official.resolvedVenueId) return official.events
+    if (official.events.length > 0) return official.events
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (/429/.test(message)) {
