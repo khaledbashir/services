@@ -18,6 +18,9 @@ interface Ticket {
   created_by_name: string
   assigned_to_name: string | null
   created_date: string
+  source?: string
+  contact_phone?: string | null
+  contact_name?: string | null
 }
 
 interface Venue { id: string; name: string }
@@ -53,7 +56,8 @@ export default function TicketsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'cards' | 'list'>('cards')
+  const [view, setView] = useState<'cards' | 'list'>('list')
+  const [viewHydrated, setViewHydrated] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [showForm, setShowForm] = useState(false)
@@ -80,7 +84,25 @@ export default function TicketsPage() {
       setStaffList(sd.staff || [])
       setLoading(false)
     }).catch(() => setLoading(false))
+
+    // Load saved view preference from DB (overrides default 'list' if user picked otherwise).
+    fetch('/api/preferences?key=tickets_view')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.value === 'cards' || d?.value === 'list') setView(d.value)
+      })
+      .finally(() => setViewHydrated(true))
   }, [])
+
+  // Persist view choice once the user has toggled (not on initial hydration).
+  const setViewPersisted = (v: 'cards' | 'list') => {
+    setView(v)
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'tickets_view', value: v }),
+    }).catch(() => {})
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -296,14 +318,14 @@ export default function TicketsPage() {
                 className="w-52 pl-8 pr-3 py-1.5 border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400 text-zinc-900 placeholder:text-zinc-400 bg-white" />
             </div>
             <div className="flex border border-zinc-200">
-              <button onClick={() => setView('cards')}
+              <button onClick={() => setViewPersisted('cards')}
                 className={`px-2.5 py-1.5 transition-colors ${view === 'cards' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
                 title="Card view">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
               </button>
-              <button onClick={() => setView('list')}
+              <button onClick={() => setViewPersisted('list')}
                 className={`px-2.5 py-1.5 transition-colors border-l border-zinc-200 ${view === 'list' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
                 title="List view">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -347,15 +369,29 @@ export default function TicketsPage() {
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-sm font-medium text-zinc-900 mb-2 line-clamp-2 leading-snug group-hover:text-zinc-700">
+                  <h3 className="text-sm font-medium text-zinc-900 mb-1 line-clamp-2 leading-snug group-hover:text-zinc-700">
                     {ticket.title}
                   </h3>
+
+                  {/* Voicemail phone number */}
+                  {ticket.source === 'voicemail' && ticket.contact_phone && (
+                    <div className="text-xs text-blue-600 font-mono mb-2 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.95.68l1.5 4.5a1 1 0 01-.5 1.21l-2.26 1.13a11 11 0 005.52 5.52l1.13-2.26a1 1 0 011.21-.5l4.5 1.5a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z" /></svg>
+                      {ticket.contact_phone}
+                    </div>
+                  )}
 
                   {/* Meta row */}
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500 mb-3">
                     <span className="truncate max-w-[140px]">{ticket.venue_name || 'No venue'}</span>
                     <span className="text-zinc-300">·</span>
                     <span>{categoryLabels[ticket.category] || ticket.category}</span>
+                    {ticket.source === 'voicemail' && (
+                      <>
+                        <span className="text-zinc-300">·</span>
+                        <span className="text-blue-600 font-medium">Voicemail</span>
+                      </>
+                    )}
                   </div>
 
                   {/* Footer: assignee + date */}
@@ -400,7 +436,12 @@ export default function TicketsPage() {
                     <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
                       className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors">
                       <td className="py-2.5 px-4 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(5, '0')}</td>
-                      <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-xs truncate">{ticket.title}</td>
+                      <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-xs">
+                        <div className="truncate">{ticket.title}</div>
+                        {ticket.source === 'voicemail' && ticket.contact_phone && (
+                          <div className="text-[11px] text-blue-600 font-mono mt-0.5">📞 {ticket.contact_phone}</div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-4 text-zinc-600 text-xs">{ticket.venue_name || '—'}</td>
                       <td className="py-2.5 px-4 text-zinc-600 text-xs capitalize">{ticket.category}</td>
                       <td className="py-2.5 px-4">
