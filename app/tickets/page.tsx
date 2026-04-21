@@ -106,7 +106,12 @@ export default function TicketsPage() {
 
   const filteredTickets = tickets.filter(t => {
     const q = search.toLowerCase()
-    const matchesSearch = !q || t.title.toLowerCase().includes(q) || t.venue_name.toLowerCase().includes(q) || (t.assigned_to_name || '').toLowerCase().includes(q) || t.category.toLowerCase().includes(q)
+    const matchesSearch = !q
+      || (t.title || '').toLowerCase().includes(q)
+      || (t.venue_name || '').toLowerCase().includes(q)
+      || (t.assigned_to_name || '').toLowerCase().includes(q)
+      || (t.category || '').toLowerCase().includes(q)
+      || String(t.ticket_number || '').includes(q)
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && t.status !== 'closed') || t.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -348,7 +353,7 @@ export default function TicketsPage() {
 
                   {/* Meta row */}
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500 mb-3">
-                    <span className="truncate max-w-[140px]">{ticket.venue_name}</span>
+                    <span className="truncate max-w-[140px]">{ticket.venue_name || 'No venue'}</span>
                     <span className="text-zinc-300">·</span>
                     <span>{categoryLabels[ticket.category] || ticket.category}</span>
                   </div>
@@ -396,7 +401,7 @@ export default function TicketsPage() {
                       className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors">
                       <td className="py-2.5 px-4 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(5, '0')}</td>
                       <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-xs truncate">{ticket.title}</td>
-                      <td className="py-2.5 px-4 text-zinc-600 text-xs">{ticket.venue_name}</td>
+                      <td className="py-2.5 px-4 text-zinc-600 text-xs">{ticket.venue_name || '—'}</td>
                       <td className="py-2.5 px-4 text-zinc-600 text-xs capitalize">{ticket.category}</td>
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-1.5">
