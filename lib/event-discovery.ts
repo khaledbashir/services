@@ -1076,7 +1076,9 @@ export async function importDiscoveryEvents(
     }
 
     const clientResult = await query(
-      `SELECT MIN(cv.client_id) as client_id, COUNT(DISTINCT cv.client_id)::int as client_count
+      `SELECT
+         (ARRAY_AGG(DISTINCT cv.client_id ORDER BY cv.client_id))[1] as client_id,
+         COUNT(DISTINCT cv.client_id)::int as client_count
        FROM client_venues cv
        WHERE cv.venue_id = $1`,
       [venueId]
