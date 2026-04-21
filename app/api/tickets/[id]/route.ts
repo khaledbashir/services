@@ -34,9 +34,9 @@ export async function GET(
               e.summary as event_name,
               s1.full_name as created_by_name, t.created_by,
               s2.full_name as assigned_to_name, t.assigned_to,
-              TO_CHAR(t.created_at, 'Mon DD, YYYY HH12:MI AM') as created_date,
-              TO_CHAR(t.updated_at, 'Mon DD, YYYY HH12:MI AM') as updated_date,
-              TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_date,
+              TO_CHAR(t.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date,
+              TO_CHAR(t.updated_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as updated_date,
+              TO_CHAR(t.resolved_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as resolved_date,
               t.sla_response_due, t.sla_resolution_due,
               t.sla_response_met, t.sla_resolution_met, t.first_response_at,
               t.original_message,
@@ -62,7 +62,7 @@ export async function GET(
     const commentsResult = await query(
       `SELECT tc.id, tc.body, tc.is_internal,
               s.full_name as author_name,
-              TO_CHAR(tc.created_at, 'Mon DD, YYYY HH12:MI AM') as created_date
+              TO_CHAR(tc.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date
        FROM ticket_comments tc
        LEFT JOIN staff s ON tc.author_id = s.id
        WHERE tc.ticket_id = $1

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const result = await query(
       `SELECT t.id, t.ticket_number, t.title, v.name as venue_name,
               t.resolution_notes, t.category,
-              TO_CHAR(t.resolved_at, 'Mon DD, YYYY') as resolved_date,
+              TO_CHAR(t.resolved_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') as resolved_date,
               (${rankExpr}) as relevance
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id

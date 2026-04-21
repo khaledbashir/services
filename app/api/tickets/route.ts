@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
               e.summary as event_name,
               s1.full_name as created_by_name,
               s2.full_name as assigned_to_name,
-              TO_CHAR(t.created_at, 'Mon DD, YYYY') as created_date,
-              TO_CHAR(t.updated_at, 'Mon DD, YYYY') as updated_date
+              TO_CHAR(t.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') as created_date,
+              TO_CHAR(t.updated_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') as updated_date
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        LEFT JOIN events e ON t.event_id = e.id
