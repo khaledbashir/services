@@ -12,6 +12,32 @@ const workflowLabels: Record<string, { label: string; emoji: string }> = {
   post_game_report: { label: 'Post-Game Report', emoji: ':clipboard:' },
 }
 
+const POST_GAME_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
+
+function getPostGameWindow(endTime?: string | null, startTime?: string | null) {
+  const baseTime = endTime || startTime || null
+  if (!baseTime) {
+    return {
+      editable: true,
+      editWindowEndsAt: null as string | null,
+    }
+  }
+
+  const baseDate = new Date(baseTime)
+  if (Number.isNaN(baseDate.getTime())) {
+    return {
+      editable: true,
+      editWindowEndsAt: null as string | null,
+    }
+  }
+
+  const editWindowEndsAt = new Date(baseDate.getTime() + POST_GAME_EDIT_WINDOW_MS)
+  return {
+    editable: Date.now() <= editWindowEndsAt.getTime(),
+    editWindowEndsAt: editWindowEndsAt.toISOString(),
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { eventId: string } }
@@ -31,6 +57,7 @@ export async function GET(
         v.name as venue_name,
         e.league,
         e.start_time,
+        e.end_time,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
@@ -71,7 +98,7 @@ export async function GET(
 
     // Get workflow submissions and map DB types to frontend types
     const workflowResult = await query(
-      `SELECT type, submitted_at, staff_id
+      `SELECT type, submitted_at, staff_id, data
        FROM workflow_submissions
        WHERE event_id = $1
        ORDER BY submitted_at DESC`,
@@ -84,19 +111,33 @@ export async function GET(
       game_ready: null as string | null,
       post_game_submitted: null as string | null,
     }
+    let latestPostGameData: Record<string, any> | null = null
 
     for (const row of workflowResult.rows) {
       // Map DB types back to frontend types
       if (row.type === 'check_in') workflow.checked_in = row.submitted_at
       else if (row.type === 'game_ready') workflow.game_ready = row.submitted_at
-      else if (row.type === 'post_game_report') workflow.post_game_submitted = row.submitted_at
+      else if (row.type === 'post_game_report') {
+        workflow.post_game_submitted = row.submitted_at
+        if (!latestPostGameData) {
+          latestPostGameData = row.data || {}
+        }
+      }
     }
+
+    const postGameWindow = getPostGameWindow(
+      eventResult.rows[0]?.end_time,
+      eventResult.rows[0]?.start_time
+    )
 
     return NextResponse.json({
       event: eventResult.rows[0],
       assignedTechs: techsResult.rows,
       allStaff: allStaffResult.rows,
       workflow,
+      latestPostGameData,
+      postGameEditable: postGameWindow.editable,
+      postGameEditWindowEndsAt: postGameWindow.editWindowEndsAt,
       viewer: {
         userId: user.userId,
         role: user.role,
@@ -149,6 +190,30 @@ export async function POST(
     const submissionType = typeMap[type]
     if (!submissionType) {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
+    }
+
+    if (submissionType === 'post_game_report') {
+      const eventTimingResult = await query(
+        `SELECT start_time, end_time
+         FROM events
+         WHERE id = $1`,
+        [eventId]
+      )
+
+      const postGameWindow = getPostGameWindow(
+        eventTimingResult.rows[0]?.end_time,
+        eventTimingResult.rows[0]?.start_time
+      )
+
+      if (!postGameWindow.editable) {
+        return NextResponse.json(
+          {
+            error: 'Post-game reports can only be edited for 24 hours after the event ends',
+            editWindowEndsAt: postGameWindow.editWindowEndsAt,
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // Insert workflow submission with ON CONFLICT DO UPDATE to handle resubmissions

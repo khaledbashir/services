@@ -160,6 +160,24 @@ export default function EventDetailPage() {
     ]
   }
 
+  const getPostGameWindow = () => {
+    const baseTime = event?.end_time || event?.start_time
+    if (!baseTime) {
+      return { editable: true, closesAt: null as Date | null }
+    }
+
+    const baseDate = new Date(baseTime)
+    if (Number.isNaN(baseDate.getTime())) {
+      return { editable: true, closesAt: null as Date | null }
+    }
+
+    const closesAt = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000)
+    return {
+      editable: Date.now() <= closesAt.getTime(),
+      closesAt,
+    }
+  }
+
   const getStepStatus = (stepType: string) => {
     const submission = workflows.find((w) => w.type === stepType)
     return submission ? 'completed' : 'pending'
@@ -272,6 +290,16 @@ export default function EventDetailPage() {
 
   const countdown = getCountdown(event.event_date, event.start_time)
   const workflowSteps = getWorkflowSteps()
+  const postGameWindow = getPostGameWindow()
+  const postGameSubmitted = workflows.some((w) => w.type === 'post_game_report')
+  const postGameWindowLabel = postGameWindow.closesAt
+    ? postGameWindow.closesAt.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null
 
   return (
     <DashboardLayout>
@@ -536,12 +564,30 @@ export default function EventDetailPage() {
                         </button>
                         <button
                           onClick={() => submitWorkflowStep('post_game_submitted')}
-                          disabled={!!workflowSubmitting || workflows.some((w) => w.type === 'post_game_report')}
+                          disabled={!!workflowSubmitting || postGameSubmitted}
                           className="rounded border border-[#E8E8E8] px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {workflowSubmitting === 'post_game_submitted' ? 'Saving...' : workflows.some((w) => w.type === 'post_game_report') ? 'Post-Game Complete' : 'Submit Post-Game'}
+                          {workflowSubmitting === 'post_game_submitted' ? 'Saving...' : postGameSubmitted ? 'Post-Game Complete' : 'Submit Post-Game'}
                         </button>
                       </div>
+                      {postGameSubmitted && (
+                        <div className="rounded border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-900">
+                          <p className="font-medium">Post-game report recorded</p>
+                          <p className="mt-1">
+                            {postGameWindow.editable
+                              ? `It can still be updated from the workflow form${postGameWindowLabel ? ` until ${postGameWindowLabel}` : ''}.`
+                              : 'The 24-hour editing window has ended.'}
+                          </p>
+                          {postGameWindow.editable && (
+                            <Link
+                              href={`/workflow/${eventId}`}
+                              className="mt-2 inline-flex font-semibold text-[#0A52EF] hover:text-[#0840C0]"
+                            >
+                              Open editable post-game form →
+                            </Link>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

@@ -10,6 +10,7 @@ interface EventDetail {
   venue_name: string
   league: string
   start_time: string
+  end_time: string | null
   event_date: string
 }
 
@@ -40,6 +41,8 @@ export default function WorkflowPage() {
   const [allStaff, setAllStaff] = useState<Staff[]>([])
   const [selectedTech, setSelectedTech] = useState<string>('')
   const [viewer, setViewer] = useState<ViewerInfo | null>(null)
+  const [postGameEditable, setPostGameEditable] = useState(true)
+  const [postGameEditWindowEndsAt, setPostGameEditWindowEndsAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [gameReadyData, setGameReadyData] = useState({
@@ -60,6 +63,8 @@ export default function WorkflowPage() {
           setAssignedTechs(data.assignedTechs || [])
           setAllStaff(data.allStaff || [])
           setViewer(data.viewer || null)
+          setPostGameEditable(data.postGameEditable !== false)
+          setPostGameEditWindowEndsAt(data.postGameEditWindowEndsAt || null)
           if (data.viewer?.role === 'technician' && data.viewer?.userId) {
             setSelectedTech(data.viewer.userId)
           } else if (data.assignedTechs.length > 0) {
@@ -67,6 +72,10 @@ export default function WorkflowPage() {
           } else if (data.allStaff.length > 0) {
             setSelectedTech(data.allStaff[0].id)
           }
+          setPostGameData({
+            notes: data.latestPostGameData?.notes || '',
+            incidents: data.latestPostGameData?.incidents || '',
+          })
         }
       } catch (err) {
         console.error('Failed to fetch event:', err)
@@ -102,8 +111,6 @@ export default function WorkflowPage() {
         // Reset form data
         if (type === 'game_ready') {
           setGameReadyData({ equipment_check: false, crew_ready: false, communications_test: false })
-        } else if (type === 'post_game_submitted') {
-          setPostGameData({ notes: '', incidents: '' })
         }
       } else {
         const error = await res.json().catch(() => null)
@@ -153,9 +160,18 @@ export default function WorkflowPage() {
   const isCheckInDone = workflow.checked_in !== null
   const isGameReadyDone = workflow.game_ready !== null
   const isPostGameDone = workflow.post_game_submitted !== null
+  const canEditPostGame = isGameReadyDone && (!isPostGameDone || postGameEditable)
   const completedSteps = [isCheckInDone, isGameReadyDone, isPostGameDone].filter(Boolean).length
   const progressPercent = Math.round((completedSteps / 3) * 100)
   const nextStepLabel = !isCheckInDone ? 'Check-in' : !isGameReadyDone ? 'Game Ready' : !isPostGameDone ? 'Post-Game Report' : 'All steps complete'
+  const postGameWindowLabel = postGameEditWindowEndsAt
+    ? new Date(postGameEditWindowEndsAt).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -340,7 +356,7 @@ export default function WorkflowPage() {
               </div>
             </button>
 
-            {isGameReadyDone && !isPostGameDone && (
+            {canEditPostGame && (
               <div className="px-4 pb-4 border-t border-[#E8E8E8] space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-zinc-900 mb-2">Notes</label>
@@ -367,11 +383,22 @@ export default function WorkflowPage() {
                   disabled={submitting || !selectedTech}
                   className="w-full bg-[#0A52EF] text-white py-3 rounded font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Submitting...' : 'Submit Post-Game Report'}
+                  {submitting ? 'Submitting...' : isPostGameDone ? 'Update Post-Game Report' : 'Submit Post-Game Report'}
                 </button>
+                {postGameWindowLabel && (
+                  <p className="text-xs text-zinc-500">
+                    Post-game reports stay editable until {postGameWindowLabel}.
+                  </p>
+                )}
               </div>
             )}
           </div>
+
+          {isGameReadyDone && isPostGameDone && !postGameEditable && (
+            <div className="rounded border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+              The 24-hour post-game editing window has ended{postGameWindowLabel ? ` (closed ${postGameWindowLabel})` : ''}.
+            </div>
+          )}
 
           {/* Completion Message */}
           {isPostGameDone && (
