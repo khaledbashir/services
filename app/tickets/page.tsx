@@ -58,6 +58,8 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'cards' | 'list'>('list')
   const [viewHydrated, setViewHydrated] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [showForm, setShowForm] = useState(false)
@@ -102,6 +104,64 @@ export default function TicketsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'tickets_view', value: v }),
     }).catch(() => {})
+  }
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const bulkClose = async () => {
+    if (bulkBusy || selectedIds.size === 0) return
+    if (!confirm(`Close ${selectedIds.size} ticket${selectedIds.size === 1 ? '' : 's'}?`)) return
+    setBulkBusy(true)
+    try {
+      await Promise.all(Array.from(selectedIds).map(id =>
+        fetch(`/api/tickets/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'closed' }),
+        })
+      ))
+      const fresh = await fetch('/api/tickets').then(r => r.json())
+      setTickets(fresh.tickets || [])
+      clearSelection()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkMerge = async () => {
+    if (bulkBusy || selectedIds.size < 2) return
+    const ids = Array.from(selectedIds)
+    const chosen = tickets.filter(t => ids.includes(t.id))
+    const options = chosen.map((t, i) => `${i + 1}. T-${String(t.ticket_number).padStart(5,'0')} — ${t.title}`).join('\n')
+    const raw = prompt(`Which ticket should remain as the primary?\nEverything else will be merged into it.\n\n${options}\n\nEnter the number (1-${chosen.length}):`)
+    if (!raw) return
+    const idx = parseInt(raw, 10) - 1
+    if (isNaN(idx) || idx < 0 || idx >= chosen.length) { alert('Invalid choice.'); return }
+    const targetId = chosen[idx].id
+    const sourceIds = ids.filter(id => id !== targetId)
+    setBulkBusy(true)
+    try {
+      for (const sid of sourceIds) {
+        await fetch(`/api/tickets/${sid}/merge`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_ticket_id: targetId }),
+        })
+      }
+      clearSelection()
+      router.push(`/tickets/${targetId}`)
+    } finally {
+      setBulkBusy(false)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -418,6 +478,21 @@ export default function TicketsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
+                  <th className="w-10 text-center py-2.5 px-2 text-xs font-medium text-zinc-500">
+                    <input
+                      type="checkbox"
+                      checked={filteredTickets.length > 0 && filteredTickets.every(t => selectedIds.has(t.id))}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        if (filteredTickets.every(t => selectedIds.has(t.id))) {
+                          clearSelection()
+                        } else {
+                          setSelectedIds(new Set(filteredTickets.map(t => t.id)))
+                        }
+                      }}
+                      className="cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">#</th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Title</th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Venue</th>
@@ -434,7 +509,15 @@ export default function TicketsPage() {
                   const st = statusConfig[ticket.status] || statusConfig.new
                   return (
                     <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
-                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors">
+                      className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors ${selectedIds.has(ticket.id) ? 'bg-blue-50/50' : ''}`}>
+                      <td className="w-10 text-center py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(ticket.id)}
+                          onChange={() => toggleSelection(ticket.id)}
+                          className="cursor-pointer"
+                        />
+                      </td>
                       <td className="py-2.5 px-4 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(5, '0')}</td>
                       <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-xs">
                         <div className="truncate">{ticket.title}</div>
@@ -463,6 +546,37 @@ export default function TicketsPage() {
           </div>
         )}
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-zinc-900 text-white rounded-full shadow-xl flex items-center gap-2 pl-4 pr-2 py-2">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <span className="text-zinc-500">·</span>
+          <button
+            onClick={clearSelection}
+            disabled={bulkBusy}
+            className="text-xs text-zinc-300 hover:text-white px-2"
+          >
+            Clear
+          </button>
+          <button
+            onClick={bulkClose}
+            disabled={bulkBusy}
+            className="text-xs font-medium bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+          >
+            {bulkBusy ? 'Closing…' : 'Close all'}
+          </button>
+          <button
+            onClick={bulkMerge}
+            disabled={bulkBusy || selectedIds.size < 2}
+            className="text-xs font-medium bg-[#0A52EF] hover:bg-[#0840C0] px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+            title={selectedIds.size < 2 ? 'Select at least 2 tickets to merge' : ''}
+          >
+            {bulkBusy ? 'Merging…' : `Merge ${selectedIds.size}`}
+          </button>
+        </div>
+      )}
     </DashboardLayout>
   )
 }
