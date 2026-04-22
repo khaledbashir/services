@@ -52,12 +52,13 @@ export async function GET(
       )
     }
 
-    // Native anc-services design requests don't live in Twenty — serve
-    // them directly from our own DB so the public proof page works without
-    // CRM round-trips. Uploaded proof files (MinIO-backed since 2026-04-22)
-    // come first; the legacy ftp_proof_link is appended as a fallback
-    // reference for records that pre-date the upload UI.
-    if (share.twenty_object_type === 'localDesignRequest') {
+    // Uploaded proof files (MinIO-backed since 2026-04-22) live in the local
+    // design_request_files table regardless of whether TWENTY_BACKED_DESIGNS
+    // is on — they're served through the token-gated proxy either way. So
+    // treat `localDesignRequest` AND `designRequest` identically here: both
+    // reference design_request_files by the same UUID. Only `printRequest` /
+    // `cgDesignRequest` etc. fall through to the Twenty-attachments branch.
+    if (share.twenty_object_type === 'localDesignRequest' || share.twenty_object_type === 'designRequest') {
       const dr = await query(
         `SELECT dr.id, dr.job_title, dr.status, dr.client_name, dr.client_email,
                 dr.ftp_proof_link, dr.ftp_final_link, dr.notes, v.name AS venue_name,
@@ -66,10 +67,20 @@ export async function GET(
          WHERE dr.id = $1`,
         [share.twenty_record_id]
       )
-      if (dr.rows.length === 0) {
-        return NextResponse.json({ error: 'The design request this proof references no longer exists.' }, { status: 404 })
+      // Local stub may be missing for Twenty-backed records — fall back to
+      // the proof-share metadata (createdByName/email) so the page still renders.
+      const row = dr.rows[0] || {
+        id: share.twenty_record_id,
+        job_title: 'Design Request',
+        status: null,
+        client_name: null,
+        client_email: null,
+        ftp_proof_link: null,
+        ftp_final_link: null,
+        notes: null,
+        venue_name: null,
+        company_name: null,
       }
-      const row = dr.rows[0]
 
       // Pull uploaded proof files (both bytea and S3 backends), newest first
       const files = await query(

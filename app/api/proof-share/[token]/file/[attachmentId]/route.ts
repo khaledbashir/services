@@ -39,7 +39,7 @@ export async function GET(
     // Local design_request_files attachments are prefixed `file-<uuid>` and
     // stored either in Postgres bytea or MinIO. They never round-trip through
     // Twenty, so we short-circuit the Twenty flow entirely for them.
-    if (attachmentId.startsWith('file-') && share.twenty_object_type === 'localDesignRequest') {
+    if (attachmentId.startsWith('file-') && (share.twenty_object_type === 'localDesignRequest' || share.twenty_object_type === 'designRequest')) {
       const fileId = attachmentId.slice(5)
       const fileResult = await query(
         `UPDATE design_request_files
