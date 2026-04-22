@@ -134,6 +134,11 @@ export default function EventDetailPage() {
   const formatTime = (timeStr: string, timeZone?: string) => {
     const date = new Date(timeStr)
     const tz = timeZone || 'America/New_York'
+    // Exact midnight in venue-local time = sentinel for "time not provided by the
+    // source feed" (Ticketmaster TBD games, ai_discovery events with no time,
+    // venue_calendar UTC bleed). Show TBD instead of a misleading 12:00 AM.
+    const hhmm = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz })
+    if (hhmm === '00:00' || hhmm === '24:00') return 'TBD'
     const label = tz === 'America/New_York' ? 'ET' : tz === 'America/Los_Angeles' ? 'PT' : tz === 'America/Chicago' ? 'CT' : tz === 'America/Denver' ? 'MT' : 'local'
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: tz }) + ' ' + label
   }

@@ -22,7 +22,11 @@ export async function GET(request: NextRequest) {
         e.source,
         c.name as client_name,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as date,
-        TO_CHAR(e.start_time AT TIME ZONE COALESCE(v.timezone, 'America/New_York'), 'HH12:MI AM') as time,
+        CASE
+          WHEN TO_CHAR(e.start_time AT TIME ZONE COALESCE(v.timezone, 'America/New_York'), 'HH24:MI') = '00:00'
+          THEN 'TBD'
+          ELSE TO_CHAR(e.start_time AT TIME ZONE COALESCE(v.timezone, 'America/New_York'), 'HH12:MI AM')
+        END as time,
         v.name as venue, v.name as venue_name,
         COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,

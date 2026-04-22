@@ -33,8 +33,12 @@ export async function GET(request: NextRequest) {
     // Pull today's events (ET) + venue + assigned techs + workflow state.
     const r = await query(
       `SELECT e.id, e.summary, e.workflow_status,
-              TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_et,
-              TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as end_et,
+              CASE WHEN TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH24:MI') = '00:00'
+                   THEN 'TBD'
+                   ELSE TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') END as start_et,
+              CASE WHEN TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH24:MI') = '00:00'
+                   THEN 'TBD'
+                   ELSE TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') END as end_et,
               v.name as venue_name,
               COALESCE(string_agg(DISTINCT s.full_name, ', ') FILTER (WHERE s.full_name IS NOT NULL), '') as techs,
               COUNT(DISTINCT ea.staff_id) FILTER (WHERE ea.staff_id IS NOT NULL) as assigned_count,
