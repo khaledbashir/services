@@ -22,6 +22,13 @@ interface Proof {
   version: number
   last_viewed_at: string | null
   view_count: number
+  is_ai_generated?: boolean
+}
+
+function isImageFile(filename: string, mime: string | null): boolean {
+  if (mime && mime.startsWith('image/')) return true
+  const ext = filename.toLowerCase().split('.').pop() || ''
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
 }
 
 function formatBytes(n: number): string {
@@ -158,32 +165,55 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
         <div className="text-xs text-zinc-400 py-3 text-center">No proofs uploaded yet.</div>
       ) : (
         <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden">
-          {proofs.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-50 transition-colors">
-              <div className="w-7 h-7 flex-shrink-0 rounded bg-[#0A52EF]/10 text-[#0A52EF] flex items-center justify-center">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm text-zinc-900 truncate font-medium">{p.filename}</div>
-                <div className="text-[11px] text-zinc-500 truncate">
-                  <span className="inline-block rounded-full bg-[#0A52EF]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0A52EF]">v{p.version}</span>
-                  <span className="ml-2">{formatBytes(p.size_bytes)} · {formatDate(p.uploaded_at)}</span>
-                  {p.backend === 's3' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">MinIO</span>}
-                  {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
+          {proofs.map((p) => {
+            const downloadUrl = `/api/design-requests/${designRequestId}/proofs/${p.id}/download`
+            const showImage = isImageFile(p.filename, p.mime_type)
+            return (
+              <div key={p.id} className="px-3 py-2.5 hover:bg-zinc-50 transition-colors">
+                <div className="flex items-start gap-3">
+                  {showImage ? (
+                    <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                      <img
+                        src={downloadUrl}
+                        alt={p.filename}
+                        className="w-20 h-20 object-cover rounded border border-zinc-200 bg-zinc-50"
+                        loading="lazy"
+                      />
+                    </a>
+                  ) : (
+                    <div className="w-7 h-7 flex-shrink-0 rounded bg-[#0A52EF]/10 text-[#0A52EF] flex items-center justify-center mt-0.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-zinc-900 truncate font-medium flex items-center gap-1.5">
+                      {p.filename}
+                      {p.is_ai_generated && (
+                        <span className="inline-block rounded-full bg-violet-100 text-violet-700 text-[10px] font-semibold px-1.5 py-0.5">✨ AI DRAFT</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 truncate">
+                      <span className="inline-block rounded-full bg-[#0A52EF]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0A52EF]">v{p.version}</span>
+                      <span className="ml-2">{formatBytes(p.size_bytes)} · {formatDate(p.uploaded_at)}</span>
+                      {p.backend === 's3' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">MinIO</span>}
+                      {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 truncate">
+                      Last viewed: {formatRelativeView(p.last_viewed_at)}{` · ${p.view_count} view${p.view_count === 1 ? '' : 's'}`}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <a href={downloadUrl} target="_blank" rel="noopener noreferrer"
+                       className="text-[11px] text-[#0A52EF] hover:underline">Open</a>
+                    <button onClick={() => handleDelete(p.id)}
+                      className="text-[11px] text-rose-500 hover:text-rose-700">Delete</button>
+                  </div>
                 </div>
-                <div className="text-[11px] text-zinc-400 truncate">
-                  Last viewed: {formatRelativeView(p.last_viewed_at)}{` · ${p.view_count} view${p.view_count === 1 ? '' : 's'}`}
-                </div>
               </div>
-              <a href={`/api/design-requests/${designRequestId}/proofs/${p.id}/download`}
-                 target="_blank" rel="noopener noreferrer"
-                 className="text-[11px] text-[#0A52EF] hover:underline flex-shrink-0">Open</a>
-              <button onClick={() => handleDelete(p.id)}
-                className="text-[11px] text-rose-500 hover:text-rose-700 flex-shrink-0">Delete</button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

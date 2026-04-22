@@ -756,10 +756,23 @@ function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
             <div className="mt-2 rounded bg-red-50 ring-1 ring-red-200 px-2.5 py-1.5 text-xs text-red-700">{error}</div>
           )}
           {generated && (
-            <div className="mt-2 rounded bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-2 text-xs text-emerald-800">
-              <div className="font-semibold">:sparkles: Draft ready: {generated.filename}</div>
-              <a href={generated.download_url} target="_blank" rel="noreferrer" className="text-[#0A52EF] hover:underline">Open the generated image →</a>
-              <div className="text-emerald-700/80 mt-1">Also filed under this design's uploaded proofs — refresh to see it listed.</div>
+            <div className="mt-3 rounded-lg ring-1 ring-emerald-200 bg-white overflow-hidden">
+              <div className="bg-emerald-50 px-3 py-2 flex items-center gap-2 text-xs">
+                <span className="font-semibold text-emerald-800">✨ Draft ready</span>
+                <span className="text-emerald-600 font-mono">{generated.filename}</span>
+                <a href={generated.download_url} target="_blank" rel="noreferrer" className="ml-auto text-[#0A52EF] hover:underline">Open full-size →</a>
+              </div>
+              {/* Inline preview — show the actual generated image so the designer
+                  can eyeball it before opening the file. AI draft files come
+                  back as PNG from gpt-image-1.5. */}
+              <img
+                src={generated.download_url}
+                alt="AI-generated first draft"
+                className="w-full max-h-96 object-contain bg-zinc-50"
+              />
+              <div className="px-3 py-2 text-[11px] text-zinc-500 border-t border-zinc-100">
+                Also filed under this design's uploaded proofs — refresh to see it listed alongside uploads.
+              </div>
             </div>
           )}
         </div>

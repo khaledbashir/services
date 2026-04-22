@@ -25,7 +25,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const res = await query(
     `SELECT id, filename, mime_type, size_bytes, storage_key, storage_backend, storage_etag,
-            created_at, version, last_viewed_at, view_count
+            created_at, version, last_viewed_at, view_count,
+            is_ai_generated, ai_model
      FROM design_request_files
      WHERE design_request_id = $1
      ORDER BY version DESC, created_at DESC`,
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       version: Number(r.version || 1),
       last_viewed_at: r.last_viewed_at,
       view_count: Number(r.view_count || 0),
+      is_ai_generated: Boolean(r.is_ai_generated),
+      ai_model: r.ai_model || null,
     })),
   })
 }
