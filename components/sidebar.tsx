@@ -113,6 +113,7 @@ export function Sidebar() {
         { href: '/shifts', label: 'Shift Templates', role: 'manager' },
         { href: '/venues', label: 'Venues', role: 'manager' },
         { href: '/venues/map', label: 'Map View', role: 'manager' },
+        { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
         { href: '/print-requests', label: 'Print Requests', role: 'manager' },
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
       ].filter(Boolean) as NavLink[],

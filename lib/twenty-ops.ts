@@ -487,3 +487,51 @@ export const ContentSchedule = {
   update: (id: string, data: Partial<TwentyContentSchedule>) => updateObject<TwentyContentSchedule>('contentSchedules', id, data as Record<string, unknown>),
   delete: (id: string) => deleteObject('contentSchedules', id),
 }
+
+export interface TwentyOpeningChecklistItem {
+  id: string
+  name: string | null
+  venueId: string | null
+  venue?: { id: string; name: string; servicesId?: string | null }
+  league: string | null
+  phase: string | null
+  openingDate: string | null
+  dueDate: string | null
+  itemDescription: { blocknote?: string; markdown?: string } | string | null
+  checklistAssigneeId: string | null
+  checklistAssignee?: { id: string; name: string; servicesId?: string | null }
+  status: string | null
+  completedAt: string | null
+  notes: { blocknote?: string; markdown?: string } | string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TwentyOpeningChecklistTemplate {
+  id: string
+  name: string | null
+  league: string | null
+  items: unknown
+  createdAt: string
+  updatedAt: string
+}
+
+export const OpeningChecklist = {
+  collection: 'openingChecklistItems',
+  venueField: 'venueId' as string | null,
+  list: (opts?: ListOptions) => listObjects<TwentyOpeningChecklistItem>('openingChecklistItems', opts),
+  get:  (id: string) => getObject<TwentyOpeningChecklistItem>('openingChecklistItems', id),
+  create: (data: Partial<TwentyOpeningChecklistItem>) => createObject<TwentyOpeningChecklistItem>('openingChecklistItems', data as Record<string, unknown>),
+  update: (id: string, data: Partial<TwentyOpeningChecklistItem>) => updateObject<TwentyOpeningChecklistItem>('openingChecklistItems', id, data as Record<string, unknown>),
+  delete: (id: string) => deleteObject('openingChecklistItems', id),
+}
+
+export const OpeningChecklistTemplate = {
+  collection: 'openingChecklistTemplates',
+  venueField: null as string | null,
+  list: (opts?: ListOptions) => listObjects<TwentyOpeningChecklistTemplate>('openingChecklistTemplates', opts),
+  get:  (id: string) => getObject<TwentyOpeningChecklistTemplate>('openingChecklistTemplates', id),
+  create: (data: Partial<TwentyOpeningChecklistTemplate>) => createObject<TwentyOpeningChecklistTemplate>('openingChecklistTemplates', data as Record<string, unknown>),
+  update: (id: string, data: Partial<TwentyOpeningChecklistTemplate>) => updateObject<TwentyOpeningChecklistTemplate>('openingChecklistTemplates', id, data as Record<string, unknown>),
+  delete: (id: string) => deleteObject('openingChecklistTemplates', id),
+}
