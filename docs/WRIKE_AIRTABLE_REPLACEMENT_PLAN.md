@@ -100,8 +100,8 @@ Decision: don't integrate with the legacy `T:\` + `workspace.anc.com` system. Ow
 - [ ] **Proof-link generator** — auto-creates public token at `/proof/[token]` on file upload (reuse existing token infrastructure)
 - [ ] **Auto-fire email to client** when design request moves to `client_review` — links to the dashboard proof page, not an FTP URL
 - [ ] **Client approve / request changes** on the proof page — already built for the Twenty proof-share flow, needs to be wired for design requests too
-- [ ] **Proof views tracked** — "last viewed at" and "responded at" timestamps (Alexis sees who looked at what, when)
-- [ ] **File versioning** — uploading a new proof to the same request adds a version, keeps old versions accessible
+- [x] **Proof views tracked** — "last viewed at" and "responded at" timestamps (Alexis sees who looked at what, when)
+- [x] **File versioning** — uploading a new proof to the same request adds a version, keeps old versions accessible
 - [ ] **Backfill strategy for existing FTP links** — the 20K+ existing design requests have `ftp_proof_link` values pointing at the old workspace.anc.com URLs. Options: (a) leave them as-is for historical records, (b) bulk-download each, re-upload to our storage, update the link. Recommend (a) for read-only history + (b) only for the currently-active records (<500)
 - [ ] **Migration plan communicated to Alexis** — designers stop putting files on `T:\` drive, start uploading through the dashboard as of [date]. Clean cutover.
 
@@ -174,3 +174,4 @@ Once those land:
 - **2026-04-22**: Print Requests module shipped in the dashboard with Twenty-backed CRUD, list + Kanban views, client filtering, and metadata bootstrap script at `scripts/create-print-request-object.ts`.
 - **2026-04-22**: Stadium Prep module shipped with Twenty-backed checklist items/templates, seed templates for MLB + NHL, grouped venue views, and bulk template cloning from `/opening-checklists`.
 - **2026-04-22**: Client read-only portals shipped with multi-link tokens in `client_portals`, public `/portals/[token]` health views, and manager controls at `/portals/[venue_id]`.
+- **2026-04-22**: Design proof versioning + view tracking shipped. `design_request_files` now stores `version`, `view_count`, and `last_viewed_at`, with history visible in `/designs/[id]` and `/proof/[token]`.
