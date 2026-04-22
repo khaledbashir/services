@@ -40,8 +40,20 @@ export default function MaintenancePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
     venue_id: '', maintenance_type: 'reactive', issue: '', issue_summary: '',
+    details_to_resolve: '', escort_information: '',
     location_reported: '', techs_scheduled: '', scheduled_date: '', status: 'open',
+    asset_id: '',
   })
+  const [assetOptions, setAssetOptions] = useState<Array<{ id: string; item_name: string }>>([])
+  useEffect(() => {
+    // Fetch inventory assets for the selected venue so maintenance can be
+    // linked to a specific display / piece of equipment.
+    if (!form.venue_id) { setAssetOptions([]); return }
+    fetch(`/api/inventory?venue_id=${form.venue_id}`)
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(d => setAssetOptions((d.items || []).map((x: any) => ({ id: x.id, item_name: x.item_name }))))
+      .catch(() => setAssetOptions([]))
+  }, [form.venue_id])
   const [quick, setQuick] = useState({ venue_id: '', issue: '', maintenance_type: 'reactive' })
   const [quickSaving, setQuickSaving] = useState(false)
 
@@ -67,7 +79,7 @@ export default function MaintenancePage() {
     })
     if (r.ok) {
       setShowCreate(false)
-      setForm({ venue_id: '', maintenance_type: 'reactive', issue: '', issue_summary: '', location_reported: '', techs_scheduled: '', scheduled_date: '', status: 'open' })
+      setForm({ venue_id: '', maintenance_type: 'reactive', issue: '', issue_summary: '', details_to_resolve: '', escort_information: '', location_reported: '', techs_scheduled: '', scheduled_date: '', status: 'open', asset_id: '' })
       load()
     } else {
       alert('Failed to create')
@@ -138,16 +150,28 @@ export default function MaintenancePage() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="text-xs font-medium text-zinc-500 block mb-1">Issue</label>
+                <label className="text-xs font-medium text-zinc-500 block mb-1">Issue <span className="text-red-500">*</span></label>
                 <input value={form.issue} onChange={e => setForm({ ...form, issue: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" placeholder="e.g. Dead pixels on Section 112 ribbon" />
               </div>
               <div className="col-span-2">
-                <label className="text-xs font-medium text-zinc-500 block mb-1">Details</label>
-                <textarea value={form.issue_summary} onChange={e => setForm({ ...form, issue_summary: e.target.value })} rows={2} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" />
+                <label className="text-xs font-medium text-zinc-500 block mb-1">Summary (short)</label>
+                <textarea value={form.issue_summary} onChange={e => setForm({ ...form, issue_summary: e.target.value })} rows={2} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" placeholder="One-liner summary for the list view" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-zinc-500 block mb-1">Details to Resolve (markdown)</label>
+                <textarea value={form.details_to_resolve} onChange={e => setForm({ ...form, details_to_resolve: e.target.value })} rows={5} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm font-mono" placeholder="Full repro + steps + parts needed. Markdown OK." />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-500 block mb-1">Asset (Inventory Item)</label>
+                <select value={form.asset_id} onChange={e => setForm({ ...form, asset_id: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm">
+                  <option value="">— Not linked —</option>
+                  {assetOptions.map(a => <option key={a.id} value={a.id}>{a.item_name}</option>)}
+                </select>
+                {!form.venue_id && <span className="text-[10px] text-zinc-400">Pick a venue first to load its assets</span>}
               </div>
               <div>
                 <label className="text-xs font-medium text-zinc-500 block mb-1">Location Reported</label>
-                <input value={form.location_reported} onChange={e => setForm({ ...form, location_reported: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" />
+                <input value={form.location_reported} onChange={e => setForm({ ...form, location_reported: e.target.value })} placeholder="Section 112, near portal" className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" />
               </div>
               <div>
                 <label className="text-xs font-medium text-zinc-500 block mb-1">Scheduled Date</label>
@@ -155,7 +179,11 @@ export default function MaintenancePage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-zinc-500 block mb-1">Techs Scheduled</label>
-                <input value={form.techs_scheduled} onChange={e => setForm({ ...form, techs_scheduled: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" />
+                <input value={form.techs_scheduled} onChange={e => setForm({ ...form, techs_scheduled: e.target.value })} placeholder="Names / crew" className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-zinc-500 block mb-1">Escort Information</label>
+                <textarea value={form.escort_information} onChange={e => setForm({ ...form, escort_information: e.target.value })} rows={3} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" placeholder="Security contact, arrival gate, access codes, who to text on arrival. Example:&#10;11:00 PM&#10;Brandon Tate&#10;202-924-2622&#10;Crystal City — station gate, top of escalators" />
               </div>
             </div>
             <button onClick={submit} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium">Create</button>

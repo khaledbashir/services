@@ -120,14 +120,25 @@ export async function POST(request: NextRequest) {
 
   if (isTwentyBackedEnabled('MAINTENANCE')) {
     try {
+      // Translate the dashboard venue UUID to Twenty's internal ID so
+      // the maintenance log links to the right station. Silent null if we
+      // can't find it — Twenty lets the log exist unlinked.
+      const { dashboardVenueIdToTwentyId } = await import('@/lib/twenty-ops')
+      const twentyVenueId = venue_id ? await dashboardVenueIdToTwentyId(venue_id) : null
       const created = await Maintenance.create({
         name: issue_summary || issue || 'Maintenance log',
         issue,
+        issueSummary: issue_summary ? { markdown: issue_summary } : null,
         detailsToResolve: details_to_resolve ? { markdown: details_to_resolve } : null,
         scheduledDate: scheduled_date,
         locationReported: location_reported,
         escortInformation: escort_information,
-      })
+        techsScheduled: techs_scheduled || null,
+        maintenanceType: maintenance_type ? `MAINTENANCE_TYPE_${maintenance_type.toUpperCase()}` : 'MAINTENANCE_TYPE_OTHER',
+        status: `STATUS_${(status || 'open').toUpperCase()}`,
+        maintenanceStationId: twentyVenueId,
+        maintenanceAssetId: asset_id || null,
+      } as any)
       return NextResponse.json({ log: { id: created.id, ...body } })
     } catch (err) {
       console.error('[maintenance POST twenty-backed] error:', err)
