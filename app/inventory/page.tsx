@@ -23,7 +23,30 @@ export default function InventoryPage() {
   const [venueFilter, setVenueFilter] = useState('all')
   const [stockFilter, setStockFilter] = useState<'all' | 'low'>('all')
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({ venue_id: '', item_name: '', sku: '', quantity: '0', threshold_low: '5' })
+  // Widened 2026-04-23 per Phase 2 form-widening (Joe/Alexis ask): expose the
+  // full inventoryAssets schema instead of the thin 4-field form. Backend at
+  // app/api/inventory/route.ts already accepted these; UI was the bottleneck.
+  const [formData, setFormData] = useState({
+    venue_id: '',
+    item_name: '',
+    sku: '',
+    quantity: '0',
+    threshold_low: '5',
+    asset_number: '',
+    three_letter_code: '',
+    location_code: '',
+    location_room: '',
+    screen_location: '',
+    manufacturer: '',
+    display_type: '',
+    orientation: '',
+    ip_address: '',
+    connected_devices: '',
+    render_name: '',
+    project_code: '',
+    model_name: '',
+    resolution: '',
+  })
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editQty, setEditQty] = useState('')
@@ -54,7 +77,13 @@ export default function InventoryPage() {
       })
       if (res.ok) {
         showToast('Item added', 'success')
-        setFormData({ venue_id: '', item_name: '', sku: '', quantity: '0', threshold_low: '5' })
+        setFormData({
+          venue_id: '', item_name: '', sku: '', quantity: '0', threshold_low: '5',
+          asset_number: '', three_letter_code: '', location_code: '', location_room: '',
+          screen_location: '', manufacturer: '', display_type: '', orientation: '',
+          ip_address: '', connected_devices: '', render_name: '', project_code: '',
+          model_name: '', resolution: '',
+        })
         setShowForm(false)
         await fetchData()
       }
@@ -133,35 +162,161 @@ export default function InventoryPage() {
         {showForm && (
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
             <h3 className="text-sm font-semibold text-zinc-900 mb-4">Add Inventory Item</h3>
-            <form onSubmit={addItem} className="grid grid-cols-5 gap-4">
+            <form onSubmit={addItem} className="space-y-5">
+              {/* Section 1: Identity */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
-                <select value={formData.venue_id} onChange={e => setFormData({ ...formData, venue_id: e.target.value })}
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
-                  <option value="">Select...</option>
-                  {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">Identity</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Venue *</label>
+                    <select value={formData.venue_id} onChange={e => setFormData({ ...formData, venue_id: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required>
+                      <option value="">Select...</option>
+                      {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Item Name *</label>
+                    <input type="text" value={formData.item_name} onChange={e => setFormData({ ...formData, item_name: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Asset #</label>
+                    <input type="text" value={formData.asset_number} onChange={e => setFormData({ ...formData, asset_number: e.target.value })}
+                      placeholder="e.g. ASSET-001"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Tri-Code</label>
+                    <input type="text" value={formData.three_letter_code} maxLength={3}
+                      onChange={e => setFormData({ ...formData, three_letter_code: e.target.value.toUpperCase() })}
+                      placeholder="FEN"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono uppercase" />
+                  </div>
+                </div>
               </div>
+
+              {/* Section 2: Location */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Item Name *</label>
-                <input type="text" value={formData.item_name} onChange={e => setFormData({ ...formData, item_name: e.target.value })}
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" required />
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">Location</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Location Code</label>
+                    <input type="text" value={formData.location_code} onChange={e => setFormData({ ...formData, location_code: e.target.value })}
+                      placeholder="B01"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Room</label>
+                    <input type="text" value={formData.location_room} onChange={e => setFormData({ ...formData, location_room: e.target.value })}
+                      placeholder="Concourse 100"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Screen Location</label>
+                    <input type="text" value={formData.screen_location} onChange={e => setFormData({ ...formData, screen_location: e.target.value })}
+                      placeholder="Main Entrance"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                </div>
               </div>
+
+              {/* Section 3: Display specs */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">SKU</label>
-                <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">Display Specs</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Manufacturer</label>
+                    <input type="text" value={formData.manufacturer} onChange={e => setFormData({ ...formData, manufacturer: e.target.value })}
+                      placeholder="Samsung, LG, …"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Display Type</label>
+                    <select value={formData.display_type} onChange={e => setFormData({ ...formData, display_type: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                      <option value="">—</option>
+                      <option value="LED">LED</option>
+                      <option value="LCD">LCD</option>
+                      <option value="PROJECTOR">Projector</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Orientation</label>
+                    <select value={formData.orientation} onChange={e => setFormData({ ...formData, orientation: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
+                      <option value="">—</option>
+                      <option value="LANDSCAPE">Landscape</option>
+                      <option value="PORTRAIT">Portrait</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Resolution</label>
+                    <input type="text" value={formData.resolution} onChange={e => setFormData({ ...formData, resolution: e.target.value })}
+                      placeholder="1920x1080"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono" />
+                  </div>
+                </div>
               </div>
+
+              {/* Section 4: Connectivity + metadata */}
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Quantity</label>
-                <input type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })}
-                  className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">Connectivity &amp; Project</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">IP Address</label>
+                    <input type="text" value={formData.ip_address} onChange={e => setFormData({ ...formData, ip_address: e.target.value })}
+                      placeholder="10.0.1.12"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Connected Devices</label>
+                    <input type="text" value={formData.connected_devices} onChange={e => setFormData({ ...formData, connected_devices: e.target.value })}
+                      placeholder="Brightsign XD235"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Render Name</label>
+                    <input type="text" value={formData.render_name} onChange={e => setFormData({ ...formData, render_name: e.target.value })}
+                      placeholder="FEN_MainConcourse_1x1"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Project Code</label>
+                    <input type="text" value={formData.project_code} onChange={e => setFormData({ ...formData, project_code: e.target.value })}
+                      placeholder="ANC-2026-Q2"
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-end">
-                <button type="submit" disabled={submitting}
-                  className="w-full px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50">
-                  {submitting ? 'Adding...' : 'Add'}
-                </button>
+
+              {/* Section 5: Stock tracking (legacy quantity + threshold) */}
+              <div>
+                <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-2">Stock Tracking</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">SKU / Part Number</label>
+                    <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Quantity</label>
+                    <input type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">Low Stock Threshold</label>
+                    <input type="number" value={formData.threshold_low} onChange={e => setFormData({ ...formData, threshold_low: e.target.value })}
+                      className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none" />
+                  </div>
+                  <div className="flex items-end">
+                    <button type="submit" disabled={submitting}
+                      className="w-full px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50">
+                      {submitting ? 'Adding…' : 'Add Asset'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </form>
           </div>

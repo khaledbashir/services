@@ -197,7 +197,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
 
       return NextResponse.json({
-        design_request: { id: updated.id, job_title: updated.name, status: updated.status },
+        // Normalize Twenty's STATUS_* back to dashboard vocab so the
+        // kanban's optimistic setState doesn't flash a wrong-lane card.
+        design_request: {
+          id: updated.id,
+          job_title: updated.name,
+          status: ((updated.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted',
+        },
         proof_share: proofShare,
       })
     }

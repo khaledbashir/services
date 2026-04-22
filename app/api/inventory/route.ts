@@ -150,8 +150,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json()
   const { venue_id, item_name, sku, quantity, threshold_low, asset_number, location_code,
-    manufacturer, display_type, orientation, three_letter_code, connected_devices,
-    render_name, part_number, project_code } = body
+    location_room, screen_location, manufacturer, display_type, orientation,
+    three_letter_code, connected_devices, render_name, part_number, project_code,
+    ip_address, model_name, resolution } = body
 
   if (!venue_id || !item_name) {
     return NextResponse.json({ error: 'Venue and item name required' }, { status: 400 })
@@ -178,6 +179,8 @@ export async function POST(request: NextRequest) {
         partName: item_name,
         assetNumber: asset_number || null,
         locationCode: location_code || null,
+        locationRoom: location_room || null,
+        screenLocation: screen_location || null,
         manufacturer: manufacturer || null,
         displayType: display_type || null,
         orientation: orientation || null,
@@ -185,8 +188,11 @@ export async function POST(request: NextRequest) {
         connectedDevices: connected_devices || null,
         renderName: render_name || null,
         projectCode: project_code || null,
+        ipAddress: ip_address || null,
+        modelName: model_name || null,
+        resolution: resolution || null,
         assetVenueId: twentyVenueId,
-      })
+      } as any)
       const venueRes = await query('SELECT name, slack_channel_id FROM venues WHERE id = $1', [venue_id])
       notifyOps(':package:', `*Inventory added:* ${item_name} (qty: ${quantity || 0}) at ${venueRes.rows[0]?.name || 'Unknown'}`, undefined, venueRes.rows[0]?.slack_channel_id)
       return NextResponse.json({ id: created.id })
