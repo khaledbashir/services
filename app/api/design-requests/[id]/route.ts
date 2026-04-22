@@ -92,7 +92,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       const auth = await requireRole(request, 'technician')
       if (isAuthError(auth)) return auth
       const d = await Designs.get(params.id) as any
-      if (!d) return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+      if (!d) {
+        // Twenty doesn't know this id — fall back to the local mirror so
+        // stranded locally-created rows (e.g. AI skill creates before we
+        // started double-writing) still resolve. If local also misses,
+        // then it's genuinely not found.
+        const access = await getAccessibleRecord(request, params.id, 'technician')
+        if (access instanceof NextResponse) return access
+        if (!access.record) {
+          return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+        }
+        return NextResponse.json({ design_request: access.record })
+      }
       // Normalize Twenty's STATUS_DONE etc. back to dashboard vocab so the
       // new stage timeline UI can highlight the correct stage.
       const status = ((d.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted'
