@@ -270,19 +270,10 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               </Field>
             </StageCard>
 
-            {/* STAGE 2: IN QUEUE — assigning designer */}
+            {/* STAGE 2: IN QUEUE — multi-assign designers + enterprise reps */}
             <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Assigned Designer">
-                  <select
-                    value={dr.designer_id || ''}
-                    onChange={(e) => updateField({ designer_id: e.target.value || null })}
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {staffList.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                  </select>
-                </Field>
+              <AssigneePicker designRequestId={dr.id} staffList={staffList} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                 <Field label="Hours Estimated">
                   <input
                     type="number"
@@ -295,15 +286,15 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   />
                 </Field>
               </div>
-              {currentIdx === 1 && dr.designer_id && (
-                <button
-                  onClick={() => updateField({ status: 'in_progress' })}
-                  className="mt-3 text-xs font-medium text-[#0A52EF] hover:underline"
-                >
-                  → Designer ready? Advance to In Progress
-                </button>
-              )}
             </StageCard>
+            {currentIdx === 1 && (
+              <button
+                onClick={() => updateField({ status: 'in_progress' })}
+                className="mt-3 text-xs font-medium text-[#0A52EF] hover:underline block"
+              >
+                → Team assigned? Advance to In Progress
+              </button>
+            )}
 
             {/* STAGE 3: IN PROGRESS — hours + notes */}
             <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'}>
@@ -480,10 +471,130 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Multi-assignee picker — Alexis (2026-04-23): "multiple Enterprise Solutions
+// reps + multiple designers per request." Pills UI, click to add, × to remove.
+// Writes the whole set via POST /api/design-requests/[id]/assignees which
+// replaces the join-table rows atomically.
+// ─────────────────────────────────────────────────────────────────────────────
+interface Assignee { id: string; full_name: string; email?: string; is_primary?: boolean }
+
+function AssigneePicker({ designRequestId, staffList }: { designRequestId: string; staffList: Staff[] }) {
+  const [designers, setDesigners] = useState<Assignee[]>([])
+  const [reps, setReps] = useState<Assignee[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const load = async () => {
+    try {
+      const res = await fetch(`/api/design-requests/${designRequestId}/assignees`)
+      if (!res.ok) { setLoading(false); return }
+      const d = await res.json()
+      setDesigners(d.designers || [])
+      setReps(d.enterprise_contacts || [])
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() }, [designRequestId])
+
+  const save = async (next: { designer_ids?: string[]; enterprise_contact_ids?: string[]; primary_designer_id?: string }) => {
+    setSaving(true)
+    try {
+      await fetch(`/api/design-requests/${designRequestId}/assignees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      })
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const designerIds = designers.map(d => d.id)
+  const repIds = reps.map(r => r.id)
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
+          Designers {designers.length > 0 && <span className="text-zinc-400 font-normal">· {designers.length}</span>}
+        </label>
+        <div className="rounded-lg ring-1 ring-zinc-200 bg-white p-2 min-h-[40px] flex flex-wrap gap-1.5">
+          {designers.map(d => (
+            <span key={d.id} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs ${d.is_primary ? 'bg-[#0A52EF] text-white' : 'bg-zinc-100 text-zinc-700'}`}>
+              {d.is_primary && <span title="Primary designer">★</span>}
+              {d.full_name}
+              <button
+                onClick={() => save({ designer_ids: designerIds.filter(x => x !== d.id) })}
+                className="opacity-60 hover:opacity-100"
+                title="Remove"
+              >×</button>
+            </span>
+          ))}
+          {!loading && designers.length === 0 && (
+            <span className="text-xs text-zinc-400 px-1 py-1">No designers yet</span>
+          )}
+        </div>
+        <select
+          value=""
+          onChange={(e) => {
+            const id = e.target.value
+            if (id && !designerIds.includes(id)) save({ designer_ids: [...designerIds, id] })
+          }}
+          disabled={saving}
+          className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
+        >
+          <option value="">＋ Add designer…</option>
+          {staffList.filter(s => !designerIds.includes(s.id)).map(s => (
+            <option key={s.id} value={s.id}>{s.full_name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
+          Enterprise Solutions {reps.length > 0 && <span className="text-zinc-400 font-normal">· {reps.length}</span>}
+        </label>
+        <div className="rounded-lg ring-1 ring-zinc-200 bg-white p-2 min-h-[40px] flex flex-wrap gap-1.5">
+          {reps.map(r => (
+            <span key={r.id} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs bg-violet-100 text-violet-800">
+              {r.full_name}
+              <button
+                onClick={() => save({ enterprise_contact_ids: repIds.filter(x => x !== r.id) })}
+                className="opacity-60 hover:opacity-100"
+                title="Remove"
+              >×</button>
+            </span>
+          ))}
+          {!loading && reps.length === 0 && (
+            <span className="text-xs text-zinc-400 px-1 py-1">No reps yet</span>
+          )}
+        </div>
+        <select
+          value=""
+          onChange={(e) => {
+            const id = e.target.value
+            if (id && !repIds.includes(id)) save({ enterprise_contact_ids: [...repIds, id] })
+          }}
+          disabled={saving}
+          className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
+        >
+          <option value="">＋ Add enterprise rep…</option>
+          {staffList.filter(s => !repIds.includes(s.id)).map(s => (
+            <option key={s.id} value={s.id}>{s.full_name}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AI First Draft — Alexis's ask (2026-04-23): let the system take a first
 // pass at the design so designers refine instead of starting from blank.
 // Hits the /generate-ai-proof endpoint which builds a venue-aware prompt from
-// the request context, calls gpt-image-1, and files the output as a proof
+// the request context, calls gpt-image-2, and files the output as a proof
 // attachment flagged is_ai_generated=true. UX: one button, ~20-40s wait,
 // preview card when ready.
 // ─────────────────────────────────────────────────────────────────────────────

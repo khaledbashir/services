@@ -28,7 +28,7 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY || (() => {
   } catch { return '' }
 })()
 
-const AI_MODEL = 'gpt-image-1'
+const AI_MODEL = 'gpt-image-2'
 const AI_SIZE = '1024x1024'
 const AI_QUALITY = 'low'
 
