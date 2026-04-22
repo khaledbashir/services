@@ -330,3 +330,42 @@ export async function PATCH(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+// Chris D asked for this in Slack on 2026-04-22: "could we add a delete option
+// for tickets? We get spam calls and emails and would like to just be able to
+// delete them instead of closing them."
+//
+// Hard delete, manager+ role only — cascades to ticket_comments via the FK.
+// We clear merged_into_ticket_id references first so the parent ticket doesn't
+// blow up an FK constraint.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getUserFromToken(request)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const role = String(user.role || '')
+    if (!['admin', 'tech_support', 'manager'].includes(role)) {
+      return NextResponse.json({ error: 'Manager role required to delete tickets' }, { status: 403 })
+    }
+
+    // Detach any merged-child links pointing to this ticket so those
+    // children don't orphan-reference a deleted parent.
+    await query(
+      `UPDATE tickets SET merged_into_ticket_id = NULL WHERE merged_into_ticket_id = $1`,
+      [params.id]
+    )
+    const r = await query(
+      `DELETE FROM tickets WHERE id = $1 RETURNING id, ticket_number, title`,
+      [params.id]
+    )
+    if (r.rows.length === 0) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true, deleted: r.rows[0] })
+  } catch (err) {
+    console.error('Error deleting ticket:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

@@ -76,6 +76,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [mergeQuery, setMergeQuery] = useState('')
   const [mergeCandidates, setMergeCandidates] = useState<Array<{ id: string; ticket_number: number; title: string; venue_name?: string | null }>>([])
   const [merging, setMerging] = useState(false)
+  const [canDelete, setCanDelete] = useState(false)
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem('userRole') || ''
+      setCanDelete(['admin', 'tech_support', 'manager'].includes(r))
+    } catch {}
+  }, [])
   const router = useRouter()
 
   const fetchData = async () => {
@@ -264,6 +271,30 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   Mark Complete
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete ticket #${ticket.ticket_number}? This can't be undone — use for spam only.`)) return
+                    try {
+                      const res = await fetch(`/api/tickets/${params.id}`, { method: 'DELETE' })
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}))
+                        alert(err.error || `Delete failed (${res.status})`)
+                        return
+                      }
+                      router.push('/tickets')
+                    } catch (err) {
+                      alert('Delete failed — see console')
+                      console.error(err)
+                    }
+                  }}
+                  title="Delete this ticket (manager+ only, for spam)"
+                  className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" /></svg>
+                  Delete
                 </button>
               )}
               {/* Send to Slack + Actions dropdown */}
