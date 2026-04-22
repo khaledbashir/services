@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import { Walkthroughs, isTwentyBackedEnabled, type TwentyWalkthroughLog } from '@/lib/twenty-ops'
+import { Walkthroughs, isTwentyBackedEnabled, twentyVenueToDashboard, type TwentyWalkthroughLog } from '@/lib/twenty-ops'
 
 // Legacy response shape the /walkthroughs page consumes:
 //   { walkthroughs: [ { id, venue_id, venue_name, technician_id, technician_name,
@@ -9,23 +9,34 @@ import { Walkthroughs, isTwentyBackedEnabled, type TwentyWalkthroughLog } from '
 //                       result, in_person, three_letter_code, notes,
 //                       created_at, updated_at } ] }
 
-function reshapeWalkthrough(log: TwentyWalkthroughLog) {
-  const notes = typeof log.notes === 'object'
-    ? (log.notes as any)?.markdown || (log.notes as any)?.blocknote || ''
-    : (log.notes || '')
+function normalizeResult(raw: string | null | undefined): string {
+  if (!raw) return 'good'
+  // Twenty stores RESULT_GOOD / RESULT_PROBLEM / RESULT_MINOR — strip + lowercase.
+  return raw.toString().replace(/^RESULT_/i, '').toLowerCase() || 'good'
+}
+
+async function reshapeWalkthrough(log: TwentyWalkthroughLog) {
+  const l = log as any
+  const notes = typeof l.notes === 'object'
+    ? l.notes?.markdown || l.notes?.blocknote || ''
+    : (l.notes || '')
+  const issuesFound = typeof l.issuesFound === 'object'
+    ? l.issuesFound?.markdown || l.issuesFound?.blocknote || ''
+    : (l.issuesFound || '')
+  const venue = l.walkVenueId ? await twentyVenueToDashboard(l.walkVenueId) : null
   return {
     id: log.id,
-    venue_id: null,               // walkthroughLog has no direct venue FK in Twenty
-    venue_name: '',
-    technician_id: null,
-    technician_name: null,
-    log_date: log.logDate,
-    log_time: log.logTime,
-    locations_visited: null,
-    issues_found: null,
-    result: log.result,
-    in_person: true,
-    three_letter_code: null,
+    venue_id: venue?.venue_id || null,
+    venue_name: venue?.venue_name || '',
+    technician_id: l.walkTechnicianId || null,
+    technician_name: l.technicianName || null,
+    log_date: l.logDate,
+    log_time: l.logTime,
+    locations_visited: l.locationsVisited || null,
+    issues_found: issuesFound,
+    result: normalizeResult(l.result),
+    in_person: l.inPerson ?? true,
+    three_letter_code: l.threeLetterCode || null,
     notes,
     created_at: log.createdAt,
     updated_at: log.updatedAt,
@@ -60,7 +71,7 @@ export async function GET(request: NextRequest) {
           filter: filters.length ? filters.join(',') : undefined,
           orderBy: 'logDate[DescNullsLast]',
         })
-        for (const log of page.items) items.push(reshapeWalkthrough(log))
+        for (const log of page.items) items.push(await reshapeWalkthrough(log))
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
