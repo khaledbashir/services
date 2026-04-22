@@ -199,11 +199,16 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
                     </div>
                   </div>
                   <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="block px-3 pb-3">
+                    {/* loading="eager" + min-h — before the image loads, an
+                        <img> with object-contain and only max-h renders 0-tall,
+                        and when paired with loading="lazy" the intersection
+                        observer never fires so the image never actually
+                        fetches. Reserving min-h + eager fixes it. */}
                     <img
                       src={downloadUrl}
                       alt={p.filename}
-                      className="w-full max-h-[480px] object-contain rounded border border-zinc-200 bg-zinc-50"
-                      loading="lazy"
+                      className="w-full min-h-[240px] max-h-[480px] object-contain rounded border border-zinc-200 bg-zinc-50"
+                      loading="eager"
                     />
                   </a>
                 </div>
