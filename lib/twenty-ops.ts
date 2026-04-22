@@ -240,6 +240,22 @@ export interface TwentyDesignerHoursBudget {
   updatedAt: string
 }
 
+export interface TwentyPartsOrder {
+  id: string
+  venueId: string | null
+  venue?: { id: string; name: string }
+  requesterName: string | null
+  requesterEmail: string | null
+  partsNeeded: string | null
+  photoUrls: string[] | null
+  shippingAddress: string | null
+  status: 'pending' | 'approved' | 'ordered' | 'shipped' | 'received' | 'complete' | null
+  trackingNumber: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface TwentyPrintRequest {
   id: string
   name: string | null
@@ -433,6 +449,16 @@ export const HoursBudgets = {
   create: (data: Partial<TwentyDesignerHoursBudget>) => createObject<TwentyDesignerHoursBudget>('designerHoursBudgets', data as Record<string, unknown>),
   update: (id: string, data: Partial<TwentyDesignerHoursBudget>) => updateObject<TwentyDesignerHoursBudget>('designerHoursBudgets', id, data as Record<string, unknown>),
   delete: (id: string) => deleteObject('designerHoursBudgets', id),
+}
+
+export const PartsOrders = {
+  collection: 'partsOrders',
+  venueField: 'venueId',
+  list: (opts?: ListOptions) => listObjects<TwentyPartsOrder>('partsOrders', opts),
+  get:  (id: string) => getObject<TwentyPartsOrder>('partsOrders', id),
+  create: (data: Partial<TwentyPartsOrder>) => createObject<TwentyPartsOrder>('partsOrders', data as Record<string, unknown>),
+  update: (id: string, data: Partial<TwentyPartsOrder>) => updateObject<TwentyPartsOrder>('partsOrders', id, data as Record<string, unknown>),
+  delete: (id: string) => deleteObject('partsOrders', id),
 }
 
 export const PrintRequests = {

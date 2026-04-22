@@ -78,9 +78,9 @@ These are features the team uses daily that don't map to any existing Twenty cus
 - [x] Public-facing form at `/forms/parts-request` (no auth) — venue, parts needed, photo upload, shipping address, requester email
 - [x] Submission creates a new `partsOrder` record in Twenty (object exists)
 - [x] Slack notification to parts-ordering channel on new submission
-- [ ] Internal queue view at `/parts-orders` — sortable, filterable, status-managed by Gianni
+- [x] Internal queue view at `/parts-orders` — sortable, filterable, status-managed by Gianni
 - [x] Email confirmation to requester on submission
-- [ ] Email on status change to requester
+- [x] Email on status change to requester
 
 ### 3.4 30/60/90 Stadium Opening Checklist (Gianni's pre-season prep)
 - [x] Design Twenty object: parent venue, checklist template name, phase (30/60/90 day), item prompt, assignee, due date, status
