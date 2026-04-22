@@ -3,18 +3,32 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { TimeEntries, isTwentyBackedEnabled, type TwentyDesignerTimeEntry } from '@/lib/twenty-ops'
 
+function stripPrefix(raw: string | null | undefined, prefix: string): string | null {
+  if (!raw) return null
+  return raw.toString().replace(new RegExp(`^${prefix}`, 'i'), '').toLowerCase() || null
+}
+
 function reshapeTimeEntry(t: TwentyDesignerTimeEntry) {
+  const raw = t as any
   return {
     id: t.id,
     budget_id: null,
-    designer_id: t.entryDesignerId,
-    designer_name: t.entryDesigner ? `${t.entryDesigner.name.firstName} ${t.entryDesigner.name.lastName}`.trim() : null,
+    designer_id: raw.entryDesignerId || null,
+    designer_name: raw.entryDesigner ? `${raw.entryDesigner.name.firstName} ${raw.entryDesigner.name.lastName}`.trim() : null,
     design_request_id: null,
-    entry_date: t.createdAt?.slice(0, 10),
-    hours: 0,
-    description: t.comment || t.taskName,
-    created_at: t.createdAt,
-    budget_client_name: null,
+    entry_date: raw.date || (raw.createdAt ? raw.createdAt.slice(0, 10) : null),
+    hours: Number(raw.hoursSpent ?? 0),
+    description: raw.taskName || raw.comment || raw.name || '',
+    category: stripPrefix(raw.category, 'CATEGORY_'),
+    billing_type: stripPrefix(raw.billingType, 'BILLING_'),
+    client_id: raw.entryClientId || null,
+    client_name: raw.entryClient?.name || null,
+    wrike_timelog_id: raw.wrikeTimelogId || null,
+    wrike_task_id: raw.wrikeTaskId || null,
+    created_at: raw.createdAt,
+    updated_at: raw.updatedAt,
+    // Time entries have no venue relation in Twenty — leave blank rather than misrepresent.
+    budget_client_name: raw.entryClient?.name || null,
     budget_venue_id: null,
     venue_name: null,
   }
