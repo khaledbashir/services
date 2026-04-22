@@ -51,6 +51,13 @@ export default function CgDesignsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [search, setSearch] = useState('')
+  // Per-designer filter — mirror the /designs page pattern so Alexis can
+  // flip between "My assignments" / a specific designer / everyone.
+  const [designerFilter, setDesignerFilter] = useState<string>('all')
+  const [currentUserId, setCurrentUserId] = useState<string>('')
+  useEffect(() => {
+    try { setCurrentUserId(localStorage.getItem('userId') || '') } catch {}
+  }, [])
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
@@ -124,6 +131,7 @@ export default function CgDesignsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+    const targetDesignerId = designerFilter === 'mine' ? currentUserId : designerFilter
     return items.filter((item) => {
       const matchesSearch =
         !q ||
@@ -138,9 +146,12 @@ export default function CgDesignsPage() {
         (statusFilter === 'active' && item.status !== 'posted') ||
         item.status === statusFilter
 
-      return matchesSearch && matchesStatus
+      const matchesDesigner =
+        designerFilter === 'all' || (targetDesignerId && item.designer_id === targetDesignerId)
+
+      return matchesSearch && matchesStatus && matchesDesigner
     })
-  }, [items, search, statusFilter])
+  }, [items, search, statusFilter, designerFilter, currentUserId])
 
   const counts: Record<string, number> = {
     active: items.filter((item) => item.status !== 'posted').length,
@@ -240,6 +251,17 @@ export default function CgDesignsPage() {
           </div>
           <div className="pb-2">
             <input type="text" placeholder="Search CG requests..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-72 border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
+            <select
+              value={designerFilter}
+              onChange={(e) => setDesignerFilter(e.target.value)}
+              className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
+              title="Filter to one designer"
+            >
+              <option value="all">All designers</option>
+              {currentUserId && <option value="mine">My assignments</option>}
+              <option disabled>──────────</option>
+              {staff.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
           </div>
         </div>
 
