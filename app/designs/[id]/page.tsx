@@ -715,14 +715,20 @@ function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
       const res = await fetch(`/api/design-requests/${designRequestId}/generate-ai-proof`, {
         method: 'POST',
       })
-      const data = await res.json()
+      // The server may respond with an HTML error page (Next.js 500) when
+      // something blows up — catch the JSON-parse failure and fall back to
+      // the raw text so the UI shows a useful message instead of "Unexpected
+      // token <".
+      const text = await res.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch {}
       if (!res.ok) {
-        setError(data.error || `Failed (${res.status})`)
-      } else {
+        setError(data?.error || text.slice(0, 200) || `Failed (${res.status})`)
+      } else if (data?.proof) {
         setGenerated(data.proof)
-        // Nudge the rest of the detail page to refetch so the new proof shows
-        // up in the upload list next to the designer's uploads.
         window.dispatchEvent(new Event('anc:data-refresh'))
+      } else {
+        setError('Unexpected response from server')
       }
     } catch (err: any) {
       setError(err?.message || 'Network error')
