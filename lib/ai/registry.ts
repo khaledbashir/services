@@ -43,6 +43,17 @@ async function loadSkills(): Promise<Skill[]> {
     }
   }
 
+  // Browser-driving UI skills — navigate, click, fill, highlight, toast.
+  // Server just echoes the payload; the client dispatcher animates them.
+  try {
+    const { uiSkills } = await import('@/lib/ai/skills/_ui-actions')
+    for (const s of uiSkills()) {
+      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
+    }
+  } catch (err) {
+    console.warn('[ai/registry] failed to load UI skills:', err instanceof Error ? err.message : err)
+  }
+
   // Auto-generated CRUD skills (find_many / find_one / create / update /
   // delete) for every dashboard table we care about. Lives in
   // _auto-crud.ts — underscore prefix keeps the fs-scan fallback from
@@ -54,17 +65,6 @@ async function loadSkills(): Promise<Skill[]> {
     }
   } catch (err) {
     console.warn('[ai/registry] failed to load auto-CRUD skills:', err instanceof Error ? err.message : err)
-  }
-
-  // Browser-driving UI skills — navigate, click, fill, highlight, toast.
-  // Server just echoes the payload; the client dispatcher animates them.
-  try {
-    const { uiSkills } = await import('@/lib/ai/skills/_ui-actions')
-    for (const s of uiSkills()) {
-      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
-    }
-  } catch (err) {
-    console.warn('[ai/registry] failed to load UI skills:', err instanceof Error ? err.message : err)
   }
 
   // Fallback fs scan for files that aren't in the static map yet (dev mode).

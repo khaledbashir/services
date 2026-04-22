@@ -36,6 +36,18 @@ interface ChatMsg {
   name?: string
 }
 
+export interface PageContextField {
+  selector: string
+  label?: string
+  type?: string
+}
+
+export interface PageContext {
+  current_path?: string
+  page_title?: string
+  visible_fields?: PageContextField[]
+}
+
 function sanitizeForProvider(messages: ChatMsg[]): ChatMsg[] {
   // Gemini's OpenAI-compat endpoint rejects content: null on assistant
   // tool-call turns. Coerce nulls to empty strings — OpenAI/Kimi/GLM all
@@ -147,13 +159,45 @@ async function loadUserContext(): Promise<string> {
   return lines.length > 0 ? lines.join('\n') : ''
 }
 
-async function buildSystemPrompt(userName: string | undefined, userRole: AgentRole): Promise<string> {
+function buildPageContextBlock(pageContext?: PageContext): string {
+  const path = pageContext?.current_path?.trim()
+  const title = pageContext?.page_title?.trim()
+  const fields = (pageContext?.visible_fields || [])
+    .map((field) => {
+      const selector = field.selector?.trim()
+      if (!selector) return null
+      const parts = [selector]
+      if (field.label?.trim()) parts.push(`label: ${field.label.trim()}`)
+      if (field.type?.trim()) parts.push(`type: ${field.type.trim()}`)
+      return `- ${parts.join(' · ')}`
+    })
+    .filter(Boolean) as string[]
+
+  if (!path && !title && fields.length === 0) return ''
+
+  const lines = ['\nCURRENT PAGE CONTEXT:']
+  if (path) lines.push(`- Path: ${path}`)
+  if (title) lines.push(`- Title: ${title}`)
+  if (fields.length > 0) {
+    lines.push('- Visible editable fields:')
+    lines.push(...fields.slice(0, 20))
+  }
+  lines.push(
+    '- Treat this as the live UI state right now.',
+    '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill/ui_select on these visible fields first.',
+    '- Do NOT call create_* unless the user explicitly asks for a brand-new record.'
+  )
+  return `${lines.join('\n')}\n`
+}
+
+async function buildSystemPrompt(userName: string | undefined, userRole: AgentRole, pageContext?: PageContext): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
   const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
   const userContext = await loadUserContext()
   const contextBlock = userContext
     ? `\nCURRENT STATE (as of ${today}):\n${userContext}\nUse these numbers when relevant (e.g. "you have 3 urgent tickets"). Don't refetch what you already see here — just answer.\n`
     : ''
+  const pageContextBlock = buildPageContextBlock(pageContext)
   return `You are the ANC Services in-dashboard assistant.
 You help ANC staff manage events, venues, tickets, maintenance, design
 requests, creative workflows, parts, RMAs, and more across the services
@@ -204,6 +248,11 @@ NARROW side panel (~360px wide). Use it well:
   \`| Col A | Col B |\\n| --- | --- |\\n| v1 | v2 |\`
   Do NOT fake tables with spaces or tabs — react-markdown won't render
   them and the output will look like raw text.
+- Never output anything that looks like:
+  \`Field    Value\`
+  \`Client Name    Test Client\`
+  \`Client Email    testclient@example.com\`
+  Convert that into bullets or a real pipe table instead.
 - Short headings (##, ###) only when there's more than one section
 - Inline \`code\` for IDs, column names, and statuses
 - Bold for key fields/values
@@ -229,11 +278,18 @@ freely — e.g. after creating a record with create_design_request,
 call ui_navigate to /designs and ui_highlight the new row so the
 user can see what you did.
 
+When the user is already on an existing record page like /designs/[id],
+assume they mean THAT PAGE unless they explicitly say "create a new one"
+or "make another". Editing/filling the current form beats creating a
+separate record.
+
 "FILL IT" / "FILL THE FORM" / "POPULATE / USE EXAMPLE DATA" — when the
 user says any of these on a form page without specifying values, DO NOT
 stop to ask what to put in each field. Generate plausible placeholder
-data on the spot and fire ui_fill for every visible field, then report
-what you filled in one short summary. Examples of fine placeholders:
+data on the spot and fire ui_fill / ui_select for every visible field on
+the CURRENT PAGE, then report what you filled in one short summary.
+Never replace this with create_design_request unless the user explicitly
+asked for a brand-new request. Examples of fine placeholders:
   - Client name: a real-sounding NBA/NHL team name (Lakers, Celtics)
   - Client email: client@example.com
   - Company name: the team's parent org (e.g. "LA Lakers")
@@ -268,7 +324,7 @@ next upcoming Friday. Always pass YYYY-MM-DD to skills. Only ask for
 clarification if truly ambiguous.
 
 User: ${userName || 'unknown'} (role: ${userRole}).
-${contextBlock}`
+${contextBlock}${pageContextBlock}`
 }
 
 export interface StreamEvent {
@@ -282,10 +338,11 @@ export async function runChat(params: {
   userRole: AgentRole
   userName?: string
   userMessage: string
+  pageContext?: PageContext
   preferredProvider?: string
   emit: (event: StreamEvent) => void
 }): Promise<void> {
-  const { chatId, userId, userRole, userName, userMessage, preferredProvider, emit } = params
+  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, emit } = params
 
   // Persist user message
   await query(
@@ -311,7 +368,7 @@ export async function runChat(params: {
   const tools = await toolDefinitions(userRole)
 
   // Build messages array
-  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole) }]
+  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext) }]
   for (const row of history.rows) {
     if (row.role === 'assistant') {
       messages.push({

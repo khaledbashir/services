@@ -4,7 +4,7 @@ import type { Skill } from '@/lib/ai/types'
 
 const skill: Skill = {
   name: 'create_design_request',
-  description: 'Create a new design request. Used by Enterprise Solutions when a client asks for a design.',
+  description: 'Create a brand-new design request record. Use only when the user explicitly asks to create/new/add another request. Never use this to fill or edit an already-open form/detail page.',
   category: 'Creative',
   icon: '🎨',
   role: 'technician',

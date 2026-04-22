@@ -192,6 +192,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               value={dr.status}
               onChange={(e) => updateField({ status: e.target.value })}
               disabled={saving}
+              data-ai-target="design-status"
               className="rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30 disabled:opacity-60"
             >
               {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -239,6 +240,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Field label="Boards requested">
                   <textarea
+                    data-ai-target="boards-requested"
                     value={boardsDraft}
                     onChange={(e) => setBoardsDraft(e.target.value)}
                     onBlur={() => boardsDraft !== (dr.boards_requested || '') && updateField({ boards_requested: boardsDraft })}
@@ -249,6 +251,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 </Field>
                 <Field label="Sizes">
                   <textarea
+                    data-ai-target="sizes-requested"
                     value={sizesDraft}
                     onChange={(e) => setSizesDraft(e.target.value)}
                     onBlur={() => sizesDraft !== (dr.sizes_requested || '') && updateField({ sizes_requested: sizesDraft })}
@@ -260,6 +263,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               </div>
               <Field label="Notes / Brief">
                 <textarea
+                  data-ai-target="notes-brief"
                   value={notesDraft}
                   onChange={(e) => setNotesDraft(e.target.value)}
                   onBlur={() => notesDraft !== (dr.notes || '') && updateField({ notes: notesDraft })}
@@ -278,6 +282,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   <input
                     type="number"
                     step="0.25"
+                    data-ai-target="hours-estimated"
                     value={hoursEstimatedDraft}
                     onChange={(e) => setHoursEstimatedDraft(e.target.value)}
                     onBlur={() => hoursEstimatedDraft !== String(dr.hours_estimated || '') && updateField({ hours_estimated: hoursEstimatedDraft === '' ? null : Number(hoursEstimatedDraft) })}
@@ -353,6 +358,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               <Field label="Final File Name">
                 <input
                   type="text"
+                  data-ai-target="final-file-name"
                   value={finalFileDraft}
                   onChange={(e) => setFinalFileDraft(e.target.value)}
                   onBlur={() => finalFileDraft !== (dr.final_file_name || '') && updateField({ final_file_name: finalFileDraft })}
@@ -532,6 +538,7 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
             if (id && !designerIds.includes(id)) save({ designer_ids: [...designerIds, id] })
           }}
           disabled={saving}
+          data-ai-target="add-designer"
           className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
         >
           <option value="">＋ Add designer…</option>
@@ -567,6 +574,7 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
             if (id && !repIds.includes(id)) save({ enterprise_contact_ids: [...repIds, id] })
           }}
           disabled={saving}
+          data-ai-target="add-enterprise-rep"
           className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
         >
           <option value="">＋ Add enterprise rep…</option>
@@ -660,13 +668,13 @@ function HoursLog({ designRequestId, staffList }: { designRequestId: string; sta
       </div>
       {/* Quick add row */}
       <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-[100px,100px,1fr,140px,80px] gap-2 border-b border-zinc-100">
-        <input type="number" step="0.25" value={formHours} onChange={e => setFormHours(e.target.value)}
+        <input type="number" step="0.25" data-ai-target="time-log-hours" value={formHours} onChange={e => setFormHours(e.target.value)}
           placeholder="Hours" className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
-        <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)}
+        <input type="date" data-ai-target="time-log-date" value={formDate} onChange={e => setFormDate(e.target.value)}
           className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
-        <input type="text" value={formDesc} onChange={e => setFormDesc(e.target.value)}
+        <input type="text" data-ai-target="time-log-description" value={formDesc} onChange={e => setFormDesc(e.target.value)}
           placeholder="What did you work on?" className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
-        <select value={formDesignerId} onChange={e => setFormDesignerId(e.target.value)}
+        <select data-ai-target="time-log-designer" value={formDesignerId} onChange={e => setFormDesignerId(e.target.value)}
           className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-xs bg-white outline-none">
           <option value="">Me</option>
           {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}

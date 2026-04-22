@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { dispatchUiAction, type UiAction } from './ai-ui-driver'
@@ -116,6 +116,18 @@ interface Skill {
 
 interface Provider { name: string; model: string }
 
+interface PageContextField {
+  selector: string
+  label?: string
+  type?: string
+}
+
+interface PageContext {
+  current_path?: string
+  page_title?: string
+  visible_fields?: PageContextField[]
+}
+
 const STORAGE_KEY = 'ai-panel-open'
 const PROVIDER_KEY = 'ai-panel-provider'
 const ACTIVE_CHAT_KEY = 'ai-active-chat'
@@ -124,8 +136,103 @@ const MIN_WIDTH = 360
 const MAX_WIDTH = 900
 const DEFAULT_WIDTH = 440
 
+function isVisibleElement(el: HTMLElement): boolean {
+  const rect = el.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return false
+  const style = window.getComputedStyle(el)
+  return style.display !== 'none' && style.visibility !== 'hidden'
+}
+
+function cleanFieldLabel(raw?: string | null): string | undefined {
+  const label = raw?.replace(/\s+/g, ' ').trim()
+  return label ? label.slice(0, 80) : undefined
+}
+
+function collectPageContext(pathname: string): PageContext {
+  if (typeof document === 'undefined') return { current_path: pathname }
+
+  const fields: PageContextField[] = []
+  const seen = new Set<string>()
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('input, textarea, select, [data-ai-target]'))
+
+  for (const node of nodes) {
+    if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement)) continue
+    if (!isVisibleElement(node) || node.disabled || node.type === 'hidden') continue
+
+    const aiTarget = node.getAttribute('data-ai-target')?.trim()
+    const selector = aiTarget ? `[data-ai-target="${aiTarget}"]` : node.id ? `#${node.id}` : ''
+    if (!selector || seen.has(selector)) continue
+
+    const labelFromFor = node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`) : null
+    const wrappedLabel = node.closest('label')
+    const siblingLabel = node.parentElement?.querySelector(':scope > label')
+    const label = cleanFieldLabel(
+      labelFromFor?.textContent ||
+      wrappedLabel?.textContent ||
+      siblingLabel?.textContent ||
+      node.getAttribute('aria-label') ||
+      node.getAttribute('placeholder') ||
+      aiTarget
+    )
+
+    fields.push({
+      selector,
+      label,
+      type: node instanceof HTMLSelectElement ? 'select' : node.type || node.tagName.toLowerCase(),
+    })
+    seen.add(selector)
+    if (fields.length >= 20) break
+  }
+
+  return {
+    current_path: pathname,
+    page_title: document.title || undefined,
+    visible_fields: fields,
+  }
+}
+
+function parseLooseTableRow(line: string): string[] | null {
+  if (!line.trim() || line.includes('|')) return null
+  if (/^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line) || /^\s*>/.test(line)) return null
+  const cols = line.trim().split(/\t+| {2,}/).map(part => part.trim()).filter(Boolean)
+  if (cols.length < 2 || cols.length > 4) return null
+  return cols
+}
+
+function normalizeMarkdownTables(text: string): string {
+  const lines = text.split('\n')
+  const out: string[] = []
+
+  for (let i = 0; i < lines.length;) {
+    const rows: string[][] = []
+    let j = i
+
+    while (j < lines.length) {
+      const parsed = parseLooseTableRow(lines[j])
+      if (!parsed) break
+      if (rows.length > 0 && parsed.length !== rows[0].length) break
+      rows.push(parsed)
+      j++
+    }
+
+    if (rows.length >= 2) {
+      out.push(`| ${rows[0].join(' | ')} |`)
+      out.push(`| ${rows[0].map(() => '---').join(' | ')} |`)
+      for (const row of rows.slice(1)) out.push(`| ${row.join(' | ')} |`)
+      i = j
+      continue
+    }
+
+    out.push(lines[i])
+    i++
+  }
+
+  return out.join('\n')
+}
+
 export function AiAssistant() {
   const router = useRouter()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [historyOpen, setHistoryOpenState] = useState(false)
   const setHistoryOpen = (v: boolean | ((prev: boolean) => boolean)) => {
@@ -213,8 +320,12 @@ export function AiAssistant() {
     const r = await fetch('/api/ai/providers')
     if (r.ok) {
       const data = await r.json()
-      setProviders(data.providers || [])
-      if (!selectedProvider && data.providers?.[0]) setSelectedProvider(data.providers[0].name)
+      const ranked = [...(data.providers || [])].sort((a: Provider, b: Provider) => {
+        const score = (p: Provider) => /gpt|openai/i.test(`${p.name} ${p.model}`) ? 1 : 0
+        return score(b) - score(a)
+      })
+      setProviders(ranked)
+      if (!selectedProvider && ranked[0]) setSelectedProvider(ranked[0].name)
     }
   }, [selectedProvider])
 
@@ -290,10 +401,16 @@ export function AiAssistant() {
     abortRef.current = controller
 
     try {
+      const pageContext = collectPageContext(pathname || window.location.pathname)
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({ chat_id: activeChatId, message: text, provider: selectedProvider || undefined }),
+        body: JSON.stringify({
+          chat_id: activeChatId,
+          message: text,
+          provider: selectedProvider || undefined,
+          page_context: pageContext,
+        }),
         signal: controller.signal,
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
@@ -623,7 +740,7 @@ export function AiAssistant() {
                             hr: () => <hr className="my-2 border-zinc-300" />,
                           }}
                         >
-                          {m.content}
+                          {normalizeMarkdownTables(m.content)}
                         </ReactMarkdown>
                       </div>
                       {m.suggestions && m.suggestions.length > 0 && (

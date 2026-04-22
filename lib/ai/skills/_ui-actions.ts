@@ -44,7 +44,7 @@ const click: Skill = {
 
 const fill: Skill = {
   name: 'ui_fill',
-  description: 'Type text into an input, textarea, or contenteditable field on the current page. Submits the change with an input + change + blur event. Pass fast:true (or any value >40 chars) to skip the typewriter animation and just set the value directly.',
+  description: 'FIRST CHOICE when the user says fill, populate, or autofill the current page. Type text into an input, textarea, or contenteditable field on the current page instead of creating a separate record. Submits the change with input + change + blur events. Pass fast:true (or any value >40 chars) to skip the typewriter animation and set the value directly.',
   category: 'System',
   icon: '⌨️',
   parameters: {

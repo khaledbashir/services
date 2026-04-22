@@ -49,6 +49,13 @@ function findField(selector: string): HTMLInputElement | HTMLTextAreaElement | H
       return direct
     }
   } catch {}
+  const bareTarget = selector.trim()
+  if (bareTarget && !bareTarget.startsWith('#') && !bareTarget.startsWith('.') && !bareTarget.startsWith('[')) {
+    const byAiTarget = document.querySelector<Element>(`[data-ai-target="${CSS.escape(bareTarget)}"]`)
+    if (byAiTarget && (byAiTarget instanceof HTMLInputElement || byAiTarget instanceof HTMLTextAreaElement || byAiTarget instanceof HTMLSelectElement)) {
+      return byAiTarget
+    }
+  }
   // Try label → for= → input lookup
   const lower = selector.toLowerCase().trim()
   const labels = Array.from(document.querySelectorAll<HTMLLabelElement>('label'))
