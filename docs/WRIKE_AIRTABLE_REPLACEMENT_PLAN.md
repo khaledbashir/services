@@ -105,7 +105,7 @@ Decision: don't integrate with the legacy `T:\` + `workspace.anc.com` system. Ow
 - [ ] **Backfill strategy for existing FTP links** — the 20K+ existing design requests have `ftp_proof_link` values pointing at the old workspace.anc.com URLs. Options: (a) leave them as-is for historical records, (b) bulk-download each, re-upload to our storage, update the link. Recommend (a) for read-only history + (b) only for the currently-active records (<500)
 - [ ] **Migration plan communicated to Alexis** — designers stop putting files on `T:\` drive, start uploading through the dashboard as of [date]. Clean cutover.
 
-### 4.2 Hours Budget 50% + 75% alerts (Alexis)
+### [x] 4.2 Hours Budget 50% + 75% alerts (Alexis)
 - [-] Add alert trigger logic to `lib/twenty-ops.ts` hours-budget updates (moved to cron instead)
 - [x] Cron that runs daily, checks every active budget, fires Slack + email at 50% / 75% thresholds
 - [x] Dedupe: don't re-alert once fired unless crossing a new threshold
