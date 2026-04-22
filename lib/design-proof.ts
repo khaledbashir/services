@@ -1,12 +1,16 @@
 import crypto from 'node:crypto'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
+import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
 
 /**
- * Generate a proof share link for a locally-owned design request and email
- * the client. Idempotent: if an unanswered share already exists it's reused.
+ * Generate a proof share link for a design request and email the client.
+ * Idempotent: if an unanswered share already exists it's reused.
+ *
+ * When TWENTY_BACKED_DESIGNS=1, the design lives in Twenty, so we pull
+ * metadata via the REST API rather than the local `design_requests` table.
  */
 export async function createDesignProofShare(params: {
   designRequestId: string
@@ -15,17 +19,7 @@ export async function createDesignProofShare(params: {
 }): Promise<{ token: string; url: string; emailed: boolean; client_email: string | null }> {
   const { designRequestId, createdByName, createdByEmail } = params
 
-  // Pull the design request + venue name (for subject line).
-  const { rows } = await query(
-    `SELECT dr.id, dr.job_title, dr.company_name, dr.client_email, dr.client_name,
-            dr.ftp_proof_link, v.name AS venue_name
-     FROM design_requests dr
-     LEFT JOIN venues v ON v.id = dr.venue_id
-     WHERE dr.id = $1`,
-    [designRequestId]
-  )
-  if (rows.length === 0) throw new Error('Design request not found')
-  const dr = rows[0] as {
+  let dr: {
     id: string
     job_title: string
     company_name: string | null
@@ -33,7 +27,39 @@ export async function createDesignProofShare(params: {
     client_name: string | null
     ftp_proof_link: string | null
     venue_name: string | null
+  } | null = null
+
+  if (isTwentyBackedEnabled('DESIGNS')) {
+    const twentyDesign = await Designs.get(designRequestId)
+    if (!twentyDesign) throw new Error('Design request not found in Twenty')
+    const client = (twentyDesign as any).designClient || null
+    dr = {
+      id: twentyDesign.id,
+      job_title: twentyDesign.name || 'Proof',
+      company_name: client?.name || null,
+      client_email:
+        (Array.isArray(client?.emails?.additionalEmails) && client.emails.additionalEmails[0]) ||
+        client?.emails?.primaryEmail ||
+        (twentyDesign as any).clientEmail ||
+        null,
+      client_name: client?.name || null,
+      ftp_proof_link: (twentyDesign as any).proofLink || null,
+      venue_name: (twentyDesign as any).designVenue?.name || null,
+    }
+  } else {
+    const { rows } = await query(
+      `SELECT dr.id, dr.job_title, dr.company_name, dr.client_email, dr.client_name,
+              dr.ftp_proof_link, v.name AS venue_name
+       FROM design_requests dr
+       LEFT JOIN venues v ON v.id = dr.venue_id
+       WHERE dr.id = $1`,
+      [designRequestId]
+    )
+    if (rows.length === 0) throw new Error('Design request not found')
+    dr = rows[0] as typeof dr
   }
+
+  if (!dr) throw new Error('Design request not found')
 
   // Reuse an unanswered, unexpired share for this record so reruns don't spam.
   const existing = await query(
