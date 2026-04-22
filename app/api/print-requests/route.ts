@@ -79,6 +79,12 @@ function parseProofLinks(value: unknown): string[] {
     .filter(Boolean)
 }
 
+function normalizeInvoiceAmount(value: unknown): number | null {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 async function getClientNameFromLocalId(clientId: string | null | undefined): Promise<string | null> {
   if (!clientId) return null
   const result = await query('SELECT id, name FROM clients WHERE id = $1 LIMIT 1', [clientId])
@@ -262,7 +268,7 @@ export async function POST(request: NextRequest) {
         shippingAddress: body.shipping_address?.trim() || null,
         shipDate: body.ship_date || null,
         arrivalDate: body.arrival_date || null,
-        invoiceAmount: body.invoice_amount === '' ? null : Number(body.invoice_amount || 0) || null,
+        invoiceAmount: normalizeInvoiceAmount(body.invoice_amount),
         britainNotes: body.notes?.trim() || null,
         proofLinks: JSON.stringify(parseProofLinks(body.proof_links)),
         trackingNumber: body.tracking_number?.trim() || null,
@@ -287,7 +293,7 @@ export async function POST(request: NextRequest) {
         body.shipping_address?.trim() || null,
         body.ship_date || null,
         body.arrival_date || null,
-        body.invoice_amount === '' ? null : Number(body.invoice_amount || 0) || null,
+        normalizeInvoiceAmount(body.invoice_amount),
         body.tracking_number?.trim() || null,
         legacyStatusForDb(body.status),
       ],
@@ -342,7 +348,7 @@ export async function PATCH(request: NextRequest) {
       if ('shipping_address' in body) patch.shippingAddress = body.shipping_address?.trim() || null
       if ('ship_date' in body) patch.shipDate = body.ship_date || null
       if ('arrival_date' in body) patch.arrivalDate = body.arrival_date || null
-      if ('invoice_amount' in body) patch.invoiceAmount = body.invoice_amount === '' ? null : Number(body.invoice_amount || 0) || null
+      if ('invoice_amount' in body) patch.invoiceAmount = normalizeInvoiceAmount(body.invoice_amount)
       if ('notes' in body) patch.britainNotes = body.notes?.trim() || null
       if ('proof_links' in body) patch.proofLinks = JSON.stringify(parseProofLinks(body.proof_links))
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null
@@ -379,7 +385,7 @@ export async function PATCH(request: NextRequest) {
       updates.push(`arrival_date = $${values.length}`)
     }
     if ('invoice_amount' in body) {
-      values.push(body.invoice_amount === '' ? null : Number(body.invoice_amount || 0) || null)
+      values.push(normalizeInvoiceAmount(body.invoice_amount))
       updates.push(`britten_cost = $${values.length}`)
     }
     if ('tracking_number' in body) {

@@ -1,12 +1,11 @@
 export {}
 
-export {}
-
 const TWENTY_BASE = process.env.TWENTY_API_URL || 'https://abc-twenty.izcgmb.easypanel.host'
 const TWENTY_METADATA_URL = `${TWENTY_BASE}/metadata`
 const TWENTY_API_KEY =
   process.env.TWENTY_API_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkM2ZiYzI5YS1hNjM1LTQ4YjctOWQ2ZS0yNTA5NDE2NzdmZDAiLCJ0eXBlIjoiQVBJX0tFWSIsIndvcmtzcGFjZUlkIjoiZDNmYmMyOWEtYTYzNS00OGI3LTlkNmUtMjUwOTQxNjc3ZmQwIiwiaWF0IjoxNzc0ODQ3NjQwLCJleHAiOjQ5Mjg0NDc2MzUsImp0aSI6IjdjZWEzNjVkLWI5ODEtNDViZC04MTY1LWRiZjgwOWJjYjQ4YiJ9.rW3KyyKgCVJrQX5WvbYHw62UNX_VkgO5ehLybXTd4bY'
+const COMPANY_OBJECT_ID = 'ccd95b3f-4a9a-443c-b8f2-01bff6c479ab'
 
 type MetadataObject = {
   id: string
@@ -24,13 +23,13 @@ type MetadataField = {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'new_job', label: 'New Job', position: 0, color: 'gray' },
-  { value: 'awaiting_layout', label: 'Awaiting Layout', position: 1, color: 'blue' },
-  { value: 'awaiting_approval', label: 'Awaiting Approval', position: 2, color: 'orange' },
-  { value: 'approved', label: 'Approved', position: 3, color: 'green' },
-  { value: 'in_production', label: 'In Production', position: 4, color: 'purple' },
-  { value: 'shipped', label: 'Shipped', position: 5, color: 'blue' },
-  { value: 'invoiced', label: 'Invoiced', position: 6, color: 'green' },
+  { value: 'STATUS_NEW_JOB', label: 'New Job', position: 0, color: 'gray' },
+  { value: 'STATUS_WAITING_LAYOUT', label: 'Awaiting Layout', position: 1, color: 'blue' },
+  { value: 'STATUS_AWAITING_APPROVAL', label: 'Awaiting Approval', position: 2, color: 'orange' },
+  { value: 'STATUS_APPROVED', label: 'Approved', position: 3, color: 'green' },
+  { value: 'STATUS_IN_PRODUCTION', label: 'In Production', position: 4, color: 'purple' },
+  { value: 'STATUS_SHIPPED', label: 'Shipped', position: 5, color: 'blue' },
+  { value: 'STATUS_INVOICED', label: 'Invoiced', position: 6, color: 'green' },
 ]
 
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
@@ -133,8 +132,6 @@ async function createField(input: Record<string, unknown>) {
 
 async function main() {
   const objects = await listObjects()
-  const company = objects.find((object) => object.nameSingular === 'company')
-  if (!company) throw new Error('Company object not found in Twenty metadata')
 
   let printRequest = objects.find((object) => object.nameSingular === 'printRequest')
   if (!printRequest) {
@@ -173,7 +170,7 @@ async function main() {
     name: 'status',
     label: 'Status',
     icon: 'IconProgressCheck',
-    defaultValue: "'new_job'",
+    defaultValue: "'STATUS_NEW_JOB'",
     options: STATUS_OPTIONS,
   })
 
@@ -184,7 +181,7 @@ async function main() {
     icon: 'IconBuilding',
     relationCreationPayload: {
       type: 'MANY_TO_ONE',
-      targetObjectMetadataId: company.id,
+      targetObjectMetadataId: COMPANY_OBJECT_ID,
       targetFieldLabel: 'Print Requests',
       targetFieldIcon: 'IconPrinter',
       targetFieldName: 'printRequests',
