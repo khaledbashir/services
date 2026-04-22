@@ -18,6 +18,7 @@ const WIP_PREFIXES = [
   '/designs',
   '/cg-designs',
   '/content-schedules',
+  '/print-requests',
   '/prints',
   '/hours-budgets',
   '/time-entries',

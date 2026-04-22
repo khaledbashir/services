@@ -240,6 +240,24 @@ export interface TwentyDesignerHoursBudget {
   updatedAt: string
 }
 
+export interface TwentyPrintRequest {
+  id: string
+  name: string | null
+  status: string | null
+  printClientId: string | null
+  printClient?: { id: string; name: string }
+  shippingAddress: string | null
+  shipDate: string | null
+  arrivalDate: string | null
+  invoiceAmount: number | null
+  britainNotes: string | null
+  notes: { blocknote?: string; markdown?: string } | string | null
+  proofLinks: string | null
+  trackingNumber: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 // ── Generic list/get/create/update/delete helpers ────────────────────────────
 // Every ops object shares the same REST shape, so one set of helpers serves
 // all eight. Each module re-exports these with its own type narrowing below.
@@ -417,6 +435,16 @@ export const HoursBudgets = {
   delete: (id: string) => deleteObject('designerHoursBudgets', id),
 }
 
+export const PrintRequests = {
+  collection: 'printRequests',
+  venueField: null as string | null,
+  list: (opts?: ListOptions) => listObjects<TwentyPrintRequest>('printRequests', opts),
+  get:  (id: string) => getObject<TwentyPrintRequest>('printRequests', id),
+  create: (data: Partial<TwentyPrintRequest>) => createObject<TwentyPrintRequest>('printRequests', data as Record<string, unknown>),
+  update: (id: string, data: Partial<TwentyPrintRequest>) => updateObject<TwentyPrintRequest>('printRequests', id, data as Record<string, unknown>),
+  delete: (id: string) => deleteObject('printRequests', id),
+}
+
 // ── Re-exports so callers only need to import from '@/lib/twenty-ops' ────────
 export { twentyFetch, fetchAllTwenty } from '@/lib/twenty-sync'
 
@@ -428,4 +456,34 @@ export { twentyFetch, fetchAllTwenty } from '@/lib/twenty-sync'
 export function isTwentyBackedEnabled(moduleName: string): boolean {
   const flag = process.env[`TWENTY_BACKED_${moduleName.toUpperCase()}`]
   return flag === '1' || flag === 'true'
+}
+
+// ── Content Schedule ─────────────────────────────────────────────────────────
+// Replaces Alexis's Wrike content-schedule workflow. Auto-stale logic lives in
+// /api/cron/content-schedule-stale — sets status to 'confirmed_live' when
+// runEndDate passes and status is still 'content_live'.
+
+export interface TwentyContentSchedule {
+  id: string
+  name: string | null
+  runStartDate: string | null
+  runEndDate: string | null
+  status: string | null
+  notes: string | null
+  contentScheduleVenueId: string | null
+  contentScheduleVenue?: { id: string; name: string; servicesId?: string | null }
+  contentScheduleClientId: string | null
+  contentScheduleClient?: { id: string; name: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export const ContentSchedule = {
+  collection: 'contentSchedules',
+  venueField: 'contentScheduleVenueId' as string | null,
+  list: (opts?: ListOptions) => listObjects<TwentyContentSchedule>('contentSchedules', opts),
+  get:  (id: string) => getObject<TwentyContentSchedule>('contentSchedules', id),
+  create: (data: Partial<TwentyContentSchedule>) => createObject<TwentyContentSchedule>('contentSchedules', data as Record<string, unknown>),
+  update: (id: string, data: Partial<TwentyContentSchedule>) => updateObject<TwentyContentSchedule>('contentSchedules', id, data as Record<string, unknown>),
+  delete: (id: string) => deleteObject('contentSchedules', id),
 }
