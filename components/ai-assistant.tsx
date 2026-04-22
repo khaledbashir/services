@@ -31,7 +31,7 @@ const DEFAULT_SUGGESTIONS = [
   'Open the Prudential Center page',
   'Create a design request',
   'What tickets are open?',
-  'List my venues with no feed URL',
+  'List my venues',
 ]
 
 // Strip a <suggestions>[...]</suggestions> block (if present) from the
@@ -138,9 +138,8 @@ interface PageContext {
   visible_fields?: PageContextField[]
 }
 
-const STORAGE_KEY = 'ai-panel-open'
+  const STORAGE_KEY = 'ai-panel-open'
 const PROVIDER_KEY = 'ai-panel-provider'
-const ACTIVE_CHAT_KEY = 'ai-active-chat'
 const WIDTH_KEY = 'ai-panel-width'
 const MIN_WIDTH = 360
 const MAX_WIDTH = 900
@@ -285,8 +284,7 @@ export function AiAssistant() {
   useEffect(() => {
     setOpen(localStorage.getItem(STORAGE_KEY) === '1')
     setSelectedProvider(localStorage.getItem(PROVIDER_KEY) || '')
-    const stored = localStorage.getItem(ACTIVE_CHAT_KEY)
-    if (stored) setActiveChatId(stored)
+    // Don't restore old chat on panel open — always start fresh
     const savedWidth = Number(localStorage.getItem(WIDTH_KEY))
     if (savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) setWidth(savedWidth)
   }, [])
@@ -323,12 +321,6 @@ export function AiAssistant() {
     }
   }, [resizing, width])
 
-  // Persist activeChatId so chat survives reload.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (activeChatId) localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId)
-    else localStorage.removeItem(ACTIVE_CHAT_KEY)
-  }, [activeChatId])
   useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, open ? '1' : '0') }, [open])
   useEffect(() => { if (selectedProvider && typeof window !== 'undefined') localStorage.setItem(PROVIDER_KEY, selectedProvider) }, [selectedProvider])
 
@@ -365,18 +357,23 @@ export function AiAssistant() {
     loadChats()
     loadSkills()
     loadProviders()
-    // If the panel reopens with a persisted active chat, hydrate its
-    // messages so history survives reloads.
-    if (activeChatId && messages.length === 0) {
-      loadChat(activeChatId).catch(() => {
-        // Chat was deleted or is inaccessible — clear pointer.
-        setActiveChatId(null)
-      })
+    // Start fresh every time the panel opens — no stale chat restoration
+    if (!activeChatId) {
+      setMessages([])
     }
     // Autofocus the composer when the panel opens.
     setTimeout(() => inputRef.current?.focus(), 50)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Reset conversation on page navigation so the AI has fresh context
+  // Reset conversation on page navigation so the AI has fresh context
+  useEffect(() => {
+    if (open) {
+      newChat()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -589,24 +586,31 @@ export function AiAssistant() {
             className={`hidden sm:block absolute inset-y-0 left-0 w-1.5 cursor-col-resize hover:bg-[#0A52EF]/20 ${resizing ? 'bg-[#0A52EF]/30' : ''}`}
             title="Drag to resize"
           />
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8]">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0A52EF]">ANC Assistant</span>
-              {activeChatId ? (
-                <span className="text-xs text-zinc-500 truncate">{chats.find(c => c.id === activeChatId)?.title || 'Chat'}</span>
-              ) : null}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8E8E8] bg-white">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#0A52EF] to-[#6C3FE8] flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-900">Assistant</div>
+                {activeChatId ? (
+                  <div className="text-[11px] text-zinc-400 truncate">{chats.find(c => c.id === activeChatId)?.title || 'Chat'}</div>
+                ) : null}
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button onClick={newChat} title="New chat" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+            <div className="flex items-center gap-0.5">
+              <button onClick={newChat} title="New chat" className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-500 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               </button>
-              <button onClick={() => setHistoryOpen(v => !v)} title="History" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+              <button onClick={() => setHistoryOpen(v => !v)} title="History" className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-500 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </button>
-              <button onClick={() => setShowSkills(v => !v)} title="Skills" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+              <button onClick={() => setShowSkills(v => !v)} title="Skills" className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-500 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               </button>
-              <button onClick={() => setOpen(false)} title="Close" className="p-1.5 rounded hover:bg-zinc-100 text-zinc-600">
+              <button onClick={() => setOpen(false)} title="Close" className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-500 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -654,65 +658,69 @@ export function AiAssistant() {
             </div>
           )}
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-0">
             {messages.length === 0 ? (
-              <div className="text-center text-sm text-zinc-500 mt-12 px-2">
-                <div className="text-3xl mb-2">👋</div>
-                <div className="text-zinc-600 font-medium">ANC Assistant</div>
-                <div className="text-zinc-400 text-xs mt-1">Ask, click, or pick a suggestion.</div>
-                <div className="flex flex-wrap gap-1.5 justify-center mt-5">
+              <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0A52EF] to-[#6C3FE8] flex items-center justify-center mb-4 shadow-lg shadow-[#0A52EF]/20">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                </div>
+                <div className="text-zinc-800 font-semibold text-base mb-1">ANC Assistant</div>
+                <div className="text-zinc-400 text-sm mb-6">Ask, search, or make anything happen.</div>
+                <div className="grid grid-cols-1 gap-2 w-full max-w-xs">
                   {DEFAULT_SUGGESTIONS.map((s, i) => (
                     <button key={i}
                       onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
-                      className="text-[11px] px-2.5 py-1 rounded-full border border-[#E8E8E8] bg-white text-zinc-600 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors">
-                      {s}
+                      className="text-left text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:border-[#0A52EF]/40 hover:bg-[#0A52EF]/[0.04] hover:text-[#0A52EF] transition-all duration-150 group">
+                      <span className="font-medium group-hover:text-[#0A52EF]">{s}</span>
                     </button>
                   ))}
                 </div>
               </div>
             ) : messages.filter(m => m.role !== 'tool' && m.role !== 'system').map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
                 {m.role === 'user' ? (
-                  <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words bg-[#0A52EF] text-white">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm whitespace-pre-wrap break-words bg-[#0A52EF] text-white shadow-sm shadow-[#0A52EF]/10">
                     {m.content}
                   </div>
                 ) : (
-                  <div className="max-w-[92%] w-full">
+                  <div className="max-w-[95%] w-full">
                     {(m.steps || []).length > 0 && (
-                      <div className="relative pl-5 border-l-2 border-zinc-200 space-y-2.5 mb-2">
+                      <div className="relative pl-4 border-l-2 border-zinc-200 space-y-2 mb-3">
                         {(m.steps || []).map((step, si) => {
                           const key = `${i}-${si}`
                           const expanded = !!expandedSteps[key]
                           const running = !step.result
                           return (
                             <div key={si} className="relative">
-                              <div className={`absolute -left-[27px] top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${running ? 'bg-[#0A52EF] text-white animate-pulse' : 'bg-emerald-500 text-white'}`}>
+                              <div className={`absolute -left-[23px] top-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${running ? 'bg-[#0A52EF] text-white animate-pulse' : 'bg-emerald-500 text-white'}`}>
                                 {running ? '·' : '✓'}
                               </div>
                               <button
                                 onClick={() => toggleStep(key)}
                                 className="text-left block w-full group"
                               >
-                                <div className="text-[11px] text-zinc-500 font-medium uppercase tracking-[0.12em]">
+                                <div className="text-[10px] text-zinc-400 font-semibold uppercase tracking-[0.14em]">
                                   {running ? 'Running' : 'Ran tool'}
                                 </div>
-                                <div className="text-xs text-zinc-800 font-mono group-hover:text-[#0A52EF] flex items-center gap-1.5">
+                                <div className="text-xs text-zinc-700 font-mono group-hover:text-[#0A52EF] flex items-center gap-1">
                                   <span>{step.name}</span>
                                   <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                                 </div>
                               </button>
                               {expanded && (
-                                <div className="mt-1 rounded-lg border border-[#E8E8E8] bg-zinc-50 px-3 py-2 font-mono text-[11px] space-y-1">
+                                <div className="mt-1.5 rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 font-mono text-[11px] space-y-1.5">
                                   {step.args ? (
                                     <div>
-                                      <div className="text-zinc-400 text-[10px] uppercase tracking-wider">Args</div>
-                                      <div className="text-zinc-700 break-all">{step.args}</div>
+                                      <div className="text-zinc-400 text-[9px] uppercase tracking-wider font-semibold">Args</div>
+                                      <div className="text-zinc-600 break-all">{step.args}</div>
                                     </div>
                                   ) : null}
                                   {step.result ? (
                                     <div>
-                                      <div className="text-zinc-400 text-[10px] uppercase tracking-wider">Result</div>
-                                      <div className="text-zinc-700 break-all max-h-40 overflow-y-auto">{step.result.length > 1200 ? step.result.slice(0, 1200) + '…' : step.result}</div>
+                                      <div className="text-zinc-400 text-[9px] uppercase tracking-wider font-semibold">Result</div>
+                                      <div className="text-zinc-600 break-all max-h-40 overflow-y-auto">{step.result.length > 1200 ? step.result.slice(0, 1200) + '…' : step.result}</div>
                                     </div>
                                   ) : null}
                                 </div>
@@ -724,19 +732,29 @@ export function AiAssistant() {
                     )}
                     {m.content ? (
                       <>
-                      <div className="rounded-2xl bg-zinc-100 text-zinc-800 px-4 py-2.5 text-sm break-words ai-prose">
+                      <div className="rounded-2xl rounded-tl-md bg-zinc-50 border border-zinc-200/60 text-zinc-800 px-4 py-3 text-[13.5px] leading-relaxed break-words ai-prose">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            h1: (p) => <h2 className="text-base font-semibold mt-2 mb-1 text-zinc-900" {...p} />,
-                            h2: (p) => <h3 className="text-sm font-semibold mt-2 mb-1 text-zinc-900" {...p} />,
-                            h3: (p) => <h4 className="text-sm font-semibold mt-1.5 mb-0.5 text-zinc-800" {...p} />,
-                            p: (p) => <p className="my-1 leading-relaxed" {...p} />,
-                            ul: (p) => <ul className="list-disc pl-5 my-1 space-y-0.5" {...p} />,
-                            ol: (p) => <ol className="list-decimal pl-5 my-1 space-y-0.5" {...p} />,
-                            li: (p) => <li className="my-0" {...p} />,
+                            h1: (p) => <h2 className="text-[15px] font-bold mt-3 mb-1.5 text-zinc-900 tracking-tight" {...p} />,
+                            h2: (p) => <h3 className="text-[14px] font-bold mt-2.5 mb-1 text-zinc-900 tracking-tight" {...p} />,
+                            h3: (p) => <h4 className="text-[13px] font-semibold mt-2 mb-0.5 text-zinc-800" {...p} />,
+                            p: (p) => <p className="my-1.5 leading-relaxed" {...p} />,
+                            ul: (p) => <ul className="list-disc pl-5 my-1.5 space-y-1" {...p} />,
+                            ol: (p) => <ol className="list-decimal pl-5 my-1.5 space-y-1" {...p} />,
+                            li: (p) => <li className="my-0.5 leading-snug" {...p} />,
                             strong: (p) => <strong className="font-semibold text-zinc-900" {...p} />,
-                            code: ({ children, ...rest }) => <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 text-[11px] font-mono" {...rest}>{children}</code>,
+                            em: (p) => <em className="italic text-zinc-600" {...p} />,
+                            code: ({ children, className, ...rest }) => {
+                              const isBlock = className?.includes('language-')
+                              return isBlock ? (
+                                <code className={className} {...rest}>{children}</code>
+                              ) : (
+                                <code className="bg-zinc-200/70 text-zinc-800 rounded px-1.5 py-0.5 text-[12px] font-mono" {...rest}>{children}</code>
+                              )
+                            },
+                            pre: (p) => <pre className="my-2 rounded-lg bg-zinc-900 text-zinc-100 p-3 text-[12px] font-mono overflow-x-auto" {...p} />,
+                            blockquote: (p) => <blockquote className="border-l-3 border-[#0A52EF]/30 pl-3 my-2 text-zinc-600 italic" {...p} />,
                             a: ({ href, children, ...rest }) => {
                               const isInternal = typeof href === 'string' && href.startsWith('/')
                               return isInternal ? (
@@ -749,27 +767,27 @@ export function AiAssistant() {
                                   {children}
                                 </a>
                               ) : (
-                                <a href={href} className="text-[#0A52EF] underline" target="_blank" rel="noopener noreferrer" {...rest}>
+                                <a href={href} className="text-[#0A52EF] font-medium underline underline-offset-2" target="_blank" rel="noopener noreferrer" {...rest}>
                                   {children}
                                 </a>
                               )
                             },
-                            table: (p) => <div className="my-2 overflow-x-auto"><table className="text-[12px] border-collapse w-full" {...p} /></div>,
-                            thead: (p) => <thead className="bg-zinc-200/60" {...p} />,
-                            th: (p) => <th className="border border-zinc-300 px-2 py-1 text-left font-semibold" {...p} />,
-                            td: (p) => <td className="border border-zinc-300 px-2 py-1 align-top" {...p} />,
-                            hr: () => <hr className="my-2 border-zinc-300" />,
+                            table: (p) => <div className="my-2 overflow-x-auto -mx-1 px-1"><table className="text-[12px] border-collapse w-full" {...p} /></div>,
+                            thead: (p) => <thead className="bg-zinc-200/50" {...p} />,
+                            th: (p) => <th className="border border-zinc-300 px-2 py-1 text-left font-semibold text-zinc-700" {...p} />,
+                            td: (p) => <td className="border border-zinc-300 px-2 py-1 align-top text-zinc-700" {...p} />,
+                            hr: () => <hr className="my-3 border-zinc-200" />,
                           }}
                         >
                           {normalizeMarkdownTables(m.content)}
                         </ReactMarkdown>
                       </div>
                       {m.suggestions && m.suggestions.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
+                        <div className="flex flex-wrap gap-1.5 mt-2">
                           {m.suggestions.map((s, si) => (
                             <button key={si}
                               onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
-                              className="text-[11px] px-2.5 py-1 rounded-full border border-[#E8E8E8] bg-white text-zinc-600 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors">
+                              className="text-[12px] px-3 py-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:border-[#0A52EF]/50 hover:bg-[#0A52EF]/[0.06] hover:text-[#0A52EF] transition-all duration-150 font-medium">
                               {s}
                             </button>
                           ))}
@@ -777,7 +795,14 @@ export function AiAssistant() {
                       )}
                       </>
                     ) : m.pending ? (
-                      <div className="rounded-2xl bg-zinc-100 text-zinc-400 px-4 py-2.5 text-sm italic">Thinking…</div>
+                      <div className="rounded-2xl rounded-tl-md bg-zinc-50 border border-zinc-200/60 text-zinc-400 px-4 py-3 text-sm flex items-center gap-2">
+                        <span className="inline-flex gap-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '0ms'}}></span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '150ms'}}></span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '300ms'}}></span>
+                        </span>
+                        <span className="italic">Thinking…</span>
+                      </div>
                     ) : null}
                   </div>
                 )}
@@ -785,35 +810,35 @@ export function AiAssistant() {
             ))}
           </div>
 
-          <div className="p-3 border-t border-[#E8E8E8] space-y-2">
+          <div className="p-3 border-t border-[#E8E8E8] bg-zinc-50/80">
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-                placeholder="Ask, search, or make anything…"
+                placeholder="Ask anything…"
                 rows={1}
-                className="flex-1 resize-none rounded-xl border border-[#E8E8E8] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 max-h-32"
+                className="flex-1 resize-none rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF]/40 max-h-32 placeholder:text-zinc-400"
               />
               {sending ? (
-                <button onClick={stop} className="rounded-xl bg-red-50 text-red-600 border border-red-200 px-3 py-2 text-sm font-medium hover:bg-red-100" title="Stop">
+                <button onClick={stop} className="rounded-xl bg-red-50 text-red-600 border border-red-200 px-3 py-2.5 text-sm font-medium hover:bg-red-100 transition-colors flex-shrink-0" title="Stop">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
                 </button>
               ) : (
                 <button onClick={send} disabled={!input.trim()}
-                  className="rounded-xl bg-[#0A52EF] text-white px-3 py-2 text-sm font-medium hover:bg-[#0840C0] disabled:opacity-50 disabled:cursor-not-allowed">
-                  Send
+                  className="rounded-xl bg-[#0A52EF] text-white px-4 py-2.5 text-sm font-semibold hover:bg-[#0840C0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm shadow-[#0A52EF]/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A28.962 28.962 0 0112 2.288c2.996 0 5.82.698 8.269 1.838L18 12m-6 0l-3 3m3-3l3 3M12 22a8 8 0 100-16 8 8 0 000 16z" /></svg>
                 </button>
               )}
             </div>
-            <div className="flex items-center justify-between text-[11px] text-zinc-400">
-              <span>{skills.length} skills loaded</span>
+            <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1.5 px-0.5">
+              <span>{skills.length} skills ready</span>
               {providers.length > 0 && (
                 <select
                   value={selectedProvider}
                   onChange={e => setSelectedProvider(e.target.value)}
-                  className="text-[11px] text-zinc-600 bg-transparent border-0 focus:outline-none cursor-pointer"
+                  className="text-[10px] text-zinc-500 bg-transparent border-0 focus:outline-none cursor-pointer hover:text-zinc-700"
                   title="AI provider"
                   disabled={sending}
                 >
