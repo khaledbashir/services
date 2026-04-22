@@ -6,29 +6,9 @@ import { AiAssistant } from './ai-assistant'
 import { AiUiDriver } from './ai-ui-driver'
 import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
-import { WipBanner } from './wip-banner'
-
-const WIP_PREFIXES = [
-  '/maintenance',
-  '/walkthroughs',
-  '/checklists',
-  '/rma',
-  '/parts-orders',
-  '/parts',
-  '/designs',
-  '/cg-designs',
-  '/content-schedules',
-  '/print-requests',
-  '/prints',
-  '/hours-budgets',
-  '/time-entries',
-]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? ''
-  const isWip = WIP_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  )
   // When the AI (or any code) fires "anc:data-refresh", remount the page tree
   // by bumping this key. That forces every child's useEffect/useState to
   // re-initialize — so any page that fetches on mount re-fetches. The AI
@@ -48,7 +28,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         style={{ paddingRight: 'var(--ai-panel-shrink, 0px)' }}
       >
         <div className="flex-1 overflow-auto">
-          {isWip && <WipBanner />}
           <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
             <div className="mb-4 flex justify-end lg:mb-6">
               <GlobalSearch />
