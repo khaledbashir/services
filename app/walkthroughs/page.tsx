@@ -36,6 +36,12 @@ export default function WalkthroughsPage() {
   })
   const [quick, setQuick] = useState({ venue_id: '', locations_visited: '', result: 'good' })
   const [quickSaving, setQuickSaving] = useState(false)
+  // Phase 2 filter bar (mirrors /tickets style): venue / date range / technician / result.
+  const [filterVenue, setFilterVenue] = useState<string>('all')
+  const [filterResult, setFilterResult] = useState<string>('all')
+  const [filterTech, setFilterTech] = useState<string>('')
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('')
+  const [filterDateTo, setFilterDateTo] = useState<string>('')
 
   const load = async () => {
     setLoading(true)
@@ -163,39 +169,86 @@ export default function WalkthroughsPage() {
           </button>
         </div>
 
+        {/* Filter bar — phase-2 parity with /tickets. */}
+        <div className="rounded-2xl border border-[#E8E8E8] bg-white p-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500 pl-1">Filter</span>
+          <select value={filterVenue} onChange={e => setFilterVenue(e.target.value)} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs max-w-[180px]">
+            <option value="all">All venues</option>
+            {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+          <select value={filterResult} onChange={e => setFilterResult(e.target.value)} className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs">
+            <option value="all">Any result</option>
+            <option value="good">Good</option>
+            <option value="problem">Problem</option>
+            <option value="problem_detected">Problem detected</option>
+            <option value="partial">Partial</option>
+            <option value="minor">Minor</option>
+          </select>
+          <input value={filterTech} onChange={e => setFilterTech(e.target.value)}
+            placeholder="Technician name"
+            className="px-3 py-1.5 border border-[#E8E8E8] rounded-lg text-xs min-w-[140px]" />
+          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+            className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs" title="From" />
+          <span className="text-zinc-400 text-xs">→</span>
+          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+            className="px-2 py-1.5 border border-[#E8E8E8] rounded-lg text-xs" title="To" />
+          {(filterVenue !== 'all' || filterResult !== 'all' || filterTech || filterDateFrom || filterDateTo) && (
+            <button onClick={() => { setFilterVenue('all'); setFilterResult('all'); setFilterTech(''); setFilterDateFrom(''); setFilterDateTo('') }}
+              className="text-xs text-zinc-500 hover:text-zinc-800 underline ml-2">
+              Clear
+            </button>
+          )}
+        </div>
+
         <div className="rounded-2xl border border-[#E8E8E8] bg-white overflow-hidden">
           {loading ? (
             <div className="p-8 text-center text-sm text-zinc-500">Loading…</div>
           ) : walks.length === 0 ? (
             <div className="p-12 text-center text-sm text-zinc-500">No walkthroughs yet.</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-                  <th className="px-5 py-3 text-left">Date</th>
-                  <th className="px-5 py-3 text-left">Venue</th>
-                  <th className="px-5 py-3 text-left">Technician</th>
-                  <th className="px-5 py-3 text-left">Locations</th>
-                  <th className="px-5 py-3 text-left">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {walks.map(w => (
-                  <tr key={w.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                    <td className="px-5 py-3 text-zinc-600 text-xs font-mono">{w.log_date}{w.log_time ? ` ${w.log_time}` : ''}</td>
-                    <td className="px-5 py-3 font-medium text-zinc-900">{w.venue_name}</td>
-                    <td className="px-5 py-3 text-zinc-600">{w.technician_name || '—'}</td>
-                    <td className="px-5 py-3 text-zinc-600 max-w-md truncate">{w.locations_visited || '—'}</td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[w.result || 'good'] || RESULT_STYLE.good}`}>
-                        {(w.result || 'unknown').replace('_', ' ')}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          ) : (() => {
+            const techQ = filterTech.trim().toLowerCase()
+            const filtered = walks.filter(w => {
+              if (filterVenue !== 'all' && w.venue_id !== filterVenue) return false
+              if (filterResult !== 'all' && (w.result || 'good') !== filterResult) return false
+              if (techQ && !(w.technician_name || '').toLowerCase().includes(techQ)) return false
+              if (filterDateFrom && (w.log_date || '') < filterDateFrom) return false
+              if (filterDateTo && (w.log_date || '') > filterDateTo) return false
+              return true
+            })
+            return (
+              <>
+                <div className="px-5 py-2 border-b border-zinc-200 text-[11px] uppercase tracking-[0.14em] text-zinc-500 bg-zinc-50">
+                  Showing {filtered.length} of {walks.length}
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] uppercase tracking-[0.16em] text-zinc-500">
+                      <th className="px-5 py-3 text-left">Date</th>
+                      <th className="px-5 py-3 text-left">Venue</th>
+                      <th className="px-5 py-3 text-left">Technician</th>
+                      <th className="px-5 py-3 text-left">Locations</th>
+                      <th className="px-5 py-3 text-left">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map(w => (
+                      <tr key={w.id} className="border-b border-zinc-100 hover:bg-zinc-50">
+                        <td className="px-5 py-3 text-zinc-600 text-xs font-mono">{w.log_date}{w.log_time ? ` ${w.log_time}` : ''}</td>
+                        <td className="px-5 py-3 font-medium text-zinc-900">{w.venue_name}</td>
+                        <td className="px-5 py-3 text-zinc-600">{w.technician_name || '—'}</td>
+                        <td className="px-5 py-3 text-zinc-600 max-w-md truncate">{w.locations_visited || '—'}</td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[w.result || 'good'] || RESULT_STYLE.good}`}>
+                            {(w.result || 'unknown').replace('_', ' ')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )
+          })()}
         </div>
       </div>
     </DashboardLayout>
