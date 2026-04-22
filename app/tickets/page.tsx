@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, FormEvent } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
@@ -64,8 +65,19 @@ export default function TicketsPage() {
     try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
   }, [])
   const [bulkBusy, setBulkBusy] = useState(false)
+  const sp = useSearchParams()
+  const urlAssignedTo = sp?.get('assigned_to') || ''
+  const urlVenueId = sp?.get('venue_id') || ''
+  const urlStatus = sp?.get('status') || ''
+  const urlFrom = sp?.get('from') || ''
+  const urlTo = sp?.get('to') || ''
+
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [statusFilter, setStatusFilter] = useState<string>(urlStatus || 'active')
+  const [assignedToFilter, setAssignedToFilter] = useState<string>(urlAssignedTo)
+  const [venueFilter, setVenueFilter] = useState<string>(urlVenueId)
+  const [fromFilter] = useState<string>(urlFrom)
+  const [toFilter] = useState<string>(urlTo)
   const [showForm, setShowForm] = useState(false)
   const [selectedVenueId, setSelectedVenueId] = useState('')
   const [venueQuery, setVenueQuery] = useState('')
@@ -254,7 +266,14 @@ export default function TicketsPage() {
       || (t.category || '').toLowerCase().includes(q)
       || String(t.ticket_number || '').includes(q)
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && t.status !== 'closed') || t.status === statusFilter
-    return matchesSearch && matchesStatus
+    // URL-param drill-down filters — used by /reports/tickets-by-tech and
+    // /reports/tickets-by-venue drill-down links. Each is no-op when empty.
+    const matchesAssignee = !assignedToFilter || (t as any).assigned_to === assignedToFilter
+    const matchesVenue = !venueFilter || (t as any).venue_id === venueFilter
+    const created = (t as any).created_at ? String((t as any).created_at).slice(0, 10) : ''
+    const matchesFrom = !fromFilter || created >= fromFilter
+    const matchesTo = !toFilter || created <= toFilter
+    return matchesSearch && matchesStatus && matchesAssignee && matchesVenue && matchesFrom && matchesTo
   })
 
   const counts: Record<string, number> = {
@@ -404,6 +423,26 @@ export default function TicketsPage() {
                 {submitting ? 'Creating...' : 'Create Ticket'}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* URL-param drill-down banner — shows when arriving here from a
+            report like "click a tech's name to see the tickets they closed." */}
+        {(assignedToFilter || venueFilter || fromFilter || toFilter) && (
+          <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 px-4 py-2.5 flex items-center gap-3 text-sm">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700">Filtered view</span>
+            <span className="text-blue-900">
+              {assignedToFilter && tickets.find(t => (t as any).assigned_to === assignedToFilter)?.assigned_to_name
+                ? <>Assigned to <b>{tickets.find(t => (t as any).assigned_to === assignedToFilter)?.assigned_to_name}</b>{' · '}</>
+                : null}
+              {venueFilter && tickets.find(t => (t as any).venue_id === venueFilter)?.venue_name
+                ? <>Venue <b>{tickets.find(t => (t as any).venue_id === venueFilter)?.venue_name}</b>{' · '}</>
+                : null}
+              {fromFilter && <>From <b>{fromFilter}</b>{' · '}</>}
+              {toFilter && <>To <b>{toFilter}</b>{' · '}</>}
+              Showing {filteredTickets.length} of {tickets.length}
+            </span>
+            <a href="/tickets" className="ml-auto text-xs text-blue-700 hover:underline">Clear filters</a>
           </div>
         )}
 

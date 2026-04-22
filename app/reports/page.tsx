@@ -96,9 +96,10 @@ export default function ReportsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Operations Report</h1>
             <p className="text-zinc-500 text-sm mt-1">{formatDate(data.startDate)} — {formatDate(data.endDate)}</p>
-            <div className="mt-2 flex gap-4 text-xs print:hidden">
+            <div className="mt-2 flex gap-4 text-xs print:hidden flex-wrap">
               <a href="/reports/hours-by-client" className="text-[#0A52EF] hover:underline">→ Hours by Client</a>
               <a href="/reports/tickets-by-tech" className="text-[#0A52EF] hover:underline">→ Tickets Closed by Tech</a>
+              <a href="/reports/tickets-by-venue" className="text-[#0A52EF] hover:underline">→ Tickets by Venue</a>
             </div>
           </div>
           <div className="flex gap-2 items-center print:hidden">
