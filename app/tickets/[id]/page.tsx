@@ -78,10 +78,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [merging, setMerging] = useState(false)
   const [canDelete, setCanDelete] = useState(false)
   useEffect(() => {
-    try {
-      const r = localStorage.getItem('userRole') || ''
-      setCanDelete(['admin', 'tech_support', 'manager'].includes(r))
-    } catch {}
+    // Tightened 2026-04-23 at Chris D's ask: admin-only delete. Managers still
+    // use "close" via the Mark Complete button — delete is irrecoverable.
+    try { setCanDelete(localStorage.getItem('userRole') === 'admin') } catch {}
   }, [])
   const router = useRouter()
 

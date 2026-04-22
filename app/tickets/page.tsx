@@ -59,6 +59,10 @@ export default function TicketsPage() {
   const [view, setView] = useState<'cards' | 'list'>('list')
   const [viewHydrated, setViewHydrated] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => {
+    try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
+  }, [])
   const [bulkBusy, setBulkBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
@@ -132,6 +136,25 @@ export default function TicketsPage() {
       const fresh = await fetch('/api/tickets').then(r => r.json())
       setTickets(fresh.tickets || [])
       clearSelection()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkDelete = async () => {
+    if (bulkBusy || selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} ticket${selectedIds.size === 1 ? '' : 's'}? This can't be undone — spam only.`)) return
+    setBulkBusy(true)
+    try {
+      const failures: string[] = []
+      await Promise.all(Array.from(selectedIds).map(async (id) => {
+        const res = await fetch(`/api/tickets/${id}`, { method: 'DELETE' })
+        if (!res.ok) failures.push(id)
+      }))
+      const fresh = await fetch('/api/tickets').then(r => r.json())
+      setTickets(fresh.tickets || [])
+      clearSelection()
+      if (failures.length > 0) alert(`${failures.length} ticket(s) could not be deleted.`)
     } finally {
       setBulkBusy(false)
     }
@@ -575,6 +598,16 @@ export default function TicketsPage() {
           >
             {bulkBusy ? 'Merging…' : `Merge ${selectedIds.size}`}
           </button>
+          {isAdmin && (
+            <button
+              onClick={bulkDelete}
+              disabled={bulkBusy}
+              className="text-xs font-medium bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50"
+              title="Admin-only — use for spam"
+            >
+              {bulkBusy ? 'Deleting…' : `Delete ${selectedIds.size}`}
+            </button>
+          )}
         </div>
       )}
     </DashboardLayout>

@@ -346,8 +346,10 @@ export async function DELETE(
     const user = await getUserFromToken(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const role = String(user.role || '')
-    if (!['admin', 'tech_support', 'manager'].includes(role)) {
-      return NextResponse.json({ error: 'Manager role required to delete tickets' }, { status: 403 })
+    // Tightened 2026-04-23 at Chris D's ask: admin-only (was manager+).
+    // Managers/support should still use "close" — delete is irrecoverable.
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Admin role required to delete tickets' }, { status: 403 })
     }
 
     // Detach any merged-child links pointing to this ticket so those
