@@ -1,6 +1,10 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+// useSearchParams bails out of static generation; mark the route explicitly
+// so Next's pre-render doesn't try to hit the DB from the build image.
+export const dynamic = 'force-dynamic'
+
+import { useEffect, useState, FormEvent, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
