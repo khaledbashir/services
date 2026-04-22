@@ -187,8 +187,8 @@ export default function WalkthroughsPage() {
                     <td className="px-5 py-3 text-zinc-600">{w.technician_name || '—'}</td>
                     <td className="px-5 py-3 text-zinc-600 max-w-md truncate">{w.locations_visited || '—'}</td>
                     <td className="px-5 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[w.result] || RESULT_STYLE.good}`}>
-                        {w.result.replace('_', ' ')}
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[w.result || 'good'] || RESULT_STYLE.good}`}>
+                        {(w.result || 'unknown').replace('_', ' ')}
                       </span>
                     </td>
                   </tr>
