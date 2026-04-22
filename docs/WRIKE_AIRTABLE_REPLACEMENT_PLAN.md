@@ -112,10 +112,10 @@ Decision: don't integrate with the legacy `T:\` + `workspace.anc.com` system. Ow
 - [ ] UI on budget detail page shows current % consumed + alert status
 
 ### 4.3 Client read-only portals (Nick — Airtable-style external interfaces)
-- [ ] Per-venue shareable link with cryptographically signed token (already have for venue portals)
-- [ ] Client view shows: total displays, displays with open issues, displays offline, open tickets
-- [ ] Auth-less (just the token); read-only; no dashboard auth required
-- [ ] Admin UI at `/portals/[venue_id]` to regenerate/revoke tokens
+- [x] Per-venue shareable link with cryptographically signed token (already have for venue portals)
+- [x] Client view shows: total displays, displays with open issues, displays offline, open tickets
+- [x] Auth-less (just the token); read-only; no dashboard auth required
+- [x] Admin UI at `/portals/[venue_id]` to regenerate/revoke tokens
 - [ ] Test with one of Nick's existing Cushman & Wakefield contacts
 
 ## Phase 5 — Data imports (blocked on client deliverables)
@@ -173,3 +173,4 @@ Once those land:
 - **2026-04-22**: Checklist created after reviewing Friday team-call transcript. Phase 0 is partially complete, hit a 429 bug mid-test, fixed. Resuming Phase 0 verification next.
 - **2026-04-22**: Print Requests module shipped in the dashboard with Twenty-backed CRUD, list + Kanban views, client filtering, and metadata bootstrap script at `scripts/create-print-request-object.ts`.
 - **2026-04-22**: Stadium Prep module shipped with Twenty-backed checklist items/templates, seed templates for MLB + NHL, grouped venue views, and bulk template cloning from `/opening-checklists`.
+- **2026-04-22**: Client read-only portals shipped with multi-link tokens in `client_portals`, public `/portals/[token]` health views, and manager controls at `/portals/[venue_id]`.

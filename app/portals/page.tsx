@@ -1,124 +1,118 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
 
-interface VenuePortal {
+interface VenuePortalRow {
   id: string
   name: string
-  market: string
-  portal_token: string
+  market: string | null
   primary_contact_name: string | null
   primary_contact_email: string | null
+  is_active: boolean
 }
 
 export default function PortalsPage() {
-  const auth = useAuth('manager')
-  const [venues, setVenues] = useState<VenuePortal[]>([])
+  useAuth('manager')
+
+  const [venues, setVenues] = useState<VenuePortalRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchVenues = async () => {
+    const load = async () => {
       try {
-        const res = await fetch('/api/venues')
-        if (res.ok) {
-          const data = await res.json()
-          setVenues(data.venues || [])
-        }
-      } catch {} finally { setLoading(false) }
+        const response = await fetch('/api/venues?include_inactive=true')
+        const payload = await response.json()
+        setVenues(payload.venues || [])
+      } finally {
+        setLoading(false)
+      }
     }
-    fetchVenues()
+
+    load()
   }, [])
 
-  const copyLink = (token: string, id: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/portal/${token}`)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  const filtered = venues.filter(v => {
-    const q = search.toLowerCase()
-    return !q || v.name.toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q) || (v.primary_contact_name || '').toLowerCase().includes(q)
-  })
+  const filteredVenues = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return venues
+    return venues.filter((venue) =>
+      [venue.name, venue.market, venue.primary_contact_name, venue.primary_contact_email]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q))
+    )
+  }, [search, venues])
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">Client Portals</h1>
-          <p className="text-sm text-zinc-500 mt-1">Each venue has a unique portal link for client self-service access</p>
+        <div className="rounded-2xl border border-[#D9E2F2] bg-gradient-to-br from-[#0A52EF] via-[#0A52EF] to-[#083BA8] p-6 text-white shadow-[0_24px_80px_-40px_rgba(10,82,239,0.9)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">External Access</p>
+          <h1 className="mt-2 text-2xl font-semibold">Client Portals</h1>
+          <p className="mt-2 max-w-3xl text-sm text-blue-100">
+            Generate read-only venue links for clients who need a live snapshot of display health, open support tickets, and recent maintenance activity.
+          </p>
         </div>
 
-        <div className="relative">
-          <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <input
             type="text"
-            placeholder="Search venues, contacts..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search venues, markets, or client contacts…"
+            className="w-full rounded-xl border border-zinc-200 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF]"
           />
         </div>
 
         {loading ? (
-          <div className="space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-20 rounded-2xl" />
+            ))}
+          </div>
         ) : (
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#E8E8E8] bg-zinc-50">
-                  <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Venue</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Market</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Contact</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider">Portal Link</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-zinc-500 uppercase tracking-wider"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(venue => (
-                  <tr key={venue.id} className="border-b border-[#E8E8E8] hover:bg-zinc-50 transition-colors">
-                    <td className="py-3 px-6 font-medium text-zinc-900">{venue.name}</td>
-                    <td className="py-3 px-6 text-zinc-600 text-xs">{venue.market}</td>
-                    <td className="py-3 px-6">
-                      {venue.primary_contact_name ? (
-                        <div>
-                          <p className="text-xs text-zinc-900">{venue.primary_contact_name}</p>
-                          {venue.primary_contact_email && <p className="text-xs text-zinc-400">{venue.primary_contact_email}</p>}
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto] gap-4 border-b border-zinc-200 bg-zinc-50 px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              <div>Venue</div>
+              <div>Market</div>
+              <div>Client Contact</div>
+              <div />
+            </div>
+
+            {filteredVenues.length === 0 ? (
+              <div className="px-6 py-14 text-center text-sm text-zinc-500">No venues matched that search.</div>
+            ) : (
+              <div className="divide-y divide-zinc-200">
+                {filteredVenues.map((venue) => (
+                  <div key={venue.id} className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1fr)_auto] gap-4 px-6 py-4 text-sm">
+                    <div>
+                      <div className="font-semibold text-zinc-950">{venue.name}</div>
+                      {!venue.is_active && (
+                        <div className="mt-1 inline-flex rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                          Inactive
                         </div>
-                      ) : (
-                        <span className="text-xs text-zinc-400">Not set</span>
                       )}
-                    </td>
-                    <td className="py-3 px-6">
-                      <code className="text-xs text-zinc-500 bg-zinc-50 px-2 py-1 rounded">/portal/{(venue as any).portal_token?.substring(0, 8)}...</code>
-                    </td>
-                    <td className="py-3 px-6">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => copyLink((venue as any).portal_token, venue.id)}
-                          className="text-xs font-medium text-[#0A52EF] hover:text-[#0840C0] transition-colors"
-                        >
-                          {copiedId === venue.id ? 'Copied!' : 'Copy Link'}
-                        </button>
-                        <a
-                          href={`/portal/${(venue as any).portal_token}`}
-                          target="_blank"
-                          className="text-xs font-medium text-zinc-500 hover:text-zinc-700 transition-colors"
-                        >
-                          Preview ↗
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="text-zinc-600">{venue.market || '—'}</div>
+                    <div className="text-zinc-600">
+                      <div>{venue.primary_contact_name || 'Not set'}</div>
+                      <div className="text-xs text-zinc-400">{venue.primary_contact_email || 'No email on file'}</div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Link
+                        href={`/portals/${venue.id}`}
+                        className="inline-flex h-10 items-center justify-center rounded-xl bg-[#0A52EF] px-4 text-sm font-semibold text-white transition hover:bg-[#0840C0]"
+                      >
+                        Manage Links
+                      </Link>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
         )}
       </div>
