@@ -42,7 +42,7 @@ async function rateLimitWait() {
 }
 
 // --- Core fetch with rate limiting + retry ---
-async function twentyFetch(endpoint: string, options: RequestInit = {}, retries = 3): Promise<Response> {
+async function twentyFetch(endpoint: string, options: RequestInit = {}, retries = 4): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     await rateLimitWait()
     const res = await fetch(`${TWENTY_BASE}/rest/${endpoint}`, {
@@ -53,9 +53,13 @@ async function twentyFetch(endpoint: string, options: RequestInit = {}, retries 
         ...options.headers,
       },
     })
-    if (res.ok || res.status < 500 || attempt === retries) return res
-    // Exponential backoff on 5xx
-    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))
+    if (res.ok || attempt === retries) return res
+    // Retry on 429 (rate limit) and 5xx; everything else returns immediately.
+    if (res.status !== 429 && res.status < 500) return res
+    // Respect server-provided Retry-After when present, otherwise exponential backoff.
+    const retryAfter = Number(res.headers.get('retry-after') || '0')
+    const backoffMs = retryAfter > 0 ? retryAfter * 1000 : 1000 * Math.pow(2, attempt)
+    await new Promise(r => setTimeout(r, backoffMs))
   }
   // Unreachable but satisfies TS
   return fetch(`${TWENTY_BASE}/rest/${endpoint}`, { ...options, headers: { 'Authorization': `Bearer ${TWENTY_API_KEY}`, 'Content-Type': 'application/json' } })
