@@ -25,6 +25,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'hours_estimated',
   'hours_spent',
   'due_date',
+  'is_rando',
 ])
 
 const ALLOWED_STATUSES = new Set([
@@ -46,6 +47,7 @@ function normalizeValue(key: string, value: any) {
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
   if (key === 'hours_estimated' || key === 'hours_spent') return value === '' ? null : value
   if (key === 'due_date') return value || null
+  if (key === 'is_rando') return !!value
   return value
 }
 
@@ -69,7 +71,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
             dr.ftp_proof_link, dr.ftp_final_link, dr.final_file_name, dr.final_duration,
             dr.notes, dr.boards_requested, dr.sizes_requested, dr.designer_id,
             dr.enterprise_contact_id, dr.status, dr.hours_estimated, dr.hours_spent,
-            dr.due_date, dr.created_at, dr.updated_at,
+            dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
             v.name as venue_name,
             d.full_name as designer_name,
             ec.full_name as enterprise_contact_name

@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
     const result = await query(
       `SELECT dr.id, dr.job_title, dr.company_name, dr.tricode, dr.ftp_proof_link, dr.ftp_final_link,
               dr.final_file_name, dr.final_duration, dr.notes, dr.boards_requested, dr.sizes_requested,
-              dr.status, dr.hours_estimated, dr.hours_spent, dr.due_date,
+              dr.status, dr.hours_estimated, dr.hours_spent, dr.due_date, dr.is_rando,
               dr.created_at,
               TO_CHAR(dr.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(dr.updated_at, 'Mon DD, YYYY') as updated_date,
@@ -222,6 +222,7 @@ export async function POST(request: NextRequest) {
       hours_estimated,
       hours_spent,
       due_date,
+      is_rando,
     } = body
 
     if (!job_title?.trim()) {
@@ -254,13 +255,13 @@ export async function POST(request: NextRequest) {
       `INSERT INTO design_requests (
         venue_id, company_name, job_title, tricode, ftp_proof_link, ftp_final_link,
         final_file_name, final_duration, notes, boards_requested, sizes_requested,
-        designer_id, enterprise_contact_id, status, hours_estimated, hours_spent, due_date, updated_at
+        designer_id, enterprise_contact_id, status, hours_estimated, hours_spent, due_date, is_rando, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16, $17, NOW()
+        $12, $13, $14, $15, $16, $17, $18, NOW()
       )
-      RETURNING id, job_title, status`,
+      RETURNING id, job_title, status, is_rando`,
       [
         venue_id || null,
         company_name?.trim() || null,
@@ -279,6 +280,7 @@ export async function POST(request: NextRequest) {
         hours_estimated || null,
         hours_spent || 0,
         due_date || null,
+        !!is_rando,
       ],
     )
 
