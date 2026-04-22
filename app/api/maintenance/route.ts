@@ -14,24 +14,34 @@ async function reshapeMaintenance(log: TwentyMaintenanceLog) {
   const details = typeof log.detailsToResolve === 'object'
     ? (log.detailsToResolve as any)?.markdown || (log.detailsToResolve as any)?.blocknote || ''
     : (log.detailsToResolve || '')
+  const summaryRich = typeof (log as any).issueSummary === 'object'
+    ? ((log as any).issueSummary?.markdown || (log as any).issueSummary?.blocknote || '')
+    : ((log as any).issueSummary || '')
+  // Wrike migrated the task Title to Twenty's `name` field; legacy `issue` is
+  // almost always empty. Fall back to name/issueSummary so the grid row isn't blank.
+  const issueText = (log.issue && log.issue.trim()) || (log as any).name || summaryRich || ''
   const venue = log.maintenanceStationId ? await twentyVenueToDashboard(log.maintenanceStationId) : null
+  const status = ((log as any).status || '').toString()
+  const normalizedStatus = status.includes('RESOLVED') ? 'closed'
+    : status.includes('IN_PROGRESS') ? 'in_progress'
+    : log.scheduledDate ? 'in_progress' : 'open'
   return {
     id: log.id,
     venue_id: venue?.venue_id || null,
     venue_name: venue?.venue_name || log.maintenanceStation?.name || '',
     technician_name: log.logTechnician ? `${log.logTechnician.name.firstName} ${log.logTechnician.name.lastName}`.trim() : null,
     asset_name: log.maintenanceAsset?.name || null,
-    maintenance_type: 'reactive',
-    issue: log.issue,
-    issue_summary: log.issue,
+    maintenance_type: ((log as any).maintenanceType || 'reactive').toString().toLowerCase(),
+    issue: issueText,
+    issue_summary: issueText,
     details_to_resolve: details,
-    status: log.scheduledDate ? 'in_progress' : 'open',
-    reported_date: log.scheduledDate || log.createdAt,
+    status: normalizedStatus,
+    reported_date: (log as any).reportedDate || log.scheduledDate || log.createdAt,
     scheduled_date: log.scheduledDate,
-    completed_date: log.lastUpdated,
+    completed_date: (log as any).completedDate || log.lastUpdated,
     escort_information: log.escortInformation,
     location_reported: log.locationReported,
-    techs_scheduled: null,
+    techs_scheduled: (log as any).techsScheduled || null,
     created_at: log.createdAt,
     updated_at: log.updatedAt,
   }
