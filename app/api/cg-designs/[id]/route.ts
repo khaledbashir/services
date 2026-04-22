@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { CgDesigns, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -58,6 +59,22 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (isTwentyBackedEnabled('CG_DESIGNS')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const c = await CgDesigns.get(params.id)
+      if (!c) return NextResponse.json({ error: 'CG design request not found' }, { status: 404 })
+      return NextResponse.json({
+        cg_design_request: {
+          id: c.id, job_title: c.clientTriCode, team_name: c.teamName, league: c.sport,
+          status: c.status, created_at: c.createdAt, updated_at: c.updatedAt,
+          designer_id: c.cgDesignerId,
+          designer_name: c.cgDesigner ? `${c.cgDesigner.name.firstName} ${c.cgDesigner.name.lastName}`.trim() : null,
+          venue_name: c.cgClient?.name || null,
+        },
+      })
+    }
+
     const access = await getAccessibleRecord(request, params.id)
     if (access instanceof NextResponse) return access
     if (!access.record) {
@@ -72,6 +89,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (isTwentyBackedEnabled('CG_DESIGNS')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const body = await request.json()
+      const patch: Record<string, unknown> = {}
+      if ('job_title' in body) patch.clientTriCode = body.job_title?.trim() || null
+      if ('team_name' in body) patch.teamName = body.team_name?.trim() || null
+      if ('league' in body) patch.sport = body.league?.trim() || null
+      if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
+      const updated = await CgDesigns.update(params.id, patch)
+      return NextResponse.json({ cg_design_request: { id: updated.id, job_title: updated.clientTriCode, status: updated.status } })
+    }
+
     const access = await getAccessibleRecord(request, params.id)
     if (access instanceof NextResponse) return access
     if (!access.record) {

@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
+import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -85,6 +86,23 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (isTwentyBackedEnabled('DESIGNS')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const d = await Designs.get(params.id)
+      if (!d) return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+      return NextResponse.json({
+        design_request: {
+          id: d.id, job_title: d.name, status: d.status || 'request_submitted',
+          notes: d.aiPrompt, boards_requested: d.boardSection, ftp_proof_link: d.proofLink,
+          final_file_name: d.localFilePath, created_at: d.createdAt, updated_at: d.updatedAt,
+          designer_id: d.designAssigneeId,
+          designer_name: d.designAssignee ? `${d.designAssignee.name.firstName} ${d.designAssignee.name.lastName}`.trim() : null,
+          company_name: d.designClient?.name || null,
+        },
+      })
+    }
+
     const access = await getAccessibleRecord(request, params.id, 'technician')
     if (access instanceof NextResponse) return access
     if (!access.record) {
@@ -99,6 +117,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (isTwentyBackedEnabled('DESIGNS')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const body = await request.json()
+      const patch: Record<string, unknown> = {}
+      if ('job_title' in body) patch.name = body.job_title?.trim() || null
+      if ('notes' in body) patch.aiPrompt = body.notes?.trim() || null
+      if ('boards_requested' in body) patch.boardSection = body.boards_requested?.trim() || null
+      if ('ftp_proof_link' in body) patch.proofLink = body.ftp_proof_link?.trim() || null
+      if ('final_file_name' in body) patch.localFilePath = body.final_file_name?.trim() || null
+      if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
+      const updated = await Designs.update(params.id, patch)
+      return NextResponse.json({ design_request: { id: updated.id, job_title: updated.name, status: updated.status }, proof_share: null })
+    }
+
     const access = await getAccessibleRecord(request, params.id, 'technician')
     if (access instanceof NextResponse) return access
     if (!access.record) {
@@ -175,6 +208,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (isTwentyBackedEnabled('DESIGNS')) {
+      const auth = await requireRole(request, 'admin')
+      if (isAuthError(auth)) return auth
+      await Designs.delete(params.id)
+      return NextResponse.json({ success: true })
+    }
+
     const access = await getAccessibleRecord(request, params.id, 'admin')
     if (access instanceof NextResponse) return access
     if (!access.record) {

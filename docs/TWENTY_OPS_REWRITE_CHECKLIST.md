@@ -23,45 +23,44 @@ Shared plumbing everything else depends on.
 - [x] TS interfaces for all 8 objects (InventoryAsset, MaintenanceLog, WalkthroughLog, RmaTracker, DesignRequest, CgDesignRequest, DesignerTimeEntry, DesignerHoursBudget)
 - [x] Env-flag plumbing: `isTwentyBackedEnabled('<MODULE>')` reads `TWENTY_BACKED_<MODULE>` env
 
-## Phase 2 — Inventory POC (Day 1 PM)
+## Phase 2 — Inventory POC (Day 1 PM) 🟡
 
 Richest schema (21 fields), most data (1,656 rows) — prove the pattern end-to-end.
 
-- [ ] `/api/twenty-ops/inventory/route.ts` — GET (list, filters, pagination) + POST (create)
-- [ ] `/api/twenty-ops/inventory/[id]/route.ts` — PATCH (update) + DELETE
-- [ ] Rewrite `app/inventory/page.tsx` — swap fetch URL, widen TS interface, add new form fields (asset#, location, manufacturer, IP, display type, orientation, tri-code, connected devices, render name)
-- [ ] Keep existing `DashboardLayout` / `useToast` / `useAuth('manager')` / Tailwind styling intact
-- [ ] **Read parity test** — admin sees 1,656 rows (± matches Twenty)
+**Architecture choice:** the plan called for a new `/api/twenty-ops/inventory/` route, but we collapsed it into the existing `/api/inventory/route.ts` with a server-side branch on `isTwentyBackedEnabled('INVENTORY')`. One URL, one code path per HTTP method, feature-flag flips the data source. Client-side is unchanged.
+
+- [x] `/api/inventory/route.ts` — GET/POST/PATCH/DELETE, all branch on `TWENTY_BACKED_INVENTORY`
+- [x] Server-side venue scoping: `getStaffVenueIds` → `buildTwentyVenueFilter` → Twenty REST filter
+- [x] Reshape Twenty asset shape → existing dashboard response shape (UI doesn't change)
+- [x] Permission parity: PATCH requires `manager`, DELETE requires `tech_support` — same as legacy
+- [x] `npm run build` + typecheck clean
+- [x] Committed + pushed (`5f5fd28`)
+- [ ] Widen `app/inventory/page.tsx` form to expose new fields (asset#, location, manufacturer, IP, display type, orientation, tri-code, connected devices, render name)
+- [ ] Set `TWENTY_BACKED_INVENTORY=1` in EasyPanel env and redeploy
+- [ ] **Read parity test** — admin sees 1,656 rows (matches Twenty count)
 - [ ] **Write round-trip test** — create in dashboard → visible in Twenty CRM within 30s
 - [ ] **RBAC test** — technician with 2 linked venues only sees those venues' assets; POST to a third venue → 403
-- [ ] Ship behind `TWENTY_BACKED_INVENTORY=1` flag
 
-## Phase 3 — Maintenance + Walkthroughs (Day 2 AM)
+## Phase 3 — Maintenance + Walkthroughs (Day 2 AM) ✅ routes
 
-- [ ] `/api/twenty-ops/maintenance/route.ts` + `[id]/route.ts`
-- [ ] `/api/twenty-ops/walkthroughs/route.ts` + `[id]/route.ts`
-- [ ] Rewrite `app/maintenance/page.tsx` (+ rich-text resolution, attachments, escort info, station relation)
-- [ ] Rewrite `app/walkthroughs/page.tsx` (+ rich notes, attachments, filter bar: venue/date/technician/result — mirror `/tickets` pattern)
-- [ ] Backfill display of the 15,465 walkthrough records that never hit the local table
-- [ ] Tests × 3 per module (read parity / write round-trip / RBAC)
+- [x] `/api/maintenance/route.ts` + `[id]/route.ts` — GET/POST/PATCH/DELETE branched on `TWENTY_BACKED_MAINTENANCE`
+- [x] `/api/walkthroughs/route.ts` + `[id]/route.ts` — GET/POST/PATCH/DELETE branched on `TWENTY_BACKED_WALKTHROUGHS`
+- [ ] Rewrite `app/maintenance/page.tsx` (form widening — deferred to post-test)
+- [ ] Rewrite `app/walkthroughs/page.tsx` (form widening + filter bar — deferred to post-test)
 
-## Phase 4 — RMA + Design Requests (Day 2 PM)
+## Phase 4 — RMA + Design Requests (Day 2 PM) ✅ routes
 
-- [ ] `/api/twenty-ops/rma/route.ts` + `[id]/route.ts`
-- [ ] `/api/twenty-ops/design-requests/route.ts` + `[id]/route.ts`
-- [ ] Rewrite `app/rma/page.tsx` (+ Company relation via `?depth=1`, parts details, submission contact, remit-to-stock)
-- [ ] Rewrite `app/designs/page.tsx` (+ AI prompt, proof link, proof last viewed, generated image, Wrike task ID)
-- [ ] Tests × 3 per module
+- [x] `/api/rma/route.ts` + `[id]/route.ts` — branched on `TWENTY_BACKED_RMA`
+- [x] `/api/design-requests/route.ts` + `[id]/route.ts` — branched on `TWENTY_BACKED_DESIGNS`
+- [ ] Rewrite `app/rma/page.tsx` (form widening — deferred)
+- [ ] Rewrite `app/designs/page.tsx` (form widening — deferred)
 
-## Phase 5 — CG Designs + Time Entries + Hours Budgets (Day 3 AM)
+## Phase 5 — CG Designs + Time Entries + Hours Budgets (Day 3 AM) ✅ routes
 
-- [ ] `/api/twenty-ops/cg-designs/route.ts` + `[id]/route.ts`
-- [ ] `/api/twenty-ops/time-entries/route.ts` + `[id]/route.ts`
-- [ ] `/api/twenty-ops/hours-budgets/route.ts` + `[id]/route.ts`
-- [ ] Rewrite `app/cg-designs/page.tsx` (+ client tri-code, team name, sport, proof timestamps)
-- [ ] Rewrite `app/time-entries/page.tsx` (+ Designer relation, task targets, wrikeTimelogId)
-- [ ] Rewrite `app/hours-budgets/page.tsx` (+ auto `currentHoursUsed`, alert flags, Client relation)
-- [ ] Tests × 3 per module
+- [x] `/api/cg-designs/route.ts` + `[id]/route.ts` — branched on `TWENTY_BACKED_CG_DESIGNS`
+- [x] `/api/time-entries/route.ts` + `[id]/route.ts` — branched on `TWENTY_BACKED_TIME_ENTRIES`
+- [x] `/api/hours-budgets/route.ts` + `[id]/route.ts` — branched on `TWENTY_BACKED_HOURS_BUDGETS`
+- [ ] Rewrite pages for form widening — deferred
 
 ## Phase 6 — Ship (Day 3 PM)
 

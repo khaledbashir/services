@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { HoursBudgets, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
 async function loadBudget(id: string) {
   const result = await query(
@@ -23,6 +24,26 @@ async function loadBudget(id: string) {
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
+    try {
+      const b = await HoursBudgets.get(params.id)
+      if (!b) return NextResponse.json({ error: 'Hours budget not found' }, { status: 404 })
+      return NextResponse.json({
+        hours_budget: {
+          id: b.id,
+          client_name: b.budgetClient?.name || '(unknown client)',
+          total_hours: 0,
+          hours_spent: Number(b.currentHoursUsed || 0),
+          created_at: b.createdAt, updated_at: b.updatedAt,
+        },
+        time_entries: [],
+      })
+    } catch (err) {
+      console.error('[hours-budgets GET [id] twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to fetch hours budget' }, { status: 500 })
+    }
+  }
 
   try {
     const budget = await loadBudget(params.id)
@@ -51,6 +72,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
+    try {
+      const body = await request.json()
+      const patch: Record<string, unknown> = {}
+      if ('hours_spent' in body) patch.currentHoursUsed = Number(body.hours_spent) || 0
+      const updated = await HoursBudgets.update(params.id, patch)
+      return NextResponse.json({ hours_budget: { id: updated.id, hours_spent: Number(updated.currentHoursUsed || 0) } })
+    } catch (err) {
+      console.error('[hours-budgets PATCH twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to update hours budget' }, { status: 500 })
+    }
+  }
 
   try {
     const body = await request.json()
@@ -105,6 +139,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'tech_support')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
+    try {
+      await HoursBudgets.delete(params.id)
+      return NextResponse.json({ ok: true })
+    } catch (err) {
+      console.error('[hours-budgets DELETE twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to delete hours budget' }, { status: 500 })
+    }
+  }
 
   try {
     const result = await query('DELETE FROM designer_hours_budgets WHERE id = $1 RETURNING id', [params.id])

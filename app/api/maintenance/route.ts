@@ -1,15 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { Maintenance, isTwentyBackedEnabled, twentyVenueToDashboard, type TwentyMaintenanceLog } from '@/lib/twenty-ops'
+
+// Legacy response shape the /maintenance page consumes:
+//   { logs: [ { id, venue_id, venue_name, technician_name, asset_name,
+//               maintenance_type, issue, issue_summary, details_to_resolve,
+//               status, reported_date, scheduled_date, completed_date,
+//               escort_information, location_reported, techs_scheduled,
+//               created_at, updated_at } ] }
+
+async function reshapeMaintenance(log: TwentyMaintenanceLog) {
+  const details = typeof log.detailsToResolve === 'object'
+    ? (log.detailsToResolve as any)?.markdown || (log.detailsToResolve as any)?.blocknote || ''
+    : (log.detailsToResolve || '')
+  const venue = log.maintenanceStationId ? await twentyVenueToDashboard(log.maintenanceStationId) : null
+  return {
+    id: log.id,
+    venue_id: venue?.venue_id || null,
+    venue_name: venue?.venue_name || log.maintenanceStation?.name || '',
+    technician_name: log.logTechnician ? `${log.logTechnician.name.firstName} ${log.logTechnician.name.lastName}`.trim() : null,
+    asset_name: log.maintenanceAsset?.name || null,
+    maintenance_type: 'reactive',
+    issue: log.issue,
+    issue_summary: log.issue,
+    details_to_resolve: details,
+    status: log.scheduledDate ? 'in_progress' : 'open',
+    reported_date: log.scheduledDate || log.createdAt,
+    scheduled_date: log.scheduledDate,
+    completed_date: log.lastUpdated,
+    escort_information: log.escortInformation,
+    location_reported: log.locationReported,
+    techs_scheduled: null,
+    created_at: log.createdAt,
+    updated_at: log.updatedAt,
+  }
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
 
+  if (isTwentyBackedEnabled('MAINTENANCE')) {
+    try {
+      const items: any[] = []
+      let cursor: string | null = null
+      for (let p = 0; p < 10; p++) {
+        const page = await Maintenance.list({
+          limit: 60,
+          startingAfter: cursor || undefined,
+          orderBy: 'updatedAt[DescNullsLast]',
+        })
+        for (const log of page.items) items.push(await reshapeMaintenance(log))
+        if (!page.hasNextPage || !page.nextCursor) break
+        cursor = page.nextCursor
+      }
+      return NextResponse.json({ logs: items })
+    } catch (err) {
+      console.error('[maintenance GET twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to list maintenance logs from Twenty' }, { status: 500 })
+    }
+  }
+
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const venueId = searchParams.get('venue_id')
-
   const conditions: string[] = []
   const params: unknown[] = []
   if (status) { params.push(status); conditions.push(`m.status = $${params.length}`) }
@@ -41,6 +96,23 @@ export async function POST(request: NextRequest) {
     escort_information = null, location_reported = null, techs_scheduled = null,
   } = body
   if (!venue_id) return NextResponse.json({ error: 'venue_id required' }, { status: 400 })
+
+  if (isTwentyBackedEnabled('MAINTENANCE')) {
+    try {
+      const created = await Maintenance.create({
+        name: issue_summary || issue || 'Maintenance log',
+        issue,
+        detailsToResolve: details_to_resolve ? { markdown: details_to_resolve } : null,
+        scheduledDate: scheduled_date,
+        locationReported: location_reported,
+        escortInformation: escort_information,
+      })
+      return NextResponse.json({ log: { id: created.id, ...body } })
+    } catch (err) {
+      console.error('[maintenance POST twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to create maintenance log in Twenty' }, { status: 500 })
+    }
+  }
 
   const result = await query(
     `INSERT INTO maintenance_logs (

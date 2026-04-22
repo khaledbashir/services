@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { TimeEntries, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
 async function loadEntry(id: string) {
   const result = await query(
@@ -23,6 +24,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
 
+  if (isTwentyBackedEnabled('TIME_ENTRIES')) {
+    try {
+      const t = await TimeEntries.get(params.id)
+      if (!t) return NextResponse.json({ error: 'Time entry not found' }, { status: 404 })
+      return NextResponse.json({
+        time_entry: {
+          id: t.id, designer_id: t.entryDesignerId,
+          designer_name: t.entryDesigner ? `${t.entryDesigner.name.firstName} ${t.entryDesigner.name.lastName}`.trim() : null,
+          entry_date: t.createdAt?.slice(0, 10), hours: 0, description: t.comment || t.taskName,
+          created_at: t.createdAt,
+        },
+      })
+    } catch (err) {
+      console.error('[time-entries GET [id] twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to fetch time entry' }, { status: 500 })
+    }
+  }
+
   try {
     const timeEntry = await loadEntry(params.id)
     if (!timeEntry) {
@@ -38,6 +57,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('TIME_ENTRIES')) {
+    try {
+      const body = await request.json()
+      const patch: Record<string, unknown> = {}
+      if ('description' in body) { patch.comment = body.description; patch.taskName = body.description }
+      const updated = await TimeEntries.update(params.id, patch)
+      return NextResponse.json({ time_entry: { id: updated.id, description: updated.comment } })
+    } catch (err) {
+      console.error('[time-entries PATCH twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to update time entry' }, { status: 500 })
+    }
+  }
 
   try {
     const body = await request.json()
@@ -85,6 +117,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('TIME_ENTRIES')) {
+    try {
+      await TimeEntries.delete(params.id)
+      return NextResponse.json({ ok: true })
+    } catch (err) {
+      console.error('[time-entries DELETE twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to delete time entry' }, { status: 500 })
+    }
+  }
 
   try {
     const result = await query('DELETE FROM designer_time_entries WHERE id = $1 RETURNING id', [params.id])

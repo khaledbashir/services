@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { HoursBudgets, isTwentyBackedEnabled, type TwentyDesignerHoursBudget } from '@/lib/twenty-ops'
+
+function reshapeHoursBudget(b: TwentyDesignerHoursBudget) {
+  return {
+    id: b.id,
+    client_name: b.budgetClient?.name || '(unknown client)',
+    venue_id: null,
+    venue_name: null,
+    league: null,
+    season: null,
+    total_hours: 0,
+    contract_start: null,
+    contract_end: null,
+    notes: null,
+    created_at: b.createdAt,
+    updated_at: b.updatedAt,
+    hours_spent: Number(b.currentHoursUsed || 0),
+    entry_count: 0,
+  }
+}
 
 async function getBudgetRows() {
   const result = await query(
@@ -22,6 +42,27 @@ async function getBudgetRows() {
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
+    try {
+      const items: any[] = []
+      let cursor: string | null = null
+      for (let p = 0; p < 10; p++) {
+        const page = await HoursBudgets.list({
+          limit: 60,
+          startingAfter: cursor || undefined,
+          orderBy: 'updatedAt[DescNullsLast]',
+        })
+        for (const b of page.items) items.push(reshapeHoursBudget(b))
+        if (!page.hasNextPage || !page.nextCursor) break
+        cursor = page.nextCursor
+      }
+      return NextResponse.json({ hours_budgets: items })
+    } catch (err) {
+      console.error('[hours-budgets GET twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to list hours budgets from Twenty' }, { status: 500 })
+    }
+  }
 
   try {
     const rows = await getBudgetRows()
@@ -46,6 +87,19 @@ export async function POST(request: NextRequest) {
     }
     if (!Number.isFinite(total_hours)) {
       return NextResponse.json({ error: 'total_hours is required' }, { status: 400 })
+    }
+
+    if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
+      try {
+        const created = await HoursBudgets.create({
+          currentHoursUsed: 0,
+          alert50Pct: false,
+        })
+        return NextResponse.json({ hours_budget: reshapeHoursBudget(created) })
+      } catch (err) {
+        console.error('[hours-budgets POST twenty-backed] error:', err)
+        return NextResponse.json({ error: 'Failed to create hours budget in Twenty' }, { status: 500 })
+      }
     }
 
     const result = await query(

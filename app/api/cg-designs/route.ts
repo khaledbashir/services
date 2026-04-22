@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import { CgDesigns, isTwentyBackedEnabled, type TwentyCgDesignRequest } from '@/lib/twenty-ops'
+
+function reshapeCgDesign(c: TwentyCgDesignRequest) {
+  return {
+    id: c.id,
+    league: c.sport,
+    team_name: c.teamName,
+    job_title: c.clientTriCode || c.teamName || '(untitled)',
+    notes: null,
+    due_date: null,
+    status: c.status || 'request_submitted',
+    created_date: new Date(c.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+    updated_date: new Date(c.updatedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+    venue_name: c.cgClient?.name || null,
+    venue_id: null,
+    designer_name: c.cgDesigner ? `${c.cgDesigner.name.firstName} ${c.cgDesigner.name.lastName}`.trim() : null,
+    designer_id: c.cgDesignerId,
+  }
+}
 
 const ALLOWED_STATUSES = new Set([
   'request_submitted',
@@ -22,6 +41,27 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireRole(request, 'technician')
     if (isAuthError(auth)) return auth
+
+    if (isTwentyBackedEnabled('CG_DESIGNS')) {
+      const { searchParams } = new URL(request.url)
+      const statusFilter = searchParams.get('status')
+      const filters: string[] = []
+      if (statusFilter && statusFilter !== 'all') filters.push(`status[eq]:"${statusFilter}"`)
+      const items: any[] = []
+      let cursor: string | null = null
+      for (let p = 0; p < 15; p++) {
+        const page = await CgDesigns.list({
+          limit: 60,
+          startingAfter: cursor || undefined,
+          filter: filters.length ? filters.join(',') : undefined,
+          orderBy: 'updatedAt[DescNullsLast]',
+        })
+        for (const c of page.items) items.push(reshapeCgDesign(c))
+        if (!page.hasNextPage || !page.nextCursor) break
+        cursor = page.nextCursor
+      }
+      return NextResponse.json({ cg_design_requests: items })
+    }
 
     const { searchParams } = new URL(request.url)
     const statusFilter = searchParams.get('status')
@@ -85,6 +125,21 @@ export async function POST(request: NextRequest) {
 
     if (!job_title?.trim()) {
       return NextResponse.json({ error: 'job_title is required' }, { status: 400 })
+    }
+
+    if (isTwentyBackedEnabled('CG_DESIGNS')) {
+      try {
+        const created = await CgDesigns.create({
+          clientTriCode: job_title.trim(),
+          teamName: team_name?.trim() || null,
+          sport: league?.trim() || null,
+          status: normalizeStatus(status),
+        })
+        return NextResponse.json({ cg_design_request: { id: created.id, job_title: created.clientTriCode, status: created.status } })
+      } catch (err) {
+        console.error('[cg-designs POST twenty-backed] error:', err)
+        return NextResponse.json({ error: 'Failed to create CG design request in Twenty' }, { status: 500 })
+      }
     }
 
     const venueIds = await getStaffVenueIds(auth.userId, auth.role)

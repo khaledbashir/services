@@ -1,10 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { TimeEntries, isTwentyBackedEnabled, type TwentyDesignerTimeEntry } from '@/lib/twenty-ops'
+
+function reshapeTimeEntry(t: TwentyDesignerTimeEntry) {
+  return {
+    id: t.id,
+    budget_id: null,
+    designer_id: t.entryDesignerId,
+    designer_name: t.entryDesigner ? `${t.entryDesigner.name.firstName} ${t.entryDesigner.name.lastName}`.trim() : null,
+    design_request_id: null,
+    entry_date: t.createdAt?.slice(0, 10),
+    hours: 0,
+    description: t.comment || t.taskName,
+    created_at: t.createdAt,
+    budget_client_name: null,
+    budget_venue_id: null,
+    venue_name: null,
+  }
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
+
+  if (isTwentyBackedEnabled('TIME_ENTRIES')) {
+    try {
+      const items: any[] = []
+      let cursor: string | null = null
+      for (let p = 0; p < 10; p++) {
+        const page = await TimeEntries.list({
+          limit: 60,
+          startingAfter: cursor || undefined,
+          orderBy: 'createdAt[DescNullsLast]',
+        })
+        for (const t of page.items) items.push(reshapeTimeEntry(t))
+        if (!page.hasNextPage || !page.nextCursor) break
+        cursor = page.nextCursor
+      }
+      return NextResponse.json({ time_entries: items })
+    } catch (err) {
+      console.error('[time-entries GET twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to list time entries from Twenty' }, { status: 500 })
+    }
+  }
 
   try {
     const { searchParams } = new URL(request.url)
@@ -68,6 +107,19 @@ export async function POST(request: NextRequest) {
 
     if (!Number.isFinite(hours)) {
       return NextResponse.json({ error: 'hours is required' }, { status: 400 })
+    }
+
+    if (isTwentyBackedEnabled('TIME_ENTRIES')) {
+      try {
+        const created = await TimeEntries.create({
+          comment: body.description || null,
+          taskName: body.description || 'Time entry',
+        })
+        return NextResponse.json({ time_entry: reshapeTimeEntry(created) })
+      } catch (err) {
+        console.error('[time-entries POST twenty-backed] error:', err)
+        return NextResponse.json({ error: 'Failed to create time entry in Twenty' }, { status: 500 })
+      }
     }
 
     const result = await query(
