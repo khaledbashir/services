@@ -66,20 +66,20 @@ These are features the team uses daily that don't map to any existing Twenty cus
 - [ ] Migrate existing Wrike + ClickUp print-request records
 
 ### 3.2 Content Schedule (Alexis — in-venue content run tracking)
-- [ ] Design Twenty object: venue, client, job title, run start date, run end date, status, notes
-- [ ] Status pipeline: Ready → In Queue → Scheduled to Launch → Content Live → Confirmed Live with Client
-- [ ] **Auto-stale logic** — when `run_end_date` passes, auto-flag for removal (fixes Alexis's manual-date-change pain)
-- [ ] Build Twenty custom object
-- [ ] `/api/content-schedules` route
-- [ ] `/content-schedules` page with calendar + list view
+- [x] Design Twenty object: venue, client, job title, run start date, run end date, status, notes
+- [x] Status pipeline: Ready → In Queue → Scheduled to Launch → Content Live → Confirmed Live with Client
+- [x] **Auto-stale logic** — when `run_end_date` passes, auto-flag for removal (fixes Alexis's manual-date-change pain)
+- [x] Build Twenty custom object
+- [x] `/api/content-schedules` route
+- [x] `/content-schedules` page with calendar + list view
 - [ ] Migration from existing Wrike records
 
 ### 3.3 Parts Ordering (Gianni — public form + internal queue)
-- [ ] Public-facing form at `/forms/parts-request` (no auth) — venue, parts needed, photo upload, shipping address, requester email
-- [ ] Submission creates a new `partsOrder` record in Twenty (object exists)
-- [ ] Slack notification to parts-ordering channel on new submission
+- [x] Public-facing form at `/forms/parts-request` (no auth) — venue, parts needed, photo upload, shipping address, requester email
+- [x] Submission creates a new `partsOrder` record in Twenty (object exists)
+- [x] Slack notification to parts-ordering channel on new submission
 - [ ] Internal queue view at `/parts-orders` — sortable, filterable, status-managed by Gianni
-- [ ] Email confirmation to requester on submission
+- [x] Email confirmation to requester on submission
 - [ ] Email on status change to requester
 
 ### 3.4 30/60/90 Stadium Opening Checklist (Gianni's pre-season prep)
@@ -106,9 +106,9 @@ Decision: don't integrate with the legacy `T:\` + `workspace.anc.com` system. Ow
 - [ ] **Migration plan communicated to Alexis** — designers stop putting files on `T:\` drive, start uploading through the dashboard as of [date]. Clean cutover.
 
 ### 4.2 Hours Budget 50% + 75% alerts (Alexis)
-- [ ] Add alert trigger logic to `lib/twenty-ops.ts` hours-budget updates
-- [ ] Cron that runs daily, checks every active budget, fires Slack + email at 50% / 75% thresholds
-- [ ] Dedupe: don't re-alert once fired unless crossing a new threshold
+- [-] Add alert trigger logic to `lib/twenty-ops.ts` hours-budget updates (moved to cron instead)
+- [x] Cron that runs daily, checks every active budget, fires Slack + email at 50% / 75% thresholds
+- [x] Dedupe: don't re-alert once fired unless crossing a new threshold
 - [ ] UI on budget detail page shows current % consumed + alert status
 
 ### 4.3 Client read-only portals (Nick — Airtable-style external interfaces)

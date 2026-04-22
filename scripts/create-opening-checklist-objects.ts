@@ -31,11 +31,11 @@ const LEAGUE_OPTIONS = [
 ] as const
 
 const PHASE_OPTIONS = [
-  { value: '90_day', label: '90 Day', position: 0, color: 'violet' },
-  { value: '60_day', label: '60 Day', position: 1, color: 'blue' },
-  { value: '30_day', label: '30 Day', position: 2, color: 'amber' },
-  { value: 'opening_week', label: 'Opening Week', position: 3, color: 'orange' },
-  { value: 'opening_day', label: 'Opening Day', position: 4, color: 'green' },
+  { value: 'PHASE_90_DAY', label: '90 Day', position: 0, color: 'violet' },
+  { value: 'PHASE_60_DAY', label: '60 Day', position: 1, color: 'blue' },
+  { value: 'PHASE_30_DAY', label: '30 Day', position: 2, color: 'amber' },
+  { value: 'PHASE_OPENING_WEEK', label: 'Opening Week', position: 3, color: 'orange' },
+  { value: 'PHASE_OPENING_DAY', label: 'Opening Day', position: 4, color: 'green' },
 ] as const
 
 const STATUS_OPTIONS = [

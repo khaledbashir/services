@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { AlertBadge } from './alert-badge'
 
 interface Budget {
   id: string
@@ -285,7 +286,7 @@ export default function HoursBudgetsPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-zinc-900">{budget.client_name}</h2>
+                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center">{budget.client_name}<AlertBadge budgetId={budget.id} progress={progress} /></h2>
                     <p className="mt-1 text-xs text-zinc-500">
                       {budget.venue_name || 'No venue linked'}
                       {budget.league ? ` · ${budget.league}` : ''}

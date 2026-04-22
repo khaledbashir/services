@@ -100,6 +100,22 @@ const PHASE_OFFSETS: Record<OpeningChecklistPhase, number> = {
   opening_day: 0,
 }
 
+const DASHBOARD_TO_TWENTY_PHASE: Record<OpeningChecklistPhase, string> = {
+  '90_day': 'PHASE_90_DAY',
+  '60_day': 'PHASE_60_DAY',
+  '30_day': 'PHASE_30_DAY',
+  opening_week: 'PHASE_OPENING_WEEK',
+  opening_day: 'PHASE_OPENING_DAY',
+}
+
+const TWENTY_TO_DASHBOARD_PHASE: Record<string, OpeningChecklistPhase> = {
+  PHASE_90_DAY: '90_day',
+  PHASE_60_DAY: '60_day',
+  PHASE_30_DAY: '30_day',
+  PHASE_OPENING_WEEK: 'opening_week',
+  PHASE_OPENING_DAY: 'opening_day',
+}
+
 export function normalizeOpeningChecklistLeague(value: string | null | undefined): OpeningChecklistLeague | null {
   if (!value) return null
   const upper = String(value).trim().toUpperCase()
@@ -108,7 +124,8 @@ export function normalizeOpeningChecklistLeague(value: string | null | undefined
 
 export function normalizeOpeningChecklistPhase(value: string | null | undefined): OpeningChecklistPhase {
   if (!value) return '30_day'
-  return (OPENING_CHECKLIST_PHASES as readonly string[]).includes(value) ? (value as OpeningChecklistPhase) : '30_day'
+  if ((OPENING_CHECKLIST_PHASES as readonly string[]).includes(value)) return value as OpeningChecklistPhase
+  return TWENTY_TO_DASHBOARD_PHASE[value] || '30_day'
 }
 
 export function normalizeOpeningChecklistStatus(value: string | null | undefined): OpeningChecklistStatus {
@@ -207,7 +224,7 @@ export function buildOpeningChecklistPatch(body: Record<string, unknown>) {
 
   if (body.name !== undefined) patch.name = String(body.name || '').trim() || null
   if (body.league !== undefined) patch.league = normalizeOpeningChecklistLeague(String(body.league || ''))
-  if (body.phase !== undefined) patch.phase = normalizeOpeningChecklistPhase(String(body.phase || ''))
+  if (body.phase !== undefined) patch.phase = DASHBOARD_TO_TWENTY_PHASE[normalizeOpeningChecklistPhase(String(body.phase || ''))]
   if (body.opening_date !== undefined) patch.openingDate = body.opening_date || null
   if (body.due_date !== undefined) patch.dueDate = body.due_date || null
   if (body.item_description !== undefined) patch.itemDescription = toRichText(String(body.item_description || ''))
