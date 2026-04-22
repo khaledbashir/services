@@ -121,6 +121,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const auth = await requireRole(request, 'technician')
       if (isAuthError(auth)) return auth
       const body = await request.json()
+
+      // Detect the client-review transition BEFORE writing so we can auto-fire
+      // the proof share + client email (same behaviour as the legacy path).
+      // This bug bit us in the team demo on 2026-04-22 — the Twenty-backed
+      // branch was silently skipping createDesignProofShare. Don't regress.
+      const prior = await Designs.get(params.id)
+      const transitioningToClientReview =
+        body.status === 'client_review' && prior?.status !== 'client_review'
+
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.name = body.job_title?.trim() || null
       if ('notes' in body) patch.aiPrompt = body.notes?.trim() || null
@@ -129,7 +138,29 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('final_file_name' in body) patch.localFilePath = body.final_file_name?.trim() || null
       if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
       const updated = await Designs.update(params.id, patch)
-      return NextResponse.json({ design_request: { id: updated.id, job_title: updated.name, status: updated.status }, proof_share: null })
+
+      let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null
+      if (transitioningToClientReview) {
+        try {
+          proofShare = await createDesignProofShare({
+            designRequestId: params.id,
+            createdByName: auth.fullName || null,
+            createdByEmail: auth.email || null,
+          })
+          // Keep proofLink denormalised on Twenty so anyone reading the Twenty
+          // record directly (Jireh via CRM) sees the same URL clients received.
+          if (proofShare?.url) {
+            try { await Designs.update(params.id, { proofLink: proofShare.url, proofSentAt: new Date().toISOString() }) } catch {}
+          }
+        } catch (err) {
+          console.error('[design-requests PATCH twenty-backed] proof share creation failed:', err)
+        }
+      }
+
+      return NextResponse.json({
+        design_request: { id: updated.id, job_title: updated.name, status: updated.status },
+        proof_share: proofShare,
+      })
     }
 
     const access = await getAccessibleRecord(request, params.id, 'technician')

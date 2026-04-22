@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { DesignProofUpload } from '@/components/design-proof-upload'
 
 interface DesignRequestDetail {
   id: string
@@ -240,13 +241,16 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 </button>
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-600 mb-1">FTP Proof Link</label>
+                <label className="block text-xs font-medium text-zinc-600 mb-1">FTP Proof Link <span className="text-[10px] text-zinc-400 font-normal">(legacy — prefer Proof Upload below)</span></label>
                 <input
                   type="text"
                   value={proofLinkDraft}
                   onChange={(e) => setProofLinkDraft(e.target.value)}
                   className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
                 />
+              </div>
+              <div className="pt-4 border-t border-zinc-200">
+                <DesignProofUpload designRequestId={designRequest.id} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1">FTP Final Link</label>
