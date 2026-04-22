@@ -127,8 +127,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       // This bug bit us in the team demo on 2026-04-22 — the Twenty-backed
       // branch was silently skipping createDesignProofShare. Don't regress.
       const prior = await Designs.get(params.id)
+      // Twenty stores status as STATUS_CLIENT_REVIEW etc. — normalize both
+      // sides to dashboard vocabulary ("client_review") before comparing, and
+      // translate back to Twenty's STATUS_ prefix before writing.
+      const priorStatusDashboard = (prior?.status || '').toString().replace(/^STATUS_/i, '').toLowerCase()
       const transitioningToClientReview =
-        body.status === 'client_review' && prior?.status !== 'client_review'
+        body.status === 'client_review' && priorStatusDashboard !== 'client_review'
 
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.name = body.job_title?.trim() || null
@@ -136,7 +140,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('boards_requested' in body) patch.boardSection = body.boards_requested?.trim() || null
       if ('ftp_proof_link' in body) patch.proofLink = body.ftp_proof_link?.trim() || null
       if ('final_file_name' in body) patch.localFilePath = body.final_file_name?.trim() || null
-      if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
+      if ('status' in body && ALLOWED_STATUSES.has(body.status)) {
+        patch.status = `STATUS_${String(body.status).toUpperCase()}`
+      }
       const updated = await Designs.update(params.id, patch)
 
       let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null

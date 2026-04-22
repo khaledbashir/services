@@ -82,6 +82,15 @@ function normalizeStatus(status: string | null | undefined) {
   return ALLOWED_STATUSES.has(status) ? status : 'request_submitted'
 }
 
+// Dashboard status values → Twenty's STATUS_ enum values.
+// Required on any write (create + PATCH with status in body) because Twenty
+// rejects `request_submitted`/`in_queue`/etc. with `Invalid value "..."
+// for field "status"`.
+function toTwentyStatus(dashboardValue: string): string {
+  const normalized = normalizeStatus(dashboardValue)
+  return `STATUS_${normalized.toUpperCase()}`
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireRole(request, 'technician')
@@ -227,7 +236,7 @@ export async function POST(request: NextRequest) {
           boardSection: boards_requested?.trim() || null,
           proofLink: ftp_proof_link?.trim() || null,
           localFilePath: final_file_name?.trim() || null,
-          status: normalizeStatus(status),
+          status: toTwentyStatus(status) as any,
         })
         return NextResponse.json({ design_request: { id: created.id, job_title: created.name, status: created.status } })
       } catch (err) {
