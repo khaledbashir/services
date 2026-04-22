@@ -91,31 +91,17 @@ export function Sidebar() {
 
   const sections: NavSection[] = useMemo(() => [
     {
-      key: 'people',
-      label: isAdmin ? 'People' : 'External',
-      icon: <Icon>{IC.people}</Icon>,
-      role: 'manager',
-      links: [
-        { href: '/clients', label: 'Clients' },
-        { href: '/staff', label: 'Staff', role: 'admin' },
-        { href: '/portals', label: 'Client Portals' },
-      ],
-    },
-    {
-      key: 'operations',
-      label: 'Operations',
+      key: 'events',
+      label: 'Events & Schedule',
       icon: <Icon>{IC.operations}</Icon>,
       links: [
         isTechnician
           ? { href: '/my-events', label: 'My Assignments', role: 'technician' }
           : { href: '/events', label: 'Events', role: 'manager' },
         !isTechnician ? { href: '/my-events', label: 'My Assignments', role: 'manager' } : null,
-        { href: '/shifts', label: 'Shift Templates', role: 'manager' },
         { href: '/venues', label: 'Venues', role: 'manager' },
         { href: '/venues/map', label: 'Map View', role: 'manager' },
-        { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
-        { href: '/print-requests', label: 'Print Requests', role: 'manager' },
-        { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
+        { href: '/shifts', label: 'Shift Templates', role: 'manager' },
       ].filter(Boolean) as NavLink[],
     },
     {
@@ -126,45 +112,58 @@ export function Sidebar() {
       links: [
         { href: '/tickets', label: 'Tickets' },
         { href: '/kb', label: 'Knowledge Base' },
-        { href: '/gallery', label: 'Visual Gallery' },
         { href: '/reports', label: 'Reports' },
       ],
     },
     {
-      key: 'service-ops',
-      label: 'Service Ops',
-      icon: <Icon>{IC.service}</Icon>,
-      role: 'technician',
-      links: [
-        { href: '/maintenance', label: 'Maintenance' },
-        { href: '/walkthroughs', label: 'Walkthroughs' },
-        { href: '/checklists', label: 'Checklists' },
-        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
-        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
-        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
-      ],
-    },
-    {
-      key: 'creative',
-      label: 'Creative',
+      key: 'design',
+      label: 'Design & Creative',
       icon: <Icon>{IC.creative}</Icon>,
       role: 'technician',
       links: [
         { href: '/designs', label: 'Design Requests' },
         { href: '/cg-designs', label: 'CG Designs' },
         { href: '/content-schedules', label: 'Content Schedule' },
-        { href: '/hours-budgets', label: 'Hours Budgets', role: 'manager' },
+        { href: '/print-requests', label: 'Print Requests', role: 'manager' },
+        { href: '/gallery', label: 'Visual Gallery' },
         { href: '/time-entries', label: 'Time Entries' },
+        { href: '/hours-budgets', label: 'Hours Budgets', role: 'manager' },
       ],
     },
     {
-      key: 'system',
-      label: 'System',
+      key: 'field-ops',
+      label: 'Field Ops',
+      icon: <Icon>{IC.service}</Icon>,
+      role: 'technician',
+      links: [
+        { href: '/inventory', label: 'Inventory' },
+        { href: '/maintenance', label: 'Maintenance' },
+        { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
+        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
+        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
+        { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
+      ],
+    },
+    {
+      key: 'external',
+      label: 'External',
+      icon: <Icon>{IC.people}</Icon>,
+      role: 'manager',
+      links: [
+        { href: '/clients', label: 'Clients' },
+        { href: '/portals', label: 'Client Portals' },
+      ],
+    },
+    {
+      key: 'admin',
+      label: 'Admin',
       icon: <Icon>{IC.system}</Icon>,
       role: 'tech_support',
       links: [
-        { href: '/inventory', label: 'Inventory' },
+        { href: '/staff', label: 'Staff', role: 'admin' },
         { href: '/settings', label: 'Settings', role: 'admin' },
+        { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
       ],
     },
   ], [userRole, isTechnician, isAdmin, isTechSupport])
@@ -249,11 +248,6 @@ export function Sidebar() {
                 <span className="flex items-center gap-2">
                   <span className="opacity-70">{section.icon}</span>
                   {section.label}
-                  {(section.key === 'service-ops' || section.key === 'creative') && (
-                    <span className="ml-1 inline-flex items-center rounded-sm bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
-                      WIP
-                    </span>
-                  )}
                 </span>
                 <Icon className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}>{IC.chevron}</Icon>
               </button>
