@@ -62,7 +62,7 @@ These are features the team uses daily that don't map to any existing Twenty cus
 - [x] Build Twenty custom object + fields (via metadata API)
 - [x] `/api/print-requests` route (twenty-backed)
 - [x] `/print-requests` page with Kanban view by status + client filter (ClickUp-style, Alexis's ask)
-- [ ] Export `/api/print-requests/export` for reporting
+- [x] Export `/api/print-requests/export` for reporting
 - [ ] Migrate existing Wrike + ClickUp print-request records
 
 ### 3.2 Content Schedule (Alexis — in-venue content run tracking)
