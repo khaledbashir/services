@@ -168,25 +168,56 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
           {proofs.map((p) => {
             const downloadUrl = `/api/design-requests/${designRequestId}/proofs/${p.id}/download`
             const showImage = isImageFile(p.filename, p.mime_type)
+
+            // AI drafts + regular image proofs get a full-width inline preview
+            // — Alexis/Ahmad need to actually see the generated image, not a
+            // thumbnail they have to click through to.
+            if (showImage) {
+              return (
+                <div key={p.id} className={`${p.is_ai_generated ? 'bg-violet-50/40' : ''} hover:bg-zinc-50 transition-colors`}>
+                  <div className="px-3 pt-3 pb-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-zinc-900 truncate font-medium flex items-center gap-1.5">
+                        <span className="truncate">{p.filename}</span>
+                        {p.is_ai_generated && (
+                          <span className="inline-block rounded-full bg-violet-100 text-violet-700 text-[10px] font-semibold px-1.5 py-0.5 flex-shrink-0">✨ AI DRAFT</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 truncate mt-0.5">
+                        <span className="inline-block rounded-full bg-[#0A52EF]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0A52EF]">v{p.version}</span>
+                        <span className="ml-2">{formatBytes(p.size_bytes)} · {formatDate(p.uploaded_at)}</span>
+                        {p.backend === 's3' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">MinIO</span>}
+                        {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
+                        <span className="ml-2 text-zinc-400">· {formatRelativeView(p.last_viewed_at)} · {p.view_count} view{p.view_count === 1 ? '' : 's'}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <a href={downloadUrl} target="_blank" rel="noopener noreferrer"
+                         className="text-[11px] text-[#0A52EF] hover:underline">Open full size</a>
+                      <button onClick={() => handleDelete(p.id)}
+                        className="text-[11px] text-rose-500 hover:text-rose-700">Delete</button>
+                    </div>
+                  </div>
+                  <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="block px-3 pb-3">
+                    <img
+                      src={downloadUrl}
+                      alt={p.filename}
+                      className="w-full max-h-[480px] object-contain rounded border border-zinc-200 bg-zinc-50"
+                      loading="lazy"
+                    />
+                  </a>
+                </div>
+              )
+            }
+
             return (
               <div key={p.id} className="px-3 py-2.5 hover:bg-zinc-50 transition-colors">
                 <div className="flex items-start gap-3">
-                  {showImage ? (
-                    <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                      <img
-                        src={downloadUrl}
-                        alt={p.filename}
-                        className="w-20 h-20 object-cover rounded border border-zinc-200 bg-zinc-50"
-                        loading="lazy"
-                      />
-                    </a>
-                  ) : (
-                    <div className="w-7 h-7 flex-shrink-0 rounded bg-[#0A52EF]/10 text-[#0A52EF] flex items-center justify-center mt-0.5">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  )}
+                  <div className="w-7 h-7 flex-shrink-0 rounded bg-[#0A52EF]/10 text-[#0A52EF] flex items-center justify-center mt-0.5">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-zinc-900 truncate font-medium flex items-center gap-1.5">
                       {p.filename}
