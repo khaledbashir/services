@@ -26,10 +26,11 @@ interface ContentScheduleDetail {
 interface Staff { id: string; full_name: string }
 
 const statusOptions = [
+  { value: 'ready', label: 'Ready' },
   { value: 'in_queue', label: 'In Queue' },
   { value: 'scheduled_to_launch', label: 'Scheduled To Launch' },
   { value: 'content_live', label: 'Content Live' },
-  { value: 'confirmed_with_client', label: 'Confirmed With Client' },
+  { value: 'confirmed_live', label: 'Confirmed Live with Client' },
 ]
 
 export default function ContentScheduleDetailPage({ params }: { params: { id: string } }) {

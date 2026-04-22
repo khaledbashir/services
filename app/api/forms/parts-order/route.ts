@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { twentyCreate, requireFields, str } from '../_helpers'
+import { notifyOps } from '@/lib/slack'
+import { sendEmail } from '@/lib/email'
+
+const SLACK_PARTS_CHANNEL = process.env.SLACK_PARTS_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || '#ops-parts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +15,6 @@ export async function POST(request: NextRequest) {
       'venueName',
       'partsNeeded',
       'shippingAddress',
-      'urgency',
     ])
     if (!check.ok) {
       return NextResponse.json({ error: check.error }, { status: 400 })
@@ -49,6 +52,36 @@ export async function POST(request: NextRequest) {
     }
 
     const created = result.data.data.createPartsOrder
+
+    // Async slack and email notifications
+    const dashboardLink = { label: 'View Order', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/parts-orders/${created.id}` }
+    notifyOps(
+      ':package:',
+      `New Parts Order: *${created.name}*\nRequestor: ${payload.requestorName} (${payload.requestorEmail})\nUrgency: ${urgency || 'Normal'}\nParts: ${payload.partsNeeded}`,
+      dashboardLink,
+      SLACK_PARTS_CHANNEL
+    )
+
+    if (payload.requestorEmail && typeof payload.requestorEmail === 'string') {
+      const html = `
+        <div style="font-family:sans-serif;max-width:600px;margin:20px auto;border:1px solid #e2e8f0;border-radius:8px;padding:24px;">
+          <h2 style="color:#002C73;margin-top:0;">Parts Order Received</h2>
+          <p>Hi ${payload.requestorName},</p>
+          <p>Your parts order for <strong>${body.venueName}</strong> has been submitted successfully.</p>
+          <div style="background:#f8fafc;padding:16px;border-radius:4px;margin:20px 0;">
+            <p style="margin:0 0 8px;"><strong>Parts needed:</strong><br/>${String(payload.partsNeeded).replace(/\n/g, '<br/>')}</p>
+            <p style="margin:0 0 8px;"><strong>Shipping to:</strong><br/>${payload.shippingAddress}</p>
+          </div>
+          <p style="margin-bottom:0;">Gianni has been notified and will process this shortly.</p>
+        </div>
+      `
+      sendEmail(
+        [payload.requestorEmail as string],
+        `[ANC Parts] Order Confirmation: ${body.venueName}`,
+        html
+      ).catch(console.error)
+    }
+
     return NextResponse.json({ id: created.id, name: created.name })
   } catch (err: any) {
     return NextResponse.json(

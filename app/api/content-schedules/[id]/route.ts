@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
+import {
+  ContentSchedule as ContentScheduleFacade,
+  dashboardVenueIdToTwentyId,
+  isTwentyBackedEnabled,
+  type TwentyContentSchedule,
+} from '@/lib/twenty-ops'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -16,10 +22,11 @@ const ALLOWED_PATCH_FIELDS = new Set([
 ])
 
 const ALLOWED_STATUSES = new Set([
+  'ready',
   'in_queue',
   'scheduled_to_launch',
   'content_live',
-  'confirmed_with_client',
+  'confirmed_live',
 ])
 
 function normalizeValue(key: string, value: any) {
@@ -33,6 +40,8 @@ function normalizeValue(key: string, value: any) {
   if (key === 'launch_date' || key === 'end_date') return value || null
   return value
 }
+
+// ── Legacy: local-DB record access check ─────────────────────────────────────
 
 async function getAccessibleRecord(request: NextRequest, id: string) {
   const auth = await requireRole(request, 'technician')
@@ -55,8 +64,46 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
   return { auth, record: result.rows[0] || null }
 }
 
+// ── Twenty ↔ Dashboard reshape ───────────────────────────────────────────────
+
+async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
+  const { twentyVenueToDashboard } = await import('@/lib/twenty-ops')
+  const venue = cs.contentScheduleVenue
+    ? { venue_id: cs.contentScheduleVenue.servicesId || null, venue_name: cs.contentScheduleVenue.name }
+    : cs.contentScheduleVenueId
+    ? await twentyVenueToDashboard(cs.contentScheduleVenueId)
+    : null
+  return {
+    id: cs.id,
+    venue_id: venue?.venue_id || null,
+    venue_name: venue?.venue_name || null,
+    company_name: cs.contentScheduleClient?.name || null,
+    content_name: cs.name || '(unnamed)',
+    launch_date: cs.runStartDate || null,
+    end_date: cs.runEndDate || null,
+    operator_id: null,
+    operator_name: null,
+    files_ready: false,
+    status: cs.status || 'in_queue',
+    notes: cs.notes || null,
+    created_at: cs.createdAt,
+    updated_at: cs.updatedAt,
+  }
+}
+
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // ── Twenty-backed path ──
+    if (isTwentyBackedEnabled('CONTENT_SCHEDULES')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const cs = await ContentScheduleFacade.get(params.id)
+      if (!cs) return NextResponse.json({ error: 'Content schedule not found' }, { status: 404 })
+      const reshaped = await reshapeTwentyToDashboard(cs)
+      return NextResponse.json({ content_schedule: reshaped })
+    }
+
+    // ── Legacy path ──
     const access = await getAccessibleRecord(request, params.id)
     if (access instanceof NextResponse) return access
     if (!access.record) {
@@ -71,6 +118,40 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // ── Twenty-backed path ──
+    if (isTwentyBackedEnabled('CONTENT_SCHEDULES')) {
+      const auth = await requireRole(request, 'technician')
+      if (isAuthError(auth)) return auth
+      const existing = await ContentScheduleFacade.get(params.id)
+      if (!existing) return NextResponse.json({ error: 'Content schedule not found' }, { status: 404 })
+
+      const body = await request.json()
+      const payload: Record<string, unknown> = {}
+
+      if (body.content_name?.trim()) payload.name = body.content_name.trim()
+      if (body.launch_date !== undefined) payload.runStartDate = body.launch_date || null
+      if (body.end_date !== undefined) payload.runEndDate = body.end_date || null
+      if (body.status !== undefined && ALLOWED_STATUSES.has(body.status)) payload.status = body.status
+      if (body.notes !== undefined) payload.notes = body.notes?.trim() || null
+      if (body.venue_id !== undefined) {
+        if (body.venue_id) {
+          const twentyVenueId = await dashboardVenueIdToTwentyId(body.venue_id)
+          if (twentyVenueId) payload.contentScheduleVenueId = twentyVenueId
+        } else {
+          payload.contentScheduleVenueId = null
+        }
+      }
+
+      if (Object.keys(payload).length === 0) {
+        return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+      }
+
+      const updated = await ContentScheduleFacade.update(params.id, payload as Partial<TwentyContentSchedule>)
+      const reshaped = await reshapeTwentyToDashboard(updated)
+      return NextResponse.json({ content_schedule: reshaped })
+    }
+
+    // ── Legacy path ──
     const access = await getAccessibleRecord(request, params.id)
     if (access instanceof NextResponse) return access
     if (!access.record) {
@@ -110,6 +191,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_request: NextRequest) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  // ── Twenty-backed path ──
+  if (isTwentyBackedEnabled('CONTENT_SCHEDULES')) {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+    try {
+      await ContentScheduleFacade.delete(params.id)
+      return NextResponse.json({ ok: true })
+    } catch (err) {
+      console.error('[content-schedule DELETE twenty-backed] error:', err)
+      return NextResponse.json({ error: 'Failed to delete content schedule' }, { status: 500 })
+    }
+  }
+
   return NextResponse.json({ error: 'Delete not supported' }, { status: 405 })
 }

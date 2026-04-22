@@ -26,17 +26,19 @@ interface Venue { id: string; name: string }
 interface Staff { id: string; full_name: string }
 
 const statusColumns = [
+  { key: 'ready', label: 'Ready' },
   { key: 'in_queue', label: 'In Queue' },
   { key: 'scheduled_to_launch', label: 'Scheduled To Launch' },
   { key: 'content_live', label: 'Content Live' },
-  { key: 'confirmed_with_client', label: 'Confirmed With Client' },
+  { key: 'confirmed_live', label: 'Confirmed Live with Client' },
 ] as const
 
 const statusTone: Record<string, string> = {
+  ready: 'bg-green-50 text-green-700',
   in_queue: 'bg-violet-50 text-violet-700',
   scheduled_to_launch: 'bg-amber-50 text-amber-700',
   content_live: 'bg-blue-50 text-blue-700',
-  confirmed_with_client: 'bg-emerald-50 text-emerald-700',
+  confirmed_live: 'bg-emerald-50 text-emerald-700',
 }
 
 export default function ContentSchedulesPage() {
@@ -45,6 +47,9 @@ export default function ContentSchedulesPage() {
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [venueFilter, setVenueFilter] = useState<string>('all')
+  const [clientFilter, setClientFilter] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -127,9 +132,20 @@ export default function ContentSchedulesPage() {
         (item.venue_name || '').toLowerCase().includes(q) ||
         (item.operator_name || '').toLowerCase().includes(q)
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter
-      return matchesSearch && matchesStatus
+      const matchesVenue = venueFilter === 'all' || item.venue_id === venueFilter
+      const matchesClient = clientFilter === 'all' || item.company_name === clientFilter
+
+      return matchesSearch && matchesStatus && matchesVenue && matchesClient
     })
-  }, [items, search, statusFilter])
+  }, [items, search, statusFilter, venueFilter, clientFilter])
+
+  const clients = useMemo(() => {
+    const set = new Set<string>()
+    for (const item of items) {
+      if (item.company_name) set.add(item.company_name)
+    }
+    return Array.from(set).sort()
+  }, [items])
 
   const counts: Record<string, number> = { all: items.length }
   for (const status of statusColumns) counts[status.key] = items.filter((item) => item.status === status.key).length
@@ -216,8 +232,8 @@ export default function ContentSchedulesPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-200">
-          <div className="flex items-center gap-0 -mb-px overflow-x-auto">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-zinc-200">
+          <div className="flex items-center gap-0 -mb-px overflow-x-auto w-full md:w-auto">
             {[...statusColumns, { key: 'all', label: 'All' }].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
@@ -228,13 +244,30 @@ export default function ContentSchedulesPage() {
               )
             })}
           </div>
-          <div className="pb-2">
-            <input type="text" placeholder="Search content schedules..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-72 border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
+          <div className="flex items-center gap-3 pb-2 w-full md:w-auto">
+            <select value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white">
+              <option value="all">All Venues</option>
+              {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white max-w-[160px]">
+              <option value="all">All Clients</option>
+              {clients.map((client) => <option key={client} value={client}>{client}</option>)}
+            </select>
+            <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-32 md:w-48 border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
+            <div className="flex bg-zinc-100 rounded-md p-1 border border-zinc-200">
+              <button onClick={() => setViewMode('list')} className={`px-3 py-1 text-xs font-medium rounded-sm ${viewMode === 'list' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>List</button>
+              <button onClick={() => setViewMode('calendar')} className={`px-3 py-1 text-xs font-medium rounded-sm ${viewMode === 'calendar' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>Calendar</button>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          {statusColumns.map((column) => {
+        {viewMode === 'calendar' ? (
+          <div className="border border-zinc-200 bg-zinc-50 p-6 min-h-[500px] flex items-center justify-center text-sm text-zinc-500">
+            Calendar view placeholder (to be implemented with react-big-calendar or similar if needed)
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            {statusColumns.map((column) => {
             const columnItems = filtered.filter((item) => item.status === column.key)
             return (
               <div key={column.key} className="border border-zinc-200 bg-zinc-50 min-h-[22rem]">
@@ -265,7 +298,8 @@ export default function ContentSchedulesPage() {
               </div>
             )
           })}
-        </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )
