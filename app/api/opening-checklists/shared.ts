@@ -116,6 +116,22 @@ const TWENTY_TO_DASHBOARD_PHASE: Record<string, OpeningChecklistPhase> = {
   PHASE_OPENING_DAY: 'opening_day',
 }
 
+const DASHBOARD_TO_TWENTY_STATUS: Record<OpeningChecklistStatus, string> = {
+  pending: 'STATUS_PENDING',
+  in_progress: 'STATUS_IN_PROGRESS',
+  blocked: 'STATUS_BLOCKED',
+  complete: 'STATUS_COMPLETE',
+  skipped: 'STATUS_SKIPPED',
+}
+
+const TWENTY_TO_DASHBOARD_STATUS: Record<string, OpeningChecklistStatus> = {
+  STATUS_PENDING: 'pending',
+  STATUS_IN_PROGRESS: 'in_progress',
+  STATUS_BLOCKED: 'blocked',
+  STATUS_COMPLETE: 'complete',
+  STATUS_SKIPPED: 'skipped',
+}
+
 export function normalizeOpeningChecklistLeague(value: string | null | undefined): OpeningChecklistLeague | null {
   if (!value) return null
   const upper = String(value).trim().toUpperCase()
@@ -130,9 +146,8 @@ export function normalizeOpeningChecklistPhase(value: string | null | undefined)
 
 export function normalizeOpeningChecklistStatus(value: string | null | undefined): OpeningChecklistStatus {
   if (!value) return 'pending'
-  return (OPENING_CHECKLIST_STATUS_ORDER as readonly string[]).includes(value)
-    ? (value as OpeningChecklistStatus)
-    : 'pending'
+  if ((OPENING_CHECKLIST_STATUS_ORDER as readonly string[]).includes(value)) return value as OpeningChecklistStatus
+  return TWENTY_TO_DASHBOARD_STATUS[value] || 'pending'
 }
 
 function parseDateOnly(input: string | null | undefined): Date | null {
@@ -228,7 +243,7 @@ export function buildOpeningChecklistPatch(body: Record<string, unknown>) {
   if (body.opening_date !== undefined) patch.openingDate = body.opening_date || null
   if (body.due_date !== undefined) patch.dueDate = body.due_date || null
   if (body.item_description !== undefined) patch.itemDescription = toRichText(String(body.item_description || ''))
-  if (body.status !== undefined) patch.status = normalizeOpeningChecklistStatus(String(body.status || ''))
+  if (body.status !== undefined) patch.status = DASHBOARD_TO_TWENTY_STATUS[normalizeOpeningChecklistStatus(String(body.status || ''))]
   if (body.notes !== undefined) patch.notes = toRichText(String(body.notes || ''))
 
   return patch
@@ -236,6 +251,10 @@ export function buildOpeningChecklistPatch(body: Record<string, unknown>) {
 
 export function toTwentyOpeningChecklistPhase(phase: string | null | undefined): string {
   return DASHBOARD_TO_TWENTY_PHASE[normalizeOpeningChecklistPhase(phase)]
+}
+
+export function toTwentyOpeningChecklistStatus(status: string | null | undefined): string {
+  return DASHBOARD_TO_TWENTY_STATUS[normalizeOpeningChecklistStatus(status)]
 }
 
 export async function shapeOpeningChecklistItem(record: TwentyOpeningChecklistItem): Promise<DashboardOpeningChecklistItem> {

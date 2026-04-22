@@ -8,6 +8,7 @@ import {
   resolveVenueForChecklist,
   shapeOpeningChecklistItem,
   toTwentyOpeningChecklistPhase,
+  toTwentyOpeningChecklistStatus,
 } from '../shared'
 
 export async function POST(request: NextRequest) {
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
         dueDate: deriveDueDate(openingDate, item.phase),
         itemDescription: item.itemDescription ? { markdown: item.itemDescription } : null,
         checklistAssigneeId: assignee.technicianId,
-        status: 'pending',
+        status: toTwentyOpeningChecklistStatus('pending'),
         completedAt: null,
         notes: null,
       })

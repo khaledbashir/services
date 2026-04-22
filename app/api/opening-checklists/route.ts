@@ -19,6 +19,7 @@ import {
   shapeOpeningChecklistItem,
   shapeOpeningChecklistTemplate,
   toTwentyOpeningChecklistPhase,
+  toTwentyOpeningChecklistStatus,
 } from './shared'
 
 export async function GET(request: NextRequest) {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     if (league) filters.push(`league[eq]:\"${normalizeOpeningChecklistLeague(league) || 'OTHER'}\"`)
     if (phase) filters.push(`phase[eq]:\"${toTwentyOpeningChecklistPhase(phase)}\"`)
-    if (status) filters.push(`status[eq]:\"${normalizeOpeningChecklistStatus(status)}\"`)
+    if (status) filters.push(`status[eq]:\"${toTwentyOpeningChecklistStatus(status)}\"`)
 
     const shapedItems: Awaited<ReturnType<typeof shapeOpeningChecklistItem>>[] = []
     let cursor: string | null = null
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedStatus = normalizeOpeningChecklistStatus(String(body.status || 'pending'))
-    patch.status = normalizedStatus
+    patch.status = toTwentyOpeningChecklistStatus(normalizedStatus)
     patch.completedAt = normalizedStatus === 'complete' ? new Date().toISOString() : null
 
     const created = await OpeningChecklist.create(patch)

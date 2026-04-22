@@ -8,6 +8,7 @@ import {
   resolveChecklistAssignee,
   resolveVenueForChecklist,
   shapeOpeningChecklistItem,
+  toTwentyOpeningChecklistStatus,
 } from '../shared'
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -66,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     if (body.status !== undefined) {
       const normalizedStatus = normalizeOpeningChecklistStatus(String(body.status || 'pending'))
-      patch.status = normalizedStatus
+      patch.status = toTwentyOpeningChecklistStatus(normalizedStatus)
       patch.completedAt = normalizedStatus === 'complete' ? new Date().toISOString() : null
     }
 

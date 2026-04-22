@@ -39,11 +39,11 @@ const PHASE_OPTIONS = [
 ] as const
 
 const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending', position: 0, color: 'gray' },
-  { value: 'in_progress', label: 'In Progress', position: 1, color: 'blue' },
-  { value: 'blocked', label: 'Blocked', position: 2, color: 'red' },
-  { value: 'complete', label: 'Complete', position: 3, color: 'green' },
-  { value: 'skipped', label: 'Skipped', position: 4, color: 'yellow' },
+  { value: 'STATUS_PENDING', label: 'Pending', position: 0, color: 'gray' },
+  { value: 'STATUS_IN_PROGRESS', label: 'In Progress', position: 1, color: 'blue' },
+  { value: 'STATUS_BLOCKED', label: 'Blocked', position: 2, color: 'red' },
+  { value: 'STATUS_COMPLETE', label: 'Complete', position: 3, color: 'green' },
+  { value: 'STATUS_SKIPPED', label: 'Skipped', position: 4, color: 'yellow' },
 ] as const
 
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
@@ -276,7 +276,7 @@ async function main() {
     name: 'status',
     label: 'Status',
     icon: 'IconProgressCheck',
-    defaultValue: "'pending'",
+    defaultValue: "'STATUS_PENDING'",
     options: STATUS_OPTIONS,
   })
   await ensureField(itemObject.id, itemFields, 'completedAt', {

@@ -83,11 +83,11 @@ These are features the team uses daily that don't map to any existing Twenty cus
 - [ ] Email on status change to requester
 
 ### 3.4 30/60/90 Stadium Opening Checklist (Gianni's pre-season prep)
-- [ ] Design Twenty object: parent venue, checklist template name, phase (30/60/90 day), item prompt, assignee, due date, status
-- [ ] Seed templates per league (MLB, NBA, NHL, NFL) that can be cloned per team
-- [ ] Build `/api/opening-checklists` route
-- [ ] `/opening-checklists` page with venue grouping + phase collapsing
-- [ ] Bulk-clone: "Prep Prudential for 2026–27 season" → spawns all 3 phase checklists with default assignees
+- [x] Design Twenty object: parent venue, checklist template name, phase (30/60/90 day), item prompt, assignee, due date, status
+- [x] Seed templates per league (MLB, NBA, NHL, NFL) that can be cloned per team
+- [x] Build `/api/opening-checklists` route
+- [x] `/opening-checklists` page with venue grouping + phase collapsing
+- [x] Bulk-clone: "Prep Prudential for 2026–27 season" → spawns all 3 phase checklists with default assignees
 
 ## Phase 4 — Integrations
 
@@ -172,3 +172,4 @@ Once those land:
 
 - **2026-04-22**: Checklist created after reviewing Friday team-call transcript. Phase 0 is partially complete, hit a 429 bug mid-test, fixed. Resuming Phase 0 verification next.
 - **2026-04-22**: Print Requests module shipped in the dashboard with Twenty-backed CRUD, list + Kanban views, client filtering, and metadata bootstrap script at `scripts/create-print-request-object.ts`.
+- **2026-04-22**: Stadium Prep module shipped with Twenty-backed checklist items/templates, seed templates for MLB + NHL, grouped venue views, and bulk template cloning from `/opening-checklists`.
