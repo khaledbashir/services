@@ -40,6 +40,8 @@ export interface PageContextField {
   selector: string
   label?: string
   type?: string
+  value?: string
+  empty?: boolean
 }
 
 export interface PageContext {
@@ -169,6 +171,8 @@ function buildPageContextBlock(pageContext?: PageContext): string {
       const parts = [selector]
       if (field.label?.trim()) parts.push(`label: ${field.label.trim()}`)
       if (field.type?.trim()) parts.push(`type: ${field.type.trim()}`)
+      if (typeof field.empty === 'boolean') parts.push(`empty: ${field.empty ? 'yes' : 'no'}`)
+      if (field.value?.trim()) parts.push(`current: ${field.value.trim()}`)
       return `- ${parts.join(' · ')}`
     })
     .filter(Boolean) as string[]
@@ -184,7 +188,7 @@ function buildPageContextBlock(pageContext?: PageContext): string {
   }
   lines.push(
     '- Treat this as the live UI state right now.',
-    '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill/ui_select on these visible fields first.',
+    '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill_form or ui_fill/ui_select on these visible fields first.',
     '- Do NOT call create_* unless the user explicitly asks for a brand-new record.'
   )
   return `${lines.join('\n')}\n`
@@ -263,6 +267,7 @@ UI DRIVING — You can drive the dashboard UI like a human. You have:
   ui_navigate(path)        — go to a page (e.g. /events, /designs)
   ui_click(selector)       — click button/link by CSS selector or
                              visible text
+  ui_fill_form(assignments, only_if_empty?) — fill many fields in one pass
   ui_fill(selector, value) — type into input/textarea (label text
                              works as a selector too)
   ui_select(selector, value) — pick a <select> option
@@ -286,8 +291,12 @@ separate record.
 "FILL IT" / "FILL THE FORM" / "POPULATE / USE EXAMPLE DATA" — when the
 user says any of these on a form page without specifying values, DO NOT
 stop to ask what to put in each field. Generate plausible placeholder
-data on the spot and fire ui_fill / ui_select for every visible field on
-the CURRENT PAGE, then report what you filled in one short summary.
+data on the spot and prefer a single ui_fill_form call for the CURRENT
+PAGE. If the user says "fill every blank", preserve any field marked
+empty: no and fill only fields marked empty: yes by passing
+only_if_empty: true. Never overwrite existing values unless the user
+explicitly asks to replace or update them. Then report what you filled in
+one short summary.
 Never replace this with create_design_request unless the user explicitly
 asked for a brand-new request. Examples of fine placeholders:
   - Client name: a real-sounding NBA/NHL team name (Lakers, Celtics)
@@ -302,6 +311,12 @@ asked for a brand-new request. Examples of fine placeholders:
 Only ask for clarification if the form requires a value we can't
 reasonably guess (e.g. a specific tricode the user mentioned earlier).
 Prefer filling and letting the user edit over asking and stalling.
+
+ACTION DISCIPLINE:
+- Do not tell the user to click/save/move/send something unless you
+  actually executed the ui action in this turn.
+- Keep imperative follow-ups inside the hidden suggestions block, not in
+  the visible body text.
 
 SUGGESTIONS — MANDATORY. The very last thing in EVERY single response
 must be a suggestions block, even short ones. No exceptions — not for

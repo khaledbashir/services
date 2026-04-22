@@ -42,6 +42,37 @@ const click: Skill = {
   },
 }
 
+const fillForm: Skill = {
+  name: 'ui_fill_form',
+  description: 'FIRST CHOICE for filling multiple fields on the current page in one pass. Use this for "fill it", "fill the form", or "fill every blank". Set only_if_empty:true when the user wants blank fields filled without overwriting existing values.',
+  category: 'System',
+  icon: '🧩',
+  parameters: {
+    type: 'object',
+    properties: {
+      assignments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            selector: { type: 'string', description: 'Prefer [data-ai-target="name"] selectors when available.' },
+            value: { type: 'string' },
+          },
+          required: ['selector', 'value'],
+        },
+      },
+      only_if_empty: { type: 'boolean', description: 'Skip any field that already has a value.' },
+    },
+    required: ['assignments'],
+  },
+  async handler(args) {
+    return ui('fill_form', {
+      assignments: Array.isArray(args.assignments) ? args.assignments : [],
+      only_if_empty: args.only_if_empty === true || undefined,
+    })
+  },
+}
+
 const fill: Skill = {
   name: 'ui_fill',
   description: 'FIRST CHOICE when the user says fill, populate, or autofill the current page. Type text into an input, textarea, or contenteditable field on the current page instead of creating a separate record. Submits the change with input + change + blur events. Pass fast:true (or any value >40 chars) to skip the typewriter animation and set the value directly.',
@@ -145,5 +176,5 @@ const refresh: Skill = {
 }
 
 export function uiSkills(): Skill[] {
-  return [navigate, click, fill, select, highlight, wait, toast, refresh]
+  return [navigate, click, fillForm, fill, select, highlight, wait, toast, refresh]
 }

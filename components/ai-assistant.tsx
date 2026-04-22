@@ -120,6 +120,8 @@ interface PageContextField {
   selector: string
   label?: string
   type?: string
+  value?: string
+  empty?: boolean
 }
 
 interface PageContext {
@@ -146,6 +148,12 @@ function isVisibleElement(el: HTMLElement): boolean {
 function cleanFieldLabel(raw?: string | null): string | undefined {
   const label = raw?.replace(/\s+/g, ' ').trim()
   return label ? label.slice(0, 80) : undefined
+}
+
+function cleanFieldValue(raw?: string | null): string | undefined {
+  const value = raw?.replace(/\s+/g, ' ').trim()
+  if (!value) return undefined
+  return value.slice(0, 120)
 }
 
 function collectPageContext(pathname: string): PageContext {
@@ -175,10 +183,18 @@ function collectPageContext(pathname: string): PageContext {
       aiTarget
     )
 
+    const currentValue = cleanFieldValue(
+      node instanceof HTMLSelectElement
+        ? (node.selectedOptions?.[0]?.textContent || node.value || '')
+        : node.value
+    )
+
     fields.push({
       selector,
       label,
       type: node instanceof HTMLSelectElement ? 'select' : node.type || node.tagName.toLowerCase(),
+      value: currentValue,
+      empty: !currentValue,
     })
     seen.add(selector)
     if (fields.length >= 20) break

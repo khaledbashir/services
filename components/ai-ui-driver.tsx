@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 export type UiAction =
   | { type: 'navigate'; path: string }
   | { type: 'click'; selector: string }
+  | { type: 'fill_form'; assignments: Array<{ selector: string; value: string }>; only_if_empty?: boolean }
   | { type: 'fill'; selector: string; value: string; fast?: boolean }
   | { type: 'select'; selector: string; value: string }
   | { type: 'highlight'; selector: string; label?: string }
@@ -71,6 +72,14 @@ function findField(selector: string): HTMLInputElement | HTMLTextAreaElement | H
     }
   }
   return null
+}
+
+function fieldCurrentValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): string {
+  if (el instanceof HTMLSelectElement) {
+    const selected = el.selectedOptions?.[0]
+    return (selected?.textContent || el.value || '').trim()
+  }
+  return (el.value || '').trim()
 }
 
 export function AiUiDriver() {
@@ -181,6 +190,33 @@ export function AiUiDriver() {
               el.dispatchEvent(new Event('change', { bubbles: true }))
             } else {
               await typeIntoField(el, action.value, action.fast)
+            }
+            break
+          }
+          case 'fill_form': {
+            for (const assignment of action.assignments || []) {
+              const selector = String(assignment?.selector || '')
+              const value = String(assignment?.value || '')
+              if (!selector) continue
+              const el = findField(selector)
+              if (!el) { console.warn('ai-ui: fill_form target not found', selector); continue }
+              const current = fieldCurrentValue(el)
+              if (action.only_if_empty && current) continue
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              await new Promise((r) => setTimeout(r, 100))
+              await moveCursor(el)
+              flashCursor()
+              if (el instanceof HTMLSelectElement) {
+                let found = Array.from(el.options).find(o => o.value === value)
+                if (!found) found = Array.from(el.options).find(o => (o.textContent || '').trim().toLowerCase() === value.toLowerCase())
+                if (found) {
+                  el.value = found.value
+                  el.dispatchEvent(new Event('change', { bubbles: true }))
+                }
+              } else {
+                await typeIntoField(el, value, true)
+              }
+              await new Promise((r) => setTimeout(r, 60))
             }
             break
           }
