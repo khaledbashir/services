@@ -149,7 +149,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Commit mode — actually import
-    const defaultPasswordHash = await bcrypt.hash('changeme123', 10)
+    // Joe's 2026-04-23 call: default to `anc123` so he can mass-upload and
+    // tell everyone "use your email + anc123, change it after login."
+    // Previously `changeme123` which nobody knew.
+    const defaultPasswordHash = await bcrypt.hash('anc123', 10)
     const imported: any[] = []
     const updated: any[] = []
     const skipped: any[] = []
