@@ -13,12 +13,12 @@ import {
   deriveDueDate,
   getStaffLookup,
   normalizeOpeningChecklistLeague,
-  normalizeOpeningChecklistPhase,
   normalizeOpeningChecklistStatus,
   resolveChecklistAssignee,
   resolveVenueForChecklist,
   shapeOpeningChecklistItem,
   shapeOpeningChecklistTemplate,
+  toTwentyOpeningChecklistPhase,
 } from './shared'
 
 export async function GET(request: NextRequest) {
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (league) filters.push(`league[eq]:\"${normalizeOpeningChecklistLeague(league) || 'OTHER'}\"`)
-    if (phase) filters.push(`phase[eq]:\"${normalizeOpeningChecklistPhase(phase)}\"`)
+    if (phase) filters.push(`phase[eq]:\"${toTwentyOpeningChecklistPhase(phase)}\"`)
     if (status) filters.push(`status[eq]:\"${normalizeOpeningChecklistStatus(status)}\"`)
 
     const shapedItems: Awaited<ReturnType<typeof shapeOpeningChecklistItem>>[] = []

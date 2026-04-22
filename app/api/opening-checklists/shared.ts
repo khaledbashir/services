@@ -234,6 +234,10 @@ export function buildOpeningChecklistPatch(body: Record<string, unknown>) {
   return patch
 }
 
+export function toTwentyOpeningChecklistPhase(phase: string | null | undefined): string {
+  return DASHBOARD_TO_TWENTY_PHASE[normalizeOpeningChecklistPhase(phase)]
+}
+
 export async function shapeOpeningChecklistItem(record: TwentyOpeningChecklistItem): Promise<DashboardOpeningChecklistItem> {
   const venue = record.venue
     ? { venue_id: record.venue.servicesId || null, venue_name: record.venue.name }

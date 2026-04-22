@@ -7,6 +7,7 @@ import {
   resolveDefaultAssigneeForVenue,
   resolveVenueForChecklist,
   shapeOpeningChecklistItem,
+  toTwentyOpeningChecklistPhase,
 } from '../shared'
 
 export async function POST(request: NextRequest) {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
         name: item.name,
         venueId: twentyVenueId,
         league: template.league || null,
-        phase: item.phase,
+        phase: toTwentyOpeningChecklistPhase(item.phase),
         openingDate,
         dueDate: deriveDueDate(openingDate, item.phase),
         itemDescription: item.itemDescription ? { markdown: item.itemDescription } : null,
