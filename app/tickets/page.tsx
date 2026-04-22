@@ -1,11 +1,6 @@
 'use client'
 
-// useSearchParams bails out of static generation; mark the route explicitly
-// so Next's pre-render doesn't try to hit the DB from the build image.
-export const dynamic = 'force-dynamic'
-
-import { useEffect, useState, FormEvent, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
@@ -69,19 +64,26 @@ export default function TicketsPage() {
     try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
   }, [])
   const [bulkBusy, setBulkBusy] = useState(false)
-  const sp = useSearchParams()
-  const urlAssignedTo = sp?.get('assigned_to') || ''
-  const urlVenueId = sp?.get('venue_id') || ''
-  const urlStatus = sp?.get('status') || ''
-  const urlFrom = sp?.get('from') || ''
-  const urlTo = sp?.get('to') || ''
-
+  // URL drill-down params (assigned_to, venue_id, status, from, to) hydrate
+  // on mount from window.location so the report → tickets-list jump works.
+  // Using window instead of useSearchParams() to avoid the Suspense-boundary
+  // requirement that breaks the Next.js build for this page.
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>(urlStatus || 'active')
-  const [assignedToFilter, setAssignedToFilter] = useState<string>(urlAssignedTo)
-  const [venueFilter, setVenueFilter] = useState<string>(urlVenueId)
-  const [fromFilter] = useState<string>(urlFrom)
-  const [toFilter] = useState<string>(urlTo)
+  const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [assignedToFilter, setAssignedToFilter] = useState<string>('')
+  const [venueFilter, setVenueFilter] = useState<string>('')
+  const [fromFilter, setFromFilter] = useState<string>('')
+  const [toFilter, setToFilter] = useState<string>('')
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get('assigned_to')) setAssignedToFilter(sp.get('assigned_to')!)
+      if (sp.get('venue_id')) setVenueFilter(sp.get('venue_id')!)
+      if (sp.get('status')) setStatusFilter(sp.get('status')!)
+      if (sp.get('from')) setFromFilter(sp.get('from')!)
+      if (sp.get('to')) setToFilter(sp.get('to')!)
+    } catch {}
+  }, [])
   const [showForm, setShowForm] = useState(false)
   const [selectedVenueId, setSelectedVenueId] = useState('')
   const [venueQuery, setVenueQuery] = useState('')
