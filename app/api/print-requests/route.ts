@@ -105,27 +105,56 @@ async function resolveTwentyCompanyId(clientId: string | null | undefined, clien
   return index.byExactName.get(resolvedName)?.id || index.byLowerName.get(resolvedName.toLowerCase())?.id || null
 }
 
+// Twenty stores money fields as {amountMicros, currencyCode}. 1 dollar = 1_000_000 micros.
+// Unpack defensively — the field may be a plain number, a populated currency object,
+// or an empty {amountMicros: null} placeholder that must become null (not NaN).
+function moneyToNumber(v: any): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'object' && 'amountMicros' in v) {
+    const micros = v.amountMicros
+    if (micros === null || micros === undefined) return null
+    const n = Number(micros)
+    return Number.isFinite(n) ? n / 1_000_000 : null
+  }
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
-  const clientName = record.printClient?.name || null
-  const proofLinks = parseProofLinks(record.proofLinks)
+  const raw = record as any
+  const clientName = raw.printClient?.name || null
+  const proofLinks = parseProofLinks(raw.proofLinks)
+  const jobTitle = (raw.name && raw.name.trim()) || (raw.sfNumber && raw.sfNumber.trim()) || '(untitled)'
+  const notesText = typeof raw.notes === 'object'
+    ? (raw.notes?.markdown || raw.notes?.blocknote || '')
+    : (raw.notes || '')
   return {
     id: record.id,
     client_id: await findLocalClientIdByName(clientName),
     client_name: clientName,
-    print_client_id: record.printClientId || null,
-    job_title: record.name || '(untitled)',
-    status: normalizeStatus(record.status),
-    shipping_address: record.shippingAddress || null,
-    shipping_info: record.shippingAddress || null,
-    ship_date: record.shipDate || null,
-    arrival_date: record.arrivalDate || null,
-    invoice_amount: record.invoiceAmount ?? null,
-    britten_cost: record.invoiceAmount ?? null,
-    notes: record.britainNotes || null,
-    britain_notes: record.britainNotes || null,
+    print_client_id: raw.printClientId || null,
+    job_title: jobTitle,
+    status: normalizeStatus(raw.status),
+    shipping_address: raw.shippingAddress || null,
+    shipping_info: raw.shippingAddress || null,
+    ship_date: raw.shipDate || null,
+    arrival_date: raw.arrivalDate || null,
+    due_date: raw.dueDate || null,
+    invoice_amount: moneyToNumber(raw.invoiceAmount),
+    britten_cost: moneyToNumber(raw.brittenPrice),
+    anc_price: moneyToNumber(raw.ancPrice),
+    install_fee: moneyToNumber(raw.installFee),
+    rush_fee: moneyToNumber(raw.rushFee),
+    shipping_fee: moneyToNumber(raw.shippingFee),
+    sales_tax: moneyToNumber(raw.salesTax),
+    notes: notesText || raw.britainNotes || null,
+    britain_notes: raw.britainNotes || null,
     proof_links: proofLinks,
     proof_links_json: JSON.stringify(proofLinks),
-    tracking_number: record.trackingNumber || null,
+    tracking_number: raw.trackingNumber || null,
+    wrike_task_id: raw.wrikeTaskId || null,
+    sf_number: raw.sfNumber || null,
     created_at: record.createdAt,
     updated_at: record.updatedAt,
   }
