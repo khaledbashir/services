@@ -25,28 +25,48 @@ function normalizeStatus(status: string | null | undefined) {
 
 // ── Twenty ↔ Dashboard field reshaping ───────────────────────────────────────
 
+function mapContentStatus(raw: string | null | undefined): string {
+  if (!raw) return 'in_queue'
+  const stripped = raw.toString().replace(/^STATUS_/i, '').toLowerCase()
+  const map: Record<string, string> = {
+    ready: 'ready',
+    in_queue: 'in_queue',
+    queued: 'in_queue',
+    scheduled_to_launch: 'scheduled_to_launch',
+    scheduled: 'scheduled_to_launch',
+    content_live: 'content_live',
+    live: 'content_live',
+    confirmed_live: 'confirmed_live',
+    confirmed: 'confirmed_live',
+    done: 'confirmed_live',
+    completed: 'confirmed_live',
+  }
+  return map[stripped] || stripped || 'in_queue'
+}
+
 async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
-  const venue = cs.contentScheduleVenue
-    ? { venue_id: cs.contentScheduleVenue.servicesId || null, venue_name: cs.contentScheduleVenue.name }
-    : cs.contentScheduleVenueId
-    ? await (async () => {
-        const lookup = await import('@/lib/twenty-ops').then(m => m.twentyVenueToDashboard(cs.contentScheduleVenueId!))
-        return lookup
-      })()
-    : null
+  const raw = cs as any
+  const notesText = typeof raw.notes === 'object'
+    ? (raw.notes?.markdown || raw.notes?.blocknote || '')
+    : (raw.notes || '')
   return {
     id: cs.id,
-    company_name: cs.contentScheduleClient?.name || null,
-    content_name: cs.name || '(unnamed)',
-    launch_date: cs.runStartDate || null,
-    end_date: cs.runEndDate || null,
-    files_ready: false,
-    status: cs.status || 'in_queue',
-    notes: cs.notes || null,
-    venue_name: venue?.venue_name || null,
-    venue_id: venue?.venue_id || null,
-    operator_name: null,
+    company_name: raw.scheduleClient?.name || null,
+    content_name: raw.contentTitle || raw.name || '(unnamed)',
+    launch_date: raw.startDate || null,
+    end_date: raw.endDate || null,
+    files_ready: !!raw.filesReady,
+    status: mapContentStatus(raw.status),
+    notes: notesText,
+    // contentSchedules have no venue relation in Twenty — they're client-scoped.
+    // Fall back to the client name so the UI "venue" column reads meaningfully.
+    venue_name: raw.scheduleClient?.name || null,
+    venue_id: null,
+    operator_name: raw.operator || null,
     operator_id: null,
+    proof_link: raw.proofLink || null,
+    ftp_location: raw.ftpLocation || null,
+    wrike_task_id: raw.wrikeTaskId || null,
     created_date: cs.createdAt ? new Date(cs.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
     updated_date: cs.updatedAt ? new Date(cs.updatedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
   }
@@ -67,11 +87,9 @@ export async function GET(request: NextRequest) {
     if (isTwentyBackedEnabled('CONTENT_SCHEDULES')) {
       try {
         const filters: string[] = []
-        if (venueIdFilter) {
-          const twentyVenueId = await dashboardVenueIdToTwentyId(venueIdFilter)
-          if (twentyVenueId) filters.push(`contentScheduleVenueId[eq]:"${twentyVenueId}"`)
-          else return NextResponse.json({ content_schedules: [] })
-        }
+        // contentSchedules has no venue relation in Twenty — silently ignore
+        // venue filters rather than 500 the request. Team can filter by client
+        // instead once we expose it in the UI.
         if (statusFilter && statusFilter !== 'all') {
           filters.push(`status[eq]:"${statusFilter}"`)
         }
@@ -83,7 +101,9 @@ export async function GET(request: NextRequest) {
             limit: 60,
             startingAfter: cursor || undefined,
             filter: filters.length > 0 ? filters.join(',') : undefined,
-            orderBy: 'runStartDate[AscNullsLast]',
+            // Twenty's actual field is `startDate`, not `runStartDate`. Wrong
+            // name threw a silent 400 and the list came back empty.
+            orderBy: 'startDate[AscNullsLast]',
           })
           for (const cs of page.items) items.push(await reshapeTwentyToDashboard(cs))
           if (!page.hasNextPage || !page.nextCursor) break

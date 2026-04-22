@@ -492,21 +492,27 @@ export function isTwentyBackedEnabled(moduleName: string): boolean {
 export interface TwentyContentSchedule {
   id: string
   name: string | null
-  runStartDate: string | null
-  runEndDate: string | null
+  contentTitle: string | null
+  startDate: string | null
+  endDate: string | null
   status: string | null
   notes: string | null
-  contentScheduleVenueId: string | null
-  contentScheduleVenue?: { id: string; name: string; servicesId?: string | null }
-  contentScheduleClientId: string | null
-  contentScheduleClient?: { id: string; name: string }
+  filesReady: boolean | null
+  operator: string | null
+  ftpLocation: string | null
+  proofLink: string | null
+  projectLocation: string | null
+  wrikeTaskId: string | null
+  scheduleClientId: string | null
+  scheduleClient?: { id: string; name: string }
   createdAt: string
   updatedAt: string
 }
 
 export const ContentSchedule = {
   collection: 'contentSchedules',
-  venueField: 'contentScheduleVenueId' as string | null,
+  // contentSchedules has no venue relation in Twenty — client-scoped only.
+  venueField: null as string | null,
   list: (opts?: ListOptions) => listObjects<TwentyContentSchedule>('contentSchedules', opts),
   get:  (id: string) => getObject<TwentyContentSchedule>('contentSchedules', id),
   create: (data: Partial<TwentyContentSchedule>) => createObject<TwentyContentSchedule>('contentSchedules', data as Record<string, unknown>),

@@ -67,25 +67,27 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
 // ── Twenty ↔ Dashboard reshape ───────────────────────────────────────────────
 
 async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
-  const { twentyVenueToDashboard } = await import('@/lib/twenty-ops')
-  const venue = cs.contentScheduleVenue
-    ? { venue_id: cs.contentScheduleVenue.servicesId || null, venue_name: cs.contentScheduleVenue.name }
-    : cs.contentScheduleVenueId
-    ? await twentyVenueToDashboard(cs.contentScheduleVenueId)
-    : null
+  const raw = cs as any
+  const notesText = typeof raw.notes === 'object'
+    ? (raw.notes?.markdown || raw.notes?.blocknote || '')
+    : (raw.notes || '')
   return {
     id: cs.id,
-    venue_id: venue?.venue_id || null,
-    venue_name: venue?.venue_name || null,
-    company_name: cs.contentScheduleClient?.name || null,
-    content_name: cs.name || '(unnamed)',
-    launch_date: cs.runStartDate || null,
-    end_date: cs.runEndDate || null,
+    // contentSchedules has no venue relation — surface client as the locality label.
+    venue_id: null,
+    venue_name: raw.scheduleClient?.name || null,
+    company_name: raw.scheduleClient?.name || null,
+    content_name: raw.contentTitle || raw.name || '(unnamed)',
+    launch_date: raw.startDate || null,
+    end_date: raw.endDate || null,
     operator_id: null,
-    operator_name: null,
-    files_ready: false,
-    status: cs.status || 'in_queue',
-    notes: cs.notes || null,
+    operator_name: raw.operator || null,
+    files_ready: !!raw.filesReady,
+    status: (raw.status || '').toString().replace(/^STATUS_/i, '').toLowerCase() || 'in_queue',
+    notes: notesText,
+    proof_link: raw.proofLink || null,
+    ftp_location: raw.ftpLocation || null,
+    wrike_task_id: raw.wrikeTaskId || null,
     created_at: cs.createdAt,
     updated_at: cs.updatedAt,
   }
