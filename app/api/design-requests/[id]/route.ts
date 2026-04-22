@@ -89,16 +89,47 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (isTwentyBackedEnabled('DESIGNS')) {
       const auth = await requireRole(request, 'technician')
       if (isAuthError(auth)) return auth
-      const d = await Designs.get(params.id)
+      const d = await Designs.get(params.id) as any
       if (!d) return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+      // Normalize Twenty's STATUS_DONE etc. back to dashboard vocab so the
+      // new stage timeline UI can highlight the correct stage.
+      const status = ((d.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted'
+      const notesText = typeof d.notes === 'object'
+        ? (d.notes?.markdown || d.notes?.blocknote || '')
+        : (d.notes || d.aiPrompt || '')
+      const companyName = d.designClient?.name || null
       return NextResponse.json({
         design_request: {
-          id: d.id, job_title: d.name, status: d.status || 'request_submitted',
-          notes: d.aiPrompt, boards_requested: d.boardSection, ftp_proof_link: d.proofLink,
-          final_file_name: d.localFilePath, created_at: d.createdAt, updated_at: d.updatedAt,
-          designer_id: d.designAssigneeId,
+          id: d.id,
+          job_title: d.name,
+          company_name: companyName,
+          // Designs don't have a venue relation in Twenty — fall back to client
+          // so the header + sidebar don't read "No client / No venue".
+          venue_name: companyName,
+          venue_id: null,
+          tricode: d.clientTriCode || null,
+          status,
+          notes: notesText,
+          ai_prompt: d.aiPrompt || null,
+          boards_requested: d.boardSection || null,
+          sizes_requested: d.sizes || null,
+          ftp_proof_link: d.proofShareUrl || d.proofLink || d.ftpProofLink || null,
+          ftp_final_link: d.ftpFinalLink || null,
+          final_file_name: d.localFilePath || null,
+          final_duration: null,
+          hours_estimated: d.effortHours ?? null,
+          hours_spent: null,
+          due_date: d.dueDate || null,
+          designer_id: d.designAssigneeId || null,
           designer_name: d.designAssignee ? `${d.designAssignee.name.firstName} ${d.designAssignee.name.lastName}`.trim() : null,
-          company_name: d.designClient?.name || null,
+          enterprise_contact_id: null,
+          enterprise_contact_name: null,
+          proof_sent_at: d.proofSentAt || null,
+          proof_view_count: d.proofViewCount ?? 0,
+          proof_last_viewed_at: d.proofLastViewedAt || null,
+          wrike_task_id: d.wrikeTaskId || null,
+          created_at: d.createdAt,
+          updated_at: d.updatedAt,
         },
       })
     }
