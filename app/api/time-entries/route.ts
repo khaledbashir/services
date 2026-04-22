@@ -26,19 +26,34 @@ export async function GET(request: NextRequest) {
 
   if (isTwentyBackedEnabled('TIME_ENTRIES')) {
     try {
+      const { searchParams } = new URL(request.url)
+      const designerId = searchParams.get('designer_id')
+      const from = searchParams.get('from')
+      const to = searchParams.get('to')
+      const limit = Math.min(Math.max(Number(searchParams.get('limit') || 200), 1), 2000)
+
+      // Translate dashboard filter params to Twenty REST filter syntax.
+      // 28k records total — filters are mandatory UX, not optional.
+      const filters: string[] = []
+      if (designerId) filters.push(`entryDesignerId[eq]:"${designerId}"`)
+      if (from) filters.push(`createdAt[gte]:"${from}T00:00:00Z"`)
+      if (to)   filters.push(`createdAt[lte]:"${to}T23:59:59Z"`)
+
       const items: any[] = []
       let cursor: string | null = null
-      for (let p = 0; p < 10; p++) {
+      while (items.length < limit) {
+        const pageSize = Math.min(60, limit - items.length)
         const page = await TimeEntries.list({
-          limit: 60,
+          limit: pageSize,
           startingAfter: cursor || undefined,
+          filter: filters.length ? filters.join(',') : undefined,
           orderBy: 'createdAt[DescNullsLast]',
         })
         for (const t of page.items) items.push(reshapeTimeEntry(t))
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
-      return NextResponse.json({ time_entries: items })
+      return NextResponse.json({ time_entries: items, next_cursor: cursor, filters_applied: filters.length })
     } catch (err) {
       console.error('[time-entries GET twenty-backed] error:', err)
       return NextResponse.json({ error: 'Failed to list time entries from Twenty' }, { status: 500 })

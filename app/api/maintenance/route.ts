@@ -43,19 +43,30 @@ export async function GET(request: NextRequest) {
 
   if (isTwentyBackedEnabled('MAINTENANCE')) {
     try {
+      const { searchParams } = new URL(request.url)
+      const from = searchParams.get('from')
+      const to = searchParams.get('to')
+      const limit = Math.min(Math.max(Number(searchParams.get('limit') || 500), 1), 2000)
+
+      const filters: string[] = []
+      if (from) filters.push(`scheduledDate[gte]:"${from}"`)
+      if (to)   filters.push(`scheduledDate[lte]:"${to}"`)
+
       const items: any[] = []
       let cursor: string | null = null
-      for (let p = 0; p < 10; p++) {
+      while (items.length < limit) {
+        const pageSize = Math.min(60, limit - items.length)
         const page = await Maintenance.list({
-          limit: 60,
+          limit: pageSize,
           startingAfter: cursor || undefined,
+          filter: filters.length ? filters.join(',') : undefined,
           orderBy: 'updatedAt[DescNullsLast]',
         })
         for (const log of page.items) items.push(await reshapeMaintenance(log))
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
-      return NextResponse.json({ logs: items })
+      return NextResponse.json({ logs: items, next_cursor: cursor, filters_applied: filters.length })
     } catch (err) {
       console.error('[maintenance GET twenty-backed] error:', err)
       return NextResponse.json({ error: 'Failed to list maintenance logs from Twenty' }, { status: 500 })

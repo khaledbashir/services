@@ -38,21 +38,33 @@ export async function GET(request: NextRequest) {
 
   if (isTwentyBackedEnabled('WALKTHROUGHS')) {
     try {
+      const { searchParams } = new URL(request.url)
+      const from = searchParams.get('from')
+      const to = searchParams.get('to')
+      const result = searchParams.get('result')
+      const limit = Math.min(Math.max(Number(searchParams.get('limit') || 200), 1), 2000)
+
+      // Walkthrough log has 15k+ records. Filters are mandatory.
+      const filters: string[] = []
+      if (result && result !== 'all') filters.push(`result[eq]:"${result}"`)
+      if (from) filters.push(`logDate[gte]:"${from}"`)
+      if (to)   filters.push(`logDate[lte]:"${to}"`)
+
       const items: any[] = []
       let cursor: string | null = null
-      // Cap at 10 pages (600 records) — the full 15k would hurt render time; Service
-      // Dashboard's walkthroughs list is for recent activity, not the archive.
-      for (let p = 0; p < 10; p++) {
+      while (items.length < limit) {
+        const pageSize = Math.min(60, limit - items.length)
         const page = await Walkthroughs.list({
-          limit: 60,
+          limit: pageSize,
           startingAfter: cursor || undefined,
+          filter: filters.length ? filters.join(',') : undefined,
           orderBy: 'logDate[DescNullsLast]',
         })
         for (const log of page.items) items.push(reshapeWalkthrough(log))
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
-      return NextResponse.json({ walkthroughs: items })
+      return NextResponse.json({ walkthroughs: items, next_cursor: cursor, filters_applied: filters.length })
     } catch (err) {
       console.error('[walkthroughs GET twenty-backed] error:', err)
       return NextResponse.json({ error: 'Failed to list walkthroughs from Twenty' }, { status: 500 })
