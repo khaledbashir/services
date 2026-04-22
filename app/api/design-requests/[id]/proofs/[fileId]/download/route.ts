@@ -3,7 +3,12 @@ import { query } from '@/lib/db'
 import { getSignedDownloadUrl } from '@/lib/proof-storage'
 
 // Download a specific proof file. Works for both storage backends:
-//   - s3      → 302 redirect to a short-lived signed URL (no proxy cost)
+//   - s3      → server proxies the MinIO object back to the browser. We used
+//               to 302 to a signed URL, but the MinIO endpoint is on an
+//               internal docker hostname (`anc-proofs-minio:9000`) that the
+//               browser can't reach, so the <img> previews failed silently.
+//               Streaming through Next keeps the traffic inside the VPC and
+//               lets the browser see a normal image response.
 //   - bytea   → streams directly from Postgres with the right Content-Type
 //
 // Access check: legacy proofs were attached to design_request rows that the
@@ -30,15 +35,27 @@ export async function GET(
 
   if (row.storage_backend === 's3' && row.storage_key) {
     try {
-      const url = await getSignedDownloadUrl(row.storage_key, 3600)  // 1h
-      return NextResponse.redirect(url, 302)
+      const signed = await getSignedDownloadUrl(row.storage_key, 300)
+      const upstream = await fetch(signed)
+      if (!upstream.ok || !upstream.body) {
+        console.error('[proof download] MinIO fetch failed:', upstream.status)
+        return NextResponse.json({ error: 'Storage layer unavailable' }, { status: 502 })
+      }
+      return new NextResponse(upstream.body, {
+        status: 200,
+        headers: {
+          'Content-Type': row.mime_type || upstream.headers.get('content-type') || 'application/octet-stream',
+          'Content-Length': upstream.headers.get('content-length') || String(row.size_bytes || 0),
+          'Content-Disposition': `inline; filename="${row.filename.replace(/"/g, '_')}"`,
+          'Cache-Control': 'private, max-age=3600',
+        },
+      })
     } catch (err) {
-      console.error('[proof download] signed URL failed:', err)
+      console.error('[proof download] s3 stream failed:', err)
       return NextResponse.json({ error: 'Storage layer unavailable' }, { status: 503 })
     }
   }
 
-  // Bytea fallback
   if (!row.data) {
     return NextResponse.json({ error: 'File body missing' }, { status: 500 })
   }
