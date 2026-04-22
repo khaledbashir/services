@@ -9,6 +9,10 @@ interface Attachment {
   extension: string
   category: 'image' | 'video' | 'pdf' | 'link' | 'other'
   fileUrl: string
+  version: number
+  lastViewedAt: string | null
+  viewCount: number
+  uploadedAt: string
 }
 
 type ShareState = 'pending' | 'approved' | 'changes_requested' | 'expired'
@@ -68,7 +72,7 @@ export default function ProofSharePage() {
       }
       const json: ProofData = await res.json()
       setData(json)
-      setActiveAttachment(json.attachments[0]?.id || null)
+      setActiveAttachment((current) => current && json.attachments.some((a) => a.id === current) ? current : (json.attachments[0]?.id || null))
       // Fire-and-forget view tracking
       fetch(`/api/proof-share/${token}/view`, { method: 'POST' }).catch(() => {})
     } catch (err) {
@@ -178,6 +182,16 @@ export default function ProofSharePage() {
     submittedState === 'approved' ||
     submittedState === 'changes_requested'
 
+  const formatAttachmentMeta = (attachment: Attachment) => {
+    const uploaded = attachment.uploadedAt
+      ? new Date(attachment.uploadedAt).toLocaleDateString()
+      : ''
+    const viewed = attachment.lastViewedAt
+      ? `${Math.max(1, Math.floor((Date.now() - new Date(attachment.lastViewedAt).getTime()) / 3600000))}h ago`
+      : 'not viewed yet'
+    return `Uploaded ${uploaded} · ${attachment.viewCount} view${attachment.viewCount === 1 ? '' : 's'} · Last viewed ${viewed}`
+  }
+
   return (
     <Shell>
       {/* Record header */}
@@ -223,7 +237,7 @@ export default function ProofSharePage() {
           )}
         </div>
 
-        {/* File selector (if multiple) */}
+        {/* File selector / version history */}
         {data.attachments.length > 1 && (
           <div className="px-6 py-3 flex gap-2 overflow-x-auto border-b border-gray-100 bg-white">
             {data.attachments.map((a) => (
@@ -236,9 +250,21 @@ export default function ProofSharePage() {
                     : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
                 }`}
               >
-                {a.name}
+                v{a.version}
               </button>
             ))}
+          </div>
+        )}
+
+        {activeAtt && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-white/80">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full bg-[color:var(--anc-brand,#0A52EF)]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--anc-brand,#0A52EF)]">
+                v{activeAtt.version}
+              </span>
+              <span className="text-xs text-gray-500">{activeAtt.name}</span>
+            </div>
+            <div className="mt-2 text-xs text-gray-400">{formatAttachmentMeta(activeAtt)}</div>
           </div>
         )}
 

@@ -42,9 +42,13 @@ export async function GET(
     if (attachmentId.startsWith('file-') && share.twenty_object_type === 'localDesignRequest') {
       const fileId = attachmentId.slice(5)
       const fileResult = await query(
-        `SELECT id, design_request_id, filename, mime_type, size_bytes, data, storage_key, storage_backend
-         FROM design_request_files
-         WHERE id = $1 AND design_request_id = $2`,
+        `UPDATE design_request_files
+         SET view_count = COALESCE(view_count, 0) + 1,
+             last_viewed_at = NOW()
+         WHERE id = $1 AND design_request_id = $2
+         RETURNING id, design_request_id, filename, mime_type, size_bytes, data, storage_key, storage_backend,
+                   view_count, last_viewed_at
+        `,
         [fileId, share.twenty_record_id]
       )
       if (fileResult.rows.length === 0) {

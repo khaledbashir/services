@@ -73,14 +73,25 @@ export async function GET(
 
       // Pull uploaded proof files (both bytea and S3 backends), newest first
       const files = await query(
-        `SELECT id, filename, mime_type, size_bytes, storage_backend
+        `SELECT id, filename, mime_type, size_bytes, storage_backend,
+                version, last_viewed_at, view_count, created_at
          FROM design_request_files
          WHERE design_request_id = $1
-         ORDER BY created_at DESC`,
+         ORDER BY version DESC, created_at DESC`,
         [share.twenty_record_id]
       )
 
-      const attachments: Array<{ id: string; name: string; extension: string; category: string; fileUrl: string }> = []
+      const attachments: Array<{
+        id: string
+        name: string
+        extension: string
+        category: string
+        fileUrl: string
+        version: number
+        lastViewedAt: string | null
+        viewCount: number
+        uploadedAt: string
+      }> = []
       for (const f of files.rows) {
         const ext = (f.filename.split('.').pop() || '').toLowerCase()
         attachments.push({
@@ -90,6 +101,10 @@ export async function GET(
           category: classifyFile(ext),
           // Route through the token-gated proxy so the download stays scoped to the share token
           fileUrl: `/api/proof-share/${token}/file/file-${f.id}`,
+          version: Number(f.version || 1),
+          lastViewedAt: f.last_viewed_at,
+          viewCount: Number(f.view_count || 0),
+          uploadedAt: f.created_at,
         })
       }
       // Append legacy FTP link if no uploaded files (legacy records only)
@@ -100,6 +115,10 @@ export async function GET(
           extension: 'link',
           category: 'link',
           fileUrl: row.ftp_proof_link,
+          version: 1,
+          lastViewedAt: null,
+          viewCount: 0,
+          uploadedAt: share.created_at,
         })
       }
       return NextResponse.json({

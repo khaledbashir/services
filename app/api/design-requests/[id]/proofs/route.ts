@@ -11,10 +11,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (isAuthError(auth)) return auth
 
   const res = await query(
-    `SELECT id, filename, mime_type, size_bytes, storage_key, storage_backend, storage_etag, created_at
+    `SELECT id, filename, mime_type, size_bytes, storage_key, storage_backend, storage_etag,
+            created_at, version, last_viewed_at, view_count
      FROM design_request_files
      WHERE design_request_id = $1
-     ORDER BY created_at DESC`,
+     ORDER BY version DESC, created_at DESC`,
     [params.id]
   )
 
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       backend: r.storage_backend,
       has_storage_key: Boolean(r.storage_key),
       uploaded_at: r.created_at,
+      version: Number(r.version || 1),
+      last_viewed_at: r.last_viewed_at,
+      view_count: Number(r.view_count || 0),
     })),
   })
 }
@@ -96,9 +100,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const inserted = await query(
     `INSERT INTO design_request_files
        (design_request_id, filename, mime_type, size_bytes, data, uploaded_by,
-        storage_key, storage_backend, storage_etag)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     RETURNING id, filename, mime_type, size_bytes, storage_backend, created_at`,
+        storage_key, storage_backend, storage_etag, version)
+     SELECT
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,
+       COALESCE(MAX(version), 0) + 1
+     FROM design_request_files
+     WHERE design_request_id = $1
+     RETURNING id, filename, mime_type, size_bytes, storage_backend, created_at, version`,
     [params.id, filename, contentType, bytes.byteLength, byteaData, auth.userId,
      storageKey, storageBackend, storageEtag]
   )
@@ -120,6 +128,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       size_bytes: Number(inserted.rows[0].size_bytes || 0),
       backend: inserted.rows[0].storage_backend,
       uploaded_at: inserted.rows[0].created_at,
+      version: Number(inserted.rows[0].version || 1),
       download_url: publicDashboardUrl,
     },
   })

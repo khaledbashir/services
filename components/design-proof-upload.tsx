@@ -19,6 +19,9 @@ interface Proof {
   backend: 's3' | 'postgres_bytea'
   has_storage_key: boolean
   uploaded_at: string
+  version: number
+  last_viewed_at: string | null
+  view_count: number
 }
 
 function formatBytes(n: number): string {
@@ -33,6 +36,18 @@ function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
   } catch { return iso }
+}
+
+function formatRelativeView(value: string | null): string {
+  if (!value) return 'Not viewed yet'
+  const diffMs = Date.now() - new Date(value).getTime()
+  const minutes = Math.max(1, Math.floor(diffMs / 60000))
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export function DesignProofUpload({ designRequestId }: { designRequestId: string }) {
@@ -153,9 +168,13 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-zinc-900 truncate font-medium">{p.filename}</div>
                 <div className="text-[11px] text-zinc-500 truncate">
-                  {formatBytes(p.size_bytes)} · {formatDate(p.uploaded_at)}
+                  <span className="inline-block rounded-full bg-[#0A52EF]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0A52EF]">v{p.version}</span>
+                  <span className="ml-2">{formatBytes(p.size_bytes)} · {formatDate(p.uploaded_at)}</span>
                   {p.backend === 's3' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">MinIO</span>}
                   {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
+                </div>
+                <div className="text-[11px] text-zinc-400 truncate">
+                  Last viewed: {formatRelativeView(p.last_viewed_at)}{` · ${p.view_count} view${p.view_count === 1 ? '' : 's'}`}
                 </div>
               </div>
               <a href={`/api/design-requests/${designRequestId}/proofs/${p.id}/download`}
