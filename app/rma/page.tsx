@@ -42,10 +42,11 @@ export default function RmaPage() {
   const [filter, setFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
-    venue_id: '', company_name: '', client_name: '', date_received: '',
-    project_code: '', part_number: '', part_name: '', model_number: '',
-    led_manufacturer: '', description: '', quantities: '', repair_vendor: '',
-    shipment_tracking: '', status: 'received', notes: '',
+    venue_id: '', company_name: '', client_name: '', submission_contact: '',
+    date_received: '', project_code: '', part_number: '', part_name: '',
+    model_number: '', led_manufacturer: '', description: '', quantities: '',
+    parts_details: '', repair_vendor: '', shipping_method: '',
+    shipment_tracking: '', remit_to_stock: false, status: 'received', notes: '',
   })
 
   const load = async () => {
@@ -69,7 +70,7 @@ export default function RmaPage() {
     const r = await fetch('/api/rma', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (r.ok) {
       setShowCreate(false)
-      setForm({ venue_id: '', company_name: '', client_name: '', date_received: '', project_code: '', part_number: '', part_name: '', model_number: '', led_manufacturer: '', description: '', quantities: '', repair_vendor: '', shipment_tracking: '', status: 'received', notes: '' })
+      setForm({ venue_id: '', company_name: '', client_name: '', submission_contact: '', date_received: '', project_code: '', part_number: '', part_name: '', model_number: '', led_manufacturer: '', description: '', quantities: '', parts_details: '', repair_vendor: '', shipping_method: '', shipment_tracking: '', remit_to_stock: false, status: 'received', notes: '' })
       load()
     } else { alert('Failed') }
   }
@@ -127,12 +128,22 @@ export default function RmaPage() {
                 <input value={form.model_number} onChange={e => setForm({ ...form, model_number: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
               <div><label className="text-xs text-zinc-500 block mb-1">LED Manufacturer</label>
                 <input value={form.led_manufacturer} onChange={e => setForm({ ...form, led_manufacturer: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
+              <div><label className="text-xs text-zinc-500 block mb-1">Submission Contact</label>
+                <input value={form.submission_contact} onChange={e => setForm({ ...form, submission_contact: e.target.value })} placeholder="Who submitted this RMA" className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
               <div><label className="text-xs text-zinc-500 block mb-1">Repair Vendor</label>
                 <input value={form.repair_vendor} onChange={e => setForm({ ...form, repair_vendor: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
+              <div><label className="text-xs text-zinc-500 block mb-1">Shipping Method</label>
+                <input value={form.shipping_method} onChange={e => setForm({ ...form, shipping_method: e.target.value })} placeholder="UPS Ground, FedEx, …" className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
               <div><label className="text-xs text-zinc-500 block mb-1">Tracking #</label>
-                <input value={form.shipment_tracking} onChange={e => setForm({ ...form, shipment_tracking: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
+                <input value={form.shipment_tracking} onChange={e => setForm({ ...form, shipment_tracking: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm font-mono" /></div>
               <div className="col-span-3"><label className="text-xs text-zinc-500 block mb-1">Description</label>
                 <textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
+              <div className="col-span-3"><label className="text-xs text-zinc-500 block mb-1">Parts Details</label>
+                <textarea rows={3} value={form.parts_details} onChange={e => setForm({ ...form, parts_details: e.target.value })} placeholder="Module / PSU / LED panel breakdown, serial numbers, quantities per part" className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm" /></div>
+              <label className="col-span-3 flex items-center gap-2 text-sm text-zinc-700 px-1">
+                <input type="checkbox" checked={form.remit_to_stock} onChange={e => setForm({ ...form, remit_to_stock: e.target.checked })} className="h-4 w-4 accent-[#0A52EF]" />
+                <span>Remit repaired parts to stock (don't return to venue)</span>
+              </label>
             </div>
             <button onClick={submit} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium">Create RMA</button>
           </div>

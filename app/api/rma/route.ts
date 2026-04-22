@@ -106,10 +106,19 @@ export async function POST(request: NextRequest) {
         partNumber: part_number,
         modelNumber: model_number,
         partsDetails: parts_details || description,
+        description: description,
         clientName: client_name,
         submissionContact: submission_contact,
         remitToStock: Boolean(remit_to_stock),
-      })
+        dateReceived: date_received,
+        projectCode: project_code,
+        ledManufacturer: led_manufacturer,
+        quantities: quantities,
+        repairVendor: repair_vendor,
+        shippingMethod: shipping_method,
+        shipmentTracking: shipment_tracking,
+        status: `STATUS_${(status || 'received').toUpperCase()}`,
+      } as any)
       return NextResponse.json({ rma: { id: created.id, ...body } })
     } catch (err) {
       console.error('[rma POST twenty-backed] error:', err)
