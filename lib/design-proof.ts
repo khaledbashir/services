@@ -62,14 +62,18 @@ export async function createDesignProofShare(params: {
   if (!dr) throw new Error('Design request not found')
 
   // Reuse an unanswered, unexpired share for this record so reruns don't spam.
+  // When TWENTY_BACKED_DESIGNS is on we write twenty_object_type='designRequest' so
+  // the /respond handler (OBJECT_CONFIGS lookup) hits the Twenty REST path instead
+  // of trying to UPDATE the local design_requests table (where the row doesn't exist).
+  const objectType = isTwentyBackedEnabled('DESIGNS') ? 'designRequest' : 'localDesignRequest'
   const existing = await query(
     `SELECT token FROM proof_shares
-     WHERE twenty_object_type = 'localDesignRequest'
-       AND twenty_record_id = $1
+     WHERE twenty_object_type = $1
+       AND twenty_record_id = $2
        AND client_response IS NULL
        AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY created_at DESC LIMIT 1`,
-    [designRequestId]
+    [objectType, designRequestId]
   )
 
   let token: string
@@ -81,8 +85,8 @@ export async function createDesignProofShare(params: {
       `INSERT INTO proof_shares (
          token, twenty_object_type, twenty_record_id, expires_at,
          created_by_name, created_by_email, client_email
-       ) VALUES ($1, 'localDesignRequest', $2, NOW() + INTERVAL '30 days', $3, $4, $5)`,
-      [token, designRequestId, createdByName || null, createdByEmail || null, dr.client_email]
+       ) VALUES ($1, $2, $3, NOW() + INTERVAL '30 days', $4, $5, $6)`,
+      [token, objectType, designRequestId, createdByName || null, createdByEmail || null, dr.client_email]
     )
   }
 

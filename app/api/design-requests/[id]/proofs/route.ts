@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { uploadProof, listProofsForRequest, isConfigured, getSignedDownloadUrl } from '@/lib/proof-storage'
+import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
+import { createDesignProofShare } from '@/lib/design-proof'
+
+// Dashboard status values considered "pre-review" — uploading a proof from any
+// of these auto-advances the request to client_review, which in turn fires
+// the proof-share email to the client. Tracked as a const so the stages UI
+// can reuse it for labelling the "active" stage.
+const PRE_REVIEW_STATUSES = new Set([
+  'request_submitted',
+  'in_queue',
+  'in_progress',
+  'in_qc',
+])
 
 // List every proof file (latest first) attached to this design request.
 // Combines the legacy bytea-backed rows and the new MinIO-backed rows into
@@ -111,14 +124,67 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
      storageKey, storageBackend, storageEtag]
   )
 
-  // Keep the denormalized `ftp_proof_link` field pointing at the latest
-  // uploaded file's dashboard URL so legacy readers + the Twenty record
-  // both surface the newest proof without a refetch.
-  const publicDashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/api/design-requests/${params.id}/proofs/${inserted.rows[0].id}/download`
+  // The download URL is the authoritative file pointer (legacy consumers + the
+  // Twenty record both want this). The client-facing share URL ("nice link")
+  // gets filled in below once the proof-share record is created.
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
+  const downloadUrl = `${baseUrl}/api/design-requests/${params.id}/proofs/${inserted.rows[0].id}/download`
   await query(
     `UPDATE design_requests SET ftp_proof_link = $1, updated_at = NOW() WHERE id = $2`,
-    [publicDashboardUrl, params.id]
+    [downloadUrl, params.id]
   )
+
+  // Reactive cascade: if this is the designer's first proof upload on a request
+  // that hasn't been sent to the client yet, auto-advance to client_review. That
+  // transition fires createDesignProofShare (public token + client email) and
+  // mirrors the share URL back onto the Twenty record.
+  let proofShareUrl: string | null = null
+  let statusAdvanced = false
+  try {
+    if (isTwentyBackedEnabled('DESIGNS')) {
+      const current = await Designs.get(params.id)
+      const currentStatus = ((current as any)?.status || '').toString().replace(/^STATUS_/i, '').toLowerCase()
+      if (!current || PRE_REVIEW_STATUSES.has(currentStatus) || currentStatus === 'submitted' || currentStatus === '') {
+        await Designs.update(params.id, { status: 'STATUS_CLIENT_REVIEW' as any })
+        const share = await createDesignProofShare({
+          designRequestId: params.id,
+          createdByName: auth.fullName || null,
+          createdByEmail: auth.email || null,
+        })
+        proofShareUrl = share.url
+        statusAdvanced = true
+        // Denormalize the share URL onto Twenty so anyone reading the record
+        // directly (Jireh in Twenty) sees what we sent the client.
+        try {
+          await Designs.update(params.id, { proofLink: share.url, proofSentAt: new Date().toISOString() } as any)
+        } catch (err) {
+          console.error('[proofs POST] proofLink mirror failed:', err)
+        }
+      }
+    } else {
+      // Legacy local path: same cascade, but against design_requests table.
+      const r = await query(`SELECT status FROM design_requests WHERE id = $1`, [params.id])
+      const currentStatus = r.rows[0]?.status
+      if (!currentStatus || PRE_REVIEW_STATUSES.has(currentStatus)) {
+        await query(`UPDATE design_requests SET status = 'client_review', updated_at = NOW() WHERE id = $1`, [params.id])
+        const share = await createDesignProofShare({
+          designRequestId: params.id,
+          createdByName: auth.fullName || null,
+          createdByEmail: auth.email || null,
+        })
+        proofShareUrl = share.url
+        statusAdvanced = true
+        await query(
+          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2 AND (ftp_proof_link IS NULL OR ftp_proof_link = '' OR ftp_proof_link = $3)`,
+          [share.url, params.id, downloadUrl]
+        )
+      }
+    }
+  } catch (err) {
+    // Don't fail the upload just because the status cascade hit a snag —
+    // designer still sees the file landed, can advance status manually.
+    console.error('[proofs POST] status-advance cascade failed:', err)
+  }
 
   return NextResponse.json({
     proof: {
@@ -129,7 +195,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       backend: inserted.rows[0].storage_backend,
       uploaded_at: inserted.rows[0].created_at,
       version: Number(inserted.rows[0].version || 1),
-      download_url: publicDashboardUrl,
+      download_url: downloadUrl,
     },
+    status_advanced: statusAdvanced,
+    proof_share_url: proofShareUrl,
   })
 }
