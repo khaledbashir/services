@@ -30,12 +30,12 @@ The 8 Twenty-ops modules shipped last night are flag-gated. All 8 flags are set 
 
 Things Joe/Alexis/Chris/Nick called out live. Ship before the Friday Jireh meeting.
 
-- [ ] **Event times showing midnight / 3:33am / 6:33am** — Google Calendar still bleeding through with UTC times. Either kill the calendar sync entirely OR fix timezone conversion on import
-- [ ] **Kill the Google Calendar sync** — Charlie said remove it completely so they only see AI-discovered events
+- [x] **Kill the Google Calendar sync** — verified 2026-04-22: no googleapis calendar imports, events.source has 5 values (team_website, ai_discovery, venue_calendar, league_schedule, ticketmaster) — no google_calendar source remains
+- [ ] **Event times showing midnight / weird hours** — separate from Google Calendar. 45 future events still at 00:00; `venue_calendar` source has UTC bleed (Royals vs Angels showing 01:00 when it should be 21:00 ET). Fix import pipeline timezone handling.
 - [ ] **Dedupe duplicate event entries** — Red Sox game showing at both Fenway and JetBlue Park when it's only at Fenway (team filter not filtering by actual home venue correctly)
 - [ ] **Event discovery: only pull events for venues flagged active** — Toronto spring training showing but they don't have Toronto's regular venue
 - [ ] **Dodger Stadium event sync** — Chris added it but no events flow. Needs connection (feed URL or discovery config)
-- [ ] **Proof-link client-review automation** — status change to `client_review` didn't auto-fire the proof link + email during Ahmad's demo. Currently broken.
+- [x] **Proof-link client-review automation** — fixed 2026-04-22 in `7692958` — Twenty-backed designs now read from Twenty REST on client_review transition instead of missing local row
 - [ ] **AI logo generator using old black/red ANC logo, not current** — fix the logo-fetch prompt / source
 - [ ] **AI bot replies only on `@ANC`, can't find `test-anyway` channel** — bot should also respond without @ prefix in DMs and specific channels, OR we auto-fix the channel routing
 
