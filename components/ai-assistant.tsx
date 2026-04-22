@@ -116,6 +116,14 @@ interface Skill {
 
 interface Provider { name: string; model: string }
 
+function providerPriority(p: Provider): number {
+  const text = `${p.name} ${p.model}`.toLowerCase()
+  if (text.includes('kimi-k2.6')) return 0
+  if (text.includes('kimi')) return 1
+  if (text.includes('gpt') || text.includes('openai')) return 2
+  return 3
+}
+
 interface PageContextField {
   selector: string
   label?: string
@@ -336,10 +344,7 @@ export function AiAssistant() {
     const r = await fetch('/api/ai/providers')
     if (r.ok) {
       const data = await r.json()
-      const ranked = [...(data.providers || [])].sort((a: Provider, b: Provider) => {
-        const score = (p: Provider) => /gpt|openai/i.test(`${p.name} ${p.model}`) ? 1 : 0
-        return score(b) - score(a)
-      })
+      const ranked = [...(data.providers || [])].sort((a: Provider, b: Provider) => providerPriority(a) - providerPriority(b))
       setProviders(ranked)
       if (!selectedProvider && ranked[0]) setSelectedProvider(ranked[0].name)
     }

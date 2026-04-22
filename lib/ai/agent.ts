@@ -4,13 +4,21 @@ import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
 
 interface ProviderConfig { name: string; baseUrl: string; apiKey: string; model: string }
 
+function providerPriority(p: ProviderConfig): number {
+  const text = `${p.name} ${p.model}`.toLowerCase()
+  if (text.includes('kimi-k2.6')) return 0
+  if (text.includes('kimi')) return 1
+  if (text.includes('gpt') || text.includes('openai')) return 2
+  return 3
+}
+
 function loadProviders(): ProviderConfig[] {
   const raw = process.env.AI_PROVIDERS_JSON || ''
   if (raw.trim()) {
     try {
       const parsed = JSON.parse(raw) as ProviderConfig[]
       const valid = parsed.filter(p => p?.baseUrl && p?.apiKey && p?.model)
-      if (valid.length > 0) return valid
+      if (valid.length > 0) return [...valid].sort((a, b) => providerPriority(a) - providerPriority(b))
     } catch {}
   }
   const apiKey = process.env.AI_API_KEY || ''
