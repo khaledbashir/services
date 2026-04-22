@@ -1,0 +1,10 @@
+--- app/api/hours-budgets/[id]/simulate-alert/route.ts
++++ app/api/hours-budgets/[id]/simulate-alert/route.ts
+@@ -48,6 +48,7 @@
+   try {
+     const origin = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
+     const b = await HoursBudgets.get(params.id)
++    if (!b) return NextResponse.json({ error: 'Budget not found' }, { status: 404 })
+     const raw = b as any
+     const totalBudget = Number(raw.totalHoursBudgeted || 0)
+     // For simulation, we pretend we are precisely at the threshold if actual is lower

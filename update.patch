@@ -1,0 +1,11 @@
+--- app/api/hours-budgets/[id]/alert-status/route.ts
++++ app/api/hours-budgets/[id]/alert-status/route.ts
+@@ -10,7 +10,7 @@
+   try {
+     const { id } = params
+     const result = await query(
+-      `SELECT threshold, alerted_at, slack_sent, email_sent 
++      `SELECT threshold, alerted_at, slack_sent, email_sent, percent_at_alert 
+        FROM budget_alert_log 
+        WHERE budget_id = $1 
+        ORDER BY threshold DESC`,

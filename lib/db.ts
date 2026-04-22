@@ -225,6 +225,29 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
 
     // ============================================================
+    // client_portals — shareable read-only venue health links
+    // for external clients. Multiple active links per venue are
+    // allowed so managers can rotate / revoke without downtime.
+    // ============================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS client_portals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        token TEXT NOT NULL UNIQUE,
+        twenty_venue_id UUID,
+        dashboard_venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        created_by_email TEXT NOT NULL,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_viewed_at TIMESTAMPTZ,
+        view_count INTEGER NOT NULL DEFAULT 0,
+        revoked_at TIMESTAMPTZ
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_portals_venue ON client_portals(dashboard_venue_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_portals_token_active ON client_portals(token) WHERE revoked_at IS NULL`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_portals_created ON client_portals(created_at DESC)`)
+
+    // ============================================================
     // service_types + venue_services — per-venue contracted services
     // (Joe's Apr 16 list: White Glove, Break/Fix, Event Support, etc.)
     // ============================================================

@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
@@ -33,14 +33,24 @@ interface TimeEntry {
   created_at: string
 }
 
+interface AlertLog {
+  threshold: number
+  alerted_at: string
+  slack_sent: boolean
+  email_sent: boolean
+  percent_at_alert: number
+}
+
 interface Staff { id: string; full_name: string }
 
 export default function HoursBudgetDetailPage({ params }: { params: { id: string } }) {
   const [budget, setBudget] = useState<BudgetDetail | null>(null)
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
+  const [alerts, setAlerts] = useState<AlertLog[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [simulating, setSimulating] = useState(false)
   const [formData, setFormData] = useState({
     designer_id: '',
     entry_date: new Date().toISOString().slice(0, 10),
@@ -49,11 +59,12 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
   })
   const router = useRouter()
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [budgetRes, staffRes] = await Promise.all([
+      const [budgetRes, staffRes, alertsRes] = await Promise.all([
         fetch(`/api/hours-budgets/${params.id}`),
         fetch('/api/staff'),
+        fetch(`/api/hours-budgets/${params.id}/alert-status`)
       ])
       if (!budgetRes.ok) {
         setLoading(false)
@@ -61,20 +72,22 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
       }
       const budgetData = await budgetRes.json()
       const staffData = await staffRes.json()
+      const alertsData = alertsRes.ok ? await alertsRes.json() : { alerts: [] }
       setBudget(budgetData.hours_budget)
       setEntries(budgetData.time_entries || [])
       setStaff(staffData.staff || [])
+      setAlerts(alertsData.alerts || [])
       setFormData((prev) => ({ ...prev, entry_date: prev.entry_date || new Date().toISOString().slice(0, 10) }))
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
 
   useEffect(() => {
     fetchData()
-  }, [params.id])
+  }, [fetchData])
 
   const utilization = useMemo(() => {
     if (!budget || !budget.total_hours) return 0
@@ -110,6 +123,25 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
       console.error(err)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const simulateAlert = async (threshold: number) => {
+    setSimulating(true)
+    try {
+      const res = await fetch(`/api/hours-budgets/${params.id}/simulate-alert?threshold=${threshold}`, {
+        method: 'POST'
+      })
+      if (res.ok) {
+        await fetchData()
+      } else {
+        alert('Failed to simulate alert')
+      }
+    } catch (err) {
+      console.error('Simulation error:', err)
+      alert('Error running simulation')
+    } finally {
+      setSimulating(false)
     }
   }
 
@@ -169,7 +201,16 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.3fr,1fr]">
+        <div className="flex gap-3 justify-end items-center">
+             {(process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEV_ALERT_BUTTONS === '1') && (
+                <>
+                  <button onClick={() => simulateAlert(50)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 50% Alert</button>
+                  <button onClick={() => simulateAlert(75)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 75% Alert</button>
+                </>
+             )}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[1.3fr,1fr]">
           <div className="space-y-6">
             <div className="border border-zinc-200 bg-white p-6">
               <div className="flex items-center justify-between">

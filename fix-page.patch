@@ -1,0 +1,149 @@
+--- app/hours-budgets/[id]/page.tsx
++++ app/hours-budgets/[id]/page.tsx
+@@ -1,6 +1,6 @@
+ 'use client'
+ 
+-import { FormEvent, useEffect, useMemo, useState } from 'react'
++import { FormEvent, useEffect, useMemo, useState, useCallback } from 'react'
+ import { useRouter } from 'next/navigation'
+ import { DashboardLayout } from '@/components/dashboard-layout'
+ import { Skeleton } from '@/components/skeleton'
+@@ -31,13 +31,23 @@
+ 
+ interface Staff { id: string; full_name: string }
+ 
++interface AlertLog {
++  threshold: number
++  alerted_at: string
++  slack_sent: boolean
++  email_sent: boolean
++  percent_at_alert: number
++}
++
+ export default function HoursBudgetDetailPage({ params }: { params: { id: string } }) {
+   const [budget, setBudget] = useState<BudgetDetail | null>(null)
+   const [entries, setEntries] = useState<TimeEntry[]>([])
+   const [staff, setStaff] = useState<Staff[]>([])
++  const [alerts, setAlerts] = useState<AlertLog[]>([])
+   const [loading, setLoading] = useState(true)
+   const [saving, setSaving] = useState(false)
++  const [simulating, setSimulating] = useState(false)
+   const [formData, setFormData] = useState({
+     designer_id: '',
+     entry_date: new Date().toISOString().slice(0, 10),
+@@ -45,11 +55,12 @@
+   })
+   const router = useRouter()
+ 
+-  const fetchData = async () => {
++  const fetchData = useCallback(async () => {
+     try {
+-      const [budgetRes, staffRes] = await Promise.all([
++      const [budgetRes, staffRes, alertsRes] = await Promise.all([
+         fetch(`/api/hours-budgets/${params.id}`),
+         fetch('/api/staff'),
++        fetch(`/api/hours-budgets/${params.id}/alert-status`)
+       ])
+       if (!budgetRes.ok) {
+         setLoading(false)
+@@ -57,20 +68,22 @@
+       }
+       const budgetData = await budgetRes.json()
+       const staffData = await staffRes.json()
++      const alertsData = alertsRes.ok ? await alertsRes.json() : { alerts: [] }
+       setBudget(budgetData.hours_budget)
+       setEntries(budgetData.time_entries || [])
+       setStaff(staffData.staff || [])
++      setAlerts(alertsData.alerts || [])
+       setFormData((prev) => ({ ...prev, entry_date: prev.entry_date || new Date().toISOString().slice(0, 10) }))
+     } catch (err) {
+       console.error(err)
+     } finally {
+       setLoading(false)
+     }
+-  }
++  }, [params.id])
+ 
+   useEffect(() => {
+     fetchData()
+-  }, [params.id])
++  }, [fetchData])
+ 
+   const utilization = useMemo(() => {
+     if (!budget || !budget.total_hours) return 0
+@@ -104,6 +117,25 @@
+     }
+   }
+ 
++  const simulateAlert = async (threshold: number) => {
++    setSimulating(true)
++    try {
++      const res = await fetch(`/api/hours-budgets/${params.id}/simulate-alert?threshold=${threshold}`, {
++        method: 'POST'
++      })
++      if (res.ok) {
++        await fetchData()
++      } else {
++        alert('Failed to simulate alert')
++      }
++    } catch (err) {
++      console.error('Simulation error:', err)
++      alert('Error running simulation')
++    } finally {
++      setSimulating(false)
++    }
++  }
++
+   if (loading) {
+     return (
+       <DashboardLayout>
+@@ -156,6 +188,15 @@
+             </div>
+           </div>
+ 
++          <div className="flex gap-3 justify-end items-center">
++             {(process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEV_ALERT_BUTTONS === '1') && (
++                <>
++                  <button onClick={() => simulateAlert(50)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 50% Alert</button>
++                  <button onClick={() => simulateAlert(75)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 75% Alert</button>
++                </>
++             )}
++          </div>
++
+           <div className="grid gap-6 lg:grid-cols-[1.3fr,1fr]">
+             <div className="space-y-6">
+               <div className="border border-zinc-200 bg-white p-6">
+@@ -168,8 +209,33 @@
+                 <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                   <span>{Math.round(progress)}% used</span>
+                   <span>{budget.total_hours > budget.hours_spent ? `${(budget.total_hours - budget.hours_spent).toFixed(1)} hrs remaining` : 'Budget exceeded'}</span>
++                  <span>{alerts.length > 0 ? `Alerted at ${alerts[0].threshold}%` : 'ON TRACK'}</span>
+                 </div>
+               </div>
+ 
++              <div className="border border-zinc-200 bg-white p-6">
++                <div className="flex items-center justify-between mb-4">
++                  <h2 className="text-sm font-semibold text-zinc-900">Alert History</h2>
++                </div>
++                {alerts.length === 0 ? (
++                  <div className="text-sm text-zinc-500">No alerts have been fired yet.</div>
++                ) : (
++                  <div className="space-y-3">
++                    {alerts.map((a, i) => (
++                      <div key={i} className="flex justify-between items-center text-sm border-b border-zinc-100 pb-2 last:border-0 last:pb-0">
++                        <div><span className="font-medium text-zinc-800">{a.threshold}% Threshold</span> <span className="text-zinc-500 text-xs ml-2">({a.percent_at_alert || a.threshold}% actual)</span></div>
++                        <div className="flex items-center gap-4 text-xs">
++                           <span className="text-zinc-500">{new Date(a.alerted_at).toLocaleString()}</span>
++                           <div className="flex gap-2">
++                             <span title="Slack" className={`w-2 h-2 rounded-full ${a.slack_sent ? 'bg-green-500' : 'bg-zinc-300'}`}></span>
++                             <span title="Email" className={`w-2 h-2 rounded-full ${a.email_sent ? 'bg-green-500' : 'bg-zinc-300'}`}></span>
++                           </div>
++                        </div>
++                      </div>
++                    ))}
++                  </div>
++                )}
++              </div>
++
+               <div className="border border-zinc-200 bg-white p-6">
+                 <div className="flex items-center justify-between">

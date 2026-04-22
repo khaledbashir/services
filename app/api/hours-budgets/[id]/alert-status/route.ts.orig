@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const { id } = params
     const result = await query(
-      `SELECT threshold, alerted_at, slack_sent, email_sent, percent_at_alert 
+      `SELECT threshold, alerted_at, slack_sent, email_sent 
        FROM budget_alert_log 
        WHERE budget_id = $1 
        ORDER BY threshold DESC`,
