@@ -296,33 +296,22 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               </button>
             )}
 
-            {/* STAGE 3: IN PROGRESS — hours + notes */}
+            {/* STAGE 3: IN PROGRESS — hours (logged via entries) + notes */}
             <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'}>
-              <div className="grid grid-cols-1 md:grid-cols-[2fr,1fr] gap-4">
-                <Field label="Hours Progress">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-600">{dr.hours_spent ?? 0}h / {dr.hours_estimated ?? '—'}h</span>
-                      <span className={`text-xs ${progressPct >= 75 ? 'text-red-600 font-medium' : 'text-zinc-500'}`}>
-                        {progressPct}% used {progressPct >= 75 && '· over 75%'}
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
-                      <div className={`h-full ${progressTone} transition-all`} style={{ width: `${progressPct}%` }} />
-                    </div>
+              <Field label="Hours Progress">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-600">{dr.hours_spent ?? 0}h logged / {dr.hours_estimated ?? '—'}h estimated</span>
+                    <span className={`text-xs ${progressPct >= 75 ? 'text-red-600 font-medium' : 'text-zinc-500'}`}>
+                      {progressPct}% used {progressPct >= 75 && '· over 75%'}
+                    </span>
                   </div>
-                </Field>
-                <Field label="Hours Spent">
-                  <input
-                    type="number"
-                    step="0.25"
-                    value={hoursSpentDraft}
-                    onChange={(e) => setHoursSpentDraft(e.target.value)}
-                    onBlur={() => hoursSpentDraft !== String(dr.hours_spent || '') && updateField({ hours_spent: hoursSpentDraft === '' ? null : Number(hoursSpentDraft) })}
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  />
-                </Field>
-              </div>
+                  <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+                    <div className={`h-full ${progressTone} transition-all`} style={{ width: `${progressPct}%` }} />
+                  </div>
+                </div>
+              </Field>
+              <HoursLog designRequestId={dr.id} staffList={staffList} />
             </StageCard>
 
             {/* STAGE 4: IN QC */}
@@ -586,6 +575,123 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
           ))}
         </select>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HoursLog — per-job time entries (Alexis 2026-04-23: "designer logs hours
+// instead of an estimate for the full job"). Writes to designer_time_entries
+// via /api/design-requests/[id]/hours — the table already has a
+// design_request_id column, this just exposes the read/write to the UI.
+// Keeps design_requests.hours_spent synced on every mutation for the kanban
+// progress bar.
+// ─────────────────────────────────────────────────────────────────────────────
+interface HourEntry {
+  id: string
+  hours: number
+  description: string | null
+  entry_date: string
+  designer_name: string | null
+  designer_id: string | null
+  created_at: string
+}
+
+function HoursLog({ designRequestId, staffList }: { designRequestId: string; staffList: Staff[] }) {
+  const [entries, setEntries] = useState<HourEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [formHours, setFormHours] = useState('')
+  const [formDesc, setFormDesc] = useState('')
+  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [formDesignerId, setFormDesignerId] = useState('')
+
+  const load = async () => {
+    const r = await fetch(`/api/design-requests/${designRequestId}/hours`)
+    if (!r.ok) return
+    const d = await r.json()
+    setEntries(d.entries || [])
+    setTotal(d.total_hours || 0)
+  }
+  useEffect(() => { load() }, [designRequestId])
+
+  const add = async () => {
+    const h = Number(formHours)
+    if (!Number.isFinite(h) || h <= 0) return
+    setBusy(true)
+    try {
+      await fetch(`/api/design-requests/${designRequestId}/hours`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hours: h,
+          description: formDesc || null,
+          entry_date: formDate || null,
+          designer_id: formDesignerId || null,
+        }),
+      })
+      setFormHours(''); setFormDesc('')
+      await load()
+      window.dispatchEvent(new Event('anc:data-refresh'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (entryId: string) => {
+    if (!confirm('Remove this time entry?')) return
+    setBusy(true)
+    try {
+      await fetch(`/api/design-requests/${designRequestId}/hours?entry_id=${entryId}`, { method: 'DELETE' })
+      await load()
+      window.dispatchEvent(new Event('anc:data-refresh'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg ring-1 ring-zinc-200 bg-white">
+      <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-zinc-900">Time Log</div>
+          <div className="text-xs text-zinc-500">{total.toFixed(2)}h logged across {entries.length} {entries.length === 1 ? 'entry' : 'entries'}</div>
+        </div>
+      </div>
+      {/* Quick add row */}
+      <div className="px-4 py-3 grid grid-cols-1 md:grid-cols-[100px,100px,1fr,140px,80px] gap-2 border-b border-zinc-100">
+        <input type="number" step="0.25" value={formHours} onChange={e => setFormHours(e.target.value)}
+          placeholder="Hours" className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
+        <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)}
+          className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
+        <input type="text" value={formDesc} onChange={e => setFormDesc(e.target.value)}
+          placeholder="What did you work on?" className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-sm bg-white outline-none" />
+        <select value={formDesignerId} onChange={e => setFormDesignerId(e.target.value)}
+          className="rounded-md ring-1 ring-zinc-200 px-2.5 py-1.5 text-xs bg-white outline-none">
+          <option value="">Me</option>
+          {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+        </select>
+        <button onClick={add} disabled={busy || !formHours}
+          className="px-3 py-1.5 rounded-md bg-[#0A52EF] text-white text-xs font-semibold disabled:opacity-60">
+          {busy ? '…' : 'Log'}
+        </button>
+      </div>
+      {/* Entries list */}
+      {entries.length === 0 ? (
+        <div className="p-5 text-xs text-zinc-400 text-center">No time logged yet.</div>
+      ) : (
+        <div className="divide-y divide-zinc-100 max-h-64 overflow-y-auto">
+          {entries.map(e => (
+            <div key={e.id} className="px-4 py-2.5 flex items-center gap-3 text-sm hover:bg-zinc-50">
+              <span className="w-16 font-mono text-xs text-zinc-500">{e.entry_date?.slice(5)}</span>
+              <span className="w-16 font-semibold tabular-nums text-zinc-900">{Number(e.hours).toFixed(2)}h</span>
+              <span className="flex-1 truncate text-zinc-700">{e.description || <span className="text-zinc-400 italic">no description</span>}</span>
+              <span className="text-xs text-zinc-400">{e.designer_name || 'unknown'}</span>
+              <button onClick={() => remove(e.id)} className="text-zinc-300 hover:text-red-500 text-xs" title="Remove">×</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
