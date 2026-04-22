@@ -4,21 +4,51 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled, type TwentyCgDesignRequest } from '@/lib/twenty-ops'
 
+// Map Twenty's STATUS_* enum values onto the kanban lane keys the UI renders.
+// Without this every record ends up lumped into 'request_submitted' (or a lane
+// it doesn't display at all) and the Kanban comes up empty.
+function mapTwentyStatus(raw: string | null | undefined): string {
+  if (!raw) return 'request_submitted'
+  const stripped = raw.toString().replace(/^STATUS_/i, '').toLowerCase()
+  const map: Record<string, string> = {
+    submitted: 'request_submitted',
+    request_submitted: 'request_submitted',
+    queued: 'in_queue',
+    in_queue: 'in_queue',
+    in_progress: 'in_progress',
+    review: 'review',
+    in_review: 'review',
+    client_review: 'review',
+    revisions: 'revisions',
+    in_revisions: 'revisions',
+    approved: 'approved',
+    posted: 'posted',
+    done: 'posted',
+    complete: 'posted',
+    completed: 'posted',
+    request_closed: 'posted',
+    closed: 'posted',
+  }
+  return map[stripped] || stripped || 'request_submitted'
+}
+
 function reshapeCgDesign(c: TwentyCgDesignRequest) {
+  const raw = c as any
   return {
     id: c.id,
-    league: c.sport,
-    team_name: c.teamName,
-    job_title: c.clientTriCode || c.teamName || '(untitled)',
-    notes: null,
-    due_date: null,
-    status: c.status || 'request_submitted',
+    league: raw.sport || null,
+    team_name: raw.teamName || null,
+    job_title: raw.name || raw.clientTriCode || raw.teamName || '(untitled)',
+    notes: typeof raw.notes === 'object' ? (raw.notes?.markdown || raw.notes?.blocknote || null) : (raw.notes || null),
+    due_date: raw.dueDate || null,
+    status: mapTwentyStatus(raw.status),
     created_date: new Date(c.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
     updated_date: new Date(c.updatedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-    venue_name: c.cgClient?.name || null,
+    venue_name: raw.cgClient?.name || null,
     venue_id: null,
-    designer_name: c.cgDesigner ? `${c.cgDesigner.name.firstName} ${c.cgDesigner.name.lastName}`.trim() : null,
-    designer_id: c.cgDesignerId,
+    tricode: raw.clientTriCode || null,
+    designer_name: raw.cgDesigner ? `${raw.cgDesigner.name.firstName} ${raw.cgDesigner.name.lastName}`.trim() : null,
+    designer_id: raw.cgDesignerId || null,
   }
 }
 
