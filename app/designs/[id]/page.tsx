@@ -358,11 +358,12 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                     )}
                   </div>
                 )}
-                <Field label="Upload Proof (auto-fires client email)">
+                <Field label="Upload Proof">
                   <DesignProofUpload designRequestId={dr.id} />
                 </Field>
+                <AIFirstDraftButton designRequestId={dr.id} />
                 <p className="text-xs text-zinc-500">
-                  Uploading a proof from any pre-review stage auto-advances this request to Client Review, creates a public share link, and emails the client.
+                  The client email fires only when you explicitly advance the status to Client Review — QC first, send second.
                 </p>
               </div>
             </StageCard>
@@ -474,6 +475,79 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">{label}</label>
       {children}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI First Draft — Alexis's ask (2026-04-23): let the system take a first
+// pass at the design so designers refine instead of starting from blank.
+// Hits the /generate-ai-proof endpoint which builds a venue-aware prompt from
+// the request context, calls gpt-image-1, and files the output as a proof
+// attachment flagged is_ai_generated=true. UX: one button, ~20-40s wait,
+// preview card when ready.
+// ─────────────────────────────────────────────────────────────────────────────
+function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [generated, setGenerated] = useState<{ filename: string; download_url: string } | null>(null)
+
+  const run = async () => {
+    setBusy(true); setError(null); setGenerated(null)
+    try {
+      const res = await fetch(`/api/design-requests/${designRequestId}/generate-ai-proof`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || `Failed (${res.status})`)
+      } else {
+        setGenerated(data.proof)
+        // Nudge the rest of the detail page to refetch so the new proof shows
+        // up in the upload list next to the designer's uploads.
+        window.dispatchEvent(new Event('anc:data-refresh'))
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg ring-1 ring-[#0A52EF]/30 bg-gradient-to-b from-[#0A52EF]/[0.04] to-white p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">
+          <div className="h-9 w-9 rounded-lg bg-[#0A52EF] flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-zinc-900">AI First Draft</div>
+          <p className="text-xs text-zinc-600 mt-0.5">
+            Generate a venue-ready starting point from the brief. Designer refines + approves. ~30 seconds.
+          </p>
+          {error && (
+            <div className="mt-2 rounded bg-red-50 ring-1 ring-red-200 px-2.5 py-1.5 text-xs text-red-700">{error}</div>
+          )}
+          {generated && (
+            <div className="mt-2 rounded bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-2 text-xs text-emerald-800">
+              <div className="font-semibold">:sparkles: Draft ready: {generated.filename}</div>
+              <a href={generated.download_url} target="_blank" rel="noreferrer" className="text-[#0A52EF] hover:underline">Open the generated image →</a>
+              <div className="text-emerald-700/80 mt-1">Also filed under this design's uploaded proofs — refresh to see it listed.</div>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={run}
+          disabled={busy}
+          className="flex-shrink-0 px-3 py-2 rounded-lg bg-[#0A52EF] hover:bg-[#0840C0] text-white text-xs font-semibold transition-colors disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
+        >
+          {busy ? 'Generating…' : 'Generate draft'}
+        </button>
+      </div>
     </div>
   )
 }
