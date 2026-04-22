@@ -100,6 +100,42 @@ export default function TicketsPage() {
       .finally(() => setViewHydrated(true))
   }, [])
 
+  // Chris D's 2026-04-23 ask: auto-refresh the tickets page so voicemails /
+  // new tickets surface without a manual reload. Poll every 30s while the
+  // tab is visible; pause when hidden (don't nag the server when nobody's
+  // looking). Mid-action states (loading, bulk busy) are skipped so the
+  // refetch doesn't stomp on a user's in-flight work.
+  useEffect(() => {
+    const REFRESH_MS = 30_000
+    let timer: ReturnType<typeof setInterval> | null = null
+
+    const poll = async () => {
+      if (document.hidden) return
+      if (loading || bulkBusy) return
+      try {
+        const res = await fetch('/api/tickets', { cache: 'no-store' })
+        if (!res.ok) return
+        const d = await res.json()
+        setTickets(d.tickets || [])
+      } catch {
+        // Silent — don't spam the user with transient fetch errors.
+      }
+    }
+
+    const start = () => {
+      if (timer) return
+      timer = setInterval(poll, REFRESH_MS)
+    }
+    const stop = () => {
+      if (timer) { clearInterval(timer); timer = null }
+    }
+    const onVis = () => { document.hidden ? stop() : (poll(), start()) }
+
+    start()
+    document.addEventListener('visibilitychange', onVis)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
+  }, [loading, bulkBusy])
+
   // Persist view choice once the user has toggled (not on initial hydration).
   const setViewPersisted = (v: 'cards' | 'list') => {
     setView(v)
