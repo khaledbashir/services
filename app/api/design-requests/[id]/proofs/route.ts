@@ -58,11 +58,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
 
-  // Confirm the design request exists before accepting the upload. Cheap
-  // guard — prevents orphaned objects in MinIO if someone POSTs a bad id.
+  // Confirm the design request exists. When TWENTY_BACKED_DESIGNS is on and
+  // the local design_requests table doesn't have a mirror row (e.g. the record
+  // was created after the flag flipped, or never migrated from Wrike), look it
+  // up in Twenty and auto-create a minimal stub row so the design_request_files
+  // FK insert doesn't blow up with "Design request not found".
   const drRes = await query(`SELECT id FROM design_requests WHERE id = $1`, [params.id])
   if (drRes.rows.length === 0) {
-    return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+    if (isTwentyBackedEnabled('DESIGNS')) {
+      try {
+        const d = await Designs.get(params.id) as any
+        if (!d) {
+          return NextResponse.json({ error: 'Design request not found (missing from Twenty too)' }, { status: 404 })
+        }
+        await query(
+          `INSERT INTO design_requests (id, job_title, company_name, status, notes, boards_requested, due_date, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            d.id,
+            d.name || '(untitled)',
+            d.designClient?.name || null,
+            ((d.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted',
+            typeof d.notes === 'object' ? (d.notes?.markdown || '') : (d.notes || d.aiPrompt || ''),
+            d.boardSection || null,
+            d.dueDate || null,
+          ]
+        )
+      } catch (err) {
+        console.error('[proofs POST] stub create failed:', err)
+        return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+      }
+    } else {
+      return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
+    }
   }
 
   let form: FormData
