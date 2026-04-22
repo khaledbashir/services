@@ -317,28 +317,55 @@ export async function POST(
       console.error('Failed to write notification log:', logErr)
     }
 
-    // Slack notification for workflow step
+    // Slack notification for workflow step.
+    //
+    // Joe's 2026-04-22 ask: suppress check-in + game-ready "completed" pings
+    // from the venue channel — those reminders already get sent; posting
+    // again when the tech finishes is white noise. Only post-game stays in
+    // the venue channel (both the reminder and the submission).
+    //
+    // Separately, a dedicated audit channel (SLACK_WORKFLOW_AUDIT_CHANNEL)
+    // receives every submission so ops leadership can monitor compliance
+    // without needing eyes on every venue channel. Joe: "I like the idea of
+    // a channel for all these notifications to go to so we can check that."
     const venueSlackRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [eventResult.rows[0]?.venue_id])
-    const slackChannel = venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
-    if (slackChannel) {
-      const wf = workflowLabels[dbType] || { label: dbType, emoji: ':gear:' }
-      const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted
-      const dashboardUrl = `https://abc-anc-services.izcgmb.easypanel.host/workflow/${eventId}`
+    const venueChannel = venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+    const auditChannel = process.env.SLACK_WORKFLOW_AUDIT_CHANNEL || ''
 
-      const blocks: any[] = [
+    const POST_TO_VENUE_CHANNEL: Record<string, boolean> = {
+      check_in: false,
+      game_ready: false,
+      post_game_report: true,
+    }
+
+    const wf = workflowLabels[dbType] || { label: dbType, emoji: ':gear:' }
+    const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted
+    const dashboardUrl = `https://abc-anc-services.izcgmb.easypanel.host/workflow/${eventId}`
+
+    const buildBlocks = () => {
+      const b: any[] = [
         { type: 'section', text: { type: 'mrkdwn', text: `${wf.emoji} *Workflow: ${wf.label} completed*\n*${eventName}* @ ${venueName}\nBy: ${staffName}` } },
       ]
-
       if (allDone) {
-        blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':tada: *All workflow steps complete for this event*' } })
+        b.push({ type: 'section', text: { type: 'mrkdwn', text: ':tada: *All workflow steps complete for this event*' } })
       }
+      b.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Workflow' }, url: dashboardUrl, style: 'primary' }] })
+      return b
+    }
 
-      blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Workflow' }, url: dashboardUrl, style: 'primary' }] })
-
+    if (venueChannel && POST_TO_VENUE_CHANNEL[dbType]) {
       sendSlackMessage({
-        channel: slackChannel,
+        channel: venueChannel,
         text: `${wf.emoji} ${wf.label} completed: ${eventName} @ ${venueName} by ${staffName}`,
-        blocks,
+        blocks: buildBlocks(),
+      })
+    }
+    // Audit channel always gets the ping (if configured + distinct from the venue channel).
+    if (auditChannel && auditChannel !== venueChannel) {
+      sendSlackMessage({
+        channel: auditChannel,
+        text: `${wf.emoji} ${wf.label} completed: ${eventName} @ ${venueName} by ${staffName}`,
+        blocks: buildBlocks(),
       })
     }
 
