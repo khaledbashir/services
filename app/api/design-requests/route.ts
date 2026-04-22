@@ -4,32 +4,66 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { Designs, isTwentyBackedEnabled, type TwentyDesignRequest } from '@/lib/twenty-ops'
 
+function normalizeTwentyStatus(raw: string | null | undefined): string {
+  if (!raw) return 'request_submitted'
+  // Twenty stores STATUS_DONE / STATUS_IN_PROGRESS etc. — strip prefix + lowercase.
+  const stripped = raw.toString().replace(/^STATUS_/i, '').toLowerCase()
+  // Map Twenty's canonical statuses to the dashboard's pipeline vocabulary.
+  const map: Record<string, string> = {
+    submitted: 'request_submitted',
+    request_submitted: 'request_submitted',
+    queued: 'in_queue',
+    in_queue: 'in_queue',
+    in_progress: 'in_progress',
+    in_qc: 'in_qc',
+    qc: 'in_qc',
+    client_review: 'client_review',
+    review: 'client_review',
+    approved: 'approved',
+    done: 'done',
+    completed: 'done',
+  }
+  return map[stripped] || stripped || 'request_submitted'
+}
+
 function reshapeDesign(d: TwentyDesignRequest) {
+  const raw = d as any
+  const companyName = raw.designClient?.name || null
+  const notesText = typeof raw.notes === 'object'
+    ? (raw.notes?.markdown || raw.notes?.blocknote || '')
+    : (raw.notes || raw.aiPrompt || '')
   return {
     id: d.id,
     job_title: d.name,
-    company_name: d.designClient?.name || null,
-    tricode: null,
-    ftp_proof_link: d.proofLink,
-    ftp_final_link: null,
-    final_file_name: d.localFilePath,
+    company_name: companyName,
+    tricode: raw.clientTriCode || null,
+    ftp_proof_link: raw.proofShareUrl || raw.proofLink || raw.ftpProofLink || null,
+    ftp_final_link: raw.ftpFinalLink || null,
+    final_file_name: raw.localFilePath || null,
     final_duration: null,
-    notes: d.aiPrompt,
-    boards_requested: d.boardSection,
-    sizes_requested: null,
-    status: d.status || 'request_submitted',
-    hours_estimated: null,
+    notes: notesText,
+    ai_prompt: raw.aiPrompt || null,
+    boards_requested: raw.boardSection || null,
+    sizes_requested: raw.sizes || null,
+    status: normalizeTwentyStatus(raw.status),
+    hours_estimated: raw.effortHours ?? null,
     hours_spent: null,
-    due_date: null,
+    due_date: raw.dueDate || null,
     created_at: d.createdAt,
     created_date: new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
     updated_date: new Date(d.updatedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-    venue_name: null,
+    // Twenty's designRequests have no venue relation — only a client company.
+    // Surface the company as the venue label so cards don't read "No venue".
+    venue_name: companyName,
     venue_id: null,
-    designer_name: d.designAssignee ? `${d.designAssignee.name.firstName} ${d.designAssignee.name.lastName}`.trim() : null,
-    designer_id: d.designAssigneeId,
+    designer_name: raw.designAssignee ? `${raw.designAssignee.name.firstName} ${raw.designAssignee.name.lastName}`.trim() : null,
+    designer_id: raw.designAssigneeId,
     enterprise_contact_name: null,
     enterprise_contact_id: null,
+    wrike_task_id: raw.wrikeTaskId || null,
+    proof_sent_at: raw.proofSentAt || null,
+    proof_view_count: raw.proofViewCount ?? 0,
+    proof_last_viewed_at: raw.proofLastViewedAt || null,
   }
 }
 
