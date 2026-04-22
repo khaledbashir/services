@@ -48,7 +48,9 @@ export async function GET() {
         
         // Use any to access custom fields that might not be on the precise TS facade
         const raw = b as any
-        const totalBudget = Number(raw.totalHoursBudgeted || 0)
+        // Twenty's cap field is `contractedHours`; the legacy `totalHoursBudgeted`
+        // never existed and was silently 0, so every cron pass checked 75 and fired 0.
+        const totalBudget = Number(raw.contractedHours ?? raw.totalHoursBudgeted ?? 0)
         const used = Number(b.currentHoursUsed || 0)
         
         if (totalBudget <= 0) continue

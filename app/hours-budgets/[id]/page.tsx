@@ -51,6 +51,10 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [simulating, setSimulating] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => {
+    try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
+  }, [])
   const [formData, setFormData] = useState({
     designer_id: '',
     entry_date: new Date().toISOString().slice(0, 10),
@@ -202,7 +206,7 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
         </div>
 
         <div className="flex gap-3 justify-end items-center">
-             {(process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEV_ALERT_BUTTONS === '1') && (
+             {isAdmin && (
                 <>
                   <button onClick={() => simulateAlert(50)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 50% Alert</button>
                   <button onClick={() => simulateAlert(75)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 75% Alert</button>
@@ -222,7 +226,13 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
                 <span>{Math.round(progress)}% used</span>
-                <span>{budget.total_hours > budget.hours_spent ? `${(budget.total_hours - budget.hours_spent).toFixed(1)} hrs remaining` : 'Budget exceeded'}</span>
+                <span>
+                  {budget.total_hours <= 0
+                    ? 'Budget cap not set'
+                    : budget.total_hours > budget.hours_spent
+                      ? `${(budget.total_hours - budget.hours_spent).toFixed(1)} hrs remaining`
+                      : 'Budget exceeded'}
+                </span>
               </div>
             </div>
 

@@ -4,21 +4,28 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { HoursBudgets, isTwentyBackedEnabled, type TwentyDesignerHoursBudget } from '@/lib/twenty-ops'
 
 function reshapeHoursBudget(b: TwentyDesignerHoursBudget) {
+  const raw = b as any
+  // Twenty stores the cap as `contractedHours`; earlier reshape hardcoded 0.
+  const totalHours = Number(raw.contractedHours ?? raw.totalHoursBudgeted ?? 0)
+  const hoursSpent = Number(raw.currentHoursUsed ?? 0)
   return {
     id: b.id,
-    client_name: b.budgetClient?.name || '(unknown client)',
+    client_name: raw.budgetClient?.name || raw.name || '(unknown client)',
     venue_id: null,
     venue_name: null,
     league: null,
-    season: null,
-    total_hours: 0,
+    season: (raw.period || '').toString().replace(/^PERIOD_/i, '').toLowerCase() || null,
+    total_hours: totalHours,
     contract_start: null,
     contract_end: null,
     notes: null,
     created_at: b.createdAt,
     updated_at: b.updatedAt,
-    hours_spent: Number(b.currentHoursUsed || 0),
+    hours_spent: hoursSpent,
     entry_count: 0,
+    alert_50_fired: !!raw.alert50Pct,
+    alert_75_fired: !!raw.alert75Pct,
+    status: (raw.status || '').toString().replace(/^STATUS_/i, '').toLowerCase() || null,
   }
 }
 
