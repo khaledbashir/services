@@ -163,56 +163,35 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     [downloadUrl, params.id]
   )
 
-  // Reactive cascade: if this is the designer's first proof upload on a request
-  // that hasn't been sent to the client yet, auto-advance to client_review. That
-  // transition fires createDesignProofShare (public token + client email) and
-  // mirrors the share URL back onto the Twenty record.
-  let proofShareUrl: string | null = null
+  // Per Alexis (2026-04-23 meeting): uploading a proof does NOT auto-send it
+  // to the client. The designer uploads, Alexis (Enterprise Solutions) runs
+  // QC first, then explicitly moves status to "Client Review" — that
+  // transition is what fires createDesignProofShare (public token + client
+  // email) via the PATCH handler in app/api/design-requests/[id]/route.ts.
+  //
+  // Optional soft-advance: if the request is still at `request_submitted`
+  // when the designer uploads, nudge it to `in_progress` so the pipeline
+  // reflects real work. Anything past that stays where the designer put it.
   let statusAdvanced = false
   try {
     if (isTwentyBackedEnabled('DESIGNS')) {
       const current = await Designs.get(params.id)
       const currentStatus = ((current as any)?.status || '').toString().replace(/^STATUS_/i, '').toLowerCase()
-      if (!current || PRE_REVIEW_STATUSES.has(currentStatus) || currentStatus === 'submitted' || currentStatus === '') {
-        await Designs.update(params.id, { status: 'STATUS_CLIENT_REVIEW' as any })
-        const share = await createDesignProofShare({
-          designRequestId: params.id,
-          createdByName: auth.fullName || null,
-          createdByEmail: auth.email || null,
-        })
-        proofShareUrl = share.url
+      if (!currentStatus || currentStatus === 'request_submitted') {
+        await Designs.update(params.id, { status: 'STATUS_IN_PROGRESS' as any })
         statusAdvanced = true
-        // Denormalize the share URL onto Twenty so anyone reading the record
-        // directly (Jireh in Twenty) sees what we sent the client.
-        try {
-          await Designs.update(params.id, { proofLink: share.url, proofSentAt: new Date().toISOString() } as any)
-        } catch (err) {
-          console.error('[proofs POST] proofLink mirror failed:', err)
-        }
       }
     } else {
-      // Legacy local path: same cascade, but against design_requests table.
       const r = await query(`SELECT status FROM design_requests WHERE id = $1`, [params.id])
       const currentStatus = r.rows[0]?.status
-      if (!currentStatus || PRE_REVIEW_STATUSES.has(currentStatus)) {
-        await query(`UPDATE design_requests SET status = 'client_review', updated_at = NOW() WHERE id = $1`, [params.id])
-        const share = await createDesignProofShare({
-          designRequestId: params.id,
-          createdByName: auth.fullName || null,
-          createdByEmail: auth.email || null,
-        })
-        proofShareUrl = share.url
+      if (!currentStatus || currentStatus === 'request_submitted') {
+        await query(`UPDATE design_requests SET status = 'in_progress', updated_at = NOW() WHERE id = $1`, [params.id])
         statusAdvanced = true
-        await query(
-          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2 AND (ftp_proof_link IS NULL OR ftp_proof_link = '' OR ftp_proof_link = $3)`,
-          [share.url, params.id, downloadUrl]
-        )
       }
     }
   } catch (err) {
-    // Don't fail the upload just because the status cascade hit a snag —
-    // designer still sees the file landed, can advance status manually.
-    console.error('[proofs POST] status-advance cascade failed:', err)
+    // Don't fail the upload just because the status nudge hit a snag.
+    console.error('[proofs POST] status-nudge failed:', err)
   }
 
   return NextResponse.json({
@@ -227,6 +206,5 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       download_url: downloadUrl,
     },
     status_advanced: statusAdvanced,
-    proof_share_url: proofShareUrl,
   })
 }
