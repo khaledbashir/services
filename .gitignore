@@ -27,3 +27,7 @@ image\ copy.png
 Slack\ Channel\ ID.xlsx
 .playwright-mcp/
 image (*.png
+
+# playwright verification screenshots
+ai-draft-preview-*.png
+.playwright-mcp/
