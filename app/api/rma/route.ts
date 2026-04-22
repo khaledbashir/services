@@ -9,22 +9,38 @@ import { Rma, isTwentyBackedEnabled, type TwentyRmaTracker } from '@/lib/twenty-
 //               model_number, submission_contact, parts_details,
 //               remit_to_stock, status, notes } ] }
 
+function normalizeStatus(raw: string | null | undefined): string {
+  if (!raw) return 'submitted'
+  // Twenty stores STATUS_SUBMITTED / STATUS_IN_REPAIR / STATUS_RETURNED etc.
+  return raw.toString().replace(/^STATUS_/i, '').toLowerCase() || 'submitted'
+}
+
 function reshapeRma(r: TwentyRmaTracker) {
+  const raw = r as any
   return {
     id: r.id,
     venue_id: null,
-    venue_name: r.rmaCompany?.name || '',
-    company_name: r.rmaCompany?.name || null,
-    client_name: r.clientName,
-    date_received: r.createdAt,
-    project_code: null,
-    part_number: r.partNumber,
-    part_name: null,
-    model_number: r.modelNumber,
-    submission_contact: r.submissionContact,
-    parts_details: r.partsDetails,
-    remit_to_stock: r.remitToStock || false,
-    status: 'received',
+    venue_name: raw.rmaCompany?.name || raw.clientName || '',
+    company_name: raw.rmaCompany?.name || null,
+    client_name: raw.clientName,
+    // Twenty's dateReceived is the true receive date. Fall back to null rather
+    // than createdAt so we don't show a misleading "received" date that's
+    // actually the record-creation date.
+    date_received: raw.dateReceived || null,
+    project_code: raw.projectCode || null,
+    part_number: raw.partNumber,
+    part_name: raw.name || null,
+    model_number: raw.modelNumber,
+    description: raw.description || null,
+    submission_contact: raw.submissionContact,
+    parts_details: raw.partsDetails,
+    quantities: raw.quantities || null,
+    led_manufacturer: raw.ledManufacturer || null,
+    repair_vendor: raw.repairVendor || null,
+    shipping_method: raw.shippingMethod || null,
+    shipment_tracking: raw.shipmentTracking || null,
+    remit_to_stock: raw.remitToStock || false,
+    status: normalizeStatus(raw.status),
     notes: null,
     created_at: r.createdAt,
     updated_at: r.updatedAt,
