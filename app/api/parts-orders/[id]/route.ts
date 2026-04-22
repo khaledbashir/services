@@ -21,13 +21,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (isTwentyBackedEnabled("PARTS_ORDERS")) {
     try {
-      const updated = await PartsOrders.update(params.id, body)
-      
-      const email = updated.requesterEmail
+      // Translate legacy UI field names to Twenty's actual schema before writing.
+      // Older UI POSTed { trackingNumber, requesterEmail }; Twenty has neither —
+      // it uses requestorEmail (spelled with an 'o') and has no trackingNumber
+      // field at all. Drop the tracking bit rather than 500.
+      const patch: Record<string, any> = { ...body }
+      delete patch.trackingNumber
+      if (patch.requesterEmail !== undefined) {
+        patch.requestorEmail = patch.requesterEmail
+        delete patch.requesterEmail
+      }
+      if (patch.requesterName !== undefined) {
+        patch.requestorName = patch.requesterName
+        delete patch.requesterName
+      }
+
+      const updated = await PartsOrders.update(params.id, patch) as any
+      const email = updated.requestorEmail || updated.requesterEmail
       if (email && body.status) {
         if (body.status === "shipped") {
-           await sendEmail([email], "ANC — Parts Order Shipped", formatEmailHtml("Your Parts Order has Shipped", "Your recent parts request has been processed and shipped.", updated.trackingNumber))
-        } else if (body.status === "received" || body.status === "complete") {
+           await sendEmail([email], "ANC — Parts Order Shipped", formatEmailHtml("Your Parts Order has Shipped", "Your recent parts request has been processed and shipped.", body.trackingNumber || null))
+        } else if (body.status === "received" || body.status === "complete" || body.status === "completed") {
            await sendEmail([email], "ANC — Parts Order Completed", formatEmailHtml("Your Parts Order is Complete", "Your recent parts request has been marked as received/completed.", undefined))
         }
       }

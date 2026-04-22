@@ -242,16 +242,22 @@ export interface TwentyDesignerHoursBudget {
 
 export interface TwentyPartsOrder {
   id: string
+  // Twenty's partsOrders uses `name` as the venue label (not a relation), and
+  // the requestor/photo fields are singular + spelled with an 'o'. The older
+  // interface used Americanized 'requester*' + plural photoUrls which silently
+  // read as undefined on every row.
+  name: string | null
   venueId: string | null
   venue?: { id: string; name: string }
-  requesterName: string | null
-  requesterEmail: string | null
+  requestorName: string | null
+  requestorEmail: string | null
   partsNeeded: string | null
-  photoUrls: string[] | null
+  photoUrl: string | null
   shippingAddress: string | null
-  status: 'pending' | 'approved' | 'ordered' | 'shipped' | 'received' | 'complete' | null
-  trackingNumber: string | null
-  notes: string | null
+  status: string | null
+  quantity: number | null
+  notes: { blocknote?: string; markdown?: string } | string | null
+  wrikeTaskId: string | null
   createdAt: string
   updatedAt: string
 }
