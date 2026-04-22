@@ -54,7 +54,9 @@ export async function GET(
 
     // Native anc-services design requests don't live in Twenty — serve
     // them directly from our own DB so the public proof page works without
-    // CRM round-trips.
+    // CRM round-trips. Uploaded proof files (MinIO-backed since 2026-04-22)
+    // come first; the legacy ftp_proof_link is appended as a fallback
+    // reference for records that pre-date the upload UI.
     if (share.twenty_object_type === 'localDesignRequest') {
       const dr = await query(
         `SELECT dr.id, dr.job_title, dr.status, dr.client_name, dr.client_email,
@@ -68,11 +70,33 @@ export async function GET(
         return NextResponse.json({ error: 'The design request this proof references no longer exists.' }, { status: 404 })
       }
       const row = dr.rows[0]
+
+      // Pull uploaded proof files (both bytea and S3 backends), newest first
+      const files = await query(
+        `SELECT id, filename, mime_type, size_bytes, storage_backend
+         FROM design_request_files
+         WHERE design_request_id = $1
+         ORDER BY created_at DESC`,
+        [share.twenty_record_id]
+      )
+
       const attachments: Array<{ id: string; name: string; extension: string; category: string; fileUrl: string }> = []
-      if (row.ftp_proof_link) {
+      for (const f of files.rows) {
+        const ext = (f.filename.split('.').pop() || '').toLowerCase()
+        attachments.push({
+          id: `file-${f.id}`,
+          name: f.filename,
+          extension: ext,
+          category: classifyFile(ext),
+          // Route through the token-gated proxy so the download stays scoped to the share token
+          fileUrl: `/api/proof-share/${token}/file/file-${f.id}`,
+        })
+      }
+      // Append legacy FTP link if no uploaded files (legacy records only)
+      if (attachments.length === 0 && row.ftp_proof_link) {
         attachments.push({
           id: 'proof-link',
-          name: 'Proof',
+          name: 'Proof (legacy FTP)',
           extension: 'link',
           category: 'link',
           fileUrl: row.ftp_proof_link,
