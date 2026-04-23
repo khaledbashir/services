@@ -49,13 +49,20 @@ async function processSlackEvent(event: any, botUserId?: string) {
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text()
-  if (!verifySlackSignature(request.headers, rawBody)) {
-    return NextResponse.json({ ok: false, error: 'invalid_signature' }, { status: 401 })
-  }
-
   const body = JSON.parse(rawBody || '{}')
   if (body.type === 'url_verification') {
-    return NextResponse.json({ challenge: body.challenge })
+    const verificationToken = process.env.SLACK_VERIFICATION_TOKEN || ''
+    if (verificationToken && body.token !== verificationToken) {
+      return NextResponse.json({ ok: false, error: 'invalid_verification_token' }, { status: 401 })
+    }
+    return new Response(String(body.challenge || ''), {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
+  }
+
+  if (!verifySlackSignature(request.headers, rawBody)) {
+    return NextResponse.json({ ok: false, error: 'invalid_signature' }, { status: 401 })
   }
 
   if (body.type !== 'event_callback' || !body.event_id || !body.event) {
