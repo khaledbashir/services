@@ -79,6 +79,7 @@ async function runMigrations() {
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS feed_type TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_synced_at TIMESTAMP`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_sync_status TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS notes TEXT`)
     await client.query(`CREATE TABLE IF NOT EXISTS shift_templates (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,

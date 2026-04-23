@@ -52,6 +52,7 @@ export async function GET(
         COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
         v.last_feed_sync_status,
+        v.notes,
         primary_client.id as primary_client_id,
         primary_client.name as primary_client_name
       FROM venues v
@@ -253,9 +254,10 @@ export async function PATCH(
     const body = await request.json()
 
     // Direct field updates
-    for (const field of ['name', 'address', 'primary_contact_name', 'primary_contact_email']) {
+    for (const field of ['name', 'address', 'primary_contact_name', 'primary_contact_email', 'notes']) {
       if (body[field] !== undefined) {
-        await query(`UPDATE venues SET ${field} = $1 WHERE id = $2`, [body[field], venueId])
+        const next = typeof body[field] === 'string' ? body[field] : body[field] === null ? null : body[field]
+        await query(`UPDATE venues SET ${field} = $1 WHERE id = $2`, [next, venueId])
       }
     }
 
@@ -440,6 +442,7 @@ export async function PATCH(
         COALESCE(v.timezone, 'America/New_York') as timezone,
         v.last_feed_synced_at,
         v.last_feed_sync_status,
+        v.notes,
         primary_client.id as primary_client_id,
         primary_client.name as primary_client_name
       FROM venues v

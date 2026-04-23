@@ -35,6 +35,7 @@ interface VenueDetail {
   timezone: string | null
   last_feed_synced_at: string | null
   last_feed_sync_status: string | null
+  notes: string | null
   primary_client_id?: string | null
   primary_client_name?: string | null
 }
@@ -149,6 +150,9 @@ export default function VenueDetailPage() {
   const [newDistEmail, setNewDistEmail] = useState('')
   const [savingDist, setSavingDist] = useState(false)
   const [savingFeed, setSavingFeed] = useState(false)
+  const [notesDraft, setNotesDraft] = useState<string>('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSavedAt, setNotesSavedAt] = useState<number | null>(null)
   const [linkedStaff, setLinkedStaff] = useState<LinkedStaff[]>([])
   const [linkedClients, setLinkedClients] = useState<LinkedClient[]>([])
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
@@ -222,6 +226,7 @@ export default function VenueDetailPage() {
           setCreative(data.creative || { designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
+          setNotesDraft(data.venue.notes || '')
 
           // Fetch briefing
           fetch(`/api/venues/${venueId}/briefing`).then(r => {
@@ -1810,6 +1815,56 @@ export default function VenueDetailPage() {
 
             {/* Right column */}
             <div className="space-y-6">
+              {/* Venue Notes */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Notes</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">Internal notes about this venue — access instructions, contact quirks, site-specific gotchas. Visible to staff.</p>
+                  </div>
+                  {notesSavedAt && Date.now() - notesSavedAt < 3000 && (
+                    <span className="text-xs text-emerald-600 font-medium shrink-0 ml-3">Saved</span>
+                  )}
+                </div>
+                <textarea
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  rows={6}
+                  placeholder="e.g. Gate 4 access after 5pm only. Reception closes at 6pm — use the loading-dock phone."
+                  className="w-full p-3 border border-[#E8E8E8] rounded text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-y"
+                />
+                <div className="flex items-center justify-end gap-3 mt-3">
+                  {notesDraft !== (venue.notes || '') && (
+                    <span className="text-xs text-zinc-500">Unsaved changes</span>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setSavingNotes(true)
+                      try {
+                        const next = notesDraft.trim() ? notesDraft : null
+                        const res = await fetch(`/api/venues/${venueId}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ notes: next }),
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          setVenue(data.venue)
+                          setNotesDraft(data.venue.notes || '')
+                          setNotesSavedAt(Date.now())
+                        }
+                      } finally {
+                        setSavingNotes(false)
+                      }
+                    }}
+                    disabled={savingNotes || notesDraft === (venue.notes || '')}
+                    className="px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50"
+                  >
+                    {savingNotes ? 'Saving...' : 'Save Notes'}
+                  </button>
+                </div>
+              </div>
+
               {/* Contracted Services */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
                 <h3 className="text-sm font-semibold text-zinc-900 mb-2">Contracted Services</h3>
