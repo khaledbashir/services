@@ -34,6 +34,7 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/dashboard-stats'),
     () => import('@/lib/ai/skills/move-design-to-client-review'),
     () => import('@/lib/ai/skills/generate-signage-proof'),
+    () => import('@/lib/ai/skills/slack-create-canvas'),
   ]
   for (const load of staticImports) {
     try {

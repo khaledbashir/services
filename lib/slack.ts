@@ -17,6 +17,20 @@ interface SlackMessage {
   channel: string
   text: string
   blocks?: any[]
+  thread_ts?: string
+}
+
+export async function slackApi(method: string, body: any) {
+  if (!SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN not set')
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+    },
+    body: JSON.stringify(body),
+  })
+  return res.json()
 }
 
 export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
@@ -30,16 +44,7 @@ export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
   }
 
   try {
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-      },
-      body: JSON.stringify(msg),
-    })
-
-    const data = await res.json()
+    const data = await slackApi('chat.postMessage', msg)
     if (!data.ok) {
       console.error('Slack API error:', data.error)
       return false
@@ -72,6 +77,48 @@ export function notifyOps(emoji: string, text: string, link?: { label: string; u
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `<${link.url}|:link: ${link.label}>` } })
   }
   sendSlackMessage({ channel: channel || DEFAULT_CHANNEL, text: `${emoji} ${text}`, blocks })
+}
+
+export async function createSlackCanvas(params: {
+  title: string
+  content?: string
+  channelId?: string
+}) {
+  const title = params.title.trim()
+  if (!title) throw new Error('Canvas title is required')
+  const markdown = params.content || ''
+
+  if (params.channelId) {
+    const res = await slackApi('conversations.canvases.create', {
+      channel_id: params.channelId,
+      title,
+      document_content: {
+        type: 'markdown',
+        markdown,
+      },
+    })
+    if (!res.ok) throw new Error(`Slack canvas create failed: ${res.error || 'unknown_error'}`)
+    return {
+      ok: true,
+      canvas_id: res.canvas_id as string | undefined,
+      channel_id: params.channelId,
+      title,
+    }
+  }
+
+  const res = await slackApi('canvases.create', {
+    title,
+    document_content: {
+      type: 'markdown',
+      markdown,
+    },
+  })
+  if (!res.ok) throw new Error(`Slack canvas create failed: ${res.error || 'unknown_error'}`)
+  return {
+    ok: true,
+    canvas_id: res.canvas_id as string | undefined,
+    title,
+  }
 }
 
 const statusLabels: Record<string, string> = {

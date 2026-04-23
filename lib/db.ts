@@ -161,6 +161,39 @@ async function runMigrations() {
     // via /api/ai/invoke. Array because Ahmad has multiple Slack IDs.
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS slack_user_ids TEXT[] DEFAULT '{}'::text[]`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_slack_user_ids ON staff USING GIN(slack_user_ids)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS ai_chats (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT 'New chat',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_chats_user_updated ON ai_chats(user_id, updated_at DESC)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS ai_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      chat_id UUID NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      content TEXT,
+      tool_calls JSONB,
+      tool_call_id TEXT,
+      tool_name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_messages_chat_created ON ai_messages(chat_id, created_at ASC)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_ai_threads (
+      channel_id TEXT NOT NULL,
+      thread_ts TEXT NOT NULL,
+      chat_id UUID NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+      created_by UUID REFERENCES staff(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (channel_id, thread_ts)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_ai_threads_chat_id ON slack_ai_threads(chat_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_processed_events (
+      event_id TEXT PRIMARY KEY,
+      processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
