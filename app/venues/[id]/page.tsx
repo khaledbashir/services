@@ -761,9 +761,11 @@ export default function VenueDetailPage() {
                   onClick={() => { setShowManualEvent(v => !v); setManualEventError(null) }}
                   className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-700 bg-white hover:border-zinc-300 transition-colors inline-flex items-center gap-1.5"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
+                  {!showManualEvent && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  )}
                   {showManualEvent ? 'Cancel' : 'Add Event'}
                 </button>
               )}
@@ -1309,9 +1311,11 @@ export default function VenueDetailPage() {
                 onClick={() => { setShowQuickTicket(v => !v); setQuickTicketError(null) }}
                 className="px-3 py-1.5 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] transition-colors inline-flex items-center gap-1.5"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
+                {!showQuickTicket && (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
                 {showQuickTicket ? 'Cancel' : 'New Support Ticket'}
               </button>
             </div>
