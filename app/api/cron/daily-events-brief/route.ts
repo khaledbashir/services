@@ -11,22 +11,33 @@ import { sendSlackMessage } from '@/lib/slack'
 //   0 21 * * * curl -s 'https://services.ancsports.net/api/cron/daily-events-brief?window=evening'
 //   (9am ET = 13:00 UTC during EDT, 5pm ET = 21:00 UTC)
 //
-// Target channel: SLACK_WORKFLOW_DIGEST_CHANNEL env var — defaults to the
-// audit channel and finally to SLACK_DEFAULT_CHANNEL.
+// Target channel(s): SLACK_WORKFLOW_DIGEST_CHANNEL env var. Accepts either a
+// single channel ID or a comma-separated list (e.g. "C0B00BH7GRW,C09UAFMH9PG")
+// so the digest can fan out to multiple rooms — Joe's 2026-04-23 ask: post
+// today's summary to #anc-events in addition to the ops audit channel.
+// Falls back to SLACK_WORKFLOW_AUDIT_CHANNEL, then SLACK_DEFAULT_CHANNEL.
 
 type Window = 'morning' | 'evening'
+
+function resolveDigestChannels(): string[] {
+  const raw =
+    process.env.SLACK_WORKFLOW_DIGEST_CHANNEL ||
+    process.env.SLACK_WORKFLOW_AUDIT_CHANNEL ||
+    process.env.SLACK_DEFAULT_CHANNEL ||
+    ''
+  return raw
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean)
+}
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const window: Window = url.searchParams.get('window') === 'evening' ? 'evening' : 'morning'
 
-    const channel =
-      process.env.SLACK_WORKFLOW_DIGEST_CHANNEL ||
-      process.env.SLACK_WORKFLOW_AUDIT_CHANNEL ||
-      process.env.SLACK_DEFAULT_CHANNEL ||
-      ''
-    if (!channel) {
+    const channels = resolveDigestChannels()
+    if (channels.length === 0) {
       return NextResponse.json({ ok: false, error: 'No Slack channel configured' }, { status: 400 })
     }
 
@@ -56,19 +67,67 @@ export async function GET(request: NextRequest) {
     )
 
     const events = r.rows
-    if (events.length === 0) {
-      await sendSlackMessage({
-        channel,
-        text: window === 'morning' ? 'No ANC events scheduled for today.' : 'No ANC events today — nothing to recap.',
-      })
-      return NextResponse.json({ ok: true, window, events_posted: 0 })
+    const baseUrl = (process.env.NEXT_PUBLIC_URL || 'https://services.ancsports.net').replace(/\/+$/, '')
+    const dashboardUrl = `${baseUrl}/events`
+
+    async function fanOut(body: { text: string; blocks?: any[] }) {
+      const results = await Promise.all(channels.map((ch) => sendSlackMessage({ ...body, channel: ch })))
+      return results.filter(Boolean).length
     }
+
+    if (events.length === 0) {
+      const text = window === 'morning'
+        ? `:sunrise: *No ANC events scheduled today* — enjoy the quiet.\n<${dashboardUrl}|Open dashboard>`
+        : `:crescent_moon: *No ANC events today* — nothing to recap.\n<${dashboardUrl}|Open dashboard>`
+      const delivered = await fanOut({
+        text: window === 'morning' ? 'No ANC events scheduled for today.' : 'No ANC events today — nothing to recap.',
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+      })
+      return NextResponse.json({ ok: true, window, events_posted: 0, channels: channels.length, delivered })
+    }
+
+    // Summary counters for the header pill row — "at a glance" for Joe.
+    const assignedCount = events.filter((e: any) => (e.assigned_count || 0) > 0).length
+    const unassignedCount = events.length - assignedCount
+    const checkedInCount = events.filter((e: any) => e.has_check_in).length
+    const gameReadyCount = events.filter((e: any) => e.has_game_ready).length
+    const postGameCount = events.filter((e: any) => e.has_post_game).length
+
+    // Morning: unassigned risk first, then by start time. Evening: sort
+    // missing-post-game first so leadership sees the close-out gap instantly.
+    const sorted = [...events].sort((a: any, b: any) => {
+      if (window === 'morning') {
+        const au = (a.assigned_count || 0) === 0 ? 0 : 1
+        const bu = (b.assigned_count || 0) === 0 ? 0 : 1
+        if (au !== bu) return au - bu
+      } else {
+        const ap = a.has_post_game ? 1 : 0
+        const bp = b.has_post_game ? 1 : 0
+        if (ap !== bp) return ap - bp
+      }
+      return String(a.start_et || '').localeCompare(String(b.start_et || ''))
+    })
 
     const title = window === 'morning'
       ? `:sunrise: *ANC Events — Today (${events.length})*`
       : `:crescent_moon: *ANC End-of-Day Recap — Today (${events.length})*`
 
-    const lines = events.map((e: any) => {
+    const summaryPills = window === 'morning'
+      ? [
+          unassignedCount > 0
+            ? `:red_circle: *${unassignedCount} unassigned*`
+            : ':white_check_mark: *all staffed*',
+          `:busts_in_silhouette: ${assignedCount} staffed`,
+        ]
+      : [
+          `:white_check_mark: ${checkedInCount}/${events.length} checked in`,
+          `:stadium: ${gameReadyCount}/${events.length} game-ready`,
+          `:clipboard: ${postGameCount}/${events.length} post-game`,
+        ]
+
+    const header = `${title}\n${summaryPills.join('  ·  ')}\n<${dashboardUrl}|Open dashboard →>`
+
+    const lines = sorted.map((e: any) => {
       const statusFlags: string[] = []
       if (e.has_check_in) statusFlags.push(':white_check_mark: check-in')
       if (e.has_game_ready) statusFlags.push(':stadium: ready')
@@ -79,13 +138,15 @@ export async function GET(request: NextRequest) {
       if (window === 'evening' && !e.has_post_game) missing.push('post-game')
       const techs = e.techs ? `_${e.techs}_` : e.assigned_count > 0 ? `${e.assigned_count} assigned` : ':red_circle: *unassigned*'
       const time = `${e.start_et}${e.end_et ? ` → ${e.end_et}` : ''}`
+      const eventLink = e.id ? `<${baseUrl}/workflow/${e.id}|open>` : ''
+      const eventLabel = eventLink ? `${e.summary} · ${eventLink}` : e.summary
 
       if (window === 'morning') {
-        return `• *${time}* — ${e.summary} @ ${e.venue_name || 'venue tbd'}\n   ${techs}`
+        return `• *${time}* — ${eventLabel} @ ${e.venue_name || 'venue tbd'}\n   ${techs}`
       }
       const statusText = statusFlags.length ? statusFlags.join(' · ') : ':hourglass_flowing_sand: pending'
       const missingText = missing.length ? `  _missing: ${missing.join(', ')}_` : ''
-      return `• *${e.summary}* @ ${e.venue_name || 'venue tbd'} — ${techs}\n   ${statusText}${missingText}`
+      return `• *${eventLabel}* @ ${e.venue_name || 'venue tbd'} — ${techs}\n   ${statusText}${missingText}`
     })
 
     // Slack blocks have a 3000-char text limit per section; chunk if needed.
@@ -101,16 +162,16 @@ export async function GET(request: NextRequest) {
     }
     if (current) chunks.push(current)
 
-    await sendSlackMessage({
-      channel,
+    const delivered = await fanOut({
       text: window === 'morning' ? 'ANC events today' : 'ANC events end-of-day recap',
       blocks: [
-        { type: 'section', text: { type: 'mrkdwn', text: title } },
+        { type: 'section', text: { type: 'mrkdwn', text: header } },
+        { type: 'divider' },
         ...chunks.map((c) => ({ type: 'section', text: { type: 'mrkdwn', text: c } })),
       ],
     })
 
-    return NextResponse.json({ ok: true, window, events_posted: events.length })
+    return NextResponse.json({ ok: true, window, events_posted: events.length, channels: channels.length, delivered })
   } catch (err) {
     console.error('[daily-events-brief] error:', err)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal' }, { status: 500 })
