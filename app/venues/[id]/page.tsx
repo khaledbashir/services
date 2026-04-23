@@ -150,9 +150,13 @@ export default function VenueDetailPage() {
   const [newDistEmail, setNewDistEmail] = useState('')
   const [savingDist, setSavingDist] = useState(false)
   const [savingFeed, setSavingFeed] = useState(false)
-  const [notesDraft, setNotesDraft] = useState<string>('')
-  const [savingNotes, setSavingNotes] = useState(false)
-  const [notesSavedAt, setNotesSavedAt] = useState<number | null>(null)
+  const [noteDraft, setNoteDraft] = useState<string>('')
+  const [postingNote, setPostingNote] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const [notesFeed, setNotesFeed] = useState<Array<{ id: string; body: string; created_at: string; author_id: string | null; author_name: string }>>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [viewerId, setViewerId] = useState<string | null>(null)
+  const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [linkedStaff, setLinkedStaff] = useState<LinkedStaff[]>([])
   const [linkedClients, setLinkedClients] = useState<LinkedClient[]>([])
   const [allStaff, setAllStaff] = useState<AllStaff[]>([])
@@ -226,7 +230,19 @@ export default function VenueDetailPage() {
           setCreative(data.creative || { designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
-          setNotesDraft(data.venue.notes || '')
+          // Load who the viewer is so we can scope the delete affordance.
+          if (typeof window !== 'undefined') {
+            setViewerId(localStorage.getItem('userId'))
+            setViewerRole(localStorage.getItem('userRole'))
+          }
+          // Load the venue note feed (best-effort, non-blocking for page render).
+          setNotesLoading(true)
+          fetch(`/api/venues/${venueId}/notes`).then(async r => {
+            if (r.ok) {
+              const d = await r.json()
+              setNotesFeed(d.notes || [])
+            }
+          }).catch(() => {}).finally(() => setNotesLoading(false))
 
           // Fetch briefing
           fetch(`/api/venues/${venueId}/briefing`).then(r => {
@@ -1815,53 +1831,147 @@ export default function VenueDetailPage() {
 
             {/* Right column */}
             <div className="space-y-6">
-              {/* Venue Notes */}
+              {/* Venue Notes — Facebook-wall style feed */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-900">Notes</h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">Internal notes about this venue — access instructions, contact quirks, site-specific gotchas. Visible to staff.</p>
+                <h3 className="text-sm font-semibold text-zinc-900">Notes</h3>
+                <p className="text-xs text-zinc-500 mt-0.5 mb-4">Internal log — access quirks, after-hours contacts, anything site-specific. Newest on top.</p>
+
+                {/* Composer */}
+                <div className="flex gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-[#0A52EF] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                    {(typeof window !== 'undefined' ? (localStorage.getItem('userName') || 'You') : 'You').trim().charAt(0).toUpperCase()}
                   </div>
-                  {notesSavedAt && Date.now() - notesSavedAt < 3000 && (
-                    <span className="text-xs text-emerald-600 font-medium shrink-0 ml-3">Saved</span>
-                  )}
-                </div>
-                <textarea
-                  value={notesDraft}
-                  onChange={(e) => setNotesDraft(e.target.value)}
-                  rows={6}
-                  placeholder="e.g. Gate 4 access after 5pm only. Reception closes at 6pm — use the loading-dock phone."
-                  className="w-full p-3 border border-[#E8E8E8] rounded text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-y"
-                />
-                <div className="flex items-center justify-end gap-3 mt-3">
-                  {notesDraft !== (venue.notes || '') && (
-                    <span className="text-xs text-zinc-500">Unsaved changes</span>
-                  )}
-                  <button
-                    onClick={async () => {
-                      setSavingNotes(true)
-                      try {
-                        const next = notesDraft.trim() ? notesDraft : null
-                        const res = await fetch(`/api/venues/${venueId}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ notes: next }),
-                        })
-                        if (res.ok) {
-                          const data = await res.json()
-                          setVenue(data.venue)
-                          setNotesDraft(data.venue.notes || '')
-                          setNotesSavedAt(Date.now())
+                  <div className="flex-1">
+                    <textarea
+                      value={noteDraft}
+                      onChange={(e) => { setNoteDraft(e.target.value); if (noteError) setNoteError(null) }}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && noteDraft.trim() && !postingNote) {
+                          (document.activeElement as HTMLElement | null)?.blur()
+                          ;(async () => {
+                            setPostingNote(true)
+                            setNoteError(null)
+                            try {
+                              const res = await fetch(`/api/venues/${venueId}/notes`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ body: noteDraft }),
+                              })
+                              if (res.ok) {
+                                const d = await res.json()
+                                setNotesFeed([d.note, ...notesFeed])
+                                setNoteDraft('')
+                              } else {
+                                const err = await res.json().catch(() => null)
+                                setNoteError(err?.error || 'Failed to post note')
+                              }
+                            } catch {
+                              setNoteError('Failed to post note')
+                            } finally {
+                              setPostingNote(false)
+                            }
+                          })()
                         }
-                      } finally {
-                        setSavingNotes(false)
-                      }
-                    }}
-                    disabled={savingNotes || notesDraft === (venue.notes || '')}
-                    className="px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50"
-                  >
-                    {savingNotes ? 'Saving...' : 'Save Notes'}
-                  </button>
+                      }}
+                      rows={3}
+                      placeholder="Write a note… Cmd+Enter to post."
+                      className="w-full p-3 border border-[#E8E8E8] rounded text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-y"
+                    />
+                    <div className="flex items-center justify-between mt-2">
+                      {noteError ? (
+                        <span className="text-xs text-red-600">{noteError}</span>
+                      ) : (
+                        <span className="text-xs text-zinc-400">Cmd/Ctrl + Enter to post</span>
+                      )}
+                      <button
+                        onClick={async () => {
+                          if (!noteDraft.trim() || postingNote) return
+                          setPostingNote(true)
+                          setNoteError(null)
+                          try {
+                            const res = await fetch(`/api/venues/${venueId}/notes`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ body: noteDraft }),
+                            })
+                            if (res.ok) {
+                              const d = await res.json()
+                              setNotesFeed([d.note, ...notesFeed])
+                              setNoteDraft('')
+                            } else {
+                              const err = await res.json().catch(() => null)
+                              setNoteError(err?.error || 'Failed to post note')
+                            }
+                          } catch {
+                            setNoteError('Failed to post note')
+                          } finally {
+                            setPostingNote(false)
+                          }
+                        }}
+                        disabled={postingNote || !noteDraft.trim()}
+                        className="px-3 py-1.5 bg-[#0A52EF] text-white text-xs rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50"
+                      >
+                        {postingNote ? 'Posting…' : 'Post'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feed */}
+                <div className="space-y-3 border-t border-zinc-100 pt-4">
+                  {notesLoading && notesFeed.length === 0 && (
+                    <p className="text-xs text-zinc-400 text-center py-4">Loading notes…</p>
+                  )}
+                  {!notesLoading && notesFeed.length === 0 && (
+                    <p className="text-xs text-zinc-400 text-center py-4">No notes yet. Post the first one above.</p>
+                  )}
+                  {notesFeed.map((n) => {
+                    const canDelete =
+                      (viewerId && n.author_id === viewerId) ||
+                      (viewerRole && ['admin', 'tech_support', 'manager'].includes(viewerRole))
+                    const initial = (n.author_name || '?').trim().charAt(0).toUpperCase()
+                    const when = (() => {
+                      const then = new Date(n.created_at).getTime()
+                      const diff = Date.now() - then
+                      const mins = Math.floor(diff / 60000)
+                      if (mins < 1) return 'just now'
+                      if (mins < 60) return `${mins}m ago`
+                      const hrs = Math.floor(mins / 60)
+                      if (hrs < 24) return `${hrs}h ago`
+                      const days = Math.floor(hrs / 24)
+                      if (days < 7) return `${days}d ago`
+                      return new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    })()
+                    return (
+                      <div key={n.id} className="flex gap-3 group">
+                        <div className="w-8 h-8 rounded-full bg-zinc-200 text-zinc-700 text-xs font-semibold flex items-center justify-center shrink-0">
+                          {initial}
+                        </div>
+                        <div className="flex-1 bg-zinc-50 rounded-lg px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-baseline gap-2 min-w-0">
+                              <span className="text-sm font-semibold text-zinc-900 truncate">{n.author_name}</span>
+                              <span className="text-xs text-zinc-400 shrink-0">{when}</span>
+                            </div>
+                            {canDelete && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm('Delete this note?')) return
+                                  const res = await fetch(`/api/venues/${venueId}/notes/${n.id}`, { method: 'DELETE' })
+                                  if (res.ok) setNotesFeed(notesFeed.filter(x => x.id !== n.id))
+                                }}
+                                className="text-xs text-zinc-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                title="Delete"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-sm text-zinc-800 mt-0.5 whitespace-pre-wrap break-words">{n.body}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

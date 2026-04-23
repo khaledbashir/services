@@ -80,6 +80,14 @@ async function runMigrations() {
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_synced_at TIMESTAMP`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS last_feed_sync_status TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS notes TEXT`)
+    await client.query(`CREATE TABLE IF NOT EXISTS venue_notes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      author_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_notes_venue ON venue_notes(venue_id, created_at DESC)`)
     await client.query(`CREATE TABLE IF NOT EXISTS shift_templates (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
