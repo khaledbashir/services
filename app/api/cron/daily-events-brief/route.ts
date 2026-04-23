@@ -93,6 +93,19 @@ export async function GET(request: NextRequest) {
     const gameReadyCount = events.filter((e: any) => e.has_game_ready).length
     const postGameCount = events.filter((e: any) => e.has_post_game).length
 
+    // Parse "HH:MM AM/PM" (or "TBD") to minutes-since-midnight for chronological
+    // sort within a group. String compare on "01:10 PM" vs "10:00 AM" sorts
+    // wrong alphabetically — "0" < "1" so afternoon beats morning. TBD sinks
+    // to the bottom of the group.
+    const toMinutes = (v: string | null | undefined): number => {
+      if (!v || v === 'TBD') return Number.MAX_SAFE_INTEGER
+      const m = String(v).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+      if (!m) return Number.MAX_SAFE_INTEGER
+      let h = parseInt(m[1], 10) % 12
+      if (m[3].toUpperCase() === 'PM') h += 12
+      return h * 60 + parseInt(m[2], 10)
+    }
+
     // Morning: unassigned risk first, then by start time. Evening: sort
     // missing-post-game first so leadership sees the close-out gap instantly.
     const sorted = [...events].sort((a: any, b: any) => {
@@ -105,7 +118,7 @@ export async function GET(request: NextRequest) {
         const bp = b.has_post_game ? 1 : 0
         if (ap !== bp) return ap - bp
       }
-      return String(a.start_et || '').localeCompare(String(b.start_et || ''))
+      return toMinutes(a.start_et) - toMinutes(b.start_et)
     })
 
     const title = window === 'morning'
