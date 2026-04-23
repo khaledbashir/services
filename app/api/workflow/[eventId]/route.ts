@@ -342,10 +342,28 @@ export async function POST(
     const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted
     const dashboardUrl = `https://abc-anc-services.izcgmb.easypanel.host/workflow/${eventId}`
 
+    // Post-game submissions: surface whether an incident was flagged so ops
+    // can glance at the Slack feed and know if anything needs a follow-up.
+    // Joe's 2026-04-23 ask: "Incident Reported - Yes 🚨 / No ✅".
+    const incidentsRaw = dbType === 'post_game_report' ? String(data?.incidents ?? '').trim() : ''
+    const hasIncident = incidentsRaw.length > 0 && incidentsRaw.toLowerCase() !== 'none' && incidentsRaw.toLowerCase() !== 'n/a'
+    const incidentExcerpt = incidentsRaw.length > 240 ? `${incidentsRaw.slice(0, 240)}…` : incidentsRaw
+
     const buildBlocks = () => {
       const b: any[] = [
-        { type: 'section', text: { type: 'mrkdwn', text: `${wf.emoji} *Workflow: ${wf.label} completed*\n*${eventName}* @ ${venueName}\nBy: ${staffName}` } },
+        { type: 'section', text: { type: 'mrkdwn', text: `${wf.emoji} *Workflow: ${wf.label} completed*\n*${eventName}* @ ${venueName}\nBy: ${staffName}\n\n<${dashboardUrl}|View Workflow>` } },
       ]
+      if (dbType === 'post_game_report') {
+        b.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: hasIncident
+              ? `:rotating_light: *Incident Reported — Yes*\n>${incidentExcerpt.replace(/\n/g, '\n>')}`
+              : ':white_check_mark: *Incident Reported — No*',
+          },
+        })
+      }
       if (allDone) {
         b.push({ type: 'section', text: { type: 'mrkdwn', text: ':tada: *All workflow steps complete for this event*' } })
       }

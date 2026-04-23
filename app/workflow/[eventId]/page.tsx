@@ -45,6 +45,7 @@ export default function WorkflowPage() {
   const [postGameEditWindowEndsAt, setPostGameEditWindowEndsAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [loadError, setLoadError] = useState<'forbidden' | 'not_found' | 'generic' | null>(null)
   const [gameReadyData, setGameReadyData] = useState({
     equipment_check: false,
     crew_ready: false,
@@ -56,29 +57,48 @@ export default function WorkflowPage() {
     const fetchEvent = async () => {
       try {
         const res = await fetch(`/api/workflow/${eventId}`)
-        if (res.ok) {
-          const data = await res.json()
-          setEvent(data.event)
-          setWorkflow(data.workflow)
-          setAssignedTechs(data.assignedTechs || [])
-          setAllStaff(data.allStaff || [])
-          setViewer(data.viewer || null)
-          setPostGameEditable(data.postGameEditable !== false)
-          setPostGameEditWindowEndsAt(data.postGameEditWindowEndsAt || null)
-          if (data.viewer?.role === 'technician' && data.viewer?.userId) {
-            setSelectedTech(data.viewer.userId)
-          } else if (data.assignedTechs.length > 0) {
-            setSelectedTech(data.assignedTechs[0].id)
-          } else if (data.allStaff.length > 0) {
-            setSelectedTech(data.allStaff[0].id)
-          }
-          setPostGameData({
-            notes: data.latestPostGameData?.notes || '',
-            incidents: data.latestPostGameData?.incidents || '',
-          })
+        if (res.status === 401) {
+          // Not signed in — bounce to login and come back here after.
+          // Slack deep links are the main entry point here; most users don't
+          // have a session in the device/browser where Slack opened the link.
+          const redirect = encodeURIComponent(`/workflow/${eventId}`)
+          window.location.href = `/login?redirect=${redirect}`
+          return
         }
+        if (res.status === 403) {
+          setLoadError('forbidden')
+          return
+        }
+        if (res.status === 404) {
+          setLoadError('not_found')
+          return
+        }
+        if (!res.ok) {
+          setLoadError('generic')
+          return
+        }
+        const data = await res.json()
+        setEvent(data.event)
+        setWorkflow(data.workflow)
+        setAssignedTechs(data.assignedTechs || [])
+        setAllStaff(data.allStaff || [])
+        setViewer(data.viewer || null)
+        setPostGameEditable(data.postGameEditable !== false)
+        setPostGameEditWindowEndsAt(data.postGameEditWindowEndsAt || null)
+        if (data.viewer?.role === 'technician' && data.viewer?.userId) {
+          setSelectedTech(data.viewer.userId)
+        } else if ((data.assignedTechs?.length || 0) > 0) {
+          setSelectedTech(data.assignedTechs[0].id)
+        } else if ((data.allStaff?.length || 0) > 0) {
+          setSelectedTech(data.allStaff[0].id)
+        }
+        setPostGameData({
+          notes: data.latestPostGameData?.notes || '',
+          incidents: data.latestPostGameData?.incidents || '',
+        })
       } catch (err) {
         console.error('Failed to fetch event:', err)
+        setLoadError('generic')
         showToast('Failed to load event', 'error')
       } finally {
         setLoading(false)
@@ -147,11 +167,28 @@ export default function WorkflowPage() {
   }
 
   if (!event) {
+    const errorHeadline =
+      loadError === 'forbidden'
+        ? 'You are not assigned to this event'
+        : loadError === 'not_found'
+        ? 'Event not found'
+        : loadError === 'generic'
+        ? 'Something went wrong loading this event'
+        : 'Event not found'
+    const errorDetail =
+      loadError === 'forbidden'
+        ? 'Ask your manager to add you to the assignment, then reopen the workflow link.'
+        : loadError === 'not_found'
+        ? 'This event may have been removed from the schedule. If you believe it still exists, notify ops.'
+        : loadError === 'generic'
+        ? 'Please try again in a moment. If this keeps happening, share the link with ops so they can investigate.'
+        : null
     return (
       <div className="min-h-screen bg-white">
         <div className="h-12 bg-[#0A52EF]"></div>
-        <div className="p-4 text-center py-12">
-          <p className="text-zinc-500">Event not found</p>
+        <div className="p-6 text-center py-12 max-w-md mx-auto">
+          <p className="text-zinc-900 font-semibold">{errorHeadline}</p>
+          {errorDetail && <p className="text-zinc-500 text-sm mt-2">{errorDetail}</p>}
         </div>
       </div>
     )

@@ -59,6 +59,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
+      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
       const sent = await sendSlackMessage({
         channel,
         text: `Reminder: ${row.full_name} — ${row.summary} at ${row.venue_name}`,
@@ -67,7 +68,11 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `👋 *Reminder for ${row.full_name}*\n\nYou're assigned to *${row.summary}* at *${row.venue_name}* tonight at *${row.start_time_et} ET*.\n\nPlease check in when you arrive on site.`,
+              // Inline mrkdwn link stays clickable for every reader — a Slack
+              // URL-button gets replaced by "selected by @user" for everyone
+              // else as soon as anyone clicks, which looked to Joe like the
+              // link was disappearing.
+              text: `👋 *Reminder for ${row.full_name}*\n\nYou're assigned to *${row.summary}* at *${row.venue_name}* tonight at *${row.start_time_et} ET*.\n\nPlease check in when you arrive on site.\n\n📋 <${workflowUrl}|Open Workflow>`,
             },
           },
           {
@@ -76,7 +81,7 @@ export async function GET() {
               {
                 type: 'button',
                 text: { type: 'plain_text', text: '📋 Open Workflow' },
-                url: `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`,
+                url: workflowUrl,
               },
             ],
           },
@@ -238,6 +243,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
+      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
       const sent = await sendSlackMessage({
         channel,
         text: `⏰ Game Ready check — ${row.full_name} at ${row.venue_name}`,
@@ -246,7 +252,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `⏰ *Game Ready check for ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET*.\n\nPlease submit your *Game Ready* confirmation (equipment check, crew ready, comms test).`,
+              text: `⏰ *Game Ready check for ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET*.\n\nPlease submit your *Game Ready* confirmation (equipment check, crew ready, comms test).\n\n✅ <${workflowUrl}|Submit Game Ready>`,
             },
           },
           {
@@ -255,7 +261,7 @@ export async function GET() {
               {
                 type: 'button',
                 text: { type: 'plain_text', text: '✅ Submit Game Ready' },
-                url: `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`,
+                url: workflowUrl,
               },
             ],
           },
@@ -306,6 +312,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
+      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
       const sent = await sendSlackMessage({
         channel,
         text: `📝 Post-Game report pending — ${row.full_name} at ${row.venue_name}`,
@@ -314,7 +321,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `📝 *Post-Game Ops Report needed from ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* ended at *${row.end_time_et} ET*.\n\nPlease submit the *Post-Game Ops Report* (notes + incidents) to close out the workflow.`,
+              text: `📝 *Post-Game Ops Report needed from ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* ended at *${row.end_time_et} ET*.\n\nPlease submit the *Post-Game Ops Report* (notes + incidents) to close out the workflow.\n\n📝 <${workflowUrl}|Submit Post-Game>`,
             },
           },
           {
@@ -323,7 +330,7 @@ export async function GET() {
               {
                 type: 'button',
                 text: { type: 'plain_text', text: '📝 Submit Post-Game' },
-                url: `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`,
+                url: workflowUrl,
               },
             ],
           },

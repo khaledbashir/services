@@ -1,7 +1,14 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+
+// Only honor same-origin redirects so `?redirect=` can't be used as an open-redirect vector.
+function safeRedirectPath(raw: string | null): string | null {
+  if (!raw) return null
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null
+  return raw
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -9,6 +16,8 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectParam = safeRedirectPath(searchParams?.get('redirect') || null)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -36,8 +45,8 @@ export default function LoginPage() {
         localStorage.setItem('userId', data.user.userId)
       }
 
-      const nextPath = data.user?.role === 'technician' ? '/my-events' : '/dashboard'
-      router.push(nextPath)
+      const defaultPath = data.user?.role === 'technician' ? '/my-events' : '/dashboard'
+      router.push(redirectParam || defaultPath)
     } catch (err) {
       setError('An error occurred')
     } finally {
