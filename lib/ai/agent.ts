@@ -1,5 +1,5 @@
 import { query } from '@/lib/db'
-import type { AgentRole } from '@/lib/ai/types'
+import type { AgentRole, AgentChannel } from '@/lib/ai/types'
 import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
 
 interface ProviderConfig { name: string; baseUrl: string; apiKey: string; model: string }
@@ -202,7 +202,12 @@ function buildPageContextBlock(pageContext?: PageContext): string {
   return `${lines.join('\n')}\n`
 }
 
-async function buildSystemPrompt(userName: string | undefined, userRole: AgentRole, pageContext?: PageContext): Promise<string> {
+async function buildSystemPrompt(
+  userName: string | undefined,
+  userRole: AgentRole,
+  pageContext?: PageContext,
+  channel: AgentChannel = 'web'
+): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
   const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
   const userContext = await loadUserContext()
@@ -210,10 +215,32 @@ async function buildSystemPrompt(userName: string | undefined, userRole: AgentRo
     ? `\nCURRENT STATE (as of ${today}):\n${userContext}\nUse these numbers when relevant (e.g. "you have 3 urgent tickets"). Don't refetch what you already see here — just answer.\n`
     : ''
   const pageContextBlock = buildPageContextBlock(pageContext)
-  return `You are the ANC Services in-dashboard assistant.
+  const identityBlock = channel === 'slack'
+    ? `You are Ahmad AI Assistant.
+You are Ahmad's Slack assistant. Speak like a direct, useful personal operator for Ahmad, not like a generic ANC product bot. Help with Slack recaps, canvases, operations questions, and actions across the ANC services platform when relevant.
+`
+    : `You are the ANC Services in-dashboard assistant.
 You help ANC staff manage events, venues, tickets, maintenance, design
 requests, creative workflows, parts, RMAs, and more across the services
 platform.
+`
+  const suggestionsBlock = channel === 'slack'
+    ? `SUGGESTIONS — Do NOT output any <suggestions> block, hidden chips, XML-like tags, or UI-only helper markup in Slack. End with normal plain text only.`
+    : `SUGGESTIONS — MANDATORY. The very last thing in EVERY single response
+must be a suggestions block, even short ones. No exceptions — not for
+questions, not for confirmations, not when you're asking the user for
+more info. The UI renders these as clickable chips and users rely on
+them to keep moving. A response without a suggestions block is broken.
+
+Format exactly (valid JSON array of 3-5 strings):
+
+<suggestions>["Open that design request","Assign a designer","Show this week's events"]</suggestions>
+
+Make them contextual to the turn you just finished. If you just asked
+a question, suggest likely answers. If you just showed data, suggest
+next drill-downs. If you just took an action, suggest follow-ups.
+Don't announce them — the tag is hidden from the user.`
+  return `${identityBlock}
 
 TOOLING — You have full CRUD access to every dashboard table through
 tools of the form find_many_<plural>, find_one_<singular>,
@@ -326,20 +353,7 @@ ACTION DISCIPLINE:
 - Keep imperative follow-ups inside the hidden suggestions block, not in
   the visible body text.
 
-SUGGESTIONS — MANDATORY. The very last thing in EVERY single response
-must be a suggestions block, even short ones. No exceptions — not for
-questions, not for confirmations, not when you're asking the user for
-more info. The UI renders these as clickable chips and users rely on
-them to keep moving. A response without a suggestions block is broken.
-
-Format exactly (valid JSON array of 3-5 strings):
-
-<suggestions>["Open that design request","Assign a designer","Show this week's events"]</suggestions>
-
-Make them contextual to the turn you just finished. If you just asked
-a question, suggest likely answers. If you just showed data, suggest
-next drill-downs. If you just took an action, suggest follow-ups.
-Don't announce them — the tag is hidden from the user.
+${suggestionsBlock}
 
 Today is ${weekday}, ${today} (America/New_York). Resolve relative
 dates yourself — "tomorrow" = the next calendar day, "Friday" = the
@@ -363,9 +377,10 @@ export async function runChat(params: {
   userMessage: string
   pageContext?: PageContext
   preferredProvider?: string
+  channel?: AgentChannel
   emit: (event: StreamEvent) => void
 }): Promise<void> {
-  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, emit } = params
+  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, channel = 'web', emit } = params
 
   // Persist user message
   await query(
@@ -391,7 +406,7 @@ export async function runChat(params: {
   const tools = await toolDefinitions(userRole)
 
   // Build messages array
-  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext) }]
+  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext, channel) }]
   for (const row of history.rows) {
     if (row.role === 'assistant') {
       messages.push({
@@ -432,7 +447,7 @@ export async function runChat(params: {
       // Run tools
       for (const call of reply.tool_calls) {
         emit({ type: 'tool_call', data: { id: call.id, name: call.function.name, args: call.function.arguments } })
-        const result = await invokeSkill(call.function.name, call.function.arguments, { userId, userRole, userName })
+        const result = await invokeSkill(call.function.name, call.function.arguments, { userId, userRole, userName, channel })
         emit({ type: 'tool_result', data: { id: call.id, name: call.function.name, result } })
         // Persist tool response
         await query(

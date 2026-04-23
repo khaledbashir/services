@@ -74,6 +74,13 @@ export function cleanSlackPrompt(text: string, botUserId?: string): string {
   return out.replace(/\s+/g, ' ').trim()
 }
 
+function cleanSlackReply(text: string): string {
+  return text
+    .replace(/<suggestions>[\s\S]*?<\/suggestions>/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 async function lookupUserLabel(userId: string, cache: Map<string, string>): Promise<string> {
   const hit = cache.get(userId)
   if (hit) return hit
@@ -205,8 +212,9 @@ export async function runSlackAssistantTurn(params: {
     userRole: params.caller.userRole,
     userName: params.caller.userName,
     userMessage,
+    channel: 'slack',
     emit,
   })
 
-  return finalText.trim() || 'I could not produce a response.'
+  return cleanSlackReply(finalText) || 'I could not produce a response.'
 }
