@@ -9,9 +9,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'week'
     const includeInactive = searchParams.get('include_inactive') === 'true'
+    const assignedToMe = searchParams.get('assigned_to_me') === 'true'
 
     const user = await getAuthUser(request)
-    const venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    let venueIds = user ? await getStaffVenueIds(user.userId, user.role) : null
+    // "My Venues": admins/managers can opt into the technician-style filter so
+    // they only see venues they're personally linked to. Technicians already
+    // see only their linked venues, so the param is a no-op for them.
+    if (assignedToMe && user) {
+      const mine = await query(
+        `SELECT venue_id FROM staff_venues WHERE staff_id = $1`,
+        [user.userId]
+      )
+      venueIds = mine.rows.map((r: any) => r.venue_id.toString())
+    }
     const vf = buildVenueFilterClause(venueIds, 'v.id', 1)
 
     let dateFilter: string

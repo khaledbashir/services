@@ -10,6 +10,7 @@ import { DropZone } from '@/components/drop-zone'
 import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
+import { formatDate as fmtDate, formatDateTime as fmtDateTime } from '@/lib/format-date'
 
 interface VenueDetail {
   id: string
@@ -36,6 +37,7 @@ interface VenueDetail {
   last_feed_synced_at: string | null
   last_feed_sync_status: string | null
   notes: string | null
+  content_guide: string | null
   primary_client_id?: string | null
   primary_client_name?: string | null
 }
@@ -208,6 +210,20 @@ export default function VenueDetailPage() {
   const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Manual event create (Stevie asked for this — some shows aren't listed online)
+  const [showManualEvent, setShowManualEvent] = useState(false)
+  const [manualEvent, setManualEvent] = useState({ summary: '', event_date: '', start_time: '', end_time: '', league: '' })
+  const [creatingManualEvent, setCreatingManualEvent] = useState(false)
+  const [manualEventError, setManualEventError] = useState<string | null>(null)
+  // Quick support-ticket create directly from the venue Tickets tab
+  const [showQuickTicket, setShowQuickTicket] = useState(false)
+  const [quickTicket, setQuickTicket] = useState({ title: '', description: '', priority: 'medium', category: 'general' })
+  const [creatingTicket, setCreatingTicket] = useState(false)
+  const [quickTicketError, setQuickTicketError] = useState<string | null>(null)
+  // Per-venue content creation guide (overrides the generic proposal-engine default)
+  const [editingGuide, setEditingGuide] = useState(false)
+  const [guideDraft, setGuideDraft] = useState('')
+  const [savingGuide, setSavingGuide] = useState(false)
   const router = useRouter()
   const params = useParams()
   const venueId = params?.id as string
@@ -391,6 +407,102 @@ export default function VenueDetailPage() {
         setLinkedStaff(data.linkedStaff || [])
       }
     } catch {}
+  }
+
+  const createManualEvent = async () => {
+    if (!manualEvent.summary.trim() || !manualEvent.event_date) {
+      setManualEventError('Event name and date are required')
+      return
+    }
+    setCreatingManualEvent(true)
+    setManualEventError(null)
+    try {
+      const res = await fetch('/api/events/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          venue_id: venueId,
+          summary: manualEvent.summary.trim(),
+          event_date: manualEvent.event_date,
+          start_time: manualEvent.start_time || null,
+          end_time: manualEvent.end_time || null,
+          league: manualEvent.league.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => null)
+        setManualEventError(d?.error || 'Unable to create event')
+        return
+      }
+      // Reload events so the new one shows up with proper formatting/assignment.
+      const venueRes = await fetch(`/api/venues/${venueId}`)
+      if (venueRes.ok) {
+        const vData = await venueRes.json()
+        setUpcomingEvents(vData.upcomingEvents || [])
+      }
+      setManualEvent({ summary: '', event_date: '', start_time: '', end_time: '', league: '' })
+      setShowManualEvent(false)
+    } catch {
+      setManualEventError('Unable to create event')
+    } finally {
+      setCreatingManualEvent(false)
+    }
+  }
+
+  const saveContentGuide = async () => {
+    setSavingGuide(true)
+    try {
+      const res = await fetch(`/api/venues/${venueId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_guide: guideDraft.trim() ? guideDraft : null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setVenue(data.venue)
+        setEditingGuide(false)
+      }
+    } finally {
+      setSavingGuide(false)
+    }
+  }
+
+  const createQuickTicket = async () => {
+    if (!quickTicket.title.trim()) {
+      setQuickTicketError('Title is required')
+      return
+    }
+    setCreatingTicket(true)
+    setQuickTicketError(null)
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          venue_id: venueId,
+          title: quickTicket.title.trim(),
+          description: quickTicket.description.trim() || undefined,
+          priority: quickTicket.priority,
+          category: quickTicket.category,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => null)
+        setQuickTicketError(d?.error || 'Unable to create ticket')
+        return
+      }
+      const ticketsRes = await fetch(`/api/tickets?venue_id=${venueId}`)
+      if (ticketsRes.ok) {
+        const t = await ticketsRes.json()
+        setVenueTickets(t.tickets || [])
+      }
+      setQuickTicket({ title: '', description: '', priority: 'medium', category: 'general' })
+      setShowQuickTicket(false)
+    } catch {
+      setQuickTicketError('Unable to create ticket')
+    } finally {
+      setCreatingTicket(false)
+    }
   }
 
   const linkedStaffIds = new Set(linkedStaff.map(s => s.staff_id?.toString()))
@@ -642,7 +754,19 @@ export default function VenueDetailPage() {
         {/* EVENTS TAB */}
         {activeTab === 'events' && (
           <div className="space-y-3">
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 flex-wrap">
+              {auth.isManager && (
+                <button
+                  type="button"
+                  onClick={() => { setShowManualEvent(v => !v); setManualEventError(null) }}
+                  className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-700 bg-white hover:border-zinc-300 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  {showManualEvent ? 'Cancel' : 'Add Event'}
+                </button>
+              )}
               <input
                 type="text"
                 value={discoveryHint}
@@ -733,6 +857,61 @@ export default function VenueDetailPage() {
                 </button>
               )}
             </div>
+          {showManualEvent && (
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-900">Add Event Manually</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Use this for shows we support that aren't posted online yet.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Event name *</label>
+                  <input type="text" value={manualEvent.summary}
+                    onChange={e => setManualEvent(prev => ({ ...prev, summary: e.target.value }))}
+                    placeholder="e.g., Private corporate reception"
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Date *</label>
+                  <input type="date" value={manualEvent.event_date}
+                    onChange={e => setManualEvent(prev => ({ ...prev, event_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">League (optional)</label>
+                  <input type="text" value={manualEvent.league}
+                    onChange={e => setManualEvent(prev => ({ ...prev, league: e.target.value }))}
+                    placeholder="e.g., NBA, concert, private"
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Start time</label>
+                  <input type="time" value={manualEvent.start_time}
+                    onChange={e => setManualEvent(prev => ({ ...prev, start_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">End time</label>
+                  <input type="time" value={manualEvent.end_time}
+                    onChange={e => setManualEvent(prev => ({ ...prev, end_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                </div>
+              </div>
+              {manualEventError && <p className="mt-3 text-xs text-red-600">{manualEventError}</p>}
+              <div className="mt-4 flex gap-2">
+                <button onClick={createManualEvent} disabled={creatingManualEvent}
+                  className="px-4 py-2 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] disabled:opacity-50 transition-colors">
+                  {creatingManualEvent ? 'Creating...' : 'Create Event'}
+                </button>
+                <button onClick={() => { setShowManualEvent(false); setManualEventError(null) }} disabled={creatingManualEvent}
+                  className="px-4 py-2 text-xs font-medium text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
             {discoverError && (
               <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -1024,12 +1203,12 @@ export default function VenueDetailPage() {
         {/* STAFF TAB */}
         {activeTab === 'staff' && (
           <div className="space-y-6">
-            {/* Linked Staff — Admin only */}
-            {auth.isAdmin && (
+            {/* Linked Staff — managers + admins can maintain the venue's crew */}
+            {auth.isManager && (
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
                 <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-zinc-900">Linked Staff</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">Staff members permanently linked to this venue. Technicians will only see data for their linked venues.</p>
+                  <h3 className="text-sm font-semibold text-zinc-900">Venue Staff</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">People permanently linked to this venue. They show up under "My Venues" and keep access even if they aren't assigned to an event yet.</p>
                 </div>
                 {/* Current linked staff chips */}
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -1123,7 +1302,79 @@ export default function VenueDetailPage() {
 
         {/* TICKETS TAB */}
         {activeTab === 'tickets' && (
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => { setShowQuickTicket(v => !v); setQuickTicketError(null) }}
+                className="px-3 py-1.5 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] transition-colors inline-flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                {showQuickTicket ? 'Cancel' : 'New Support Ticket'}
+              </button>
+            </div>
+            {showQuickTicket && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-5">
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold text-zinc-900">New Support Ticket</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Filed against {venue.name}. Routes through the same assignment and SLA rules as the main Tickets page.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Title *</label>
+                    <input type="text" value={quickTicket.title}
+                      onChange={e => setQuickTicket(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Brief description of the issue"
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Priority</label>
+                    <select value={quickTicket.priority}
+                      onChange={e => setQuickTicket(prev => ({ ...prev, priority: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30">
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Category</label>
+                    <select value={quickTicket.category}
+                      onChange={e => setQuickTicket(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30">
+                      <option value="hardware">Hardware</option>
+                      <option value="software">Software</option>
+                      <option value="content">Content</option>
+                      <option value="operational">Operational</option>
+                      <option value="general">General</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-zinc-600 mb-1">Description</label>
+                    <textarea value={quickTicket.description}
+                      onChange={e => setQuickTicket(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Provide details..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-none" />
+                  </div>
+                </div>
+                {quickTicketError && <p className="mt-3 text-xs text-red-600">{quickTicketError}</p>}
+                <div className="mt-4 flex gap-2">
+                  <button onClick={createQuickTicket} disabled={creatingTicket}
+                    className="px-4 py-2 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] disabled:opacity-50 transition-colors">
+                    {creatingTicket ? 'Creating...' : 'Create Ticket'}
+                  </button>
+                  <button onClick={() => { setShowQuickTicket(false); setQuickTicketError(null) }} disabled={creatingTicket}
+                    className="px-4 py-2 text-xs font-medium text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
             {venueTickets.length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-sm text-zinc-500">No tickets for this venue</p>
@@ -1156,12 +1407,59 @@ export default function VenueDetailPage() {
                 </tbody>
               </table>
             )}
+            </div>
           </div>
         )}
 
         {/* SPECS TAB */}
         {activeTab === 'specs' && (
           <div className="space-y-6">
+            {/* Content Creation Guide — overrides the generic proposal-engine default */}
+            <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
+              <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-900">Content Creation Guide</h3>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Venue-specific creative specs. Overrides the default guide from the proposal engine.</p>
+                </div>
+                {auth.isManager && !editingGuide && (
+                  <button
+                    onClick={() => { setGuideDraft(venue.content_guide || ''); setEditingGuide(true) }}
+                    className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-700 hover:border-zinc-300 transition-colors"
+                  >
+                    {venue.content_guide ? 'Edit Guide' : '+ Add Guide'}
+                  </button>
+                )}
+              </div>
+              <div className="p-5">
+                {editingGuide ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={guideDraft}
+                      onChange={e => setGuideDraft(e.target.value)}
+                      rows={12}
+                      placeholder={`Paste or write this venue's content creation guide.\n\nExample:\n• Resolutions: Center-hung 3840×2160, Corners 1920×1080\n• Frame rate: 60fps\n• File formats: MOV (H.264) or MP4\n• Aspect ratio: 16:9\n• Duration: 15 or 30 seconds\n• Delivery: upload to share link below`}
+                      className="w-full px-3 py-2 border border-[#E8E8E8] rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-y"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={saveContentGuide} disabled={savingGuide}
+                        className="px-4 py-2 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0941bf] disabled:opacity-50 transition-colors">
+                        {savingGuide ? 'Saving...' : 'Save Guide'}
+                      </button>
+                      <button onClick={() => setEditingGuide(false)} disabled={savingGuide}
+                        className="px-4 py-2 text-xs font-medium text-zinc-600 border border-[#E8E8E8] rounded hover:border-zinc-300 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : venue.content_guide ? (
+                  <pre className="text-[13px] text-zinc-700 whitespace-pre-wrap font-sans leading-relaxed">{venue.content_guide}</pre>
+                ) : (
+                  <p className="text-xs text-zinc-400">
+                    No venue-specific guide yet. {auth.isManager ? 'Click "Add Guide" to override the default proposal-engine guide with venue-specific specs.' : 'Ask a manager to add one.'}
+                  </p>
+                )}
+              </div>
+            </div>
             {screens.length === 0 ? (
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-12 text-center">
                 <p className="text-zinc-500 text-sm">No display specifications on file</p>
@@ -1454,9 +1752,9 @@ export default function VenueDetailPage() {
                               <Link href={`/designs/${d.id}`} className="text-[#0A52EF] hover:underline">{d.job_title}</Link>
                             </td>
                             <td className="px-5 py-3 text-zinc-600">{d.status.replace(/_/g, ' ')}</td>
-                            <td className="px-5 py-3 text-zinc-600">{d.due_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(d.due_date)}</td>
                             <td className="px-5 py-3 text-zinc-600">{d.hours_spent ?? 0} / {d.hours_estimated || '—'}</td>
-                            <td className="px-5 py-3 text-zinc-500">{d.created_at}</td>
+                            <td className="px-5 py-3 text-zinc-500">{fmtDate(d.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1488,8 +1786,8 @@ export default function VenueDetailPage() {
                             </td>
                             <td className="px-5 py-3 text-zinc-600">{[d.league, d.team_name].filter(Boolean).join(' · ') || '—'}</td>
                             <td className="px-5 py-3 text-zinc-600">{d.status.replace(/_/g, ' ')}</td>
-                            <td className="px-5 py-3 text-zinc-600">{d.due_date || '—'}</td>
-                            <td className="px-5 py-3 text-zinc-500">{d.created_at}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(d.due_date)}</td>
+                            <td className="px-5 py-3 text-zinc-500">{fmtDate(d.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1521,8 +1819,8 @@ export default function VenueDetailPage() {
                             </td>
                             <td className="px-5 py-3 text-zinc-600">{p.client_name || '—'}</td>
                             <td className="px-5 py-3 text-zinc-600">{p.status.replace(/_/g, ' ')}</td>
-                            <td className="px-5 py-3 text-zinc-600">{p.ship_date || '—'}</td>
-                            <td className="px-5 py-3 text-zinc-600">{p.arrival_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(p.ship_date)}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(p.arrival_date)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1554,8 +1852,8 @@ export default function VenueDetailPage() {
                             </td>
                             <td className="px-5 py-3 text-zinc-600">{c.company_name || '—'}</td>
                             <td className="px-5 py-3 text-zinc-600">{c.status.replace(/_/g, ' ')}</td>
-                            <td className="px-5 py-3 text-zinc-600">{c.launch_date || '—'}</td>
-                            <td className="px-5 py-3 text-zinc-600">{c.end_date || '—'}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(c.launch_date)}</td>
+                            <td className="px-5 py-3 text-zinc-600">{fmtDate(c.end_date)}</td>
                           </tr>
                         ))}
                       </tbody>

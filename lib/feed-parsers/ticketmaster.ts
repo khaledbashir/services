@@ -140,6 +140,29 @@ async function fetchTicketmasterJson<T>(pathname: string, searchParams: URLSearc
   throw new Error(`Ticketmaster API request failed: ${lastStatus}`)
 }
 
+/**
+ * Ticketmaster venue IDs are embedded in their venue URLs, e.g.
+ * `https://www.ticketmaster.com/venue/KovZpZA7AAEA`. When a manager pastes
+ * one of those directly, skip the fragile keyword-based venue lookup
+ * (which fails for renamed venues like "Rocket Arena", formerly "Rocket
+ * Mortgage FieldHouse") and use the ID authoritatively.
+ */
+function extractTicketmasterVenueIdFromUrl(feedUrl?: string): string | null {
+  if (!feedUrl) return null
+  try {
+    const url = new URL(feedUrl)
+    if (!/ticketmaster\.(com|ca)$/i.test(url.hostname.replace(/^www\./, ''))) return null
+    // `/venue/KovZ…` — venue IDs are alphanumeric, typically 10-16 chars.
+    const venueMatch = url.pathname.match(/\/venue\/([A-Za-z0-9]{6,})/i)
+    if (venueMatch) return venueMatch[1]
+    const qVenueId = url.searchParams.get('venueId') || url.searchParams.get('venue_id')
+    if (qVenueId && /^[A-Za-z0-9]{6,}$/.test(qVenueId)) return qVenueId
+    return null
+  } catch {
+    return null
+  }
+}
+
 async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<TicketmasterDiscoveryVenue | null> {
   const { city, stateCode } = parseCityState(params.venueAddress)
   const cacheKey = `${params.venueName.toLowerCase()}|${city || ''}|${stateCode || ''}`
@@ -195,8 +218,15 @@ async function lookupTicketmasterVenue(params: ParseFeedParams): Promise<Ticketm
 async function ticketmasterViaOfficialApi(params: ParseFeedParams): Promise<{ events: FeedEvent[]; resolvedVenueId: boolean }> {
   if (!TICKETMASTER_API_KEY) return { events: [], resolvedVenueId: false }
 
-  const venue = await lookupTicketmasterVenue(params)
-  const venueId = venue?.id || null
+  // Prefer a TM venue ID embedded in the feed URL over name-based lookup —
+  // renamed venues (e.g. "Rocket Arena" née "Rocket Mortgage FieldHouse")
+  // can drift out of the keyword-search match threshold.
+  const urlVenueId = extractTicketmasterVenueIdFromUrl(params.feedUrl)
+  let venueId: string | null = urlVenueId
+  if (!venueId) {
+    const venue = await lookupTicketmasterVenue(params)
+    venueId = venue?.id || null
+  }
 
   const search = new URLSearchParams({
     apikey: TICKETMASTER_API_KEY,

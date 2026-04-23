@@ -45,6 +45,7 @@ export default function VenuesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
+  const [myVenuesOnly, setMyVenuesOnly] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -52,7 +53,10 @@ export default function VenuesPage() {
     const fetchVenues = async () => {
       try {
         setLoading(true)
-        const res = await fetch(`/api/venues?period=${period}${showInactive ? '&include_inactive=true' : ''}`)
+        const params = new URLSearchParams({ period })
+        if (showInactive) params.set('include_inactive', 'true')
+        if (myVenuesOnly) params.set('assigned_to_me', 'true')
+        const res = await fetch(`/api/venues?${params.toString()}`)
         if (res.ok) {
           const data = await res.json()
           setVenues(data.venues || [])
@@ -64,7 +68,7 @@ export default function VenuesPage() {
       }
     }
     fetchVenues()
-  }, [period, showInactive])
+  }, [period, showInactive, myVenuesOnly])
 
   const periodLabel = period === 'today' ? 'today' : period === 'week' ? 'this week' : 'this month'
 
@@ -118,8 +122,21 @@ export default function VenuesPage() {
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] text-zinc-900 placeholder:text-zinc-400" />
           </div>
 
-          {/* Type filter chips */}
-          <div className="flex gap-1.5">
+          {/* Scope + type filter chips */}
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => setMyVenuesOnly(!myVenuesOnly)}
+              title="Show only venues you are linked to"
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                myVenuesOnly
+                  ? 'bg-[#0A52EF] text-white shadow-sm'
+                  : 'bg-white border border-zinc-200 text-zinc-600 hover:border-zinc-400'
+              }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              My Venues
+            </button>
+            <span className="w-px bg-zinc-200 self-stretch mx-0.5"></span>
             {[
               { key: 'all', label: 'All' },
               { key: 'sports', label: 'Sports' },
@@ -224,8 +241,20 @@ export default function VenuesPage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
-            <p className="text-sm font-medium text-zinc-500">{venues.length === 0 ? 'No venues yet' : 'No venues match your filter'}</p>
-            <p className="text-xs text-zinc-400 mt-1">{venues.length === 0 ? 'Click "+ Add Venue" to create your first one.' : 'Try adjusting your search or filter.'}</p>
+            <p className="text-sm font-medium text-zinc-500">
+              {myVenuesOnly && venues.length === 0
+                ? 'No venues linked to you yet'
+                : venues.length === 0
+                ? 'No venues yet'
+                : 'No venues match your filter'}
+            </p>
+            <p className="text-xs text-zinc-400 mt-1">
+              {myVenuesOnly && venues.length === 0
+                ? 'Ask an admin to link you on a venue\'s Staff tab, or clear "My Venues" to see everything.'
+                : venues.length === 0
+                ? 'Click "+ Add Venue" to create your first one.'
+                : 'Try adjusting your search or filter.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

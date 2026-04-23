@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { formatDateTime } from '@/lib/format-date'
 
 interface Walk {
   id: string
@@ -233,7 +234,7 @@ export default function WalkthroughsPage() {
                   <tbody>
                     {filtered.map(w => (
                       <tr key={w.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                        <td className="px-5 py-3 text-zinc-600 text-xs font-mono">{w.log_date}{w.log_time ? ` ${w.log_time}` : ''}</td>
+                        <td className="px-5 py-3 text-zinc-600 text-xs whitespace-nowrap">{formatDateTime(w.log_date, w.log_time)}</td>
                         <td className="px-5 py-3 font-medium text-zinc-900">{w.venue_name}</td>
                         <td className="px-5 py-3 text-zinc-600">{w.technician_name || '—'}</td>
                         <td className="px-5 py-3 text-zinc-600 max-w-md truncate">{w.locations_visited || '—'}</td>

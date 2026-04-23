@@ -30,7 +30,12 @@ function loadProviders(): ProviderConfig[] {
 const PROVIDERS = loadProviders()
 let cursor = 0
 function pickProvider(): ProviderConfig {
-  if (PROVIDERS.length === 0) throw new Error('No AI providers configured')
+  if (PROVIDERS.length === 0) {
+    // This fires when AI_API_KEY / AI_PROVIDERS_JSON aren't set on the server.
+    // The message bubbles up directly to the chat panel, so it's worded for
+    // the end user rather than for a developer reading logs.
+    throw new Error('AI assistant is not configured yet. An admin needs to add API credentials on the server before the chat can run. Ping #services-dashboard if this persists.')
+  }
   const p = PROVIDERS[cursor % PROVIDERS.length]
   cursor++
   return p

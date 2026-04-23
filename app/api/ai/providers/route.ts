@@ -12,8 +12,13 @@ function loadProviders(): Array<{ name: string; model: string }> {
       if (valid.length > 0) return valid.map(p => ({ name: p.name, model: p.model }))
     } catch {}
   }
-  const model = process.env.AI_MODEL || 'default'
-  return [{ name: 'default', model }]
+  // Only surface a provider to the UI when the backend actually has creds.
+  // Otherwise the dropdown offers a phantom option and the user hits a
+  // "No AI providers configured" error on send.
+  if (process.env.AI_API_KEY) {
+    return [{ name: 'default', model: process.env.AI_MODEL || 'default' }]
+  }
+  return []
 }
 
 export async function GET(request: NextRequest) {

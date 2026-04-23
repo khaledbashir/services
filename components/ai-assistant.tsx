@@ -668,6 +668,14 @@ export function AiAssistant() {
                 </div>
                 <div className="text-zinc-800 font-semibold text-base mb-1">ANC Assistant</div>
                 <div className="text-zinc-400 text-sm mb-6">Ask, search, or make anything happen.</div>
+                {providers.length === 0 && (
+                  <div className="w-full max-w-xs mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 mb-0.5">Not configured</div>
+                    <div className="text-xs text-amber-900 leading-snug">
+                      The AI assistant isn't wired to a model on this server yet. An admin needs to add <code className="font-mono text-[10px] bg-amber-100 px-1 rounded">AI_API_KEY</code> (or <code className="font-mono text-[10px] bg-amber-100 px-1 rounded">AI_PROVIDERS_JSON</code>) in EasyPanel.
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-2 w-full max-w-xs">
                   {DEFAULT_SUGGESTIONS.map((s, i) => (
                     <button key={i}
