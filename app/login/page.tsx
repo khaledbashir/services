@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // Only honor same-origin redirects so `?redirect=` can't be used as an open-redirect vector.
@@ -10,7 +10,9 @@ function safeRedirectPath(raw: string | null): string | null {
   return raw
 }
 
-export default function LoginPage() {
+// useSearchParams triggers a CSR bailout during prerender in Next 14 unless
+// wrapped in a Suspense boundary, so the form lives in a child component.
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -55,51 +57,67 @@ export default function LoginPage() {
   }
 
   return (
+    <div className="bg-white rounded shadow-lg p-8 w-full max-w-sm border border-[#E8E8E8]">
+      <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto" />
+      <p className="text-zinc-500 text-sm mt-1 mb-8 text-center">Service Dashboard</p>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6 text-sm">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-zinc-900 mb-2">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-900 mb-2">Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-[#0A52EF] text-white py-2.5 rounded font-medium text-sm hover:bg-[#0840C0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+        >
+          {loading ? 'Signing in...' : 'Sign In'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
     <div className="min-h-screen bg-white flex items-center justify-center p-4">
-      <div className="bg-white rounded shadow-lg p-8 w-full max-w-sm border border-[#E8E8E8]">
-        <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto" />
-        <p className="text-zinc-500 text-sm mt-1 mb-8 text-center">Service Dashboard</p>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6 text-sm">
-            {error}
+      <Suspense
+        fallback={
+          <div className="bg-white rounded shadow-lg p-8 w-full max-w-sm border border-[#E8E8E8]">
+            <img src="/ANC_Logo_2023_blue.png" alt="ANC" className="h-10 mx-auto" />
+            <p className="text-zinc-500 text-sm mt-1 mb-8 text-center">Service Dashboard</p>
+            <div className="h-40 bg-zinc-100 rounded animate-pulse" />
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-900 mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-zinc-900 mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#0A52EF] text-white py-2.5 rounded font-medium text-sm hover:bg-[#0840C0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-6"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
+        }
+      >
+        <LoginForm />
+      </Suspense>
     </div>
   )
 }
