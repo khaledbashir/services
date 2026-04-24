@@ -319,22 +319,17 @@ export async function POST(
 
     // Slack notification for workflow step.
     //
-    // Joe's 2026-04-22 ask: suppress check-in + game-ready "completed" pings
-    // from the venue channel — those reminders already get sent; posting
-    // again when the tech finishes is white noise. Only post-game stays in
-    // the venue channel (both the reminder and the submission).
-    //
-    // Separately, a dedicated audit channel (SLACK_WORKFLOW_AUDIT_CHANNEL)
-    // receives every submission so ops leadership can monitor compliance
-    // without needing eyes on every venue channel. Joe: "I like the idea of
-    // a channel for all these notifications to go to so we can check that."
+    // Send every workflow submission to the venue channel and also to the
+    // audit channel when configured. Chris D confirmed on 2026-04-25 that
+    // all-alerts alone is not enough; venue-specific channels need the same
+    // operational updates so local teams see check-in/game-ready/post-game.
     const venueSlackRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [eventResult.rows[0]?.venue_id])
     const venueChannel = venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
     const auditChannel = process.env.SLACK_WORKFLOW_AUDIT_CHANNEL || ''
 
     const POST_TO_VENUE_CHANNEL: Record<string, boolean> = {
-      check_in: false,
-      game_ready: false,
+      check_in: true,
+      game_ready: true,
       post_game_report: true,
     }
 

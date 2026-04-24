@@ -18,6 +18,7 @@ interface Ticket {
   created_by_name: string
   assigned_to_name: string | null
   created_date: string
+  created_time: string
   source?: string
   contact_phone?: string | null
   contact_name?: string | null
@@ -570,7 +571,7 @@ export default function TicketsPage() {
                     ) : (
                       <span className="text-xs text-zinc-400">Unassigned</span>
                     )}
-                    <span className="text-xs text-zinc-400 tabular-nums">{formatDate(ticket.created_date)}</span>
+                    <span className="text-xs text-zinc-400 tabular-nums">{formatDate(ticket.created_date)} · {ticket.created_time}</span>
                   </div>
                 </div>
               )
@@ -604,6 +605,7 @@ export default function TicketsPage() {
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Priority</th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Status</th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Assigned</th>
+                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Time</th>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Created</th>
                 </tr>
               </thead>
@@ -641,6 +643,7 @@ export default function TicketsPage() {
                         <span className={`text-xs font-medium px-1.5 py-0.5 ${st.bg} ${st.text}`}>{st.label}</span>
                       </td>
                       <td className="py-2.5 px-4 text-xs text-zinc-600">{ticket.assigned_to_name || <span className="text-zinc-400">—</span>}</td>
+                      <td className="py-2.5 px-4 text-xs text-zinc-500 whitespace-nowrap tabular-nums">{ticket.created_time}</td>
                       <td className="py-2.5 px-4 text-xs text-zinc-400 whitespace-nowrap tabular-nums">{formatDate(ticket.created_date)}</td>
                     </tr>
                   )
