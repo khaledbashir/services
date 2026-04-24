@@ -296,7 +296,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await requireRole(request, 'admin')
+    const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
 
     const { id } = params

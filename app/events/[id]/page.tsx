@@ -72,6 +72,7 @@ export default function EventDetailPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [selectedWorkflowTech, setSelectedWorkflowTech] = useState('')
   const [workflowSubmitting, setWorkflowSubmitting] = useState<string | null>(null)
 
@@ -280,6 +281,25 @@ export default function EventDetailPage() {
     }
   }
 
+  const deleteEvent = async () => {
+    if (!event || deleting) return
+    const ok = confirm(`Delete "${event.summary}"? This cannot be undone. Tickets will stay open but lose their event link.`)
+    if (!ok) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete event')
+      showToast('Event deleted', 'success')
+      router.push('/events')
+    } catch (err) {
+      console.error('Event delete error:', err)
+      showToast('Failed to delete event', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const isManager = auth.role === 'admin' || auth.role === 'manager'
 
   if (!auth.loaded || loading || !event) {
@@ -311,9 +331,20 @@ export default function EventDetailPage() {
       <div className="space-y-8">
         {/* Header */}
         <div>
-          <Link href="/events" className="text-sm text-[#0A52EF] hover:text-[#0840C0] font-medium mb-4 block">
-            ← Back to Events
-          </Link>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <Link href="/events" className="text-sm text-[#0A52EF] hover:text-[#0840C0] font-medium">
+              ← Back to Events
+            </Link>
+            {isManager && (
+              <button
+                onClick={deleteEvent}
+                disabled={deleting}
+                className="rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete Event'}
+              </button>
+            )}
+          </div>
           {editing === 'summary' ? (
             <div className="flex items-center gap-2">
               <input
