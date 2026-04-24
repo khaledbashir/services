@@ -339,6 +339,9 @@ export async function PATCH(
 
     // Handle service toggle
     if (body.service_type_id !== undefined) {
+      if ((auth as { role: string }).role !== 'admin') {
+        return NextResponse.json({ error: 'Only admins can change contracted services' }, { status: 403 })
+      }
       if (!primaryClientId) {
         return NextResponse.json({ error: 'Link a client to this venue before toggling services' }, { status: 400 })
       }

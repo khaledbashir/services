@@ -2293,8 +2293,11 @@ export default function VenueDetailPage() {
                           <p className="text-sm font-medium text-zinc-900">{svc.name}</p>
                           {svc.description && <p className="text-xs text-zinc-500 truncate">{svc.description}</p>}
                         </div>
-                        <button onClick={() => toggleService(svc.service_type_id, !svc.enabled)} disabled={togglingService === svc.service_type_id}
-                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${svc.enabled ? 'bg-emerald-500' : 'bg-zinc-300'}`}>
+                        <button
+                          onClick={() => toggleService(svc.service_type_id, !svc.enabled)}
+                          disabled={!auth.isAdmin || togglingService === svc.service_type_id}
+                          title={auth.isAdmin ? undefined : 'Only admins can change contracted services'}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${svc.enabled ? 'bg-emerald-500' : 'bg-zinc-300'} ${!auth.isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}>
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow-sm ${svc.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
