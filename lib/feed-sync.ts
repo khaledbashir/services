@@ -1,6 +1,7 @@
 import { query } from '@/lib/db'
 import { importDiscoveryEvents, type DiscoveryCandidate } from '@/lib/event-discovery'
 import { parseVenueFeed, type FeedEvent, type FeedType } from '@/lib/feed-parsers'
+import { notifyOps } from '@/lib/slack'
 import { buildAutomationSelect, withComputedAutomation } from '@/lib/venue-automation'
 
 export interface FeedVenue {
@@ -9,6 +10,7 @@ export interface FeedVenue {
   address: string | null
   feed_url: string
   feed_type: FeedType
+  slack_channel_id?: string | null
   client_count?: number
   active_service_count: number
   active_service_names: string[]
@@ -152,6 +154,7 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
        v.address,
        v.feed_url,
        COALESCE(v.feed_type, 'other') as feed_type,
+       v.slack_channel_id,
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
      LEFT JOIN client_venues cv ON cv.venue_id = v.id
@@ -241,6 +244,20 @@ export async function syncVenueFeed(
        WHERE id = $1`,
       [venue.id, status]
     )
+
+    if (imported.imported > 0) {
+      const sample = autoImportable
+        .slice(0, 5)
+        .map((event) => `- ${event.event_date}${event.start_time ? ` ${event.start_time}` : ''} - ${event.summary}`)
+        .join('\n')
+      const more = imported.imported > 5 ? `\n...and ${imported.imported - 5} more` : ''
+      await notifyOps(
+        ':calendar:',
+        `*Feed sync imported ${imported.imported} event${imported.imported === 1 ? '' : 's'} for ${venue.name}*\n${sample}${more}`,
+        { label: 'View Events', url: 'https://abc-anc-services.izcgmb.easypanel.host/events' },
+        venue.slack_channel_id || undefined
+      )
+    }
 
     return {
       venue,

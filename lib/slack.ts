@@ -59,16 +59,21 @@ export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
 const DASHBOARD_URL_BASE = 'https://abc-anc-services.izcgmb.easypanel.host'
 const DEFAULT_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 
-/** Fire-and-forget operational notification for any dashboard action */
-export function notifyOps(emoji: string, text: string, link?: { label: string; url: string }, channel?: string) {
+/** Operational notification for any dashboard action. Safe to await or fire-and-forget. */
+export async function notifyOps(emoji: string, text: string, link?: { label: string; url: string }, channel?: string): Promise<boolean> {
   const isVenueChannel = !!channel && channel !== DEFAULT_CHANNEL
   if (globalMuted()) {
     console.log('[slack-muted]', channel || DEFAULT_CHANNEL, text.slice(0, 80))
-    return
+    return false
   }
   if (isVenueChannel && venueMuted()) {
     console.log('[slack-venue-muted]', channel, text.slice(0, 80))
-    return
+    return false
+  }
+  const targetChannel = channel || DEFAULT_CHANNEL
+  if (!targetChannel) {
+    console.warn('[slack-missing-channel]', text.slice(0, 120))
+    return false
   }
   const blocks: any[] = [
     { type: 'section', text: { type: 'mrkdwn', text: `${emoji} ${text}` } },
@@ -76,7 +81,7 @@ export function notifyOps(emoji: string, text: string, link?: { label: string; u
   if (link) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `<${link.url}|:link: ${link.label}>` } })
   }
-  sendSlackMessage({ channel: channel || DEFAULT_CHANNEL, text: `${emoji} ${text}`, blocks })
+  return sendSlackMessage({ channel: targetChannel, text: `${emoji} ${text}`, blocks })
 }
 
 export async function createSlackCanvas(params: {

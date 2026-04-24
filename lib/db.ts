@@ -160,6 +160,19 @@ async function runMigrations() {
           feed_type = 'mlb-schedule'
       WHERE LOWER(name) = 'fenway park'
         AND (COALESCE(feed_url, '') = '' OR feed_type = 'team-website')`)
+    await client.query(`UPDATE venues
+      SET feed_url = 'https://www.ticketmaster.com/moda-center-tickets-portland/venue/123078',
+          feed_type = 'ticketmaster',
+          timezone = CASE
+            WHEN COALESCE(timezone, '') = '' OR timezone = 'America/New_York' THEN 'America/Los_Angeles'
+            ELSE timezone
+          END
+      WHERE LOWER(name) IN ('moda center', 'moda center portland')
+        AND (
+          COALESCE(feed_url, '') = ''
+          OR COALESCE(feed_type, '') <> 'ticketmaster'
+          OR feed_url NOT LIKE '%123078%'
+        )`)
     // Twenty CRM ID columns for bidirectional mapping
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS twenty_person_id TEXT`)
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS twenty_technician_id TEXT`)

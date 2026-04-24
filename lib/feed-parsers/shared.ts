@@ -91,10 +91,29 @@ export function normalizeClock(value: string | null | undefined): string | null 
 }
 
 export function inferLeague(name: string): string | null {
-  const lower = name.toLowerCase()
-  if (lower.includes('red sox') || lower.includes('yankees') || lower.includes('blue jays') || lower.includes('orioles') || lower.includes('rays') || lower.includes('brewers')) return 'MLB'
-  if (lower.includes('devils') || lower.includes('flyers') || lower.includes('rangers') || lower.includes('bruins')) return 'NHL'
-  if (lower.includes('celtics') || lower.includes('knicks') || lower.includes('nets')) return 'NBA'
+  const lower = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+  const compact = lower.replace(/\s+/g, '')
+  const includesAny = (terms: string[]) =>
+    terms.some((term) => lower.includes(term) || compact.includes(term.replace(/\s+/g, '')))
+
+  if (includesAny([
+    'red sox', 'yankees', 'blue jays', 'orioles', 'rays', 'brewers', 'dodgers', 'giants',
+    'mets', 'phillies', 'braves', 'mariners', 'padres', 'cubs', 'cardinals',
+  ])) return 'MLB'
+
+  if (includesAny([
+    'devils', 'flyers', 'rangers', 'bruins', 'islanders', 'penguins', 'capitals',
+    'kraken', 'canucks', 'sharks', 'la kings', 'los angeles kings', 'ducks', 'golden knights',
+  ])) return 'NHL'
+
+  if (includesAny([
+    'trail blazers', 'trailblazers', 'blazers', 'celtics', 'knicks', 'nets', 'spurs',
+    'lakers', 'clippers', 'warriors', 'sacramento kings', 'suns', 'jazz', 'nuggets', 'thunder',
+    'mavericks', 'rockets', 'grizzlies', 'pelicans', 'timberwolves', 'bucks', 'bulls',
+    'cavaliers', 'pistons', 'pacers', 'heat', 'magic', 'hawks', 'hornets', 'wizards',
+    'raptors', '76ers', 'sixers',
+  ])) return 'NBA'
+
   return null
 }
 

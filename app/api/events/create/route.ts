@@ -74,7 +74,12 @@ export async function POST(request: NextRequest) {
     const venueName = venueRes.rows[0]?.name || 'Unknown'
     const venueChannel = venueRes.rows[0]?.slack_channel_id
     const staffCount = staff_ids?.length || 0
-    notifyOps(':calendar:', `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`, { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` }, venueChannel)
+    const slackSent = await notifyOps(
+      ':calendar:',
+      `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`,
+      { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` },
+      venueChannel
+    )
 
     // --- CRM SYNC: push new event to Twenty ---
     ;(async () => {
@@ -105,7 +110,7 @@ export async function POST(request: NextRequest) {
       }
     })()
 
-    return NextResponse.json({ id: eventId, client_id: resolvedClientId })
+    return NextResponse.json({ id: eventId, client_id: resolvedClientId, slack_sent: slackSent })
   } catch (err) {
     console.error('Error creating event:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

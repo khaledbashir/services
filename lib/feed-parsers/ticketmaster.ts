@@ -146,6 +146,11 @@ async function fetchTicketmasterJson<T>(pathname: string, searchParams: URLSearc
  * one of those directly, skip the fragile keyword-based venue lookup
  * (which fails for renamed venues like "Rocket Arena", formerly "Rocket
  * Mortgage FieldHouse") and use the ID authoritatively.
+ *
+ * Ticketmaster also has legacy public venue URLs like
+ * `/moda-center-tickets-portland/venue/123078`. Those numeric IDs are not
+ * Discovery API venue IDs, so do not treat them as authoritative or the API
+ * returns a clean-but-wrong zero-event response.
  */
 function extractTicketmasterVenueIdFromUrl(feedUrl?: string): string | null {
   if (!feedUrl) return null
@@ -154,9 +159,9 @@ function extractTicketmasterVenueIdFromUrl(feedUrl?: string): string | null {
     if (!/ticketmaster\.(com|ca)$/i.test(url.hostname.replace(/^www\./, ''))) return null
     // `/venue/KovZ…` — venue IDs are alphanumeric, typically 10-16 chars.
     const venueMatch = url.pathname.match(/\/venue\/([A-Za-z0-9]{6,})/i)
-    if (venueMatch) return venueMatch[1]
+    if (venueMatch && /[A-Za-z]/.test(venueMatch[1])) return venueMatch[1]
     const qVenueId = url.searchParams.get('venueId') || url.searchParams.get('venue_id')
-    if (qVenueId && /^[A-Za-z0-9]{6,}$/.test(qVenueId)) return qVenueId
+    if (qVenueId && /^[A-Za-z0-9]{6,}$/.test(qVenueId) && /[A-Za-z]/.test(qVenueId)) return qVenueId
     return null
   } catch {
     return null
