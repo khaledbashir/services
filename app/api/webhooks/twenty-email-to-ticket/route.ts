@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
 
 const TWENTY_BASE = 'https://abc-twenty.izcgmb.easypanel.host'
 const TWENTY_TOKEN = process.env.TWENTY_API_TOKEN || ''
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
 const SUPPORT_MAILBOX = 'support@anc.com'
+const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
 
 type ParticipantRole = 'FROM' | 'TO' | 'CC' | 'BCC'
 interface Participant {
@@ -66,6 +68,98 @@ function textToTipTap(text: string): string {
       return { type: 'paragraph', content }
     }),
   })
+}
+
+async function findVenueForSender(senderEmail: string): Promise<{ id: string; name: string } | null> {
+  const normalizedEmail = senderEmail.toLowerCase().trim()
+  if (!normalizedEmail) return null
+
+  const exact = await query(
+    `SELECT id, name FROM venues
+     WHERE primary_contact_email ILIKE $1
+        OR $2 = ANY(COALESCE(distribution_emails, '{}'))
+     LIMIT 1`,
+    [normalizedEmail, normalizedEmail]
+  )
+  if (exact.rows[0]) return exact.rows[0]
+
+  const domain = normalizedEmail.split('@')[1] || ''
+  const genericDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'aol.com', 'live.com', 'msn.com', 'protonmail.com', 'anc.com']
+  if (!domain || genericDomains.includes(domain)) return null
+
+  const domainMatch = await query(
+    `SELECT id, name FROM venues
+     WHERE primary_contact_email ILIKE $1
+        OR EXISTS (SELECT 1 FROM unnest(COALESCE(distribution_emails, '{}')) AS e WHERE e ILIKE $1)
+     LIMIT 1`,
+    [`%@${domain}`]
+  )
+  return domainMatch.rows[0] || null
+}
+
+async function createDashboardTicketFromEmail(params: {
+  twentyTicketId: string
+  subject: string
+  body: string
+  senderName: string
+  senderEmail: string
+  receivedAt?: string | null
+}) {
+  const existing = await query('SELECT id, ticket_number FROM tickets WHERE twenty_ticket_id = $1 LIMIT 1', [params.twentyTicketId])
+  if (existing.rows[0]) return existing.rows[0]
+
+  const venue = await findVenueForSender(params.senderEmail)
+  const description = params.body
+    ? `Email from ${params.senderName} (${params.senderEmail}):\n\n${params.body.slice(0, 5000)}`
+    : `Email received from ${params.senderName} (${params.senderEmail}). Subject: ${params.subject}`
+
+  const result = await query(
+    `INSERT INTO tickets (
+       venue_id, title, description, category, priority, status, created_by,
+       original_message, source, contact_name, contact_email, twenty_ticket_id, created_at, updated_at
+     )
+     VALUES ($1, $2, $3, 'general', 'medium', 'new', $4, $5, 'email', $6, $7, $8,
+       COALESCE($9::timestamp, NOW()), COALESCE($9::timestamp, NOW()))
+     RETURNING id, ticket_number`,
+    [
+      venue?.id || null,
+      params.subject.slice(0, 100),
+      description,
+      CLAW_STAFF_ID,
+      params.body || params.subject,
+      params.senderName,
+      params.senderEmail,
+      params.twentyTicketId,
+      params.receivedAt || null,
+    ]
+  )
+  return result.rows[0]
+}
+
+async function addDashboardEmailComment(params: {
+  twentyTicketId: string
+  body: string
+  senderName: string
+  senderEmail: string
+}) {
+  if (!params.body.trim()) return null
+
+  const ticket = await query(
+    `SELECT id FROM tickets WHERE twenty_ticket_id = $1 LIMIT 1`,
+    [params.twentyTicketId]
+  )
+  const localTicket = ticket.rows[0]
+  if (!localTicket) return null
+
+  const commentBody = `Email from ${params.senderName} (${params.senderEmail}):\n\n${params.body.slice(0, 5000)}`
+  const comment = await query(
+    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
+     VALUES ($1, $2, $3, false, NOW())
+     RETURNING id`,
+    [localTicket.id, CLAW_STAFF_ID, commentBody]
+  )
+  await query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [localTicket.id])
+  return comment.rows[0]
 }
 
 /**
@@ -147,10 +241,17 @@ export async function POST(request: NextRequest) {
         authorName: `${senderName} <${senderEmail}>`,
         serviceTicketId: linkedTicketId,
       }).catch((e) => ({ error: String(e) }))
+      const dashboardComment = await addDashboardEmailComment({
+        twentyTicketId: linkedTicketId,
+        body: msg.text || '',
+        senderName,
+        senderEmail,
+      }).catch((e) => ({ error: String(e) }))
       return NextResponse.json({
         action: 'comment_created',
         ticketId: linkedTicketId,
         comment,
+        dashboardComment,
       })
     }
 
@@ -176,6 +277,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const dashboardTicket = await createDashboardTicketFromEmail({
+      twentyTicketId: newTicket.id,
+      subject,
+      body: msg.text || '',
+      senderName,
+      senderEmail,
+      receivedAt: msg.receivedAt,
+    })
+    await tw('PATCH', `/rest/serviceTickets/${newTicket.id}`, {
+      servicesId: dashboardTicket.id,
+    }).catch((e) => console.error('[email-to-ticket] servicesId backfill failed:', e))
+
     // Link the thread → ticket so future replies become comments
     await gql(
       `mutation($id: UUID!, $ticketId: UUID!){
@@ -187,6 +300,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       action: 'ticket_created',
       ticketId: newTicket.id,
+      dashboardTicketId: dashboardTicket.id,
       threadId: msg.messageThreadId,
       subject,
       from: senderEmail,

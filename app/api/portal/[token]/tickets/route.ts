@@ -85,8 +85,8 @@ export async function POST(
     // Use Claw's staff ID for portal-created tickets
     const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
     const result = await query(
-      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, 'new', $6)
+      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, source)
+       VALUES ($1, $2, $3, $4, $5, 'new', $6, 'portal')
        RETURNING id, ticket_number, title, category, priority, status`,
       [venueId, title, description || '', category || 'general', priority || 'medium', CLAW_STAFF_ID]
     )

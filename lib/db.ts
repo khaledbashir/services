@@ -71,6 +71,8 @@ async function runMigrations() {
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS contact_phone TEXT`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS parent_ticket_id UUID REFERENCES tickets(id)`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sf_case_number TEXT`)
+    await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS twenty_ticket_id TEXT`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_twenty_ticket_id ON tickets(twenty_ticket_id) WHERE twenty_ticket_id IS NOT NULL`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS logo_url TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS cover_image_url TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_manager_id UUID REFERENCES staff(id)`)

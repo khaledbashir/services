@@ -263,10 +263,10 @@ export async function POST(request: NextRequest) {
       : `Email received from ${senderName} (${senderEmail}). Subject: ${subject}`
 
     const result = await query(
-      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, assigned_to, sla_response_due, sla_resolution_due, original_message)
-       VALUES ($1, $2, $3, 'general', 'medium', 'new', $4, $5, $6, $7, $8)
+      `INSERT INTO tickets (venue_id, title, description, category, priority, status, created_by, assigned_to, sla_response_due, sla_resolution_due, original_message, source, contact_name, contact_email)
+       VALUES ($1, $2, $3, 'general', 'medium', 'new', $4, $5, $6, $7, $8, 'email', $9, $10)
        RETURNING id, ticket_number, title, category, priority, status`,
-      [venueId, subject.substring(0, 100), description, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue, emailBody || subject]
+      [venueId, subject.substring(0, 100), description, CLAW_STAFF_ID, autoAssign, slaResponseDue, slaResolutionDue, emailBody || subject, senderName, senderEmail]
     )
 
     const ticket = result.rows[0]
