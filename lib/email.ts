@@ -4,7 +4,7 @@ const RESEND_API_URL = 'https://api.resend.com/emails'
 
 // Domain config — set EMAIL_DOMAIN env var to change (default: ancsports.net)
 const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'ancsports.net'
-const FROM_ADDRESS = `ANC Services <notifications@${EMAIL_DOMAIN}>`
+const FROM_ADDRESS = process.env.EMAIL_FROM || `ANC Services <notifications@${EMAIL_DOMAIN}>`
 const REPLY_DOMAIN = EMAIL_DOMAIN
 
 /**
@@ -65,6 +65,23 @@ function ticketEmailHtml(caseNum: string, title: string, venueName: string, body
       <p style="margin:0;font-size:12px;color:#94a3b8">This is an automated notification from ANC Sports Operations.</p>
     </div>
   </div>`
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    if (char === '&') return '&amp;'
+    if (char === '<') return '&lt;'
+    if (char === '>') return '&gt;'
+    if (char === '"') return '&quot;'
+    return '&#39;'
+  })
+}
+
+function plainTextToHtml(value: string): string {
+  return escapeHtml(value)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p style="margin:0 0 12px;font-size:14px;color:#1e293b;line-height:1.5">${paragraph.replace(/\n/g, '<br>')}</p>`)
+    .join('')
 }
 
 /**
@@ -128,6 +145,29 @@ export async function sendTicketDistributionEmail(opts: {
     venue.distribution_emails,
     subjectMap[opts.type],
     ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
+    replyTo
+  )
+}
+
+export async function sendTicketReplyEmail(opts: {
+  to: string
+  ticketTitle: string
+  ticketNumber: number
+  venueName: string
+  body: string
+  authorName: string
+}): Promise<boolean> {
+  const caseNum = String(opts.ticketNumber).padStart(8, '0')
+  const replyTo = ticketReplyAddress(opts.ticketNumber)
+  const bodyContent = `
+    <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
+    <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
+  `
+
+  return sendEmail(
+    [opts.to],
+    `Re: Case ${caseNum} — ${opts.ticketTitle}`,
+    ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
     replyTo
   )
 }

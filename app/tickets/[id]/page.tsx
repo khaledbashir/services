@@ -32,6 +32,13 @@ interface Comment { id: string; body: string; is_internal: boolean; author_name:
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
 interface Staff { id: string; full_name: string }
 
+function isTicketEmailComment(comment: Comment) {
+  if (comment.is_internal) return false
+  return comment.author_name === 'ANC Bot'
+    || /^Email (from|sent to)/i.test(comment.body || '')
+    || /^Outbound email/i.test(comment.body || '')
+}
+
 const priorityConfig: Record<string, { color: string; label: string }> = {
   low: { color: 'text-zinc-500 bg-zinc-50 border-zinc-200', label: 'Low' },
   medium: { color: 'text-amber-700 bg-amber-50 border-amber-200', label: 'Medium' },
@@ -63,6 +70,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [newComment, setNewComment] = useState('')
   const [isInternal, setIsInternal] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [emailTo, setEmailTo] = useState('')
+  const [emailReply, setEmailReply] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [editResolution, setEditResolution] = useState(false)
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
@@ -108,6 +119,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
 
   useEffect(() => { fetchData() }, [params.id])
+
+  useEffect(() => {
+    if (!ticket) return
+    setEmailTo((current) => current || ticket.contact_email || '')
+  }, [ticket?.id, ticket?.contact_email])
 
   useEffect(() => {
     if (!showMergeModal) return
@@ -162,6 +178,32 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     } catch {} finally { setSubmitting(false) }
   }
 
+  const sendEmailReply = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!emailReply.trim()) return
+    setSendingEmail(true)
+    setEmailStatus(null)
+    try {
+      const res = await fetch(`/api/tickets/${params.id}/email-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: emailTo, body: emailReply }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        setEmailReply('')
+        setEmailStatus({ type: 'success', message: `Email sent to ${data?.to || emailTo}` })
+        await fetchData()
+      } else {
+        setEmailStatus({ type: 'error', message: data?.error || 'Email could not be sent' })
+      }
+    } catch {
+      setEmailStatus({ type: 'error', message: 'Email could not be sent' })
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   const saveResolution = async () => {
     await updateField('resolution_notes', resolutionNotes)
     setEditResolution(false)
@@ -200,7 +242,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   const allTimelineItems: Array<{ type: 'comment' | 'email' | 'change'; data: any; time: Date }> = []
   comments.forEach(c => {
-    const isEmail = c.author_name === 'ANC Bot' && !c.is_internal
+    const isEmail = isTicketEmailComment(c)
     allTimelineItems.push({ type: isEmail ? 'email' : 'comment', data: c, time: new Date(c.created_date) })
   })
   activity.forEach(a => allTimelineItems.push({ type: 'change', data: a, time: new Date(a.created_at) }))
@@ -213,11 +255,12 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   const filterCounts = {
     all: allTimelineItems.length,
-    comments: comments.filter(c => c.author_name !== 'ANC Bot' || c.is_internal).length,
-    emails: comments.filter(c => c.author_name === 'ANC Bot' && !c.is_internal).length,
+    comments: comments.filter(c => !isTicketEmailComment(c)).length,
+    emails: comments.filter(c => isTicketEmailComment(c)).length,
     changes: activity.length,
   }
   const communicationCount = filterCounts.emails + (ticket.original_message ? 1 : 0)
+  const emailTimelineItems = allTimelineItems.filter(i => i.type === 'email')
 
   return (
     <DashboardLayout>
@@ -927,11 +970,54 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
                 {/* ── Communication Tab ── */}
                 {activeTab === 'emails' && (
-                  <div className="p-6">
-                    {filterCounts.emails === 0 && !ticket.original_message ? (
-                      <p className="text-sm text-zinc-400 py-10 text-center">{isVoicemailTicket ? 'No voicemail transcript on this ticket' : 'No emails on this ticket'}</p>
-                    ) : (
-                      <div className="space-y-4">
+                  <div>
+                    <div className="p-6 space-y-4">
+                      {!isVoicemailTicket && (
+                        <form onSubmit={sendEmailReply} className="border border-zinc-200 rounded-lg bg-zinc-50/50 p-4">
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                            <div>
+                              <h3 className="text-sm font-semibold text-zinc-900">Reply by Email</h3>
+                              <p className="text-xs text-zinc-500 mt-0.5">Client replies come back into this same ticket thread.</p>
+                            </div>
+                            {emailStatus && (
+                              <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${emailStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                {emailStatus.message}
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-3">
+                            <input
+                              type="email"
+                              value={emailTo}
+                              onChange={(e) => setEmailTo(e.target.value)}
+                              placeholder="client@example.com"
+                              className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
+                            />
+                            <textarea
+                              value={emailReply}
+                              onChange={(e) => setEmailReply(e.target.value)}
+                              placeholder="Write the email reply..."
+                              rows={3}
+                              className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white resize-none"
+                            />
+                          </div>
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <p className="text-[11px] text-zinc-400">Sent from the ANC service mailbox with this ticket as the reply-to.</p>
+                            <button
+                              type="submit"
+                              disabled={sendingEmail || !emailReply.trim() || !emailTo.trim()}
+                              className="bg-[#0A52EF] text-white px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#0840C0] disabled:opacity-30 transition-all"
+                            >
+                              {sendingEmail ? 'Sending...' : 'Send Email'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {communicationCount === 0 ? (
+                        <p className="text-sm text-zinc-400 py-10 text-center">{isVoicemailTicket ? 'No voicemail transcript on this ticket' : 'No emails on this ticket'}</p>
+                      ) : (
+                        <>
                         {isVoicemailTicket && (ticket.contact_phone || voicemailRecordingUrl) && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {ticket.contact_phone && (
@@ -962,7 +1048,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           </div>
                         )}
                         {/* Email comments from timeline */}
-                        {allTimelineItems.filter(i => i.type === 'email').map((item, idx) => {
+                        {emailTimelineItems.map((item, idx) => {
                           const comment = item.data as Comment
                           const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
                           return (
@@ -976,8 +1062,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             </div>
                           )
                         })}
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
 
