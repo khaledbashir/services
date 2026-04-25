@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
          COALESCE(array_remove(array_agg(DISTINCT cv.venue_id::text), NULL), '{}') as venue_ids,
          COALESCE(array_remove(array_agg(DISTINCT v.name), NULL), '{}') as venue_names,
          COUNT(DISTINCT CASE WHEN cs.enabled = true THEN st.id END)::int as active_service_count,
-         COUNT(DISTINCT child.id)::int as subclient_count
+         COUNT(DISTINCT child.id)::int as subclient_count,
+         COALESCE(ticket_stats.open_ticket_count, 0)::int as open_ticket_count,
+         COALESCE(ticket_stats.urgent_ticket_count, 0)::int as urgent_ticket_count,
+         COALESCE(event_stats.upcoming_event_count, 0)::int as upcoming_event_count,
+         event_stats.next_event_date,
+         event_stats.next_event_summary
        FROM clients c
        LEFT JOIN clients p ON p.id = c.parent_client_id
        LEFT JOIN client_venues cv ON cv.client_id = c.id
@@ -43,8 +48,30 @@ export async function GET(request: NextRequest) {
        LEFT JOIN client_services cs ON cs.client_id = c.id
        LEFT JOIN service_types st ON st.id = cs.service_type_id
        LEFT JOIN clients child ON child.parent_client_id = c.id
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*)::int as open_ticket_count,
+           COUNT(*) FILTER (WHERE t.priority IN ('critical', 'high'))::int as urgent_ticket_count
+         FROM tickets t
+         WHERE t.venue_id IN (
+           SELECT cv2.venue_id FROM client_venues cv2 WHERE cv2.client_id = c.id
+         )
+           AND COALESCE(t.status, 'new') NOT IN ('closed', 'completed', 'resolved')
+       ) ticket_stats ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(DISTINCT e.id)::int as upcoming_event_count,
+           TO_CHAR(MIN(e.event_date), 'YYYY-MM-DD') as next_event_date,
+           (array_agg(e.summary ORDER BY e.event_date ASC, e.start_time ASC NULLS LAST))[1] as next_event_summary
+         FROM events e
+         WHERE (e.client_id = c.id OR e.venue_id IN (
+           SELECT cv3.venue_id FROM client_venues cv3 WHERE cv3.client_id = c.id
+         ))
+           AND e.event_date >= CURRENT_DATE
+       ) event_stats ON TRUE
        ${whereClause}
-       GROUP BY c.id, p.id, p.name
+       GROUP BY c.id, p.id, p.name, ticket_stats.open_ticket_count, ticket_stats.urgent_ticket_count,
+                event_stats.upcoming_event_count, event_stats.next_event_date, event_stats.next_event_summary
        ORDER BY c.name ASC`,
       params
     )
@@ -80,12 +107,13 @@ export async function POST(request: NextRequest) {
 
     const clientId = result.rows[0].id
     if (Array.isArray(linked_venue_ids)) {
-      for (const venueId of linked_venue_ids) {
+      for (let i = 0; i < linked_venue_ids.length; i++) {
+        const venueId = linked_venue_ids[i]
         await query(
           `INSERT INTO client_venues (client_id, venue_id, relation_type)
-           VALUES ($1, $2, 'primary')
+           VALUES ($1, $2, $3)
            ON CONFLICT (client_id, venue_id) DO NOTHING`,
-          [clientId, venueId]
+          [clientId, venueId, i === 0 ? 'primary' : 'secondary']
         )
       }
     }

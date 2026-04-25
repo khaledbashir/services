@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
@@ -17,11 +17,43 @@ interface ClientRow {
   active_service_count: number
   subclient_count: number
   is_active: boolean
+  open_ticket_count: number
+  urgent_ticket_count: number
+  upcoming_event_count: number
+  next_event_date: string | null
+  next_event_summary: string | null
 }
 
 interface VenueOption {
   id: string
   name: string
+}
+
+type ClientFilter = 'all' | 'attention' | 'active' | 'no_venues' | 'no_services' | 'parents' | 'subclients'
+
+const filters: Array<{ key: ClientFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'attention', label: 'Needs Attention' },
+  { key: 'active', label: 'Active' },
+  { key: 'no_venues', label: 'No Venue' },
+  { key: 'no_services', label: 'No Services' },
+  { key: 'parents', label: 'Parents' },
+  { key: 'subclients', label: 'Sub-clients' },
+]
+
+function formatEventDate(value: string | null) {
+  if (!value) return 'No upcoming event'
+  const date = new Date(`${value}T12:00:00`)
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function getHealth(client: ClientRow) {
+  if (!client.is_active) return { label: 'Inactive', tone: 'bg-zinc-100 text-zinc-600 border-zinc-200' }
+  if (client.urgent_ticket_count > 0) return { label: `${client.urgent_ticket_count} urgent`, tone: 'bg-rose-50 text-rose-700 border-rose-200' }
+  if (client.venue_count === 0) return { label: 'No venue', tone: 'bg-amber-50 text-amber-700 border-amber-200' }
+  if (client.active_service_count === 0) return { label: 'No services', tone: 'bg-orange-50 text-orange-700 border-orange-200' }
+  if (client.open_ticket_count > 0) return { label: `${client.open_ticket_count} open`, tone: 'bg-sky-50 text-sky-700 border-sky-200' }
+  return { label: 'Healthy', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
 }
 
 export default function ClientsPage() {
@@ -30,6 +62,7 @@ export default function ClientsPage() {
   const [venues, setVenues] = useState<VenueOption[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<ClientFilter>('all')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -63,13 +96,29 @@ export default function ClientsPage() {
 
   useEffect(() => { load() }, [])
 
+  const summary = useMemo(() => ({
+    active: clients.filter((client) => client.is_active).length,
+    attention: clients.filter((client) => client.is_active && (client.urgent_ticket_count > 0 || client.venue_count === 0 || client.active_service_count === 0)).length,
+    openTickets: clients.reduce((sum, client) => sum + Number(client.open_ticket_count || 0), 0),
+    upcomingEvents: clients.reduce((sum, client) => sum + Number(client.upcoming_event_count || 0), 0),
+  }), [clients])
+
   const filtered = clients.filter((client) => {
     const q = search.toLowerCase().trim()
-    if (!q) return true
-    return client.name.toLowerCase().includes(q)
+    const matchesSearch = !q
+      || client.name.toLowerCase().includes(q)
       || (client.parent_client_name || '').toLowerCase().includes(q)
       || (client.sport || '').toLowerCase().includes(q)
       || client.venue_names.some((name) => name.toLowerCase().includes(q))
+    if (!matchesSearch) return false
+
+    if (activeFilter === 'attention') return client.is_active && (client.urgent_ticket_count > 0 || client.venue_count === 0 || client.active_service_count === 0)
+    if (activeFilter === 'active') return client.is_active
+    if (activeFilter === 'no_venues') return client.venue_count === 0
+    if (activeFilter === 'no_services') return client.active_service_count === 0
+    if (activeFilter === 'parents') return !client.parent_client_name
+    if (activeFilter === 'subclients') return Boolean(client.parent_client_name) || client.client_kind === 'sub_client'
+    return true
   })
 
   const toggleVenue = (venueId: string) => {
@@ -118,8 +167,9 @@ export default function ClientsPage() {
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900">Clients</h1>
-            <p className="text-sm text-zinc-500 mt-1">Option B: clients own services, venues stay physical places, and colleges can have sport-specific sub-clients underneath the parent school.</p>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Account Command Center</div>
+            <h1 className="text-2xl font-bold text-zinc-900 mt-1">Clients</h1>
+            <p className="text-sm text-zinc-500 mt-1">Track who ANC supports, what is contracted, what is open, and what needs attention next.</p>
           </div>
           {auth.isManager && (
             <button
@@ -131,31 +181,32 @@ export default function ClientsPage() {
           )}
         </div>
 
-        <div className="bg-[linear-gradient(180deg,#FFFFFF,#F7FAFF)] rounded-xl border border-sky-100 p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600">How Option B Works</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-sm">
-            <div className="rounded-lg border border-sky-100 bg-white p-4">
-              <p className="font-semibold text-zinc-900">1. Create the client</p>
-              <p className="text-zinc-600 mt-1">Example: <span className="font-medium">Rutgers University</span> or <span className="font-medium">Florida Panthers</span>.</p>
-            </div>
-            <div className="rounded-lg border border-sky-100 bg-white p-4">
-              <p className="font-semibold text-zinc-900">2. Link the venue(s)</p>
-              <p className="text-zinc-600 mt-1">The first linked venue becomes primary. Shared venues can be linked to multiple clients.</p>
-            </div>
-            <div className="rounded-lg border border-sky-100 bg-white p-4">
-              <p className="font-semibold text-zinc-900">3. Turn on services</p>
-              <p className="text-zinc-600 mt-1">Those client-level service toggles determine what ANC is actually contracted to deliver.</p>
-            </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg border border-zinc-200 p-4">
+            <div className="text-xs font-semibold text-zinc-500">Active Clients</div>
+            <div className="mt-2 text-2xl font-bold text-zinc-900">{summary.active}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-zinc-200 p-4">
+            <div className="text-xs font-semibold text-zinc-500">Needs Attention</div>
+            <div className="mt-2 text-2xl font-bold text-amber-700">{summary.attention}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-zinc-200 p-4">
+            <div className="text-xs font-semibold text-zinc-500">Open Cases</div>
+            <div className="mt-2 text-2xl font-bold text-zinc-900">{summary.openTickets}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-zinc-200 p-4">
+            <div className="text-xs font-semibold text-zinc-500">Upcoming Events</div>
+            <div className="mt-2 text-2xl font-bold text-zinc-900">{summary.upcomingEvents}</div>
           </div>
         </div>
 
         {(createError || createSuccess) && (
-          <div className={`rounded-xl border px-4 py-3 text-sm ${createError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+          <div className={`rounded-lg border px-4 py-3 text-sm ${createError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
             {createError || createSuccess}
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-zinc-200 p-3">
+        <div className="bg-white rounded-lg border border-zinc-200 p-3 space-y-3">
           <input
             type="text"
             placeholder="Search clients, parents, sports, or venues..."
@@ -163,13 +214,25 @@ export default function ClientsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF] outline-none"
           />
+          <div className="flex flex-wrap gap-2">
+            {filters.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setActiveFilter(filter.key)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${activeFilter === filter.key ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'}`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {showCreate && (
-          <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 space-y-4">
+          <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 space-y-4">
             <div>
               <h2 className="text-lg font-semibold text-zinc-900">Create Client</h2>
-              <p className="text-sm text-zinc-500 mt-1">Use <span className="font-medium text-zinc-700">Client</span> for the account itself. Use <span className="font-medium text-zinc-700">Sub-client</span> when you need a sport-specific child account.</p>
+              <p className="text-sm text-zinc-500 mt-1">Create the account, attach venues, then turn on contracted services from the client detail page.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -205,7 +268,6 @@ export default function ClientsPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-zinc-600 mb-2">Linked Venues</label>
-              <p className="text-xs text-zinc-500 mb-3">Click venues to attach them now. The first selected venue is treated as the primary venue for this client.</p>
               <div className="flex flex-wrap gap-2">
                 {venues.map((venue) => {
                   const selected = form.linked_venue_ids.includes(venue.id)
@@ -227,55 +289,91 @@ export default function ClientsPage() {
                 </div>
               )}
             </div>
-            <div>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={createClient}
-                className="px-5 py-2.5 bg-zinc-900 text-white rounded-lg text-sm font-semibold hover:bg-zinc-800 disabled:opacity-50"
-              >
-                {creating ? 'Creating...' : 'Create Client'}
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={creating}
+              onClick={createClient}
+              className="px-5 py-2.5 bg-zinc-900 text-white rounded-lg text-sm font-semibold hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {creating ? 'Creating...' : 'Create Client'}
+            </button>
           </div>
         )}
 
         {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, idx) => <Skeleton key={idx} className="h-36" />)}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, idx) => <Skeleton key={idx} className="h-44" />)}
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-lg border border-zinc-200 p-8 text-center text-sm text-zinc-500">No clients match this view.</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {filtered.map((client) => (
-              <Link
-                key={client.id}
-                href={`/clients/${client.id}`}
-                className="bg-white rounded-xl border border-zinc-200 hover:border-zinc-300 hover:shadow-sm transition-all p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold text-zinc-900">{client.name}</h2>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {client.parent_client_name ? `Child of ${client.parent_client_name}` : 'Top-level client'}
-                      {client.sport ? ` • ${client.sport}` : ''}
-                    </p>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {filtered.map((client) => {
+              const health = getHealth(client)
+              return (
+                <Link
+                  key={client.id}
+                  href={`/clients/${client.id}`}
+                  className="bg-white rounded-lg border border-zinc-200 hover:border-zinc-300 hover:shadow-sm transition-all p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-lg font-semibold text-zinc-900 truncate">{client.name}</h2>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold border ${health.tone}`}>
+                          {health.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {client.parent_client_name ? `Child of ${client.parent_client_name}` : 'Parent client'}
+                        {client.sport ? ` / ${client.sport}` : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold border ${client.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-50 text-zinc-500 border-zinc-200'}`}>
+                      {client.is_active ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold border ${client.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-50 text-zinc-500 border-zinc-200'}`}>
-                    {client.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-600">
-                  <span className="px-2 py-1 rounded-full bg-zinc-100">{client.venue_count} venue{client.venue_count === 1 ? '' : 's'}</span>
-                  <span className="px-2 py-1 rounded-full bg-zinc-100">{client.active_service_count} active service{client.active_service_count === 1 ? '' : 's'}</span>
+
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+                      <div className="text-[11px] text-zinc-500 font-semibold">Venues</div>
+                      <div className="mt-1 text-lg font-bold text-zinc-900">{client.venue_count}</div>
+                    </div>
+                    <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+                      <div className="text-[11px] text-zinc-500 font-semibold">Services</div>
+                      <div className="mt-1 text-lg font-bold text-zinc-900">{client.active_service_count}</div>
+                    </div>
+                    <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+                      <div className="text-[11px] text-zinc-500 font-semibold">Cases</div>
+                      <div className={`mt-1 text-lg font-bold ${client.urgent_ticket_count > 0 ? 'text-rose-700' : 'text-zinc-900'}`}>{client.open_ticket_count}</div>
+                    </div>
+                    <div className="rounded-lg bg-zinc-50 border border-zinc-100 p-3">
+                      <div className="text-[11px] text-zinc-500 font-semibold">Events</div>
+                      <div className="mt-1 text-lg font-bold text-zinc-900">{client.upcoming_event_count}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Venues</div>
+                      <p className="mt-1 text-zinc-700 line-clamp-2">{client.venue_names.length > 0 ? client.venue_names.join(', ') : 'No venues linked yet'}</p>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Next Event</div>
+                      <p className="mt-1 text-zinc-700 line-clamp-2">
+                        {client.next_event_summary ? `${formatEventDate(client.next_event_date)} / ${client.next_event_summary}` : 'No upcoming event'}
+                      </p>
+                    </div>
+                  </div>
+
                   {client.subclient_count > 0 && (
-                    <span className="px-2 py-1 rounded-full bg-zinc-100">{client.subclient_count} sub-client{client.subclient_count === 1 ? '' : 's'}</span>
+                    <div className="mt-4 text-xs text-zinc-500">
+                      {client.subclient_count} sub-client{client.subclient_count === 1 ? '' : 's'} under this account
+                    </div>
                   )}
-                </div>
-                <p className="mt-3 text-sm text-zinc-600 line-clamp-2">
-                  {client.venue_names.length > 0 ? client.venue_names.join(', ') : 'No venues linked yet'}
-                </p>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
         )}
       </div>
