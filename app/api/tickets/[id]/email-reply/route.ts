@@ -5,6 +5,7 @@ import { sendTicketReplyEmail } from '@/lib/email'
 
 const TWENTY_BASE = 'https://abc-twenty.izcgmb.easypanel.host'
 const TWENTY_TOKEN = process.env.TWENTY_API_TOKEN || ''
+const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -33,6 +34,16 @@ function textToTipTap(text: string): string {
       }),
     })),
   })
+}
+
+function extractEmail(text: string | null | undefined) {
+  return text?.match(EMAIL_PATTERN)?.[0]?.trim() || null
+}
+
+function extractInboundEmail(body: string | null | undefined) {
+  const text = body || ''
+  const fromHeader = text.match(/^Email from[^\n(]*\(([^)]+)\)/i)?.[1]
+  return extractEmail(fromHeader) || extractEmail(text.match(/^From:\s*(.+)$/im)?.[1]) || null
 }
 
 async function addTwentyVisibleComment(params: {
@@ -94,6 +105,8 @@ export async function POST(
          t.title,
          t.venue_id,
          t.contact_email,
+         t.description,
+         t.original_message,
          t.twenty_ticket_id,
          v.name as venue_name,
          v.primary_contact_email
@@ -106,7 +119,27 @@ export async function POST(
     const ticket = ticketResult.rows[0]
     if (!ticket) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
 
-    const recipient = String(to || ticket.contact_email || ticket.primary_contact_email || '').trim()
+    const commentsResult = await query(
+      `SELECT body
+       FROM ticket_comments
+       WHERE ticket_id = $1 AND is_internal = false
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [params.id]
+    )
+    const latestInboundEmail = commentsResult.rows
+      .map((row: { body: string | null }) => extractInboundEmail(row.body))
+      .find(Boolean)
+
+    const recipient = String(
+      to ||
+      ticket.contact_email ||
+      latestInboundEmail ||
+      extractEmail(ticket.original_message) ||
+      extractEmail(ticket.description) ||
+      ticket.primary_contact_email ||
+      ''
+    ).trim()
     if (!recipient || !recipient.includes('@')) {
       return NextResponse.json({ error: 'Add a contact email before replying' }, { status: 400 })
     }

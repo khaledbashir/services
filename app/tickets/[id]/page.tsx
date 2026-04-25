@@ -24,6 +24,7 @@ interface TicketDetail {
   original_message: string | null
   source: string; ticket_type: string
   contact_name: string | null; contact_email: string | null; contact_phone: string | null
+  venue_contact_email: string | null
   parent_ticket_id: string | null; parent_ticket_number: number | null; parent_ticket_title: string | null
   sf_case_number: string | null
   image_url: string | null
@@ -49,6 +50,18 @@ function isTicketEmailComment(comment: Comment) {
   return comment.author_name === 'ANC Bot'
     || /^Email (from|sent to)/i.test(comment.body || '')
     || /^Outbound email/i.test(comment.body || '')
+}
+
+const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+
+function extractEmail(text: string | null | undefined) {
+  return text?.match(emailPattern)?.[0]?.trim() || null
+}
+
+function extractInboundEmail(comment: Comment) {
+  const body = comment.body || ''
+  const fromHeader = body.match(/^Email from[^\n(]*\(([^)]+)\)/i)?.[1]
+  return extractEmail(fromHeader) || extractEmail(body.match(/^From:\s*(.+)$/im)?.[1]) || null
 }
 
 const priorityConfig: Record<string, { color: string; label: string }> = {
@@ -83,7 +96,6 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [newComment, setNewComment] = useState('')
   const [isInternal, setIsInternal] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [emailTo, setEmailTo] = useState('')
   const [emailReply, setEmailReply] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -137,11 +149,6 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
 
   useEffect(() => { fetchData() }, [params.id])
-
-  useEffect(() => {
-    if (!ticket) return
-    setEmailTo((current) => current || ticket.contact_email || '')
-  }, [ticket?.id, ticket?.contact_email])
 
   useEffect(() => {
     if (!showMergeModal) return
@@ -205,12 +212,12 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       const res = await fetch(`/api/tickets/${params.id}/email-reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: emailTo, body: emailReply }),
+        body: JSON.stringify({ body: emailReply }),
       })
       const data = await res.json().catch(() => null)
       if (res.ok) {
         setEmailReply('')
-        setEmailStatus({ type: 'success', message: `Email sent to ${data?.to || emailTo}` })
+        setEmailStatus({ type: 'success', message: `Email sent to ${data?.to || 'the ticket contact'}` })
         await fetchData()
       } else {
         setEmailStatus({ type: 'error', message: data?.error || 'Email could not be sent' })
@@ -321,6 +328,19 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
   const communicationCount = filterCounts.emails + (ticket.original_message ? 1 : 0)
   const emailTimelineItems = allTimelineItems.filter(i => i.type === 'email')
+  const latestInboundEmail = [...comments]
+    .reverse()
+    .map(extractInboundEmail)
+    .find(Boolean) || null
+  const replyTarget = ticket.contact_email
+    ? { email: ticket.contact_email, source: 'Ticket contact' }
+    : latestInboundEmail
+      ? { email: latestInboundEmail, source: 'Latest inbound email' }
+      : extractEmail(ticket.original_message) || extractEmail(ticket.description)
+        ? { email: extractEmail(ticket.original_message) || extractEmail(ticket.description)!, source: 'Original message' }
+        : ticket.venue_contact_email
+          ? { email: ticket.venue_contact_email, source: 'Venue contact' }
+          : null
   const displayAttachments: TicketAttachment[] = [
     ...(ticket.image_url ? [{
       id: 'original-ticket-image',
@@ -1067,13 +1087,14 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             )}
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3">
-                            <input
-                              type="email"
-                              value={emailTo}
-                              onChange={(e) => setEmailTo(e.target.value)}
-                              placeholder="client@example.com"
-                              className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
-                            />
+                            <div className={`rounded-lg border px-3 py-2.5 ${replyTarget ? 'border-blue-100 bg-blue-50/60' : 'border-amber-200 bg-amber-50'}`}>
+                              <span className={`text-[10px] font-semibold uppercase tracking-wider ${replyTarget ? 'text-blue-500' : 'text-amber-600'}`}>
+                                {replyTarget ? replyTarget.source : 'Recipient needed'}
+                              </span>
+                              <p className={`mt-1 text-sm font-semibold break-all ${replyTarget ? 'text-zinc-900' : 'text-amber-800'}`}>
+                                {replyTarget ? replyTarget.email : 'No email found on this ticket'}
+                              </p>
+                            </div>
                             <textarea
                               value={emailReply}
                               onChange={(e) => setEmailReply(e.target.value)}
@@ -1083,10 +1104,12 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             />
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-3">
-                            <p className="text-[11px] text-zinc-400">Sent from the ANC service mailbox with this ticket as the reply-to.</p>
+                            <p className="text-[11px] text-zinc-400">
+                              {replyTarget ? 'Sent from the ANC service mailbox. Customer replies come back into this ticket.' : 'Add a contact email in Details before sending a reply.'}
+                            </p>
                             <button
                               type="submit"
-                              disabled={sendingEmail || !emailReply.trim() || !emailTo.trim()}
+                              disabled={sendingEmail || !emailReply.trim() || !replyTarget}
                               className="bg-[#0A52EF] text-white px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#0840C0] disabled:opacity-30 transition-all"
                             >
                               {sendingEmail ? 'Sending...' : 'Send Email'}
