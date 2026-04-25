@@ -378,7 +378,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Tickets
           </button>
-          <div className="flex flex-col 2xl:flex-row 2xl:items-start gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-start gap-4">
             <span className="text-xs font-mono font-semibold text-zinc-500 bg-zinc-100 px-2.5 py-1.5 rounded-md w-fit flex-shrink-0">{caseNum}</span>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl font-semibold text-zinc-900 leading-tight">
@@ -404,7 +404,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               )}
             </div>
             {/* Action buttons — SF style */}
-            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap 2xl:ml-auto">
+            <div className="flex items-center gap-2 flex-shrink-0 xl:ml-auto">
               {ticket.status !== 'closed' && (
                 <button
                   onClick={() => updateField('status', 'closed')}
@@ -520,11 +520,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         </div>
         </div>
 
-        {/* ── Responsive Work Area ── */}
-        <div className="grid grid-cols-1 2xl:grid-cols-[280px_minmax(0,1fr)_256px] gap-5 items-start">
+        {/* ── Three Column Layout ── */}
+        <div className="flex flex-col lg:flex-row gap-5">
 
           {/* ── LEFT SIDEBAR ── */}
-          <div className="order-2 2xl:order-1 w-full 2xl:w-72 2xl:min-w-[272px] space-y-6 2xl:sticky 2xl:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
+          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
 
             {/* Details */}
             <div className="space-y-5">
@@ -746,7 +746,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT: Tabbed Content Card ── */}
-          <div className="order-1 2xl:order-2 min-w-0">
+          <div className="flex-1 min-w-0">
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
               {/* Tab bar */}
               <div className="flex items-center border-b border-zinc-100 px-2 overflow-x-auto">
@@ -1086,7 +1086,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               </span>
                             )}
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3">
+                          <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-3 items-stretch">
                             <div className={`rounded-lg border px-3 py-2.5 ${replyTarget ? 'border-blue-100 bg-blue-50/60' : 'border-amber-200 bg-amber-50'}`}>
                               <span className={`text-[10px] font-semibold uppercase tracking-wider ${replyTarget ? 'text-blue-500' : 'text-amber-600'}`}>
                                 {replyTarget ? replyTarget.source : 'Recipient needed'}
@@ -1099,11 +1099,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               value={emailReply}
                               onChange={(e) => setEmailReply(e.target.value)}
                               placeholder="Write the email reply..."
-                              rows={3}
-                              className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white resize-none"
+                              rows={4}
+                              className="min-h-[104px] border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white resize-none"
                             />
                           </div>
-                          <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                             <p className="text-[11px] text-zinc-400">
                               {replyTarget ? 'Sent from the ANC service mailbox. Customer replies come back into this ticket.' : 'Add a contact email in Details before sending a reply.'}
                             </p>
@@ -1314,7 +1314,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT SIDEBAR: Related Objects (SF-style) ── */}
-          <div className="order-3 2xl:order-3 w-full 2xl:w-64 2xl:min-w-[256px] space-y-3">
+          <div className="w-full lg:w-64 lg:min-w-[256px] flex-shrink-0 space-y-3">
             {[
               {
                 title: 'Related Cases',
