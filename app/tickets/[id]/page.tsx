@@ -358,7 +358,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Tickets
           </button>
-          <div className="flex flex-col xl:flex-row xl:items-start gap-4">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-start gap-4">
             <span className="text-xs font-mono font-semibold text-zinc-500 bg-zinc-100 px-2.5 py-1.5 rounded-md w-fit flex-shrink-0">{caseNum}</span>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl font-semibold text-zinc-900 leading-tight">
@@ -384,7 +384,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               )}
             </div>
             {/* Action buttons — SF style */}
-            <div className="flex items-center gap-2 flex-shrink-0 xl:ml-auto">
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap 2xl:ml-auto">
               {ticket.status !== 'closed' && (
                 <button
                   onClick={() => updateField('status', 'closed')}
@@ -500,11 +500,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         </div>
         </div>
 
-        {/* ── Three Column Layout ── */}
-        <div className="flex flex-col lg:flex-row gap-5">
+        {/* ── Responsive Work Area ── */}
+        <div className="grid grid-cols-1 2xl:grid-cols-[280px_minmax(0,1fr)_256px] gap-5 items-start">
 
           {/* ── LEFT SIDEBAR ── */}
-          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
+          <div className="order-2 2xl:order-1 w-full 2xl:w-72 2xl:min-w-[272px] space-y-6 2xl:sticky 2xl:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
 
             {/* Details */}
             <div className="space-y-5">
@@ -726,7 +726,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT: Tabbed Content Card ── */}
-          <div className="flex-1 min-w-0">
+          <div className="order-1 2xl:order-2 min-w-0">
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
               {/* Tab bar */}
               <div className="flex items-center border-b border-zinc-100 px-2 overflow-x-auto">
@@ -1291,7 +1291,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT SIDEBAR: Related Objects (SF-style) ── */}
-          <div className="w-full lg:w-64 lg:min-w-[256px] flex-shrink-0 space-y-3">
+          <div className="order-3 2xl:order-3 w-full 2xl:w-64 2xl:min-w-[256px] space-y-3">
             {[
               {
                 title: 'Related Cases',

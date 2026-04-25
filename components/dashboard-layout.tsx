@@ -28,7 +28,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         style={{ paddingRight: 'var(--ai-panel-shrink, 0px)' }}
       >
         <div className="flex-1 overflow-auto">
-          <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
+          <div className="w-full max-w-[1680px] p-4 pt-16 lg:p-6 lg:pt-6 2xl:p-8 2xl:pt-8">
             <div className="mb-4 flex justify-end lg:mb-6">
               <GlobalSearch />
             </div>
