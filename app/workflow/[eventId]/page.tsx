@@ -43,6 +43,7 @@ export default function WorkflowPage() {
   const [viewer, setViewer] = useState<ViewerInfo | null>(null)
   const [postGameEditable, setPostGameEditable] = useState(true)
   const [postGameEditWindowEndsAt, setPostGameEditWindowEndsAt] = useState<string | null>(null)
+  const [postGameFormOpen, setPostGameFormOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<'forbidden' | 'not_found' | 'generic' | null>(null)
@@ -85,6 +86,7 @@ export default function WorkflowPage() {
         setViewer(data.viewer || null)
         setPostGameEditable(data.postGameEditable !== false)
         setPostGameEditWindowEndsAt(data.postGameEditWindowEndsAt || null)
+        setPostGameFormOpen(!data.workflow?.post_game_submitted)
         if (data.viewer?.role === 'technician' && data.viewer?.userId) {
           setSelectedTech(data.viewer.userId)
         } else if ((data.assignedTechs?.length || 0) > 0) {
@@ -131,6 +133,8 @@ export default function WorkflowPage() {
         // Reset form data
         if (type === 'game_ready') {
           setGameReadyData({ equipment_check: false, crew_ready: false, communications_test: false })
+        } else if (type === 'post_game_submitted') {
+          setPostGameFormOpen(false)
         }
       } else {
         const error = await res.json().catch(() => null)
@@ -393,7 +397,7 @@ export default function WorkflowPage() {
               </div>
             </button>
 
-            {canEditPostGame && (
+            {canEditPostGame && (!isPostGameDone || postGameFormOpen) && (
               <div className="px-4 pb-4 border-t border-[#E8E8E8] space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-zinc-900 mb-2">Notes</label>
@@ -420,13 +424,33 @@ export default function WorkflowPage() {
                   disabled={submitting || !selectedTech}
                   className="w-full bg-[#0A52EF] text-white py-3 rounded font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Submitting...' : isPostGameDone ? 'Update Post-Game Report' : 'Submit Post-Game Report'}
+                  {submitting ? 'Submitting...' : 'Submit post game ops report'}
                 </button>
                 {postGameWindowLabel && (
                   <p className="text-xs text-zinc-500">
                     Post-game reports stay editable until {postGameWindowLabel}.
                   </p>
                 )}
+              </div>
+            )}
+
+            {canEditPostGame && isPostGameDone && !postGameFormOpen && (
+              <div className="px-4 pb-4 border-t border-[#E8E8E8] space-y-3">
+                <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-3">
+                  <p className="text-sm font-medium text-emerald-700">Post game ops report submitted</p>
+                  {postGameWindowLabel && (
+                    <p className="text-xs text-emerald-600 mt-1">
+                      It can still be edited until {postGameWindowLabel}.
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPostGameFormOpen(true)}
+                  className="w-full border border-slate-300 text-zinc-900 py-3 rounded font-medium hover:bg-zinc-50 transition-colors"
+                >
+                  Edit post game ops report
+                </button>
               </div>
             )}
           </div>
