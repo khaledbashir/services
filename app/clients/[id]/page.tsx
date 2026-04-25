@@ -73,6 +73,16 @@ interface AccountStats {
   missing_contact_count: number
 }
 
+interface RecentActivity {
+  activity_type: 'ticket' | 'event'
+  entity_id: string
+  title: string
+  context: string | null
+  meta: string | null
+  href: string
+  occurred_date: string
+}
+
 function formatDate(value: string) {
   const date = new Date(`${value}T12:00:00`)
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -100,6 +110,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [subclients, setSubclients] = useState<Array<{ id: string; name: string; sport: string | null }>>([])
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [accountStats, setAccountStats] = useState<AccountStats>({
     open_ticket_count: 0,
     urgent_ticket_count: 0,
@@ -131,6 +142,31 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     return items
   }, [accountStats, activeServices.length, client?.is_active, linkedVenues.length])
 
+  const readinessScore = useMemo(() => {
+    let score = 100
+    if (!client?.is_active) score -= 30
+    if (linkedVenues.length === 0) score -= 25
+    if (activeServices.length === 0) score -= 20
+    score -= Math.min(accountStats.urgent_ticket_count * 12, 24)
+    score -= Math.min(accountStats.missing_contact_count * 8, 16)
+    if (linkedVenues.length > 0 && accountStats.portal_link_count === 0) score -= 6
+    return Math.max(0, Math.min(100, score))
+  }, [accountStats, activeServices.length, client?.is_active, linkedVenues.length])
+
+  const readinessLabel = readinessScore >= 85 ? 'Ready' : readinessScore >= 65 ? 'Watch' : 'Needs setup'
+  const readinessTone = readinessScore >= 85 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : readinessScore >= 65 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-rose-700 bg-rose-50 border-rose-200'
+
+  const nextActions = useMemo(() => {
+    const actions: Array<{ label: string; detail: string; href?: string }> = []
+    if (linkedVenues.length === 0) actions.push({ label: 'Link venues', detail: 'Attach the venues this account owns or operates.' })
+    if (activeServices.length === 0) actions.push({ label: 'Turn on services', detail: 'Mark the contracted ANC services for this client.' })
+    if (accountStats.missing_contact_count > 0) actions.push({ label: 'Add primary contacts', detail: 'Venue contact emails are missing, which weakens ticket routing.' })
+    if (accountStats.urgent_ticket_count > 0) actions.push({ label: 'Review urgent cases', detail: `${accountStats.urgent_ticket_count} high-priority support item${accountStats.urgent_ticket_count === 1 ? '' : 's'} need attention.`, href: '/tickets' })
+    if (accountStats.upcoming_event_count > 0 && accountStats.open_ticket_count === 0) actions.push({ label: 'Prep upcoming events', detail: 'Check staffing and workflows before the next event window.', href: '/events' })
+    if (actions.length === 0) actions.push({ label: 'Maintain account rhythm', detail: 'No setup gaps found. Keep an eye on upcoming events and open cases.' })
+    return actions.slice(0, 3)
+  }, [accountStats, activeServices.length, linkedVenues.length])
+
   const load = async () => {
     setLoading(true)
     try {
@@ -144,6 +180,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setSubclients(data.subclients || [])
         setSupportTickets(data.supportTickets || [])
         setUpcomingEvents(data.upcomingEvents || [])
+        setRecentActivity(data.recentActivity || [])
         setAccountStats(data.accountStats || {
           open_ticket_count: 0,
           urgent_ticket_count: 0,
@@ -182,6 +219,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setSubclients(data.subclients || [])
         setSupportTickets(data.supportTickets || [])
         setUpcomingEvents(data.upcomingEvents || [])
+        setRecentActivity(data.recentActivity || [])
         setAccountStats(data.accountStats || accountStats)
         if ('linked_venue_ids' in payload) {
           setSelectedVenues((data.linkedVenues || []).map((v: LinkedVenue) => v.id))
@@ -321,6 +359,69 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           )}
         </div>
 
+        <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-5">
+          <div className="bg-white rounded-lg border border-zinc-200 p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900">Account Readiness</h2>
+                <p className="text-xs text-zinc-500 mt-1">How complete this client is for day-to-day service work.</p>
+              </div>
+              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessTone}`}>{readinessLabel}</span>
+            </div>
+            <div className="mt-5 flex items-end gap-3">
+              <div className="text-4xl font-bold tracking-tight text-zinc-900">{readinessScore}</div>
+              <div className="pb-1 text-sm font-semibold text-zinc-400">/100</div>
+            </div>
+            <div className="mt-4 h-2 rounded-full bg-zinc-100 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${readinessScore >= 85 ? 'bg-emerald-500' : readinessScore >= 65 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                style={{ width: `${readinessScore}%` }}
+              />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-md border border-zinc-100 bg-zinc-50 p-2">
+                <div className="text-sm font-bold text-zinc-900">{accountStats.urgent_ticket_count}</div>
+                <div className="text-[10px] font-semibold text-zinc-500">Urgent</div>
+              </div>
+              <div className="rounded-md border border-zinc-100 bg-zinc-50 p-2">
+                <div className="text-sm font-bold text-zinc-900">{accountStats.missing_contact_count}</div>
+                <div className="text-[10px] font-semibold text-zinc-500">Contact Gaps</div>
+              </div>
+              <div className="rounded-md border border-zinc-100 bg-zinc-50 p-2">
+                <div className="text-sm font-bold text-zinc-900">{accountStats.portal_link_count}</div>
+                <div className="text-[10px] font-semibold text-zinc-500">Portals</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-zinc-200 p-6">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900">Command Brief</h2>
+                <p className="text-xs text-zinc-500 mt-1">What an account manager should look at first.</p>
+              </div>
+              {primaryVenue && (
+                <Link href={`/venues/${primaryVenue.id}`} className="text-xs font-semibold text-[#0A52EF] hover:text-[#0840C0]">Open primary venue</Link>
+              )}
+            </div>
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {nextActions.map((action) => {
+                const content = (
+                  <>
+                    <p className="text-sm font-semibold text-zinc-900">{action.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">{action.detail}</p>
+                  </>
+                )
+                return action.href ? (
+                  <Link key={action.label} href={action.href} className="rounded-lg border border-zinc-200 p-4 hover:border-zinc-300 hover:bg-zinc-50 transition-colors">{content}</Link>
+                ) : (
+                  <div key={action.label} className="rounded-lg border border-zinc-200 p-4">{content}</div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-5">
           <div className="space-y-5">
             <div className="bg-white rounded-lg border border-zinc-200 p-6">
@@ -453,6 +554,33 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           </div>
 
           <div className="space-y-5">
+            <div className="bg-white rounded-lg border border-zinc-200 p-6">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-900">Recent Activity</h2>
+                  <p className="text-sm text-zinc-500">Latest events and case movement tied to this account.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {recentActivity.length === 0 ? (
+                  <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-4 text-sm text-zinc-500">No recent activity found.</div>
+                ) : recentActivity.map((item) => (
+                  <Link key={`${item.activity_type}-${item.entity_id}`} href={item.href} className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-300 hover:bg-zinc-50 transition-colors">
+                    <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${item.activity_type === 'ticket' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                      {item.activity_type === 'ticket' ? 'T' : 'E'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="truncate text-sm font-semibold text-zinc-900">{item.title}</p>
+                        <span className="shrink-0 text-[10px] font-medium text-zinc-400">{item.occurred_date}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-zinc-500">{item.context || 'No venue'} / {item.meta || 'Tracked'}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg border border-zinc-200 p-6">
               <h2 className="text-lg font-semibold text-zinc-900">Quick Actions</h2>
               <div className="mt-4 grid grid-cols-2 gap-2">

@@ -11,7 +11,7 @@ export async function GET(
   try {
     const clientId = params.id
 
-    const [clientResult, venuesResult, servicesResult, allVenuesResult, subclientsResult, ticketsResult, eventsResult, statsResult] = await Promise.all([
+    const [clientResult, venuesResult, servicesResult, allVenuesResult, subclientsResult, ticketsResult, eventsResult, statsResult, activityResult] = await Promise.all([
       query(
         `SELECT c.*, p.name as parent_client_name
          FROM clients c
@@ -125,6 +125,47 @@ export async function GET(
          WHERE c.id = $1`,
         [clientId]
       ),
+      query(
+        `SELECT
+           activity_type,
+           entity_id,
+           title,
+           context,
+           meta,
+           href,
+           TO_CHAR(occurred_at AT TIME ZONE 'America/New_York', 'Mon DD, HH12:MI AM') as occurred_date
+         FROM (
+           SELECT
+             'ticket'::text as activity_type,
+             t.id::text as entity_id,
+             t.title,
+             v.name as context,
+             COALESCE(t.status, 'new') as meta,
+             '/tickets/' || t.id::text as href,
+             t.updated_at as occurred_at
+           FROM tickets t
+           JOIN client_venues cv ON cv.venue_id = t.venue_id AND cv.client_id = $1
+           LEFT JOIN venues v ON v.id = t.venue_id
+
+           UNION ALL
+
+           SELECT
+             'event'::text as activity_type,
+             e.id::text as entity_id,
+             e.summary as title,
+             v.name as context,
+             COALESCE(e.workflow_status, 'pending') as meta,
+             '/events/' || e.id::text as href,
+             e.event_date::timestamp as occurred_at
+           FROM events e
+           LEFT JOIN venues v ON v.id = e.venue_id
+           WHERE e.client_id = $1
+              OR e.venue_id IN (SELECT venue_id FROM client_venues WHERE client_id = $1)
+         ) activity
+         ORDER BY occurred_at DESC
+         LIMIT 10`,
+        [clientId]
+      ),
     ])
 
     if (!clientResult.rows.length) {
@@ -146,6 +187,7 @@ export async function GET(
         portal_link_count: 0,
         missing_contact_count: 0,
       },
+      recentActivity: activityResult.rows,
     })
   } catch (err) {
     console.error('Error fetching client detail:', err)
