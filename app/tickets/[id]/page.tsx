@@ -193,6 +193,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
   const currentStepIdx = statusSteps.findIndex(s => s.key === ticket.status)
   const caseNum = `T-${ticket.ticket_number}`
+  const isVoicemailTicket = ticket.source === 'voicemail'
+  const voicemailRecordingUrl = isVoicemailTicket
+    ? ticket.description?.match(/(?:^|\n)Listen:\s*(https?:\/\/\S+)/)?.[1] || null
+    : null
 
   const allTimelineItems: Array<{ type: 'comment' | 'email' | 'change'; data: any; time: Date }> = []
   comments.forEach(c => {
@@ -213,6 +217,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     emails: comments.filter(c => c.author_name === 'ANC Bot' && !c.is_internal).length,
     changes: activity.length,
   }
+  const communicationCount = filterCounts.emails + (ticket.original_message ? 1 : 0)
 
   return (
     <DashboardLayout>
@@ -609,7 +614,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 {([
                   { key: 'timeline', label: 'Feed', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
                   { key: 'details', label: 'Details', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
-                  { key: 'emails', label: 'Emails', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+                  { key: 'emails', label: isVoicemailTicket ? 'Voicemail' : 'Emails', icon: isVoicemailTicket ? 'M12 18.75a6 6 0 006-6V10.5a6 6 0 10-12 0v2.25a6 6 0 006 6zm0 0v2.25m-4.5 0h9' : 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
                   { key: 'notes', label: 'Notes', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
                 ] as const).map(tab => (
                   <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -622,7 +627,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                       <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
                     </svg>
                     {tab.label}
-                    {tab.key === 'emails' && filterCounts.emails > 0 && <span className="text-[10px] text-zinc-300">{filterCounts.emails}</span>}
+                    {tab.key === 'emails' && communicationCount > 0 && <span className="text-[10px] text-zinc-300">{communicationCount}</span>}
                     {tab.key === 'notes' && filterCounts.comments > 0 && <span className="text-[10px] text-zinc-300">{filterCounts.comments}</span>}
                   </button>
                 ))}
@@ -704,7 +709,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
                                     {comment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
-                                    {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Email</span>}
+                                    {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">{isVoicemailTicket ? 'Voicemail' : 'Email'}</span>}
                                     <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
                                   </div>
                                   <div className={`rounded-lg p-4 ${
@@ -806,7 +811,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           <InlineEdit
                             value={ticket.source || 'web'}
                             type="select"
-                            options={[{ value: 'web', label: 'Web' }, { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }, { value: 'slack', label: 'Slack' }, { value: 'portal', label: 'Portal' }]}
+                            options={[{ value: 'web', label: 'Web' }, { value: 'email', label: 'Email' }, { value: 'voicemail', label: 'Voicemail' }, { value: 'phone', label: 'Phone' }, { value: 'slack', label: 'Slack' }, { value: 'portal', label: 'Portal' }]}
                             onSave={v => updateField('source', v)}
                             displayClassName="text-sm text-zinc-800 font-medium"
                           />
@@ -920,21 +925,37 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   </div>
                 )}
 
-                {/* ── Emails Tab ── */}
+                {/* ── Communication Tab ── */}
                 {activeTab === 'emails' && (
                   <div className="p-6">
                     {filterCounts.emails === 0 && !ticket.original_message ? (
-                      <p className="text-sm text-zinc-400 py-10 text-center">No emails on this ticket</p>
+                      <p className="text-sm text-zinc-400 py-10 text-center">{isVoicemailTicket ? 'No voicemail transcript on this ticket' : 'No emails on this ticket'}</p>
                     ) : (
                       <div className="space-y-4">
-                        {/* Original email from ticket creation */}
+                        {isVoicemailTicket && (ticket.contact_phone || voicemailRecordingUrl) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {ticket.contact_phone && (
+                              <div className="border border-zinc-100 rounded-lg bg-zinc-50/50 p-3">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Caller</span>
+                                <p className="text-sm font-medium text-zinc-900 mt-1">{ticket.contact_phone}</p>
+                              </div>
+                            )}
+                            {voicemailRecordingUrl && (
+                              <a href={voicemailRecordingUrl} target="_blank" rel="noreferrer" className="border border-blue-100 rounded-lg bg-blue-50/40 p-3 hover:bg-blue-50 transition-colors">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Recording</span>
+                                <p className="text-sm font-medium text-blue-700 mt-1">Open voicemail audio</p>
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {/* Original message from ticket creation */}
                         {ticket.original_message && (
                           <div className="border border-blue-100 rounded-lg p-4 bg-blue-50/20">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={isVoicemailTicket ? 'M12 18.75a6 6 0 006-6V10.5a6 6 0 10-12 0v2.25a6 6 0 006 6zm0 0v2.25m-4.5 0h9' : 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'} /></svg>
                               </div>
-                              <span className="text-xs font-semibold text-zinc-900">Original Email</span>
+                              <span className="text-xs font-semibold text-zinc-900">{isVoicemailTicket ? 'Voicemail Transcript' : 'Original Email'}</span>
                               <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{ticket.created_date}</span>
                             </div>
                             <div className="max-w-prose"><TicketContent content={ticket.original_message} variant="email" /></div>
