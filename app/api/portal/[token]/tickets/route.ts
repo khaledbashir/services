@@ -4,6 +4,15 @@ import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import fs from 'fs'
 
+const MAX_DATA_URL_LENGTH = 8_000_000
+function normalizeImage(input: any): { imageUrl: string; mimeType: string; filename: string | null } | null {
+  if (!input?.data || typeof input.data !== 'string') return null
+  const mimeType = typeof input.mimeType === 'string' && input.mimeType.startsWith('image/') ? input.mimeType : 'image/jpeg'
+  const imageUrl = input.data.startsWith('data:') ? input.data : `data:${mimeType};base64,${input.data}`
+  if (!imageUrl.startsWith('data:image/') || imageUrl.length > MAX_DATA_URL_LENGTH) return null
+  return { imageUrl, mimeType, filename: typeof input.name === 'string' ? input.name.slice(0, 180) : null }
+}
+
 // Get ticket detail with external comments
 export async function GET(
   request: NextRequest,
@@ -28,7 +37,7 @@ export async function GET(
     // Get ticket (must belong to this venue)
     const ticketResult = await query(
       `SELECT t.id, t.ticket_number, t.title, t.description, t.category, t.priority, t.status,
-              t.resolution_notes,
+              t.resolution_notes, t.image_url,
               TO_CHAR(t.created_at, 'Mon DD, YYYY HH12:MI AM') as created_at,
               TO_CHAR(t.resolved_at, 'Mon DD, YYYY HH12:MI AM') as resolved_at
        FROM tickets t
@@ -42,7 +51,7 @@ export async function GET(
 
     // External comments only
     const commentsResult = await query(
-      `SELECT tc.body, tc.created_at, s.full_name as author
+      `SELECT tc.id, tc.body, tc.created_at, s.full_name as author
        FROM ticket_comments tc
        LEFT JOIN staff s ON tc.author_id = s.id
        WHERE tc.ticket_id = $1 AND tc.is_internal = false
@@ -50,9 +59,25 @@ export async function GET(
       [ticketId]
     )
 
+    const attachmentsResult = await query(
+      `SELECT
+         id,
+         comment_id,
+         filename,
+         mime_type,
+         image_url,
+         caption,
+         TO_CHAR(created_at, 'Mon DD, YYYY HH12:MI AM') as created_at
+       FROM ticket_attachments
+       WHERE ticket_id = $1 AND is_internal = false
+       ORDER BY created_at ASC`,
+      [ticketId]
+    )
+
     return NextResponse.json({
       ticket: ticketResult.rows[0],
       comments: commentsResult.rows,
+      attachments: attachmentsResult.rows,
     })
   } catch (err) {
     console.error('Error fetching ticket:', err)
@@ -76,7 +101,7 @@ export async function POST(
     }
 
     const venueId = venueResult.rows[0].id
-    const { title, description, category, priority } = await request.json()
+    const { title, description, category, priority, image } = await request.json()
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
@@ -93,6 +118,15 @@ export async function POST(
 
     const ticket = result.rows[0]
     const venueName = venueResult.rows[0].name
+    const normalizedImage = normalizeImage(image)
+    if (normalizedImage) {
+      await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [normalizedImage.imageUrl, ticket.id])
+      await query(
+        `INSERT INTO ticket_attachments (ticket_id, filename, mime_type, image_url, caption, uploaded_by, is_internal)
+         VALUES ($1, $2, $3, $4, $5, $6, false)`,
+        [ticket.id, normalizedImage.filename, normalizedImage.mimeType, normalizedImage.imageUrl, 'Submitted with ticket', CLAW_STAFF_ID]
+      )
+    }
 
     // Write notification log for Claw
     const logEntry = `TICKET|portal_created|Portal User|${title}|${venueName}|${new Date().toISOString()}\n`

@@ -75,6 +75,25 @@ export async function GET(
       [params.id]
     )
 
+    const attachmentsResult = await query(
+      `SELECT
+         ta.id,
+         ta.ticket_id,
+         ta.comment_id,
+         ta.filename,
+         ta.mime_type,
+         ta.image_url,
+         ta.caption,
+         ta.is_internal,
+         s.full_name as uploaded_by_name,
+         TO_CHAR(ta.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date
+       FROM ticket_attachments ta
+       LEFT JOIN staff s ON s.id = ta.uploaded_by
+       WHERE ta.ticket_id = $1
+       ORDER BY ta.created_at DESC`,
+      [params.id]
+    )
+
     const activityResult = await query(
       `SELECT action, staff_id, details, created_at
        FROM activity_log
@@ -98,6 +117,7 @@ export async function GET(
     return NextResponse.json({
       ticket: ticketResult.rows[0],
       comments: commentsResult.rows,
+      attachments: attachmentsResult.rows,
       activity: activityResult.rows || [],
       related_tickets: relatedResult.rows || []
     })

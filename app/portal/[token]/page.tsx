@@ -276,7 +276,8 @@ function ResourcesTab({ token, venueName }: { token: string; venueName: string }
 
 interface Venue { id: string; name: string; address: string; market: string; primary_contact_name: string | null; primary_contact_email: string | null }
 interface Event { id: string; summary: string; league: string; event_date: string; start_time: string; workflow_status: string; staff_count?: number }
-interface Ticket { id: string; ticket_number: number; title: string; description: string; category: string; priority: string; status: string; resolution_notes: string | null; created_at: string; resolved_at: string | null }
+interface Ticket { id: string; ticket_number: number; title: string; description: string; category: string; priority: string; status: string; resolution_notes: string | null; image_url?: string | null; created_at: string; resolved_at: string | null }
+interface TicketAttachment { id: string; comment_id: string | null; filename: string | null; mime_type: string; image_url: string; caption: string | null; created_at: string }
 interface Service { name: string; description: string | null; enabled: boolean }
 interface WorkflowStep { type: string; submitted_at: string }
 interface Stats { upcomingEvents: number; pastMonthEvents: number; completedEvents: number; completionRate: number; openTickets: number; avgResolutionHours: number | null }
@@ -325,7 +326,9 @@ export default function PortalPage() {
   // Ticket reply
   const [viewingTicket, setViewingTicket] = useState<string | null>(null)
   const [ticketComments, setTicketComments] = useState<any[]>([])
+  const [ticketAttachments, setTicketAttachments] = useState<TicketAttachment[]>([])
   const [newReply, setNewReply] = useState('')
+  const [replyImage, setReplyImage] = useState<{ data: string; mimeType: string; name: string } | null>(null)
   const [replyLoading, setReplyLoading] = useState(false)
 
   useEffect(() => {
@@ -377,6 +380,10 @@ export default function PortalPage() {
       if (res.ok) {
         const data = await res.json()
         setTicketComments(data.comments || [])
+        setTicketAttachments(data.attachments || [])
+        if (data.ticket) {
+          setTickets((prev) => prev.map((ticket) => ticket.id === ticketId ? { ...ticket, ...data.ticket } : ticket))
+        }
       }
     } catch {}
   }
@@ -397,15 +404,25 @@ export default function PortalPage() {
     setFollowUpSubmitting(false)
   }
 
+  const readImageFile = async (file: File) => {
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    return { data, mimeType: file.type, name: file.name }
+  }
+
   const submitReply = async () => {
-    if (!newReply.trim() || !viewingTicket) return
+    if ((!newReply.trim() && !replyImage) || !viewingTicket) return
     setReplyLoading(true)
     try {
-      const res = await fetch(`/api/portal/${token}/tickets`, {
+      const res = await fetch(`/api/portal/${token}/tickets/comment`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: `Reply on ticket`, description: newReply }),
+        body: JSON.stringify({ ticket_id: viewingTicket, body: newReply, image: replyImage, caption: newReply }),
       })
-      if (res.ok) { setNewReply(''); viewTicket(viewingTicket) }
+      if (res.ok) { setNewReply(''); setReplyImage(null); viewTicket(viewingTicket) }
     } catch {}
     setReplyLoading(false)
   }
@@ -898,6 +915,37 @@ export default function PortalPage() {
                           <p className="text-sm text-emerald-800 mt-1">{t.resolution_notes}</p>
                         </div>
                       )}
+                      {(() => {
+                        const visibleAttachments: TicketAttachment[] = [
+                          ...(t.image_url ? [{
+                            id: 'original-image',
+                            comment_id: null,
+                            filename: 'Original ticket image',
+                            mime_type: 'image/jpeg',
+                            image_url: t.image_url,
+                            caption: 'Submitted with ticket',
+                            created_at: t.created_at,
+                          }] : []),
+                          ...ticketAttachments,
+                        ]
+                        if (visibleAttachments.length === 0) return null
+                        return (
+                          <div className="mt-5">
+                            <h4 className="text-sm font-semibold text-zinc-900 mb-3">Photos</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                              {visibleAttachments.map((attachment) => (
+                                <button key={attachment.id} type="button" onClick={() => window.open(attachment.image_url, '_blank')} className="text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300">
+                                  <img src={attachment.image_url} alt={attachment.caption || 'Ticket photo'} className="w-full aspect-video object-cover bg-zinc-100" />
+                                  <div className="p-2">
+                                    <p className="text-xs font-medium text-zinc-700 line-clamp-1">{attachment.caption || attachment.filename || 'Photo'}</p>
+                                    <p className="text-[10px] text-zinc-400 mt-0.5">{attachment.created_at}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                       {/* Comments */}
                       <div className="mt-6 border-t border-zinc-200 pt-4">
@@ -917,6 +965,37 @@ export default function PortalPage() {
                             ))}
                           </div>
                         )}
+                        <div className="mt-4 border border-zinc-200 rounded-lg p-3">
+                          <textarea
+                            value={newReply}
+                            onChange={(e) => setNewReply(e.target.value)}
+                            placeholder="Add an update or describe the photo..."
+                            rows={2}
+                            className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/20 resize-none"
+                          />
+                          <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
+                            <label className="text-xs font-medium text-zinc-600 border border-zinc-200 rounded px-3 py-1.5 cursor-pointer hover:border-zinc-300">
+                              {replyImage ? replyImage.name : 'Attach Photo'}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file && file.type.startsWith('image/') && file.size <= 6 * 1024 * 1024) {
+                                    setReplyImage(await readImageFile(file))
+                                  }
+                                  e.currentTarget.value = ''
+                                }}
+                              />
+                            </label>
+                            {replyImage && <button type="button" onClick={() => setReplyImage(null)} className="text-xs text-zinc-400 hover:text-zinc-700">Remove photo</button>}
+                            <button onClick={submitReply} disabled={replyLoading || (!newReply.trim() && !replyImage)}
+                              className="ml-auto text-xs font-medium px-4 py-1.5 bg-[#0A52EF] text-white rounded hover:bg-[#0840C0] disabled:opacity-50">
+                              {replyLoading ? 'Sending...' : 'Add Update'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )

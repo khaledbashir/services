@@ -31,6 +31,18 @@ interface TicketDetail {
 interface Comment { id: string; body: string; is_internal: boolean; author_name: string; created_date: string }
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
 interface Staff { id: string; full_name: string }
+interface TicketAttachment {
+  id: string
+  ticket_id?: string
+  comment_id: string | null
+  filename: string | null
+  mime_type: string
+  image_url: string
+  caption: string | null
+  is_internal: boolean
+  uploaded_by_name?: string | null
+  created_date: string
+}
 
 function isTicketEmailComment(comment: Comment) {
   if (comment.is_internal) return false
@@ -57,11 +69,12 @@ const categoryLabels: Record<string, string> = {
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
-type ContentTab = 'timeline' | 'details' | 'description' | 'emails' | 'notes'
+type ContentTab = 'timeline' | 'details' | 'description' | 'emails' | 'attachments' | 'notes'
 
 export default function TicketDetailPage({ params }: { params: { id: string } }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
+  const [attachments, setAttachments] = useState<TicketAttachment[]>([])
   const [activity, setActivity] = useState<Activity[]>([])
   const [relatedTickets, setRelatedTickets] = useState<any[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
@@ -74,6 +87,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [emailReply, setEmailReply] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [attachmentCaption, setAttachmentCaption] = useState('')
+  const [attachmentInternal, setAttachmentInternal] = useState(false)
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [attachmentStatus, setAttachmentStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [editResolution, setEditResolution] = useState(false)
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
@@ -107,6 +124,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       const venuesData = await venuesRes.json().catch(() => ({ venues: [] }))
       setTicket(ticketData.ticket)
       setComments(ticketData.comments || [])
+      setAttachments(ticketData.attachments || [])
       setActivity(ticketData.activity || [])
       setRelatedTickets(ticketData.related_tickets || [])
       setStaffList(staffData.staff || [])
@@ -204,6 +222,48 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     }
   }
 
+  const uploadAttachment = async (file: File | null) => {
+    if (!file || !file.type.startsWith('image/')) {
+      setAttachmentStatus({ type: 'error', message: 'Choose an image file' })
+      return
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      setAttachmentStatus({ type: 'error', message: 'Image must be under 6 MB' })
+      return
+    }
+    setUploadingAttachment(true)
+    setAttachmentStatus(null)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch(`/api/tickets/${params.id}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: { data: dataUrl, mimeType: file.type, name: file.name },
+          caption: attachmentCaption,
+          is_internal: attachmentInternal,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        setAttachmentCaption('')
+        setAttachmentStatus({ type: 'success', message: 'Attachment added' })
+        await fetchData()
+      } else {
+        setAttachmentStatus({ type: 'error', message: data?.error || 'Unable to upload attachment' })
+      }
+    } catch {
+      setAttachmentStatus({ type: 'error', message: 'Unable to upload attachment' })
+    } finally {
+      setUploadingAttachment(false)
+    }
+  }
+
   const saveResolution = async () => {
     await updateField('resolution_notes', resolutionNotes)
     setEditResolution(false)
@@ -261,6 +321,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
   const communicationCount = filterCounts.emails + (ticket.original_message ? 1 : 0)
   const emailTimelineItems = allTimelineItems.filter(i => i.type === 'email')
+  const displayAttachments: TicketAttachment[] = [
+    ...(ticket.image_url ? [{
+      id: 'original-ticket-image',
+      comment_id: null,
+      filename: 'Original ticket image',
+      mime_type: 'image/jpeg',
+      image_url: ticket.image_url,
+      caption: 'Original image submitted with this ticket',
+      is_internal: false,
+      uploaded_by_name: ticket.created_by_name,
+      created_date: ticket.created_date,
+    }] : []),
+    ...attachments,
+  ]
 
   return (
     <DashboardLayout>
@@ -658,6 +732,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   { key: 'timeline', label: 'Feed', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
                   { key: 'details', label: 'Details', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
                   { key: 'emails', label: isVoicemailTicket ? 'Voicemail' : 'Emails', icon: isVoicemailTicket ? 'M12 18.75a6 6 0 006-6V10.5a6 6 0 10-12 0v2.25a6 6 0 006 6zm0 0v2.25m-4.5 0h9' : 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+                  { key: 'attachments', label: 'Files', icon: 'M3 16.5V7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5zM8 11l2.25 2.25L13 10l4 5H7l1-4z' },
                   { key: 'notes', label: 'Notes', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
                 ] as const).map(tab => (
                   <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -671,6 +746,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     </svg>
                     {tab.label}
                     {tab.key === 'emails' && communicationCount > 0 && <span className="text-[10px] text-zinc-300">{communicationCount}</span>}
+                    {tab.key === 'attachments' && displayAttachments.length > 0 && <span className="text-[10px] text-zinc-300">{displayAttachments.length}</span>}
                     {tab.key === 'notes' && filterCounts.comments > 0 && <span className="text-[10px] text-zinc-300">{filterCounts.comments}</span>}
                   </button>
                 ))}
@@ -1065,6 +1141,84 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         </>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* ── Attachments Tab ── */}
+                {activeTab === 'attachments' && (
+                  <div className="p-6 space-y-5">
+                    <div className="border border-zinc-200 rounded-lg bg-zinc-50/50 p-4">
+                      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-zinc-900">Add Photo Evidence</h3>
+                          <p className="text-xs text-zinc-500 mt-0.5">Upload screenshots, error photos, damaged parts, or field reference images.</p>
+                        </div>
+                        {attachmentStatus && (
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${attachmentStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                            {attachmentStatus.message}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_180px] gap-3">
+                        <input
+                          value={attachmentCaption}
+                          onChange={(e) => setAttachmentCaption(e.target.value)}
+                          placeholder="Optional caption, e.g. right ribbon board error"
+                          className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
+                        />
+                        <label className={`cursor-pointer text-center border border-zinc-200 bg-white rounded-lg px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:border-zinc-400 ${uploadingAttachment ? 'opacity-50 pointer-events-none' : ''}`}>
+                          {uploadingAttachment ? 'Uploading...' : 'Choose Image'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              uploadAttachment(file)
+                              e.currentTarget.value = ''
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-3 inline-flex bg-zinc-100/80 rounded-md p-0.5">
+                        <button type="button" onClick={() => setAttachmentInternal(false)}
+                          className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!attachmentInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                          Client Visible
+                        </button>
+                        <button type="button" onClick={() => setAttachmentInternal(true)}
+                          className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${attachmentInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
+                          Internal
+                        </button>
+                      </div>
+                    </div>
+
+                    {displayAttachments.length === 0 ? (
+                      <p className="text-sm text-zinc-400 py-10 text-center">No photos or attachments yet</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {displayAttachments.map((attachment) => (
+                          <button
+                            key={attachment.id}
+                            type="button"
+                            onClick={() => window.open(attachment.image_url, '_blank')}
+                            className="text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300 hover:shadow-sm transition-all bg-white"
+                          >
+                            <div className="aspect-video bg-zinc-100">
+                              <img src={attachment.image_url} alt={attachment.caption || attachment.filename || 'Ticket attachment'} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-semibold text-zinc-900 line-clamp-1">{attachment.caption || attachment.filename || 'Ticket photo'}</p>
+                                {attachment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                              </div>
+                              <p className="text-xs text-zinc-400 mt-1">
+                                {attachment.uploaded_by_name || 'Uploaded'} / {attachment.created_date}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

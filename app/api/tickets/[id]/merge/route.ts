@@ -43,6 +43,10 @@ export async function POST(
       `UPDATE ticket_comments SET ticket_id = $1 WHERE ticket_id = $2 RETURNING id`,
       [targetId, params.id]
     )
+    await query(
+      `UPDATE ticket_attachments SET ticket_id = $1 WHERE ticket_id = $2`,
+      [targetId, params.id]
+    )
 
     // Close source and point it at the target
     await query(
