@@ -338,7 +338,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   return (
     <DashboardLayout>
-      <div className="max-w-6xl mx-auto space-y-8 py-2">
+      <div className="max-w-[1440px] mx-auto space-y-5 py-4">
 
         {ticket.merged_into_ticket_id && ticket.merged_into_ticket_number && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-center justify-between">
@@ -353,29 +353,29 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         )}
 
         {/* ── Header ── */}
-        <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-5 space-y-4">
           <button onClick={() => router.push('/tickets')} className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors flex items-center gap-1.5 group">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Tickets
           </button>
-          <div className="flex items-start gap-4">
-            <span className="text-xs font-mono font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1.5 rounded-md mt-0.5 flex-shrink-0">{caseNum}</span>
+          <div className="flex flex-col xl:flex-row xl:items-start gap-4">
+            <span className="text-xs font-mono font-semibold text-zinc-500 bg-zinc-100 px-2.5 py-1.5 rounded-md w-fit flex-shrink-0">{caseNum}</span>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl font-semibold text-zinc-900 leading-tight">
                 <InlineEdit value={ticket.title} onSave={v => updateField('title', v)} displayClassName="text-xl font-semibold text-zinc-900" />
               </h1>
-              <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
+              <div className="flex items-center gap-2 mt-2 text-xs text-zinc-400 flex-wrap">
                 <span>Opened by <span className="text-zinc-600 font-medium">{ticket.created_by_name}</span></span>
-                <span>&middot;</span>
+                <span>/</span>
                 <span>{ticket.created_date}</span>
                 {ticket.venue_name && (
                   <>
-                    <span>&middot;</span>
+                    <span>/</span>
                     <Link href={`/venues/${ticket.venue_id}`} className="text-blue-600 hover:text-blue-800 font-medium">{ticket.venue_name}</Link>
                   </>
                 )}
-                <span>&middot;</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-medium">{(ticket.source || 'web').toUpperCase()}</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-semibold">{(ticket.source || 'web').toUpperCase()}</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${pri.color}`}>{pri.label}</span>
               </div>
               {ticket.image_url && (
                 <div className="mt-2">
@@ -384,11 +384,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               )}
             </div>
             {/* Action buttons — SF style */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 xl:ml-auto">
               {ticket.status !== 'closed' && (
                 <button
                   onClick={() => updateField('status', 'closed')}
-                  className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   Mark Complete
@@ -412,7 +412,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     }
                   }}
                   title="Delete this ticket (manager+ only, for spam)"
-                  className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors flex items-center gap-1.5"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" /></svg>
                   Delete
@@ -431,13 +431,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         })
                       } catch {}
                     }}
-                    className="px-3 py-1.5 bg-[#0A52EF] text-white text-xs font-medium rounded-l-lg hover:bg-[#0840C0] transition-colors"
+                    className="px-3 py-2 bg-[#0A52EF] text-white text-xs font-semibold rounded-l-lg hover:bg-[#0840C0] transition-colors shadow-sm"
                   >
                     Send to Slack
                   </button>
                   <button
                     onClick={() => setShowActions(!showActions)}
-                    className="px-1.5 py-1.5 bg-[#0A52EF] text-white rounded-r-lg hover:bg-[#0840C0] transition-colors border-l border-blue-400/30"
+                    className="px-2 py-2 bg-[#0A52EF] text-white rounded-r-lg hover:bg-[#0840C0] transition-colors border-l border-blue-400/30"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                   </button>
@@ -481,6 +481,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         </div>
 
         {/* ── Status Steps ── */}
+        <div className="bg-white rounded-xl border border-zinc-200 p-3 shadow-sm">
         <div className="flex items-center gap-1">
           {statusSteps.map((step, idx) => {
             const isActive = step.key === ticket.status
@@ -497,12 +498,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             )
           })}
         </div>
+        </div>
 
         {/* ── Three Column Layout ── */}
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-5">
 
           {/* ── LEFT SIDEBAR ── */}
-          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start">
+          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
 
             {/* Details */}
             <div className="space-y-5">
@@ -725,9 +727,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
           {/* ── RIGHT: Tabbed Content Card ── */}
           <div className="flex-1 min-w-0">
-            <div className="bg-white rounded-xl border border-zinc-200/80 overflow-hidden">
+            <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
               {/* Tab bar */}
-              <div className="flex items-center border-b border-zinc-100 px-1">
+              <div className="flex items-center border-b border-zinc-100 px-2 overflow-x-auto">
                 {([
                   { key: 'timeline', label: 'Feed', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
                   { key: 'details', label: 'Details', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
@@ -821,7 +823,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               <div key={`c-${comment.id}`} className="relative flex gap-3 py-3">
                                 <div className="relative z-10 flex-shrink-0 w-[30px] flex justify-center pt-1">
                                   <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                                    isEmail ? 'bg-blue-100 text-blue-600' : comment.is_internal ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'
+                                    isEmail ? 'bg-blue-50 text-[#0A52EF] border border-blue-100' : comment.is_internal ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'
                                   }`}>{getInitials(comment.author_name)}</div>
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -831,8 +833,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                     {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">{isVoicemailTicket ? 'Voicemail' : 'Email'}</span>}
                                     <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
                                   </div>
-                                  <div className={`rounded-lg p-4 ${
-                                    isEmail ? 'bg-blue-50/40 border border-blue-100' : comment.is_internal ? 'bg-indigo-50/40 border border-indigo-100' : 'bg-zinc-50/50 border border-zinc-100'
+                                  <div className={`rounded-lg p-4 shadow-sm ${
+                                    isEmail ? 'bg-white border border-zinc-200' : comment.is_internal ? 'bg-indigo-50/40 border border-indigo-100' : 'bg-zinc-50/50 border border-zinc-100'
                                   }`}>
                                     {isEmail ? (
                                       <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
@@ -1047,12 +1049,15 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 {/* ── Communication Tab ── */}
                 {activeTab === 'emails' && (
                   <div>
-                    <div className="p-6 space-y-4">
+                    <div className="p-6 space-y-5 bg-zinc-50/40">
                       {!isVoicemailTicket && (
-                        <form onSubmit={sendEmailReply} className="border border-zinc-200 rounded-lg bg-zinc-50/50 p-4">
+                        <form onSubmit={sendEmailReply} className="border border-zinc-200 rounded-xl bg-white p-4 shadow-sm">
                           <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                             <div>
-                              <h3 className="text-sm font-semibold text-zinc-900">Reply by Email</h3>
+                              <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-[#0A52EF]"></span>
+                                Reply by Email
+                              </h3>
                               <p className="text-xs text-zinc-500 mt-0.5">Client replies come back into this same ticket thread.</p>
                             </div>
                             {emailStatus && (
@@ -1061,7 +1066,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               </span>
                             )}
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3">
                             <input
                               type="email"
                               value={emailTo}
@@ -1097,13 +1102,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         {isVoicemailTicket && (ticket.contact_phone || voicemailRecordingUrl) && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {ticket.contact_phone && (
-                              <div className="border border-zinc-100 rounded-lg bg-zinc-50/50 p-3">
+                              <div className="border border-zinc-200 rounded-xl bg-white p-4 shadow-sm">
                                 <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Caller</span>
                                 <p className="text-sm font-medium text-zinc-900 mt-1">{ticket.contact_phone}</p>
                               </div>
                             )}
                             {voicemailRecordingUrl && (
-                              <a href={voicemailRecordingUrl} target="_blank" rel="noreferrer" className="border border-blue-100 rounded-lg bg-blue-50/40 p-3 hover:bg-blue-50 transition-colors">
+                              <a href={voicemailRecordingUrl} target="_blank" rel="noreferrer" className="border border-blue-100 rounded-xl bg-white p-4 hover:bg-blue-50 transition-colors shadow-sm">
                                 <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Recording</span>
                                 <p className="text-sm font-medium text-blue-700 mt-1">Open voicemail audio</p>
                               </a>
@@ -1112,15 +1117,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         )}
                         {/* Original message from ticket creation */}
                         {ticket.original_message && (
-                          <div className="border border-blue-100 rounded-lg p-4 bg-blue-50/20">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">
+                          <div className="border border-zinc-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                            <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 bg-white">
+                              <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0A52EF] flex items-center justify-center text-[10px] font-semibold border border-blue-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={isVoicemailTicket ? 'M12 18.75a6 6 0 006-6V10.5a6 6 0 10-12 0v2.25a6 6 0 006 6zm0 0v2.25m-4.5 0h9' : 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'} /></svg>
                               </div>
-                              <span className="text-xs font-semibold text-zinc-900">{isVoicemailTicket ? 'Voicemail Transcript' : 'Original Email'}</span>
+                              <div>
+                                <span className="text-xs font-semibold text-zinc-900">{isVoicemailTicket ? 'Voicemail Transcript' : 'Original Email'}</span>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">{ticket.contact_email || ticket.contact_name || ticket.created_by_name}</p>
+                              </div>
                               <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{ticket.created_date}</span>
                             </div>
-                            <div className="max-w-prose"><TicketContent content={ticket.original_message} variant="email" /></div>
+                            <div className="px-5 py-4 max-w-none overflow-hidden"><TicketContent content={ticket.original_message} variant="email" /></div>
                           </div>
                         )}
                         {/* Email comments from timeline */}
@@ -1128,13 +1136,16 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           const comment = item.data as Comment
                           const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
                           return (
-                            <div key={idx} className="border border-blue-100 rounded-lg p-4 bg-blue-50/20">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">{getInitials(comment.author_name)}</div>
-                                <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                            <div key={idx} className="border border-zinc-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                              <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 bg-white">
+                                <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0A52EF] flex items-center justify-center text-[10px] font-semibold border border-blue-100">{getInitials(comment.author_name)}</div>
+                                <div>
+                                  <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
+                                  <p className="text-[11px] text-zinc-400 mt-0.5">{isTicketEmailComment(comment) ? 'Email message' : 'Message'}</p>
+                                </div>
                                 <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
                               </div>
-                              <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
+                              <div className="px-5 py-4 max-w-none overflow-hidden"><TicketContent content={comment.body} variant="email" /></div>
                             </div>
                           )
                         })}
@@ -1280,12 +1291,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT SIDEBAR: Related Objects (SF-style) ── */}
-          <div className="w-full lg:w-56 lg:min-w-[224px] flex-shrink-0 space-y-3">
+          <div className="w-full lg:w-64 lg:min-w-[256px] flex-shrink-0 space-y-3">
             {[
               {
                 title: 'Related Cases',
-                icon: '🔗',
-                color: 'from-orange-500 to-red-500',
+                icon: 'RC',
                 items: relatedTickets,
                 render: (item: any) => (
                   <Link key={item.id} href={`/tickets/${item.id}`} className="flex items-center gap-2 py-1.5 px-2 text-xs hover:bg-zinc-50 rounded transition-colors">
@@ -1298,8 +1308,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               },
               {
                 title: 'Dev Tickets',
-                icon: '🛠',
-                color: 'from-violet-500 to-purple-500',
+                icon: 'DT',
                 items: relatedTickets.filter((t: any) => t.ticket_type === 'dev_ticket'),
                 render: (item: any) => (
                   <Link key={item.id} href={`/tickets/${item.id}`} className="flex items-center gap-2 py-1.5 px-2 text-xs hover:bg-zinc-50 rounded transition-colors">
@@ -1310,17 +1319,17 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               },
             ].map((panel) => (
               <details key={panel.title} open className="group">
-                <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r ${panel.color} cursor-pointer select-none"
-                  style={{ background: `linear-gradient(135deg, ${panel.color.includes('orange') ? '#f97316, #ef4444' : '#8b5cf6, #a855f7'})` }}>
+                <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white border border-zinc-200 cursor-pointer select-none shadow-sm hover:border-zinc-300 transition-colors">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">{panel.icon}</span>
-                    <span className="text-white text-xs font-semibold">{panel.title} ({panel.items.length})</span>
+                    <span className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-600 text-[10px] font-bold flex items-center justify-center">{panel.icon}</span>
+                    <span className="text-zinc-900 text-xs font-semibold">{panel.title}</span>
+                    <span className="text-[10px] text-zinc-400">{panel.items.length}</span>
                   </div>
-                  <svg className="w-3.5 h-3.5 text-white/80 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </summary>
-                <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden shadow-sm">
                   {panel.items.length > 0 ? (
                     <div className="divide-y divide-zinc-100">
                       {panel.items.map(panel.render)}
@@ -1335,16 +1344,16 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             {/* Venue Equipment */}
             <details open className="group">
               <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer select-none"
-                style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
+                style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm">📦</span>
-                  <span className="text-white text-xs font-semibold">Account Assets</span>
+                  <span className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold flex items-center justify-center">AS</span>
+                  <span className="text-zinc-900 text-xs font-semibold">Account Assets</span>
                 </div>
-                <svg className="w-3.5 h-3.5 text-white/80 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </summary>
-              <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden">
+              <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden shadow-sm">
                 <Link href={`/venues/${ticket.venue_id}`} className="flex items-center gap-2 py-2 px-3 text-xs text-blue-600 hover:bg-zinc-50 transition-colors">
                   View {ticket.venue_name} assets →
                 </Link>
@@ -1354,16 +1363,17 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             {/* Parts */}
             <details open className="group">
               <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer select-none"
-                style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+                style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm">🔧</span>
-                  <span className="text-white text-xs font-semibold">Parts (0)</span>
+                  <span className="w-6 h-6 rounded-md bg-red-50 text-red-700 text-[10px] font-bold flex items-center justify-center">PT</span>
+                  <span className="text-zinc-900 text-xs font-semibold">Parts</span>
+                  <span className="text-[10px] text-zinc-400">0</span>
                 </div>
-                <svg className="w-3.5 h-3.5 text-white/80 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-3.5 h-3.5 text-zinc-400 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </summary>
-              <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden">
+              <div className="mt-1 bg-white rounded-lg border border-zinc-200 overflow-hidden shadow-sm">
                 <p className="text-[11px] text-zinc-400 text-center py-3">None</p>
               </div>
             </details>

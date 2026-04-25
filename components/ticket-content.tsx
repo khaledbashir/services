@@ -10,6 +10,30 @@ interface EmailBlock {
   body: string
 }
 
+function splitSignature(body: string): { body: string; signature: string } {
+  const lines = body.split('\n')
+  if (lines.length < 4) return { body, signature: '' }
+
+  const signatureStart = lines.findIndex((line, index) => {
+    if (index < 2) return false
+    const trimmed = line.trim()
+    if (!trimmed) return false
+    const looksLikeTitle = trimmed.length <= 80
+      && !/[.!?]$/.test(trimmed)
+      && /\b(?:manager|director|coordinator|production|installation|operations|support|sales|phone|mobile|office)\b/i.test(trimmed)
+    return /mailto:|@[\w.-]+\.[a-z]{2,}|https?:\/\/|www\./i.test(trimmed)
+      || looksLikeTitle
+      || /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(trimmed)
+      || /\b(?:atlanta|baltimore|boston|charlotte|chicago|cincinnati|cleveland|columbus|dallas|denver|detroit|houston)\b/i.test(trimmed)
+  })
+
+  if (signatureStart === -1) return { body, signature: '' }
+  return {
+    body: lines.slice(0, signatureStart).join('\n').trim(),
+    signature: lines.slice(signatureStart).join('\n').trim(),
+  }
+}
+
 /**
  * Parse raw email/ticket content into structured blocks:
  * - Primary message (the actual content)
@@ -151,18 +175,30 @@ function parseEmailContent(raw: string): EmailBlock[] {
     return [{ type: 'message', body: raw.trim() }]
   }
 
-  return blocks
+  const normalized: EmailBlock[] = []
+  blocks.forEach((block) => {
+    if (block.type !== 'message') {
+      normalized.push(block)
+      return
+    }
+    const split = splitSignature(block.body)
+    if (split.body) normalized.push({ ...block, body: split.body })
+    if (split.signature) normalized.push({ type: 'signature', body: split.signature })
+  })
+  return normalized.length > 0 ? normalized : blocks
 }
 
 /** Clean inline junk from a text block */
 function cleanInlineText(text: string): string {
   return text
+    .replace(/mailto:/gi, '')
     .replace(/<https?:\/\/aka\.ms\/[^>]+>/g, '')    // <https://aka.ms/xxx>
     .replace(/https?:\/\/aka\.ms\/\S+/g, '')         // bare aka.ms links
     .replace(/<https?:\/\/[^>]*salesforce[^>]*>/g, '') // salesforce URLs
     .replace(/\[https?:\/\/[^\]]*salesforce[^\]]*\]/g, '') // [salesforce URLs]
     .replace(/\u200B/g, '')                           // zero-width spaces
     .replace(/\uFEFF/g, '')                           // BOM
+    .replace(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\1/g, '$1')
     .replace(/\s{3,}/g, '  ')                         // excessive spaces
     .replace(/\n{4,}/g, '\n\n\n')                     // excessive newlines
     .trim()
@@ -178,6 +214,7 @@ export function TicketContent({ content, variant = 'description' }: {
 
   const primaryBlocks = blocks.filter(b => b.type === 'message')
   const replyBlocks = blocks.filter(b => b.type === 'reply')
+  const signatureBlocks = blocks.filter(b => b.type === 'signature')
 
   return (
     <div className="space-y-3">
@@ -186,12 +223,12 @@ export function TicketContent({ content, variant = 'description' }: {
         <div key={i} className="prose-ticket">
           <ReactMarkdown
             components={{
-              p: ({ children }) => <p className="text-[13.5px] text-zinc-700 leading-[1.7] mb-3 last:mb-0">{children}</p>,
+              p: ({ children }) => <p className="text-[14px] text-zinc-800 leading-[1.75] mb-3 last:mb-0">{children}</p>,
               strong: ({ children }) => <strong className="font-semibold text-zinc-900">{children}</strong>,
               em: ({ children }) => <em className="italic text-zinc-600">{children}</em>,
               a: ({ href, children }) => (
                 <a href={href} target="_blank" rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 underline decoration-blue-200 hover:decoration-blue-400 transition-colors">
+                  className="break-words text-[#0A52EF] hover:text-[#0840C0] underline decoration-blue-200 hover:decoration-blue-400 transition-colors">
                   {children}
                 </a>
               ),
@@ -220,6 +257,17 @@ export function TicketContent({ content, variant = 'description' }: {
           </ReactMarkdown>
         </div>
       ))}
+
+      {signatureBlocks.length > 0 && (
+        <details className="group rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2">
+          <summary className="cursor-pointer select-none text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-open:text-zinc-500">
+            Signature
+          </summary>
+          <div className="mt-2 whitespace-pre-line text-xs leading-relaxed text-zinc-500">
+            {signatureBlocks.map((block) => cleanInlineText(block.body)).join('\n\n')}
+          </div>
+        </details>
+      )}
 
       {/* Reply chain toggle */}
       {replyBlocks.length > 0 && (
