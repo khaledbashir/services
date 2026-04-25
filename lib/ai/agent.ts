@@ -123,7 +123,7 @@ async function loadUserContext(): Promise<string> {
          (SELECT COUNT(*) FROM clients WHERE COALESCE(is_active,true)=true)::int AS active_clients,
          (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true)::int AS active_staff,
          (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved'))::int AS open_tickets,
-         (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved') AND priority='urgent')::int AS urgent_tickets,
+         (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved') AND priority IN ('high','critical'))::int AS urgent_tickets,
          (SELECT COUNT(*) FROM design_requests WHERE status NOT IN ('approved','done'))::int AS open_designs,
          (SELECT COUNT(*) FROM maintenance_logs WHERE status NOT IN ('completed','cancelled'))::int AS open_maintenance,
          (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE)::int AS events_today,
@@ -135,7 +135,7 @@ async function loadUserContext(): Promise<string> {
       `SELECT t.title, t.ticket_number, v.name AS venue
        FROM tickets t LEFT JOIN venues v ON v.id = t.venue_id
        WHERE t.status NOT IN ('closed','resolved')
-       ORDER BY (t.priority='urgent') DESC, t.created_at DESC LIMIT 3`
+       ORDER BY (t.priority='critical') DESC, (t.priority='high') DESC, t.created_at DESC LIMIT 3`
     )),
     timeout(query(
       `SELECT job_title, status FROM design_requests

@@ -49,6 +49,7 @@ const categoryLabels: Record<string, string> = {
   content: 'Content',
   operational: 'Operational',
   general: 'General',
+  voicemail: 'Voicemail',
 }
 
 export default function TicketsPage() {
@@ -632,7 +633,7 @@ export default function TicketsPage() {
                         )}
                       </td>
                       <td className="py-2.5 px-4 text-zinc-600 text-xs">{ticket.venue_name || '—'}</td>
-                      <td className="py-2.5 px-4 text-zinc-600 text-xs capitalize">{ticket.category}</td>
+                      <td className="py-2.5 px-4 text-zinc-600 text-xs">{categoryLabels[ticket.category] || ticket.category}</td>
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-1.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${pri.dot}`}></span>

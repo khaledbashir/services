@@ -11,7 +11,7 @@ const STATUS_MAP: Record<string, string> = {
 }
 
 const ORIGIN_MAP: Record<string, string> = {
-  'Email': 'email', 'Web': 'web', 'Phone': 'phone',
+  'Email': 'email', 'Web': 'web', 'Phone': 'phone', 'Voicemail': 'voicemail',
 }
 
 export async function POST(request: NextRequest) {

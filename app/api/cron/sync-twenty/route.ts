@@ -9,7 +9,7 @@ import { syncEventsToTwenty, syncTicketsToTwenty, syncTechniciansToTwenty } from
  * - Syncs recent/updated events to Twenty VenueEvents
  * - Syncs recent/updated tickets to Twenty ServiceTickets
  * - Sets venueId relation by matching venue name
- * - Sets ticketSource = DASHBOARD on all synced tickets
+ * - Preserves ticketSource from the dashboard ticket origin
  * - Sets staffingRequired = true on events with assigned techs
  */
 export async function GET() {
@@ -47,6 +47,7 @@ export async function GET() {
         t.status,
         t.priority,
         t.category,
+        t.source,
         v.name as venue_name,
         t.venue_id,
         s.name as assigned_to,

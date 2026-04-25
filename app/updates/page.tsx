@@ -74,7 +74,7 @@ export default function UpdatesPage() {
             title="Salesforce Case Parity"
             description="The ticket system now matches Salesforce's Service Console field-for-field. If you used SF Cases before, this will feel familiar — but with real-time Slack integration, SLA tracking, and AI diagnostics that SF doesn't have."
             details={[
-              { label: 'Source tracking', explain: 'Every ticket tracks where it came from — Email, Web, Phone, Slack, or Portal. Set automatically on creation, editable after.' },
+              { label: 'Source tracking', explain: 'Every ticket tracks where it came from — Email, Voicemail, Web, Phone, Slack, or Portal. Set automatically on creation, editable after.' },
               { label: 'Ticket types', explain: 'Support (standard service case) or Dev Ticket (internal development task spawned from a support case).' },
               { label: 'Contact info', explain: 'Contact name, email, and phone stored directly on the ticket. Click any field to edit inline.' },
               { label: 'Parent/child linking', explain: 'Link tickets together. Clone a ticket or create a Dev Ticket from the action menu — both auto-link as children to the original case.' },
@@ -88,7 +88,7 @@ export default function UpdatesPage() {
             details={[
               { label: 'Feed tab', explain: 'The main timeline — comments, status changes, assignment changes, all in chronological order. Write comments, toggle between client-visible and internal notes.' },
               { label: 'Details tab', explain: 'Two-column field grid showing every field on the ticket. All inline-editable — click any value to change it. Matches the SF Details view.' },
-              { label: 'Emails tab', explain: 'Shows the original email (if the ticket came from email) plus any email replies. Only has content when the ticket originated from the email forwarding system.' },
+              { label: 'Communication tab', explain: 'Shows email history for email tickets and the transcript, caller, and recording for voicemail tickets. The label changes based on case origin.' },
               { label: 'Notes tab', explain: 'Internal-only notes that venue contacts and clients cannot see. Use for internal coordination — "spoke to vendor, part ships Monday" etc.' },
               { label: 'Right sidebar', explain: 'Collapsible panels for Related Cases, Dev Tickets, Account Assets, and Parts. Matches the SF right sidebar layout.' },
               { label: 'Action menu', explain: '"Send to Slack" button with dropdown: Change Owner, Clone Ticket, Create Dev Ticket, Print View.' },

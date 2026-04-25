@@ -14,7 +14,7 @@ const skill: Skill = {
       venue_id: { type: 'string', description: 'UUID of the venue' },
       title: { type: 'string' },
       description: { type: 'string' },
-      priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
     },
     required: ['venue_id', 'title'],
   },

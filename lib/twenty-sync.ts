@@ -247,6 +247,7 @@ export async function syncTicketsToTwenty(
     status: string
     priority: string
     category?: string
+    source?: string
     venue_name: string
     venue_id?: string
     assigned_to?: string
@@ -285,6 +286,7 @@ export async function syncTicketsToTwenty(
     'low': 'PRI_LOW',
     'medium': 'PRI_MEDIUM',
     'high': 'PRI_HIGH',
+    'critical': 'PRI_HIGH',
   }
 
   // Map categories
@@ -293,6 +295,17 @@ export async function syncTicketsToTwenty(
     'software': 'CATEGORY_SOFTWARE',
     'general': 'CATEGORY_GENERAL',
     'content': 'CATEGORY_CONTENT',
+    'operational': 'CATEGORY_GENERAL',
+    'voicemail': 'CATEGORY_GENERAL',
+  }
+
+  const sourceMap: Record<string, string> = {
+    'web': 'DASHBOARD',
+    'portal': 'DASHBOARD',
+    'email': 'EMAIL',
+    'voicemail': 'PHONE',
+    'phone': 'PHONE',
+    'slack': 'SLACK',
   }
 
   for (const ticket of dbTickets) {
@@ -317,7 +330,7 @@ export async function syncTicketsToTwenty(
         description: ticket.description || '',
         resolutionNotes: ticket.resolution_notes || '',
         servicesId: ticket.id,
-        ticketSource: 'DASHBOARD',
+        ticketSource: sourceMap[ticket.source || ''] || 'DASHBOARD',
       }
 
       if (venueId) {

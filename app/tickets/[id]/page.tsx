@@ -46,7 +46,7 @@ const statusSteps = [
   { key: 'closed', label: 'Closed', color: '#6b7280' },
 ]
 const categoryLabels: Record<string, string> = {
-  hardware: 'Hardware', software: 'Software', content: 'Content', operational: 'Operational', general: 'General',
+  hardware: 'Hardware', software: 'Software', content: 'Content', operational: 'Operational', general: 'General', voicemail: 'Voicemail',
 }
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
@@ -825,7 +825,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           <InlineEdit
                             value={ticket.category || 'general'}
                             type="select"
-                            options={[{ value: 'hardware', label: 'Hardware' }, { value: 'software', label: 'Software' }, { value: 'content', label: 'Content' }, { value: 'operational', label: 'Operational' }, { value: 'general', label: 'General' }]}
+                            options={[{ value: 'hardware', label: 'Hardware' }, { value: 'software', label: 'Software' }, { value: 'content', label: 'Content' }, { value: 'operational', label: 'Operational' }, { value: 'general', label: 'General' }, { value: 'voicemail', label: 'Voicemail' }]}
                             onSave={v => updateField('category', v)}
                             displayClassName="text-sm text-zinc-800 font-medium"
                           />

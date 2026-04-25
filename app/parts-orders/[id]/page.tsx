@@ -74,8 +74,9 @@ export default function PartsOrderDetail() {
                     value={order.trackingNumber || ""}
                     onChange={e => setOrder({...order, trackingNumber: e.target.value})}
                     onBlur={e => handleUpdate({ trackingNumber: e.target.value })}
-                    placeholder="Twenty object has no trackingNumber field yet — TBD"
+                    placeholder="Add before marking shipped"
                   />
+                  <p className="mt-1 text-[11px] text-zinc-400">Included in the shipment email; Twenty does not store this field yet.</p>
                 </div>
               </div>
 
