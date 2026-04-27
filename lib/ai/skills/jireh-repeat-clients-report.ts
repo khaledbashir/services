@@ -59,7 +59,7 @@ const skill: Skill = {
       },
       body: JSON.stringify({
         query: `mutation E($input: ExecuteOneLogicFunctionInput!) {
-          executeOneLogicFunction(input: $input)
+          executeOneLogicFunction(input: $input) { data status error }
         }`,
         variables: {
           input: {
@@ -84,11 +84,18 @@ const skill: Skill = {
         json.errors.map((e: { message: string }) => e.message).join('; '),
       )
     }
-    const result = json?.data?.executeOneLogicFunction
-    if (!result || result.error) {
+    const wrapper = json?.data?.executeOneLogicFunction
+    if (wrapper?.status === 'ERROR' || wrapper?.error) {
       throw new SkillError(
         'twenty_logic_function_returned_error',
-        result?.error || 'Twenty logic function returned no result',
+        wrapper.error?.errorMessage || JSON.stringify(wrapper.error) || 'Twenty logic function failed',
+      )
+    }
+    const result = wrapper?.data
+    if (!result || result.error) {
+      throw new SkillError(
+        'twenty_logic_function_no_data',
+        result?.error || 'Twenty logic function returned no data payload',
       )
     }
     return {
