@@ -113,6 +113,23 @@ function storagePrompt(prompt: string, plan: PackagePlan): string {
 }
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    return await handle(request, params)
+  } catch (err: any) {
+    console.error('[generate-ai-proof] unhandled error:', err)
+    return NextResponse.json(
+      {
+        error: err?.message || 'AI image generation crashed',
+        where: err?.where || null,
+        code: err?.code || null,
+        detail: err?.detail || null,
+      },
+      { status: 500 }
+    )
+  }
+}
+
+async function handle(request: NextRequest, params: { id: string }) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
 
