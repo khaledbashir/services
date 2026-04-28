@@ -40,8 +40,8 @@ interface Staff { id: string; full_name: string }
 
 // Pipeline order drives the stage timeline: earlier index = earlier stage.
 // Each stage can advance with a single "move forward" button OR via the status
-// dropdown at the top. Upload at the Client Review stage auto-advances + fires
-// the client email via the cascade in app/api/design-requests/[id]/proofs.
+// dropdown at the top. Proof uploads only file the work; the client email is
+// fired when the request is explicitly moved to Client Review.
 const STAGES = [
   { key: 'request_submitted', label: 'Submitted',     desc: 'New request intake' },
   { key: 'in_queue',          label: 'In Queue',      desc: 'Awaiting designer' },
@@ -322,7 +322,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             {/* STAGE 4: IN QC */}
             <StageCard n={4} label="In QC" desc={STAGES[3].desc} state={currentIdx < 3 ? 'upcoming' : currentIdx === 3 ? 'active' : 'done'}>
               <p className="text-sm text-zinc-500">
-                Internal quality check. When passed, upload the proof below to auto-advance this request to Client Review and fire the approval email.
+                Internal quality check. When passed, upload the proof below, then explicitly advance this request to Client Review to fire the approval email.
               </p>
             </StageCard>
 
@@ -708,10 +708,28 @@ function HoursLog({ designRequestId, staffList }: { designRequestId: string; sta
 // AI First Draft — Alexis's ask (2026-04-23): let the system take a first
 // pass at the design so designers refine instead of starting from blank.
 // Hits the /generate-ai-proof endpoint which builds a venue-aware prompt from
-// the request context, calls gpt-image-2, and files the output as a proof
+// the request context, calls image generation, and files the output as a proof
 // attachment flagged is_ai_generated=true. UX: one button, ~20-40s wait,
 // preview card when ready.
 // ─────────────────────────────────────────────────────────────────────────────
+function parseApiError(res: Response, text: string, data: any): string {
+  if (data?.error) return data.error
+  if (res.status === 401) return 'Your session expired. Refresh, sign in, and try again.'
+  if (res.status === 403) return 'You do not have permission to generate AI drafts.'
+
+  const contentType = res.headers.get('content-type') || ''
+  const looksLikeHtml =
+    contentType.includes('text/html') ||
+    /^\s*<!doctype html/i.test(text) ||
+    /^\s*<html[\s>]/i.test(text)
+
+  if (looksLikeHtml) {
+    return 'The AI draft request returned an app page instead of an API error. Refresh and try again; if it continues, check the server logs.'
+  }
+
+  return text.trim().slice(0, 200) || `Failed (${res.status})`
+}
+
 function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -722,21 +740,21 @@ function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
     try {
       const res = await fetch(`/api/design-requests/${designRequestId}/generate-ai-proof`, {
         method: 'POST',
+        headers: { Accept: 'application/json' },
       })
       // The server may respond with an HTML error page (Next.js 500) when
-      // something blows up — catch the JSON-parse failure and fall back to
-      // the raw text so the UI shows a useful message instead of "Unexpected
-      // token <".
+      // something blows up. Catch the JSON-parse failure so the UI can show
+      // a clean message instead of leaking markup.
       const text = await res.text()
       let data: any = null
       try { data = text ? JSON.parse(text) : null } catch {}
       if (!res.ok) {
-        setError(data?.error || text.slice(0, 200) || `Failed (${res.status})`)
+        setError(parseApiError(res, text, data))
       } else if (data?.proof) {
         setGenerated(data.proof)
         window.dispatchEvent(new Event('anc:data-refresh'))
       } else {
-        setError('Unexpected response from server')
+        setError(parseApiError(res, text, data))
       }
     } catch (err: any) {
       setError(err?.message || 'Network error')

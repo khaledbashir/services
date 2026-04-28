@@ -3,18 +3,6 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { uploadProof, listProofsForRequest, isConfigured, getSignedDownloadUrl } from '@/lib/proof-storage'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
-import { createDesignProofShare } from '@/lib/design-proof'
-
-// Dashboard status values considered "pre-review" — uploading a proof from any
-// of these auto-advances the request to client_review, which in turn fires
-// the proof-share email to the client. Tracked as a const so the stages UI
-// can reuse it for labelling the "active" stage.
-const PRE_REVIEW_STATUSES = new Set([
-  'request_submitted',
-  'in_queue',
-  'in_progress',
-  'in_qc',
-])
 
 // List every proof file (latest first) attached to this design request.
 // Combines the legacy bytea-backed rows and the new MinIO-backed rows into
