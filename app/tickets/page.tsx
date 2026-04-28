@@ -519,7 +519,7 @@ export default function TicketsPage() {
               const pri = priorityConfig[ticket.priority] || priorityConfig.medium
               const st = statusConfig[ticket.status] || statusConfig.new
               return (
-                <div key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
+                <div key={ticket.id} onClick={() => window.open(`/tickets/${ticket.id}`, '_blank', 'noopener,noreferrer')}
                   className="bg-white p-4 hover:bg-zinc-50 transition-colors cursor-pointer group">
                   {/* Top: ticket number + priority indicator */}
                   <div className="flex items-center justify-between mb-2">
@@ -615,7 +615,7 @@ export default function TicketsPage() {
                   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
                   const st = statusConfig[ticket.status] || statusConfig.new
                   return (
-                    <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)}
+                    <tr key={ticket.id} onClick={() => window.open(`/tickets/${ticket.id}`, '_blank', 'noopener,noreferrer')}
                       className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors ${selectedIds.has(ticket.id) ? 'bg-blue-50/50' : ''}`}>
                       <td className="w-10 text-center py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
                         <input
