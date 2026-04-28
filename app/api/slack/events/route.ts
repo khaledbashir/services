@@ -5,8 +5,14 @@ import { sendSlackMessage } from '@/lib/slack'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function assistantMuted(): boolean {
+  const v = (process.env.SLACK_ASSISTANT_ENABLED || '').trim().toLowerCase()
+  return v === 'false' || v === '0' || v === 'off' || v === 'no'
+}
+
 function shouldHandleEvent(event: any, botUserId?: string): boolean {
   if (!event || event.subtype === 'bot_message' || event.bot_id) return false
+  if (assistantMuted()) return false
   if (event.type === 'app_mention') return true
   if (event.channel_type === 'im') return true
   if (botUserId && typeof event.text === 'string' && event.text.includes(`<@${botUserId}>`)) return true
