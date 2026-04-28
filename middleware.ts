@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://crm.ancsports.net',
+  'https://services.ancsports.net',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+])
+
 // Edge runtime compatible JWT verification
 async function verifyJWT(token: string): Promise<any | null> {
   try {
@@ -12,8 +20,26 @@ async function verifyJWT(token: string): Promise<any | null> {
   }
 }
 
+function withCors(request: NextRequest, response: NextResponse) {
+  if (!request.nextUrl.pathname.startsWith('/api/')) return response
+
+  const origin = request.headers.get('origin')
+  if (!origin || !ALLOWED_CORS_ORIGINS.has(origin)) return response
+
+  response.headers.set('Access-Control-Allow-Origin', origin)
+  response.headers.set('Access-Control-Allow-Credentials', 'true')
+  response.headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS')
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+  response.headers.set('Vary', 'Origin')
+  return response
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
+
+  if (request.method === 'OPTIONS' && pathname.startsWith('/api/')) {
+    return withCors(request, new NextResponse(null, { status: 204 }))
+  }
 
   // Normalize accidental double slashes before Next.js routing kicks in.
   // Without this, paths like //events/discovery-log can be treated like
@@ -32,7 +58,7 @@ export async function middleware(request: NextRequest) {
   const publicRoutes = ['/login', '/api/auth/login', '/workflow', '/api/workflow', '/portal', '/api/portal', '/portals', '/api/portals', '/api/webhooks', '/api/showcase', '/api/cron', '/api/schedule/export', '/api/slack', '/api/internal', '/api/kb', '/presentation', '/proof', '/api/proof-share', '/dashboard/ops-overview', '/dashboard/design-content', '/_next', '/favicon', '/ANC_Logo_2023_blue.png', '/ANC_Logo_2023_white.png']
   
   if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
-    return NextResponse.next()
+    return withCors(request, NextResponse.next())
   }
   
   // Protected routes - require authentication
@@ -40,7 +66,7 @@ export async function middleware(request: NextRequest) {
   
   if (!token) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return withCors(request, NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
     return NextResponse.redirect(new URL('/login', request.url))
   }
@@ -48,12 +74,12 @@ export async function middleware(request: NextRequest) {
   const payload = await verifyJWT(token)
   if (!payload) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return withCors(request, NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
     return NextResponse.redirect(new URL('/login', request.url))
   }
   
-  return NextResponse.next()
+  return withCors(request, NextResponse.next())
 }
 
 export const config = {

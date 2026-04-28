@@ -730,6 +730,17 @@ function parseApiError(res: Response, text: string, data: any): string {
   return text.trim().slice(0, 200) || `Failed (${res.status})`
 }
 
+function getServicesApiUrl(path: string) {
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+  const browserOrigin = typeof window === 'undefined' ? '' : window.location.origin
+  const browserHost = typeof window === 'undefined' ? '' : window.location.hostname
+  const origin =
+    configuredOrigin ||
+    (browserHost === 'crm.ancsports.net' ? 'https://services.ancsports.net' : browserOrigin)
+
+  return `${origin}${path}`
+}
+
 function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -738,9 +749,10 @@ function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
   const run = async () => {
     setBusy(true); setError(null); setGenerated(null)
     try {
-      const res = await fetch(`/api/design-requests/${designRequestId}/generate-ai-proof`, {
+      const res = await fetch(getServicesApiUrl(`/api/design-requests/${designRequestId}/generate-ai-proof`), {
         method: 'POST',
         headers: { Accept: 'application/json' },
+        credentials: 'include',
       })
       // The server may respond with an HTML error page (Next.js 500) when
       // something blows up. Catch the JSON-parse failure so the UI can show
