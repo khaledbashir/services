@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
         e.id,
         e.summary,
         COALESCE(e.event_type, 'event') as event_type,
+        e.venue_id,
         v.name as venue_name,
         COALESCE(v.venue_type, 'sports') as venue_type,
         c.id as client_id,

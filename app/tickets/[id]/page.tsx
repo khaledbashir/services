@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useRef, useState, FormEvent, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { InlineEdit } from '@/components/inline-edit'
@@ -107,6 +107,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [cannedResponses, setCannedResponses] = useState<Array<{ id: string; title: string; body: string; category: string }>>([])
   const [showCanned, setShowCanned] = useState(false)
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionAnchor, setMentionAnchor] = useState<{ start: number; end: number }>({ start: 0, end: 0 })
+  const [mentionHighlight, setMentionHighlight] = useState(0)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
   const [activeTab, setActiveTab] = useState<ContentTab>('timeline')
   const [venueOptions, setVenueOptions] = useState<Array<{ id: string; name: string; client_name?: string | null }>>([])
@@ -188,6 +192,52 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       })
       if (res.ok) await fetchData()
     } catch {}
+  }
+
+  const onCommentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setNewComment(value)
+    const caret = e.target.selectionStart || value.length
+    const before = value.slice(0, caret)
+    const match = before.match(/(?:^|\s)@([\w.\- ]{0,40})$/)
+    if (match) {
+      setMentionQuery(match[1])
+      setMentionAnchor({ start: caret - match[1].length - 1, end: caret })
+      setMentionHighlight(0)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  const filteredMentionStaff = mentionQuery === null
+    ? []
+    : staffList
+        .filter(s => s.full_name.toLowerCase().includes(mentionQuery.toLowerCase()))
+        .slice(0, 6)
+
+  const insertMention = (staff: Staff) => {
+    const before = newComment.slice(0, mentionAnchor.start)
+    const after = newComment.slice(mentionAnchor.end)
+    const inserted = `@[${staff.full_name}] `
+    const next = before + inserted + after
+    setNewComment(next)
+    setMentionQuery(null)
+    setTimeout(() => {
+      const ta = commentTextareaRef.current
+      if (ta) {
+        const pos = (before + inserted).length
+        ta.focus()
+        ta.setSelectionRange(pos, pos)
+      }
+    }, 0)
+  }
+
+  const onCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery === null || filteredMentionStaff.length === 0) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setMentionHighlight(h => Math.min(h + 1, filteredMentionStaff.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setMentionHighlight(h => Math.max(h - 1, 0)) }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertMention(filteredMentionStaff[mentionHighlight]) }
+    else if (e.key === 'Escape') { setMentionQuery(null) }
   }
 
   const addComment = async (e: FormEvent) => {
@@ -885,10 +935,33 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             ))}
                           </div>
                         )}
-                        <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
-                          placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible comment...'}
-                          className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
-                          rows={2} />
+                        <div className="relative">
+                          <textarea
+                            ref={commentTextareaRef}
+                            value={newComment}
+                            onChange={onCommentChange}
+                            onKeyDown={onCommentKeyDown}
+                            placeholder={isInternal ? 'Write an internal note... (type @ to tag a teammate)' : 'Write a client-visible comment... (type @ to tag a teammate)'}
+                            className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
+                            rows={2}
+                          />
+                          {mentionQuery !== null && filteredMentionStaff.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-56 overflow-y-auto bg-white border border-zinc-200 rounded-md shadow-lg">
+                              <div className="px-3 py-1.5 text-[10px] font-medium text-zinc-400 uppercase tracking-wide border-b border-zinc-100">Tag teammate</div>
+                              {filteredMentionStaff.map((s, i) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onMouseDown={(e) => { e.preventDefault(); insertMention(s) }}
+                                  onMouseEnter={() => setMentionHighlight(i)}
+                                  className={`w-full text-left px-3 py-1.5 text-xs ${i === mentionHighlight ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                                >
+                                  <span className="font-medium">@{s.full_name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center justify-between gap-3 mt-2">
                           <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
                             <button type="button" onClick={() => setShowCanned(!showCanned)}

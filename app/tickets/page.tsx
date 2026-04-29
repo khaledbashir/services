@@ -35,7 +35,7 @@ const priorityRank: Record<string, number> = { low: 0, medium: 1, high: 2, criti
 const statusRank: Record<string, number> = { closed: 0, on_hold: 1, in_progress: 2, escalated: 3, new: 4 }
 
 interface Venue { id: string; name: string }
-interface Event { id: string; summary: string; event_date: string }
+interface Event { id: string; summary: string; event_date: string; venue_id: string }
 interface Staff { id: string; full_name: string }
 
 const priorityConfig: Record<string, { dot: string; label: string }> = {
@@ -490,7 +490,9 @@ export default function TicketsPage() {
                   <select value={formData.event_id} onChange={e => setFormData(prev => ({ ...prev, event_id: e.target.value }))}
                     className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" disabled={!selectedVenueId}>
                     <option value="">No event</option>
-                    {events.map(e => <option key={e.id} value={e.id}>{e.summary}</option>)}
+                    {events
+                      .filter(e => !selectedVenueId || e.venue_id === selectedVenueId)
+                      .map(e => <option key={e.id} value={e.id}>{e.summary}</option>)}
                   </select>
                 </div>
               </div>

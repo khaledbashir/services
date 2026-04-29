@@ -41,6 +41,40 @@ export async function POST(
       [params.id]
     )
     const ti = ticketInfo.rows[0]
+
+    // @-mention DMs: parse @[Full Name] markers and DM each tagged staff
+    // member who has a Slack user ID on file. Best-effort — failure doesn't
+    // block the comment.
+    try {
+      const mentionedNames = Array.from(new Set(
+        [...String(body).matchAll(/@\[([^\]]+)\]/g)].map(m => m[1].trim()).filter(Boolean)
+      ))
+      if (mentionedNames.length > 0 && ti) {
+        const caseNumDm = String(ti.ticket_number).padStart(8, '0')
+        const ticketUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
+        const mentioned = await query(
+          `SELECT id, full_name, slack_user_ids FROM staff WHERE full_name = ANY($1::text[]) AND is_active = true`,
+          [mentionedNames]
+        )
+        for (const m of mentioned.rows) {
+          if (m.id === user.userId) continue
+          const slackUserId = (m.slack_user_ids || [])[0]
+          if (!slackUserId) continue
+          sendSlackMessage({
+            channel: slackUserId,
+            text: `🔔 ${user.fullName || 'A teammate'} tagged you on Case #${caseNumDm}`,
+            blocks: [
+              { type: 'section', text: { type: 'mrkdwn', text: `🔔 *${user.fullName || 'A teammate'} tagged you on Case #${caseNumDm}*\n*${ti.title}* @ ${ti.venue_name}` } },
+              { type: 'section', text: { type: 'mrkdwn', text: `> ${String(body).substring(0, 300)}${String(body).length > 300 ? '...' : ''}` } },
+              { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: ticketUrl, style: 'primary' }] },
+            ],
+          })
+        }
+      }
+    } catch (mentionErr) {
+      console.error('[mentions] DM dispatch failed:', mentionErr)
+    }
+
     if (ti) {
       const caseNum = String(ti.ticket_number).padStart(8, '0')
       const channelId = ti.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''

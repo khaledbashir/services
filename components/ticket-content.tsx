@@ -305,6 +305,12 @@ export function TicketContent({ content, variant = 'description' }: {
   )
 }
 
+// Pre-process @[Full Name] mentions into a markdown form ReactMarkdown can
+// render with a custom emphasis style — turning them into chips visually.
+function renderMentions(content: string): string {
+  return content.replace(/@\[([^\]]+)\]/g, (_m, name) => `**@${name}**`)
+}
+
 /** Simpler renderer for comments (no email parsing needed) */
 export function CommentContent({ content }: { content: string }) {
   return (
@@ -312,7 +318,13 @@ export function CommentContent({ content }: { content: string }) {
       <ReactMarkdown
         components={{
           p: ({ children }) => <p className="text-[13px] text-zinc-700 leading-[1.7] mb-2 last:mb-0">{children}</p>,
-          strong: ({ children }) => <strong className="font-semibold text-zinc-900">{children}</strong>,
+          strong: ({ children }) => {
+            const text = Array.isArray(children) ? children.join('') : String(children ?? '')
+            if (text.startsWith('@')) {
+              return <span className="inline-flex items-center px-1.5 py-px rounded text-[12px] font-medium bg-blue-50 text-blue-700 border border-blue-100">{text}</span>
+            }
+            return <strong className="font-semibold text-zinc-900">{children}</strong>
+          },
           em: ({ children }) => <em className="italic">{children}</em>,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{children}</a>
@@ -330,7 +342,7 @@ export function CommentContent({ content }: { content: string }) {
           blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-200 pl-3 my-2 text-zinc-500 italic">{children}</blockquote>,
         }}
       >
-        {content}
+        {renderMentions(content)}
       </ReactMarkdown>
     </div>
   )

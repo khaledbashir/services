@@ -160,6 +160,56 @@ body {
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38) !important;
 }
 
+/* Accent-tint badges (status pills, priority chips, alert callouts) use
+   bg-{color}-50/100 hardcoded across the dashboard. On a #0f0f0f surface
+   those near-white pastels glare — Chris's manager flagged the blowout
+   2026-04-29. Replace each with a dim translucent tint so they stay
+   visually distinct without dominating the page. */
+.dark .bg-red-50      { background-color: rgba(239, 68, 68, 0.16) !important; }
+.dark .bg-red-100     { background-color: rgba(239, 68, 68, 0.22) !important; }
+.dark .bg-orange-50   { background-color: rgba(249, 115, 22, 0.16) !important; }
+.dark .bg-orange-100  { background-color: rgba(249, 115, 22, 0.22) !important; }
+.dark .bg-amber-50    { background-color: rgba(245, 158, 11, 0.16) !important; }
+.dark .bg-amber-100   { background-color: rgba(245, 158, 11, 0.22) !important; }
+.dark .bg-yellow-50   { background-color: rgba(234, 179, 8, 0.16) !important; }
+.dark .bg-yellow-100  { background-color: rgba(234, 179, 8, 0.22) !important; }
+.dark .bg-emerald-50  { background-color: rgba(16, 185, 129, 0.16) !important; }
+.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.22) !important; }
+.dark .bg-green-50    { background-color: rgba(34, 197, 94, 0.16) !important; }
+.dark .bg-green-100   { background-color: rgba(34, 197, 94, 0.22) !important; }
+.dark .bg-sky-50      { background-color: rgba(14, 165, 233, 0.16) !important; }
+.dark .bg-sky-100     { background-color: rgba(14, 165, 233, 0.22) !important; }
+.dark .bg-blue-50     { background-color: rgba(59, 130, 246, 0.16) !important; }
+.dark .bg-blue-100    { background-color: rgba(59, 130, 246, 0.22) !important; }
+.dark .bg-indigo-50   { background-color: rgba(99, 102, 241, 0.16) !important; }
+.dark .bg-indigo-100  { background-color: rgba(99, 102, 241, 0.22) !important; }
+.dark .bg-violet-50   { background-color: rgba(139, 92, 246, 0.16) !important; }
+.dark .bg-violet-100  { background-color: rgba(139, 92, 246, 0.22) !important; }
+.dark .bg-purple-50   { background-color: rgba(168, 85, 247, 0.16) !important; }
+.dark .bg-purple-100  { background-color: rgba(168, 85, 247, 0.22) !important; }
+.dark .bg-rose-50     { background-color: rgba(244, 63, 94, 0.16) !important; }
+.dark .bg-rose-100    { background-color: rgba(244, 63, 94, 0.22) !important; }
+.dark .bg-pink-50     { background-color: rgba(236, 72, 153, 0.16) !important; }
+.dark .bg-pink-100    { background-color: rgba(236, 72, 153, 0.22) !important; }
+.dark .bg-teal-50     { background-color: rgba(20, 184, 166, 0.16) !important; }
+.dark .bg-teal-100    { background-color: rgba(20, 184, 166, 0.22) !important; }
+
+/* Brighten dark-on-light text pairings so the dimmed pills stay readable. */
+.dark .text-red-700,    .dark .text-red-800    { color: #fca5a5 !important; }
+.dark .text-orange-700, .dark .text-orange-800 { color: #fdba74 !important; }
+.dark .text-amber-700,  .dark .text-amber-800  { color: #fcd34d !important; }
+.dark .text-yellow-700, .dark .text-yellow-800 { color: #fde047 !important; }
+.dark .text-emerald-700,.dark .text-emerald-800{ color: #6ee7b7 !important; }
+.dark .text-green-700,  .dark .text-green-800  { color: #86efac !important; }
+.dark .text-sky-700,    .dark .text-sky-800    { color: #7dd3fc !important; }
+.dark .text-blue-700,   .dark .text-blue-800   { color: #93c5fd !important; }
+.dark .text-indigo-700, .dark .text-indigo-800 { color: #a5b4fc !important; }
+.dark .text-violet-700, .dark .text-violet-800 { color: #c4b5fd !important; }
+.dark .text-purple-700, .dark .text-purple-800 { color: #d8b4fe !important; }
+.dark .text-rose-700,   .dark .text-rose-800   { color: #fda4af !important; }
+.dark .text-pink-700,   .dark .text-pink-800   { color: #f9a8d4 !important; }
+.dark .text-teal-700,   .dark .text-teal-800   { color: #5eead4 !important; }
+
 .leaflet-container {
   font: inherit;
 }
