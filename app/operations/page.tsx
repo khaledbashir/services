@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
-interface NocoTable { id: string; title: string }
-interface NocoBase { id: string; title: string; tables: NocoTable[] }
-interface NocoWorkspace { workspace_id: string; workspace_title: string; bases: NocoBase[] }
+interface BaserowTable { id: number; name: string }
+interface BaserowDatabase { id: number; name: string; tables: BaserowTable[] }
+interface BaserowWorkspace { workspace_id: number; workspace_name: string; bases: BaserowDatabase[] }
 
 export default function OperationsPage() {
-  const [workspaces, setWorkspaces] = useState<NocoWorkspace[]>([])
+  const [workspaces, setWorkspaces] = useState<BaserowWorkspace[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -43,7 +43,7 @@ export default function OperationsPage() {
         bases: ws.bases
           .map((b) => ({
             ...b,
-            tables: b.tables.filter((t) => t.title.toLowerCase().includes(q) || b.title.toLowerCase().includes(q)),
+            tables: b.tables.filter((t) => t.name.toLowerCase().includes(q) || b.name.toLowerCase().includes(q)),
           }))
           .filter((b) => b.tables.length > 0),
       }))
@@ -62,7 +62,7 @@ export default function OperationsPage() {
               Operations
             </h1>
             <p className="text-sm text-zinc-500 mt-1.5">
-              {loading ? 'Loading…' : `${totalTables} ${totalTables === 1 ? 'table' : 'tables'} across ${workspaces.reduce((n, ws) => n + ws.bases.length, 0)} bases`}
+              {loading ? 'Loading…' : `${totalTables} ${totalTables === 1 ? 'table' : 'tables'} across ${workspaces.reduce((n, ws) => n + ws.bases.length, 0)} databases`}
             </p>
           </div>
           {!loading && (
@@ -81,7 +81,7 @@ export default function OperationsPage() {
             <div className="font-semibold mb-1">Operations is not reachable</div>
             <p className="text-amber-800 whitespace-pre-wrap">{error}</p>
             <p className="text-amber-800 mt-2">
-              Make sure <code className="font-mono text-xs bg-white/60 px-1.5 py-0.5 rounded">NOCODB_API_TOKEN</code> and <code className="font-mono text-xs bg-white/60 px-1.5 py-0.5 rounded">NOCODB_BASE_URL</code> are set on the EasyPanel anc-services service, then redeploy.
+              Make sure <code className="font-mono text-xs bg-white/60 px-1.5 py-0.5 rounded">BASEROW_API_TOKEN</code> and <code className="font-mono text-xs bg-white/60 px-1.5 py-0.5 rounded">BASEROW_BASE_URL</code> are set on the EasyPanel anc-services service, then redeploy.
             </p>
           </div>
         ) : loading ? (
@@ -96,7 +96,7 @@ export default function OperationsPage() {
             </div>
             <div className="text-xs text-zinc-500 mt-1">
               {workspaces.length === 0
-                ? 'Add bases and tables in NocoDB admin, then come back.'
+                ? 'Create a database + tables in Baserow admin, then come back.'
                 : 'Try a different search term.'}
             </div>
           </div>
@@ -106,7 +106,7 @@ export default function OperationsPage() {
               ws.bases.map((base) => (
                 <div key={base.id}>
                   <div className="flex items-baseline gap-2 mb-2">
-                    <h2 className="text-sm font-semibold text-zinc-900">{base.title}</h2>
+                    <h2 className="text-sm font-semibold text-zinc-900">{base.name}</h2>
                     <span className="text-[10.5px] uppercase tracking-wider text-zinc-400">
                       {base.tables.length} {base.tables.length === 1 ? 'table' : 'tables'}
                     </span>
@@ -118,8 +118,8 @@ export default function OperationsPage() {
                         href={`/operations/${base.id}/${t.id}`}
                         className="block rounded-xl bg-white ring-1 ring-zinc-200 p-4 hover:ring-[#0A52EF]/40 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-12px_rgba(15,23,42,0.18)] transition-all"
                       >
-                        <div className="text-sm font-semibold text-zinc-900 truncate">{t.title}</div>
-                        <div className="text-[11px] text-zinc-400 mt-1 font-mono truncate">{t.id}</div>
+                        <div className="text-sm font-semibold text-zinc-900 truncate">{t.name}</div>
+                        <div className="text-[11px] text-zinc-400 mt-1 font-mono">#{t.id}</div>
                       </Link>
                     ))}
                   </div>

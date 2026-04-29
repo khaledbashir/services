@@ -37,9 +37,9 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/slack-create-canvas'),
     () => import('@/lib/ai/skills/jireh-repeat-clients-report'),
     () => import('@/lib/ai/skills/enrich-from-salesforce'),
-    () => import('@/lib/ai/skills/noco-list-tables'),
-    () => import('@/lib/ai/skills/noco-query-table'),
-    () => import('@/lib/ai/skills/noco-create-row'),
+    () => import('@/lib/ai/skills/ops-list-tables'),
+    () => import('@/lib/ai/skills/ops-query-table'),
+    () => import('@/lib/ai/skills/ops-create-row'),
   ]
   for (const load of staticImports) {
     try {

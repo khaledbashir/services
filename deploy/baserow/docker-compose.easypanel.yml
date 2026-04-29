@@ -1,0 +1,53 @@
+# Baserow all-in-one deploy for EasyPanel.
+# Drop this into a new EasyPanel "Compose" service. Set BASEROW_PUBLIC_URL
+# to the external URL you'll expose (e.g. https://ops.ancsports.net) before
+# starting — Baserow refuses to start without a real public URL.
+#
+# After it boots:
+#   1. Visit BASEROW_PUBLIC_URL, register the first admin user (becomes the
+#      instance owner; you can promote/add more after).
+#   2. Settings → API tokens → create a token (xc-style: scoped to a workspace
+#      or global). Drop it into anc-services env as BASEROW_API_TOKEN.
+#   3. Build out the ANC tables (Walkthroughs / Assets / Maintenance / etc.).
+#
+# Branding: this stock image still says "Baserow" everywhere. The rebranded
+# Dockerfile next to this file (deploy/baserow/Dockerfile) overlays ANC
+# logos + locale strings on top once we have it building. Run the stock
+# image first to confirm everything talks; then swap to the branded image.
+
+services:
+  baserow:
+    container_name: anc-baserow
+    image: baserow/baserow:latest
+    restart: unless-stopped
+    environment:
+      # External URL — MUST match what users visit. Caddy inside the
+      # container uses this for cookies, websockets, and link generation.
+      BASEROW_PUBLIC_URL: ${BASEROW_PUBLIC_URL:?Set BASEROW_PUBLIC_URL to e.g. https://ops.ancsports.net}
+
+      # Kill the premium/enterprise upsell paths in the OSS build so users
+      # don't see "upgrade to Enterprise" prompts everywhere.
+      BASEROW_OSS_ONLY: 'true'
+
+      # Disable telemetry and the "do you like Baserow?" support widgets.
+      BASEROW_DISABLE_SUPPORT: 'true'
+      BASEROW_TRIGGER_SYNC_TEMPLATES_AFTER_MIGRATION: 'false'
+
+      # Session secrets — generate strong values and set them once.
+      SECRET_KEY: ${BASEROW_SECRET_KEY:?Set a long random string}
+      BASEROW_JWT_SIGNING_KEY: ${BASEROW_JWT_SIGNING_KEY:?Set a long random string}
+      DATABASE_PASSWORD: ${BASEROW_DB_PASSWORD:?Set a strong password}
+      REDIS_PASSWORD: ${BASEROW_REDIS_PASSWORD:?Set a strong password}
+
+      # Workspace defaults — keep instance closed until invited users register.
+      BASEROW_DISABLE_PUBLIC_URL_CHECK: 'false'
+
+    volumes:
+      - baserow_data:/baserow/data
+
+    ports:
+      - '80:80'
+      - '443:443'
+
+volumes:
+  baserow_data:

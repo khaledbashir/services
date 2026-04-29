@@ -200,7 +200,7 @@ export function Sidebar() {
       role: 'admin',
       links: [
         { href: '/wrike-airtable-scope', label: 'Scope doc' },
-        { href: '/operations', label: 'Operations (NocoDB)' },
+        { href: '/operations', label: 'Operations (Baserow)' },
         { href: '/inventory', label: 'Inventory (assets)' },
         { href: '/maintenance', label: 'Maintenance' },
         { href: '/walkthroughs', label: 'Walkthroughs' },

@@ -1,0 +1,25 @@
+/* ANC overrides on top of Baserow's theme.
+   Hide the few upsell elements that survive BASEROW_OSS_ONLY and force
+   primary brand color to ANC blue. Loaded by the rebranded image at
+   /static/anc-overrides.css — link from a custom client-script-loader
+   plugin if Baserow doesn't auto-include it. */
+
+:root {
+  --color-primary-100: #e6efff;
+  --color-primary-200: #b3ccff;
+  --color-primary-400: #4d8aff;
+  --color-primary-500: #0A52EF;
+  --color-primary-600: #0840c0;
+  --color-primary-700: #062f8c;
+  --color-primary: #0A52EF;
+}
+
+/* Hide the "Upgrade to Premium / Enterprise" upsells if any survive. */
+[class*="upgrade"], [class*="premium"], [class*="enterprise-trial"] {
+  display: none !important;
+}
+
+/* Hide the workspace plan badge ("FREE PLAN" etc). */
+[class*="plan-badge"], .plan-badge, .free-plan-badge {
+  display: none !important;
+}

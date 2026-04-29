@@ -648,7 +648,7 @@ export default function VenueDetailPage() {
           {/* AI Briefing */}
           {briefing && (
             <div className="mx-6 mb-4">
-              <div className="rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/50 overflow-hidden shadow-sm">
+              <div className="rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/50 overflow-hidden shadow-sm dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface)] dark:[background-image:none]">
                 {/* Header */}
                 <div className="px-5 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -656,7 +656,7 @@ export default function VenueDetailPage() {
                       <span className="text-white text-xs">✦</span>
                     </div>
                     <div>
-                      <span className="text-xs font-semibold text-zinc-800">AI Venue Intel</span>
+                      <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">AI Venue Intel</span>
                       <span className="text-[10px] text-zinc-400 ml-2">
                         {new Date(briefing.generated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                       </span>
@@ -679,9 +679,9 @@ export default function VenueDetailPage() {
 
                 {/* Content — flowing text like an AI response */}
                 <div className="px-5 pb-4">
-                  <p className="text-[13px] text-zinc-700 leading-relaxed" dangerouslySetInnerHTML={{
+                  <p className="text-[13px] text-zinc-700 leading-relaxed dark:text-zinc-300" dangerouslySetInnerHTML={{
                     __html: briefing.content
-                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-900">$1</strong>')
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-900 dark:text-zinc-100">$1</strong>')
                   }} />
 
                   {/* Stats pills */}
@@ -724,9 +724,9 @@ export default function VenueDetailPage() {
 
                   {/* Recommendation */}
                   {briefing.recommendation && (
-                    <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-blue-50/80 to-violet-50/40 border border-blue-100/60">
+                    <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-blue-50/80 to-violet-50/40 border border-blue-100/60 dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:[background-image:none]">
                       <span className="text-xs mt-0.5">💡</span>
-                      <p className="text-xs text-blue-800 leading-relaxed">{briefing.recommendation}</p>
+                      <p className="text-xs text-blue-800 leading-relaxed dark:text-blue-200">{briefing.recommendation}</p>
                     </div>
                   )}
                 </div>

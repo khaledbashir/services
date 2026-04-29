@@ -6,61 +6,62 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
 interface Field {
-  id: string
+  id: number
   title: string
   type: string
+  read_only?: boolean
+  primary?: boolean
   options?: { choices?: Array<{ title: string; color?: string }> } | null
 }
 
 interface TableMeta {
-  id: string
+  id: number
   title: string
   fields: Field[]
 }
 
-interface NocoRecord {
-  id: string | number
-  fields: Record<string, any>
-}
+// Baserow returns rows flat when user_field_names=true: { id, order, "Name": ..., "Status": ... }
+type Row = Record<string, any> & { id: number | string; order?: string }
 
-const SYSTEM_FIELDS = new Set(['Id', 'CreatedAt', 'UpdatedAt', 'CreatedBy', 'UpdatedBy', 'nc_created_at', 'nc_updated_at'])
-const READONLY_TYPES = new Set(['Formula', 'LinkToAnotherRecord', 'Lookup', 'Rollup', 'Links', 'CreatedTime', 'LastModifiedTime', 'CreatedBy', 'LastModifiedBy', 'AutoNumber', 'Barcode', 'QrCode'])
+const SYSTEM_FIELDS = new Set(['id', 'order'])
+const READONLY_TYPES = new Set([
+  'formula', 'lookup', 'link_row', 'count', 'rollup',
+  'last_modified', 'last_modified_by', 'created_on', 'created_by',
+  'autonumber',
+])
 
 function isEditable(field: Field): boolean {
-  if (SYSTEM_FIELDS.has(field.title)) return false
+  if (field.read_only) return false
   if (READONLY_TYPES.has(field.type)) return false
   return true
 }
 
-function inputTypeFor(field: Field): 'text' | 'number' | 'email' | 'tel' | 'url' | 'date' | 'datetime-local' | 'checkbox' | 'select' | 'textarea' {
+function inputTypeFor(field: Field): 'text' | 'number' | 'email' | 'tel' | 'url' | 'date' | 'datetime-local' | 'checkbox' | 'select' | 'multiselect' | 'textarea' {
   switch (field.type) {
-    case 'Number':
-    case 'Decimal':
-    case 'Currency':
-    case 'Percent':
-    case 'Rating':
-    case 'Duration':
+    case 'number':
+    case 'rating':
       return 'number'
-    case 'Email': return 'email'
-    case 'PhoneNumber': return 'tel'
-    case 'URL': return 'url'
-    case 'Date': return 'date'
-    case 'DateTime': return 'datetime-local'
-    case 'Checkbox': return 'checkbox'
-    case 'SingleSelect': return 'select'
-    case 'LongText': return 'textarea'
+    case 'email': return 'email'
+    case 'phone_number': return 'tel'
+    case 'url': return 'url'
+    case 'date': return 'date'
+    case 'datetime': return 'datetime-local'
+    case 'boolean': return 'checkbox'
+    case 'single_select': return 'select'
+    case 'multiple_select': return 'multiselect'
+    case 'long_text': return 'textarea'
     default: return 'text'
   }
 }
 
 export default function OperationsTablePage({ params }: { params: { base: string; table: string } }) {
   const [meta, setMeta] = useState<TableMeta | null>(null)
-  const [rows, setRows] = useState<NocoRecord[]>([])
+  const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<NocoRecord | null>(null)
+  const [editing, setEditing] = useState<Row | null>(null)
   const [formValues, setFormValues] = useState<Record<string, any>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -69,7 +70,7 @@ export default function OperationsTablePage({ params }: { params: { base: string
     try {
       const [metaRes, rowsRes] = await Promise.all([
         fetch(`/api/operations/${params.base}/${params.table}`),
-        fetch(`/api/operations/${params.base}/${params.table}/rows?pageSize=100`),
+        fetch(`/api/operations/${params.base}/${params.table}/rows?size=200`),
       ])
       if (!metaRes.ok) throw new Error((await metaRes.json()).error || 'Failed to load table')
       if (!rowsRes.ok) throw new Error((await rowsRes.json()).error || 'Failed to load rows')
@@ -95,33 +96,33 @@ export default function OperationsTablePage({ params }: { params: { base: string
   )
 
   const visibleFields = useMemo(
-    () => (meta?.fields || []).filter((f) => !SYSTEM_FIELDS.has(f.title) || f.title === 'Id'),
+    () => (meta?.fields || []),
     [meta],
   )
 
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase().trim()
     if (!q) return rows
-    return rows.filter((row) => {
-      const fields = row.fields || row
-      return Object.values(fields).some((v) =>
-        String(v ?? '').toLowerCase().includes(q),
-      )
-    })
+    return rows.filter((row) =>
+      Object.entries(row)
+        .filter(([k]) => !SYSTEM_FIELDS.has(k))
+        .some(([_, v]) => String(v ?? '').toLowerCase().includes(q)),
+    )
   }, [rows, search])
 
   const startCreate = () => {
     setEditing(null)
     const init: Record<string, any> = {}
-    editableFields.forEach((f) => { init[f.title] = f.type === 'Checkbox' ? false : '' })
+    editableFields.forEach((f) => {
+      init[f.title] = f.type === 'boolean' ? false : f.type === 'multiple_select' ? [] : ''
+    })
     setFormValues(init)
     setShowForm(true)
   }
 
-  const startEdit = (row: NocoRecord) => {
-    const fields = row.fields || row
+  const startEdit = (row: Row) => {
     setEditing(row)
-    setFormValues({ ...fields })
+    setFormValues({ ...row })
     setShowForm(true)
   }
 
@@ -138,17 +139,19 @@ export default function OperationsTablePage({ params }: { params: { base: string
       const cleaned: Record<string, any> = {}
       for (const f of editableFields) {
         const v = formValues[f.title]
-        if (v === '' || v === undefined) continue
-        if (f.type === 'Number' || f.type === 'Decimal' || f.type === 'Currency' || f.type === 'Percent' || f.type === 'Rating') {
+        if (v === '' || v === undefined || v === null) continue
+        if (f.type === 'number' || f.type === 'rating') {
           cleaned[f.title] = Number(v)
-        } else if (f.type === 'Checkbox') {
+        } else if (f.type === 'boolean') {
           cleaned[f.title] = !!v
+        } else if (f.type === 'multiple_select') {
+          cleaned[f.title] = Array.isArray(v) ? v : [v]
         } else {
           cleaned[f.title] = v
         }
       }
       const url = editing
-        ? `/api/operations/${params.base}/${params.table}/rows/${(editing.fields as any)?.Id || (editing as any).Id || editing.id}`
+        ? `/api/operations/${params.base}/${params.table}/rows/${editing.id}`
         : `/api/operations/${params.base}/${params.table}/rows`
       const method = editing ? 'PATCH' : 'POST'
       const res = await fetch(url, {
@@ -168,10 +171,9 @@ export default function OperationsTablePage({ params }: { params: { base: string
     }
   }
 
-  const deleteRow = async (row: NocoRecord) => {
-    const id = (row.fields as any)?.Id || (row as any).Id || row.id
+  const deleteRow = async (row: Row) => {
     if (!confirm('Delete this row? This can\'t be undone.')) return
-    const res = await fetch(`/api/operations/${params.base}/${params.table}/rows/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/operations/${params.base}/${params.table}/rows/${row.id}`, { method: 'DELETE' })
     if (res.ok) await fetchAll()
     else {
       const err = await res.json().catch(() => ({}))
@@ -228,9 +230,11 @@ export default function OperationsTablePage({ params }: { params: { base: string
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50">
+                    <th className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap">#</th>
                     {visibleFields.map((f) => (
                       <th key={f.id} className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
                         {f.title}
+                        {f.primary && <span className="ml-1 text-[9px] text-amber-600">★</span>}
                       </th>
                     ))}
                     <th className="w-24 text-right py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -239,29 +243,26 @@ export default function OperationsTablePage({ params }: { params: { base: string
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRows.map((row) => {
-                    const fields = (row.fields || row) as Record<string, any>
-                    const id = fields.Id || (row as any).Id || row.id
-                    return (
-                      <tr key={String(id)} className="border-b border-zinc-100 hover:bg-zinc-50 last:border-0">
-                        {visibleFields.map((f) => {
-                          const v = fields[f.title]
-                          return (
-                            <td key={f.id} className="py-2.5 px-3 text-zinc-700 whitespace-nowrap max-w-xs truncate" title={typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}>
-                              {renderCell(f, v)}
-                            </td>
-                          )
-                        })}
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          <button onClick={() => startEdit(row)} className="text-xs text-[#0A52EF] hover:underline mr-3">Edit</button>
-                          <button onClick={() => deleteRow(row)} className="text-xs text-zinc-400 hover:text-red-600">Delete</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {filteredRows.map((row) => (
+                    <tr key={String(row.id)} className="border-b border-zinc-100 hover:bg-zinc-50 last:border-0">
+                      <td className="py-2.5 px-3 text-zinc-400 font-mono text-xs">{row.id}</td>
+                      {visibleFields.map((f) => {
+                        const v = row[f.title]
+                        return (
+                          <td key={f.id} className="py-2.5 px-3 text-zinc-700 whitespace-nowrap max-w-xs truncate" title={typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}>
+                            {renderCell(f, v)}
+                          </td>
+                        )
+                      })}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <button onClick={() => startEdit(row)} className="text-xs text-[#0A52EF] hover:underline mr-3">Edit</button>
+                        <button onClick={() => deleteRow(row)} className="text-xs text-zinc-400 hover:text-red-600">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={visibleFields.length + 1} className="text-center text-sm text-zinc-500 py-12">
+                      <td colSpan={visibleFields.length + 2} className="text-center text-sm text-zinc-500 py-12">
                         {rows.length === 0 ? 'No rows yet — click "New row" to add one.' : 'No rows match the search.'}
                       </td>
                     </tr>
@@ -282,7 +283,7 @@ export default function OperationsTablePage({ params }: { params: { base: string
           >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-zinc-900">
-                {editing ? `Edit row` : `New row in ${meta.title}`}
+                {editing ? `Edit row #${editing.id}` : `New row in ${meta.title}`}
               </h2>
               <button type="button" onClick={closeForm} className="text-zinc-400 hover:text-zinc-700 text-xl leading-none">×</button>
             </div>
@@ -326,33 +327,36 @@ export default function OperationsTablePage({ params }: { params: { base: string
 
 function renderCell(field: Field, value: any): React.ReactNode {
   if (value == null || value === '') return <span className="text-zinc-300">—</span>
-  if (field.type === 'Checkbox') return value ? '✓' : '—'
-  if (field.type === 'Date' || field.type === 'DateTime') {
+  if (field.type === 'boolean') return value ? '✓' : '—'
+  if (field.type === 'date' || field.type === 'datetime') {
     try { return new Date(value).toLocaleDateString() } catch { return String(value) }
   }
-  if (field.type === 'SingleSelect' || field.type === 'MultiSelect') {
-    const options = field.options?.choices || []
+  if (field.type === 'single_select' || field.type === 'multiple_select') {
     const arr = Array.isArray(value) ? value : [value]
     return (
       <span className="inline-flex flex-wrap gap-1">
         {arr.map((v, i) => {
-          const choice = options.find((c) => c.title === v)
+          const label = typeof v === 'object' ? v.value : v
+          const color = typeof v === 'object' ? v.color : undefined
           return (
             <span
               key={i}
               className="inline-flex text-[10.5px] font-medium px-1.5 py-0.5 rounded ring-1"
               style={{
-                background: choice?.color ? `${choice.color}20` : '#f4f4f5',
-                color: choice?.color || '#3f3f46',
-                borderColor: choice?.color ? `${choice.color}40` : '#e4e4e7',
+                background: color ? `${color}20` : '#f4f4f5',
+                color: color || '#3f3f46',
+                borderColor: color ? `${color}40` : '#e4e4e7',
               }}
             >
-              {String(v)}
+              {String(label)}
             </span>
           )
         })}
       </span>
     )
+  }
+  if (field.type === 'link_row' && Array.isArray(value)) {
+    return <span className="text-zinc-500 text-xs">{value.length} linked</span>
   }
   if (typeof value === 'object') return <code className="text-[11px] text-zinc-500">{JSON.stringify(value).slice(0, 60)}</code>
   return String(value)
@@ -387,6 +391,17 @@ function FieldInput({ field, value, onChange }: { field: Field; value: any; onCh
       ) : inputType === 'select' ? (
         <select value={value || ''} onChange={(e) => onChange(e.target.value)} className={baseClass}>
           <option value="">—</option>
+          {(field.options?.choices || []).map((c) => (
+            <option key={c.title} value={c.title}>{c.title}</option>
+          ))}
+        </select>
+      ) : inputType === 'multiselect' ? (
+        <select
+          multiple
+          value={Array.isArray(value) ? value.map((v) => typeof v === 'object' ? v.value : v) : []}
+          onChange={(e) => onChange(Array.from(e.target.selectedOptions).map((o) => o.value))}
+          className={`${baseClass} min-h-[80px]`}
+        >
           {(field.options?.choices || []).map((c) => (
             <option key={c.title} value={c.title}>{c.title}</option>
           ))}
