@@ -129,7 +129,6 @@ function EventsPageInner() {
   const [discoverySummary, setDiscoverySummary] = useState<{ venues: number; total_found: number; duplicates_skipped: number } | null>(null)
   const [discoveryHint, setDiscoveryHint] = useState('')
   const [activeDiscoveryHint, setActiveDiscoveryHint] = useState<string | null>(null)
-  const [includeExistingDiscovery, setIncludeExistingDiscovery] = useState(false)
   const [showDiscoverySummaryCard, setShowDiscoverySummaryCard] = useState(false)
   const [discoverySearch, setDiscoverySearch] = useState('')
   const [discoveryTypeFilter, setDiscoveryTypeFilter] = useState<'all' | 'game' | 'concert' | 'other'>('all')
@@ -391,7 +390,7 @@ function EventsPageInner() {
         body: JSON.stringify({
           all_active: true,
           discovery_hint: discoveryHint.trim() || undefined,
-          include_existing: includeExistingDiscovery,
+          include_existing: false,
         }),
       })
 
@@ -878,26 +877,195 @@ function EventsPageInner() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center flex-wrap gap-3">
-          <h1 className="text-2xl font-semibold text-zinc-900">Events</h1>
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => router.push('/events/discovery-log')}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
-              title="See what each discovery run found, imported, or failed on"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900">Events</h1>
+            <p className="mt-1 text-sm text-zinc-500">Schedule, staffing, and discovery in one place.</p>
+          </div>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="inline-flex h-10 items-center rounded-md bg-[#0A52EF] px-4 text-sm font-medium text-white transition-colors hover:bg-[#0840C0]"
+          >
+            {showCreate ? 'Cancel' : '+ Create Event'}
+          </button>
+        </div>
+
+        <div className="rounded-lg border border-[#E8E8E8] bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-md bg-zinc-100 p-1">
+              <button
+                onClick={() => saveViewPreference('calendar')}
+                className={`h-8 rounded px-3 text-sm font-medium transition-colors ${view === 'calendar' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
+              >
+                Calendar
+              </button>
+              <button
+                onClick={() => saveViewPreference('list')}
+                className={`h-8 rounded px-3 text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
+              >
+                List
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(['today', 'week', 'month', 'all', 'pending_workflow'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`h-9 rounded-md px-3 text-sm font-medium transition-colors ${
+                    filter === f ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                  }`}
+                >
+                  {f === 'today' && 'Today'}
+                  {f === 'week' && 'Week'}
+                  {f === 'month' && 'Month'}
+                  {f === 'all' && 'All'}
+                  {f === 'pending_workflow' && 'Pending Workflow'}
+                </button>
+              ))}
+            </div>
+            <div className="relative min-w-[16rem] flex-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              Discovery Logs
+              <input
+                type="text"
+                placeholder="Search events or venues"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white pl-10 pr-4 text-sm text-zinc-900 outline-none transition focus:ring-2 focus:ring-[#0A52EF]/30"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#E8E8E8] pt-3">
+            {(['all', 'needs_staffing', 'warranty_only'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setStaffingFilter(f)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${
+                  staffingFilter === f
+                    ? f === 'needs_staffing' ? 'border-red-600 bg-red-600 text-white'
+                      : f === 'warranty_only' ? 'border-zinc-600 bg-zinc-600 text-white'
+                      : 'border-[#0A52EF] bg-[#0A52EF] text-white'
+                    : 'border-[#E8E8E8] bg-white text-zinc-600 hover:border-zinc-300'
+                }`}
+              >
+                {f === 'all' && <><span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />Show All</>}
+                {f === 'needs_staffing' && <><span className={`h-1.5 w-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-red-500'}`} />Needs Staffing</>}
+                {f === 'warranty_only' && <><span className={`h-1.5 w-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-zinc-400'}`} />Warranty Only</>}
+              </button>
+            ))}
+            <button
+              onClick={() => setAiFilter(aiFilter === 'ai_only' ? 'all' : 'ai_only')}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${
+                aiFilter === 'ai_only'
+                  ? 'border-sky-600 bg-sky-600 text-white'
+                  : 'border-[#E8E8E8] bg-white text-zinc-600 hover:border-zinc-300'
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${aiFilter === 'ai_only' ? 'bg-white' : 'bg-sky-500'}`} />
+              AI Imported
             </button>
+            <button
+              onClick={() => setAiFilter(aiFilter === 'url_only' ? 'all' : 'url_only')}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${
+                aiFilter === 'url_only'
+                  ? 'border-emerald-600 bg-emerald-600 text-white'
+                  : 'border-[#E8E8E8] bg-white text-zinc-600 hover:border-zinc-300'
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${aiFilter === 'url_only' ? 'bg-white' : 'bg-emerald-500'}`} />
+              URL Feed
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowVenueFilter(!showVenueFilter)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${
+                  selectedVenues.size > 0
+                    ? 'border-[#0A52EF] bg-[#0A52EF] text-white'
+                    : 'border-[#E8E8E8] bg-white text-zinc-600 hover:border-zinc-300'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Venues {selectedVenues.size > 0 && `(${selectedVenues.size})`}
+              </button>
+              {showVenueFilter && (
+                <div className="absolute left-0 top-full z-50 mt-2 max-h-64 w-72 overflow-y-auto rounded-lg border border-[#E8E8E8] bg-white shadow-lg">
+                  <div className="border-b border-[#E8E8E8] p-2">
+                    <p className="px-2 text-xs font-medium text-zinc-500">Select venues to filter</p>
+                  </div>
+                  {venueOptions.map(v => (
+                    <label key={v.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedVenues.has(v.id)}
+                        onChange={() => toggleVenue(v.id)}
+                        className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                      />
+                      <span className="text-zinc-700">{v.name}</span>
+                    </label>
+                  ))}
+                  <div className="border-t border-[#E8E8E8] p-2">
+                    <button onClick={() => setShowVenueFilter(false)} className="w-full py-1 text-center text-xs font-medium text-[#0A52EF] hover:underline">
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedVenues.size > 0 && (
+              <>
+                {venueOptions.filter(v => selectedVenues.has(v.id)).slice(0, 3).map(v => (
+                  <span key={v.id} className="inline-flex h-7 items-center gap-1 rounded-full bg-blue-50 px-2.5 text-xs font-medium text-blue-700">
+                    {v.name}
+                    <button onClick={() => toggleVenue(v.id)} className="hover:text-blue-900">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                {selectedVenues.size > 3 && (
+                  <span className="text-xs text-zinc-400">+{selectedVenues.size - 3} more</span>
+                )}
+                <button onClick={clearVenueFilter} className="text-xs text-zinc-400 underline hover:text-zinc-600">
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <details className="group rounded-lg border border-[#E8E8E8] bg-white shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-zinc-700">
+            <span>Discovery tools</span>
+            <span className="text-xs font-normal text-zinc-400 group-open:hidden">Run discovery, view logs, or reset events</span>
+            <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide tools</span>
+          </summary>
+          <div className="flex flex-wrap items-center gap-2 border-t border-[#E8E8E8] px-4 py-3">
             <button
               onClick={runBulkDiscovery}
               disabled={discovering}
-              className="px-4 py-2 border border-[#E8E8E8] bg-white text-zinc-700 rounded text-sm font-medium hover:border-zinc-300 transition-colors disabled:opacity-50"
+              className="h-9 rounded-md border border-[#E8E8E8] bg-white px-3 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-300 disabled:opacity-50"
             >
               {discovering ? 'Discovering...' : 'Discover Active Venues'}
             </button>
+            <button
+              onClick={() => router.push('/events/discovery-log')}
+              className="h-9 rounded-md border border-[#E8E8E8] bg-white px-3 text-sm font-medium text-zinc-700 transition-colors hover:border-[#0A52EF] hover:text-[#0A52EF]"
+              title="See what each discovery run found, imported, or failed on"
+            >
+              Discovery Logs
+            </button>
+            <input
+              type="text"
+              value={discoveryHint}
+              onChange={(e) => setDiscoveryHint(e.target.value)}
+              placeholder="Optional hint, e.g. focus on MLB and concerts"
+              className="h-9 min-w-[18rem] flex-1 rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none transition focus:ring-2 focus:ring-[#0A52EF]/30"
+            />
             <button
               onClick={async () => {
                 if (!confirm('Delete ALL events across every venue? This cannot be undone. Tickets attached to events will remain but lose their event link.')) return
@@ -910,79 +1078,12 @@ function EventsPageInner() {
                   alert('Failed to delete. You may not have admin permissions.')
                 }
               }}
-              className="px-4 py-2 border border-red-200 bg-white text-red-600 rounded text-sm font-medium hover:bg-red-50 transition-colors"
+              className="h-9 rounded-md border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
             >
               Delete All Events
             </button>
-            <button
-              onClick={() => setShowCreate(!showCreate)}
-              className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
-            >
-              {showCreate ? 'Cancel' : '+ Create Event'}
-            </button>
-            <div className="relative">
-              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search events, venues..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-48"
-              />
-            </div>
-            <div className="relative">
-              <input
-                type="text"
-                value={discoveryHint}
-                onChange={(e) => setDiscoveryHint(e.target.value)}
-                placeholder="Optional discovery hint, e.g. focus on MLB and concerts"
-                className="px-4 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900 w-80"
-              />
-            </div>
-            <label className="inline-flex items-center gap-2 px-3 py-2 border border-[#E8E8E8] rounded text-sm text-zinc-700 bg-white">
-              <input
-                type="checkbox"
-                checked={includeExistingDiscovery}
-                onChange={(e) => setIncludeExistingDiscovery(e.target.checked)}
-                className="rounded border-zinc-300"
-              />
-              Demo mode
-            </label>
-            <div className="bg-zinc-100 rounded p-1 flex gap-1">
-              <button
-                onClick={() => saveViewPreference('calendar')}
-                className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'calendar' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
-              >
-                Calendar
-              </button>
-              <button
-                onClick={() => saveViewPreference('list')}
-                className={`px-3 py-2 rounded text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
-              >
-                List
-              </button>
-            </div>
-            <div className="flex gap-2">
-              {(['today', 'week', 'month', 'all', 'pending_workflow'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-4 py-2 rounded font-medium text-sm transition-colors ${
-                    filter === f ? 'bg-[#0A52EF] text-white' : 'bg-white text-zinc-600 border border-[#E8E8E8] hover:border-zinc-300'
-                  }`}
-                >
-                  {f === 'today' && 'Today'}
-                  {f === 'week' && 'Week'}
-                  {f === 'month' && 'Month'}
-                  {f === 'all' && 'All'}
-                  {f === 'pending_workflow' && 'Pending Workflow'}
-                </button>
-              ))}
-            </div>
           </div>
-        </div>
+        </details>
 
         {discovering && discoveryProgress && (
           <div className="rounded-2xl border border-[#E8E8E8] bg-white shadow-sm overflow-hidden">
@@ -1058,11 +1159,6 @@ function EventsPageInner() {
                 {activeDiscoveryHint && (
                   <p className="mt-2 text-xs text-zinc-500">
                     Discovery hint used: "{activeDiscoveryHint}"
-                  </p>
-                )}
-                {includeExistingDiscovery && (
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Demo mode included events that already exist so they can appear as duplicates for review.
                   </p>
                 )}
               </div>
@@ -1190,123 +1286,6 @@ function EventsPageInner() {
           </div>
         )}
 
-        {/* Staffing + Venue filters */}
-        <div className="relative">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Staffing filter */}
-            {(['all', 'needs_staffing', 'warranty_only'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setStaffingFilter(f)}
-                className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
-                  staffingFilter === f
-                    ? f === 'needs_staffing' ? 'bg-red-600 text-white border-red-600'
-                      : f === 'warranty_only' ? 'bg-zinc-600 text-white border-zinc-600'
-                      : 'bg-[#0A52EF] text-white border-[#0A52EF]'
-                    : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
-                }`}
-              >
-                {f === 'all' && (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
-                    Show All
-                  </>
-                )}
-                {f === 'needs_staffing' && (
-                  <>
-                    <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-red-500'}`} />
-                    Needs Staffing
-                  </>
-                )}
-                {f === 'warranty_only' && (
-                  <>
-                    <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === f ? 'bg-white' : 'bg-zinc-400'}`} />
-                    Warranty Only
-                  </>
-                )}
-              </button>
-            ))}
-            <button
-              onClick={() => setAiFilter(aiFilter === 'ai_only' ? 'all' : 'ai_only')}
-              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
-                aiFilter === 'ai_only'
-                  ? 'bg-sky-600 text-white border-sky-600'
-                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${aiFilter === 'ai_only' ? 'bg-white' : 'bg-sky-500'}`} />
-              AI Imported
-            </button>
-            <button
-              onClick={() => setAiFilter(aiFilter === 'url_only' ? 'all' : 'url_only')}
-              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
-                aiFilter === 'url_only'
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${aiFilter === 'url_only' ? 'bg-white' : 'bg-emerald-500'}`} />
-              URL Feed
-            </button>
-            <span className="w-px h-6 bg-zinc-200" />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap mt-2">
-            <button
-              onClick={() => setShowVenueFilter(!showVenueFilter)}
-              className={`px-3 py-2 rounded text-sm font-medium border transition-colors flex items-center gap-1.5 ${
-                selectedVenues.size > 0
-                  ? 'bg-[#0A52EF] text-white border-[#0A52EF]'
-                  : 'bg-white text-zinc-600 border-[#E8E8E8] hover:border-zinc-300'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              Venues {selectedVenues.size > 0 && `(${selectedVenues.size})`}
-            </button>
-            {selectedVenues.size > 0 && (
-              <>
-                {venueOptions.filter(v => selectedVenues.has(v.id)).map(v => (
-                  <span key={v.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
-                    {v.name}
-                    <button onClick={() => toggleVenue(v.id)} className="hover:text-blue-900">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </span>
-                ))}
-                <button onClick={clearVenueFilter} className="text-xs text-zinc-400 hover:text-zinc-600 underline">
-                  Clear all
-                </button>
-              </>
-            )}
-          </div>
-          {showVenueFilter && (
-            <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-[#E8E8E8] rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-              <div className="p-2 border-b border-[#E8E8E8]">
-                <p className="text-xs font-medium text-zinc-500 px-2">Select venues to filter</p>
-              </div>
-              {venueOptions.map(v => (
-                <label key={v.id} className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-50 cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedVenues.has(v.id)}
-                    onChange={() => toggleVenue(v.id)}
-                    className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
-                  />
-                  <span className="text-zinc-700">{v.name}</span>
-                </label>
-              ))}
-              <div className="p-2 border-t border-[#E8E8E8]">
-                <button onClick={() => setShowVenueFilter(false)} className="w-full text-center text-xs text-[#0A52EF] font-medium py-1 hover:underline">
-                  Done
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
         {view === 'calendar' ? <CalendarView /> : <ListView />}
 
         {showDiscoveryModal && (
@@ -1328,11 +1307,6 @@ function EventsPageInner() {
                     {activeDiscoveryHint && (
                       <p className="text-xs text-zinc-500 mt-2">
                         Discovery hint: "{activeDiscoveryHint}"
-                      </p>
-                    )}
-                    {includeExistingDiscovery && (
-                      <p className="text-xs text-zinc-500 mt-1">
-                        Demo mode is on, so existing events may appear here as duplicates.
                       </p>
                     )}
                   </div>
