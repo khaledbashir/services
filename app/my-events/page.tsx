@@ -17,10 +17,10 @@ interface MyEvent {
 }
 
 const workflowStatusColors: Record<string, { dot: string; label: string; pill: string }> = {
-  pending: { dot: 'bg-rose-500', label: 'Pending', pill: 'bg-rose-50 text-rose-700' },
-  checked_in: { dot: 'bg-amber-500', label: 'Checked In', pill: 'bg-amber-50 text-amber-700' },
-  game_ready: { dot: 'bg-emerald-500', label: 'Game Ready', pill: 'bg-emerald-50 text-emerald-700' },
-  post_game_submitted: { dot: 'bg-blue-500', label: 'Complete', pill: 'bg-blue-50 text-blue-700' },
+  pending: { dot: 'bg-rose-500', label: 'Pending', pill: 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200' },
+  checked_in: { dot: 'bg-amber-500', label: 'Checked In', pill: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200' },
+  game_ready: { dot: 'bg-emerald-500', label: 'Game Ready', pill: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' },
+  post_game_submitted: { dot: 'bg-blue-500', label: 'Complete', pill: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200' },
 }
 
 export default function MyEventsPage() {
@@ -94,21 +94,21 @@ export default function MyEventsPage() {
   const completedCount = events.filter((event) => event.workflow_status === 'post_game_submitted').length
   const todayCount = events.filter((event) => event.event_date === todayKey).length
   const statCards = [
-    { label: 'Today', value: todayCount, tone: 'text-[#0A52EF] bg-[#0A52EF]/8 border-[#0A52EF]/15' },
-    { label: 'In Progress', value: inProgressCount, tone: 'text-amber-700 bg-amber-50 border-amber-200' },
-    { label: 'Completed', value: completedCount, tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+    { label: 'Today', value: todayCount, tone: 'text-white bg-white/10 border-white/15' },
+    { label: 'In Progress', value: inProgressCount, tone: 'text-amber-100 bg-amber-400/15 border-amber-200/25' },
+    { label: 'Completed', value: completedCount, tone: 'text-emerald-100 bg-emerald-400/15 border-emerald-200/25' },
   ]
 
   const renderSection = (title: string, items: MyEvent[]) => (
-    <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#E8E8E8] flex items-center justify-between bg-zinc-50/70">
+    <div className="bg-white rounded-lg border border-[#E8E8E8] shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between bg-zinc-50/70">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
           <p className="text-xs text-zinc-500 mt-1">{items.length} assigned event{items.length === 1 ? '' : 's'}</p>
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="px-5 py-10 text-center">
+        <div className="px-5 py-8 text-center">
           <p className="text-sm text-zinc-500">No assigned events in this section.</p>
         </div>
       ) : (
@@ -140,7 +140,7 @@ export default function MyEventsPage() {
                     </div>
                   </div>
                   <div className="sm:text-right">
-                    <div className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-[#0A52EF] text-white text-xs font-semibold whitespace-nowrap shadow-sm">
+                    <div className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-[#0A52EF] text-white text-xs font-semibold whitespace-nowrap shadow-sm">
                       Open Workflow
                     </div>
                   </div>
@@ -156,14 +156,14 @@ export default function MyEventsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="relative overflow-hidden rounded-[28px] border border-[#DDE7FF] bg-[linear-gradient(135deg,#0A52EF_0%,#1F7BF2_55%,#7FB5FF_100%)] px-5 py-6 text-white shadow-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-[#DDE7FF] bg-[linear-gradient(135deg,#0A52EF_0%,#1F7BF2_62%,#63A5FF_100%)] px-5 py-5 text-white shadow-sm">
           <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
           <div className="absolute bottom-0 right-0 h-24 w-24 rounded-full bg-[#7FB5FF]/25 blur-2xl"></div>
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
-              <p className="text-[11px] uppercase tracking-[0.28em] text-white/70 font-semibold">Technician View</p>
-              <h1 className="text-3xl font-semibold mt-2">My Events</h1>
-              <p className="text-sm text-white/80 mt-2">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-white/70 font-semibold">Technician View</p>
+              <h1 className="text-2xl font-semibold mt-2">My Events</h1>
+              <p className="text-sm text-white/80 mt-1.5">
                 {auth.loaded && auth.userName
                   ? `${auth.userName.split(' ')[0]}, open the next assigned event and move through the workflow without waiting on a shared link.`
                   : 'Open the next assigned event and move through the workflow without waiting on a shared link.'}
@@ -171,7 +171,7 @@ export default function MyEventsPage() {
             </div>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {statCards.map((card) => (
-                <div key={card.label} className={`min-w-[84px] rounded-2xl border px-3 py-3 backdrop-blur-sm ${card.tone}`}>
+                <div key={card.label} className={`min-w-[84px] rounded-xl border px-3 py-3 backdrop-blur-sm ${card.tone}`}>
                   <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{card.label}</p>
                   <p className="text-2xl font-semibold mt-1">{card.value}</p>
                 </div>
@@ -183,7 +183,7 @@ export default function MyEventsPage() {
         {nextAssignedEvent && (
           <Link
             href={`/workflow/${nextAssignedEvent.id}`}
-            className="block rounded-[24px] border border-[#E8E8E8] bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
+            className="block rounded-lg border border-[#E8E8E8] bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -203,7 +203,7 @@ export default function MyEventsPage() {
                   <p className="text-xs text-zinc-500">Fastest path</p>
                   <p className="text-sm font-medium text-zinc-900">Arrive, open, check in</p>
                 </div>
-                <div className="inline-flex items-center justify-center rounded-2xl bg-[#0A52EF] px-4 py-3 text-sm font-semibold text-white shadow-sm">
+                <div className="inline-flex items-center justify-center rounded-md bg-[#0A52EF] px-4 py-3 text-sm font-semibold text-white shadow-sm">
                   Start Workflow
                 </div>
               </div>
@@ -211,7 +211,7 @@ export default function MyEventsPage() {
           </Link>
         )}
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 rounded-lg border border-[#E8E8E8] bg-white p-4 shadow-sm lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-zinc-900">Assignments</h2>
             <p className="text-sm text-zinc-500 mt-1">Use the filters below to jump between today, upcoming, and completed work.</p>
@@ -221,12 +221,12 @@ export default function MyEventsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search assigned events or venues..."
-              className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+              className="w-full px-4 py-2.5 border border-[#E8E8E8] rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="-mt-3 flex flex-wrap gap-2 px-1">
           {[
             { key: 'upcoming', label: 'Upcoming' },
             { key: 'today', label: 'Today' },
@@ -237,7 +237,7 @@ export default function MyEventsPage() {
               key={option.key}
               type="button"
               onClick={() => setFilter(option.key as typeof filter)}
-              className={`px-3 py-2 rounded text-xs font-medium transition-colors ${
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors ${
                 filter === option.key
                   ? 'bg-[#0A52EF] text-white'
                   : 'bg-white border border-[#E8E8E8] text-zinc-600 hover:bg-zinc-50'
@@ -256,12 +256,7 @@ export default function MyEventsPage() {
         ) : (
           <div className="space-y-6">
             {filter === 'today' && renderSection('Today', grouped.today)}
-            {filter === 'upcoming' && (
-              <>
-                {renderSection('Today', grouped.today)}
-                {renderSection('Upcoming', grouped.upcoming)}
-              </>
-            )}
+            {filter === 'upcoming' && renderSection('Upcoming', grouped.upcoming)}
             {filter === 'past' && renderSection('Past', grouped.past)}
             {filter === 'all' && (
               <>
