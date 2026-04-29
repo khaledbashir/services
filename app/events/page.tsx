@@ -643,13 +643,13 @@ function EventsPageInner() {
               prev.setDate(prev.getDate() - 7)
               setCurrentWeekStart(prev)
             }}
-            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors"
+            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors dark:hover:bg-white/5"
           >
             ← Previous Week
           </button>
           <button
             onClick={() => setCurrentWeekStart(getWeekStart(new Date()))}
-            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors"
+            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors dark:hover:bg-white/5"
           >
             Current Week
           </button>
@@ -659,7 +659,7 @@ function EventsPageInner() {
               next.setDate(next.getDate() + 7)
               setCurrentWeekStart(next)
             }}
-            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors"
+            className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors dark:hover:bg-white/5"
           >
             Next Week →
           </button>
@@ -675,7 +675,7 @@ function EventsPageInner() {
                   className={`p-3 text-center border-r border-[#E8E8E8] last:border-r-0 ${isToday ? 'bg-blue-50' : ''}`}
                 >
                   <p className="text-xs font-medium text-zinc-600">{days[i]}</p>
-                  <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-zinc-900'}`}>{date.getDate()}</p>
+                  <p className={`text-sm font-semibold ${isToday ? 'text-blue-700' : 'text-zinc-900'}`}>{date.getDate()}</p>
                 </div>
               )
             })}
@@ -727,18 +727,27 @@ function EventsPageInner() {
 
                         // Border color: red=understaffed, green=staffed, gray=warranty
                         const borderColor = isUnderstaffed ? '#dc2626' : isStaffed ? '#16a34a' : '#a1a1aa'
-                        const bgColor = isUnderstaffed ? '#fef2f2' : isStaffed ? '#f0fdf4' : '#fafafa'
+                        const cardToneClass = isUnderstaffed
+                          ? 'bg-red-50 hover:bg-red-100'
+                          : isStaffed
+                            ? 'bg-green-50 hover:bg-green-100'
+                            : 'bg-zinc-50 hover:bg-zinc-100'
+                        const staffingToneClass = isUnderstaffed
+                          ? 'text-red-700'
+                          : isStaffed
+                            ? 'text-green-700'
+                            : 'text-zinc-500'
 
                         return (
                           <button
                             key={event.id}
                             onClick={() => router.push(`/events/${event.id}`)}
-                            className="w-full text-left p-2 rounded mb-1 transition-all hover:shadow-md text-xs"
-                            style={{ backgroundColor: bgColor, borderLeft: `3px solid ${borderColor}` }}
+                            className={`w-full text-left p-2 rounded mb-1 transition-all hover:shadow-md text-xs ${cardToneClass}`}
+                            style={{ borderLeft: `3px solid ${borderColor}` }}
                           >
                             <div className="flex items-center gap-1 mb-0.5">
                               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isUnderstaffed ? 'bg-red-500' : isStaffed ? 'bg-green-500' : 'bg-zinc-400'}`} />
-                              <span className={`text-[9px] font-semibold uppercase tracking-wide ${isUnderstaffed ? 'text-red-600' : isStaffed ? 'text-green-700' : 'text-zinc-400'}`}>
+                              <span className={`text-[9px] font-semibold uppercase tracking-wide ${staffingToneClass}`}>
                                 {isUnderstaffed ? 'Needs Staff' : isWarranty ? 'Warranty' : `${assignedCount} Assigned`}
                               </span>
                               {isAiImportedEvent(event) && (
