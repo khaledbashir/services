@@ -45,6 +45,9 @@ const IC = {
   chevron: (
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
   ),
+  build: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 4a4 4 0 014 4v1.586l5.707 5.707a1 1 0 010 1.414l-2.586 2.586a1 1 0 01-1.414 0L11 13.586V11a4 4 0 010-8m-7 7l3-3m-3 3l-1 1v3h3l1-1m-3-3l3-3" />
+  ),
 }
 
 function Icon({ children, className = 'h-4 w-4' }: { children: ReactNode; className?: string }) {
@@ -165,6 +168,41 @@ export function Sidebar() {
         { href: '/staff', label: 'Staff', role: 'admin' },
         { href: '/settings', label: 'Settings', role: 'admin' },
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
+      ],
+    },
+    // Build-time scaffolding (admin-only): groups every page being built as
+    // part of each migration so the scope is visible at a glance during the
+    // Wrike + Airtable consolidation. Strip these two sections once both
+    // migrations are signed off.
+    {
+      key: 'build-wrike',
+      label: 'Wrike (build)',
+      icon: <Icon>{IC.build}</Icon>,
+      role: 'admin',
+      links: [
+        { href: '/wrike-airtable-scope', label: 'Scope doc' },
+        { href: '/designs', label: 'Design Requests' },
+        { href: '/cg-designs', label: 'CG Designs' },
+        { href: '/content-schedules', label: 'Content Schedule' },
+        { href: '/print-requests', label: 'Print Requests' },
+        { href: '/gallery', label: 'Visual Gallery' },
+        { href: '/time-entries', label: 'Time Entries' },
+        { href: '/hours-budgets', label: 'Hours Budgets' },
+      ],
+    },
+    {
+      key: 'build-airtable',
+      label: 'Airtable (build)',
+      icon: <Icon>{IC.build}</Icon>,
+      role: 'admin',
+      links: [
+        { href: '/wrike-airtable-scope', label: 'Scope doc' },
+        { href: '/inventory', label: 'Inventory (assets)' },
+        { href: '/maintenance', label: 'Maintenance' },
+        { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/rma', label: 'RMA Tracker' },
+        { href: '/parts-orders', label: 'Parts Orders' },
+        { href: '/parts', label: 'Parts Catalog' },
       ],
     },
   ], [userRole, isTechnician, isAdmin, isTechSupport])
