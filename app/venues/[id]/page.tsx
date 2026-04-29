@@ -1986,16 +1986,21 @@ export default function VenueDetailPage() {
                 </div>
               </div>
 
-              {/* Assignment */}
+              {/* Staffing default — Joe's 2026-04-29 model: this toggle is
+                  the single source of truth for whether events at this venue
+                  default to needing staff. Per-event overrides happen on the
+                  event detail page (events.requires_staffing). */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Assignment</h3>
-                <p className="text-xs text-zinc-500 mb-4">Does this venue require staff assignment for events?</p>
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Staffing</h3>
+                <p className="text-xs text-zinc-500 mb-4">
+                  Do events at this venue need staff assigned by default? Individual events can still override this on their detail page.
+                </p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => toggleRequiresAssignment(!venue.requires_assignment)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${venue.requires_assignment ? 'bg-[#0A52EF]' : 'bg-zinc-300'}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${venue.requires_assignment ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
-                  <span className="text-sm text-zinc-700">{venue.requires_assignment ? 'Required' : 'Not required (support only)'}</span>
+                  <span className="text-sm text-zinc-700">{venue.requires_assignment ? 'Needs staff by default' : 'No staff needed (remote / monitoring only)'}</span>
                 </div>
               </div>
 

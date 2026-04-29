@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
-import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
 
 function formatDateLabel(date: Date) {
   return new Intl.DateTimeFormat('en-US', {
@@ -100,24 +99,13 @@ export async function GET() {
       [today]
     )
 
-    const events = result.rows.map((row) => {
-      const clientDefault = computeRequiresStaffingFromRow({
-        active_service_names: row.client_service_names,
-        active_service_descriptions: row.client_service_descriptions,
-        active_service_count: row.client_service_count,
-      })
-      const venueDefault = computeRequiresStaffingFromRow({
-        active_service_names: row.venue_service_names,
-        active_service_descriptions: row.venue_service_descriptions,
-        active_service_count: row.venue_service_count,
-      })
-      return {
-        ...row,
-        venue_requires_assignment: row.client_name
-          ? clientDefault
-          : (Number(row.venue_service_count || 0) > 0 ? venueDefault : row.venue_requires_assignment_legacy !== false),
-      }
-    })
+    // Joe 2026-04-29: the venue-level requires_assignment toggle is the
+    // single source of truth. Per-event override stays via
+    // events.requires_staffing (null = use venue default).
+    const events = result.rows.map((row) => ({
+      ...row,
+      venue_requires_assignment: row.venue_requires_assignment_legacy !== false,
+    }))
     const defaultChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
     if (!defaultChannel) {
       return NextResponse.json({ error: 'SLACK_DEFAULT_CHANNEL not configured' }, { status: 500 })

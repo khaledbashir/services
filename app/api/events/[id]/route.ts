@@ -3,7 +3,6 @@ import { query } from '@/lib/db'
 import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 import { combineLocalToUtc } from '@/lib/timezone'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
-import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
 import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(
@@ -72,13 +71,9 @@ export async function GET(
       ),
     ])
 
-    const clientDefault = computeRequiresStaffingFromRow(clientAutomation.rows[0] || {})
-    const venueDefault = computeRequiresStaffingFromRow(venueAutomation.rows[0] || {})
-    event.venue_requires_assignment = event.client_id
-      ? clientDefault
-      : (Number(venueAutomation.rows[0]?.active_service_count || 0) > 0
-          ? venueDefault
-          : event.venue_requires_assignment_legacy !== false)
+    // Joe 2026-04-29: venue.requires_assignment is the single staffing-default
+    // signal; per-event override via events.requires_staffing.
+    event.venue_requires_assignment = event.venue_requires_assignment_legacy !== false
 
     if (user.role === 'technician') {
       const accessResult = await query(

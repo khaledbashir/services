@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { computeRequiresStaffingFromRow } from '@/lib/client-automation'
 import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(request: NextRequest) {
@@ -72,29 +71,17 @@ export async function GET(request: NextRequest) {
       [start, end]
     )
 
-    const events = result.rows.map((row) => {
-      const clientDefault = computeRequiresStaffingFromRow({
-        active_service_names: row.client_service_names,
-        active_service_descriptions: row.client_service_descriptions,
-        active_service_count: row.client_service_count,
-      })
-      const venueDefault = computeRequiresStaffingFromRow({
-        active_service_names: row.venue_service_names,
-        active_service_descriptions: row.venue_service_descriptions,
-        active_service_count: row.venue_service_count,
-      })
-      return {
-        ...row,
-        summary: formatVenueEventSummary({
-          summary: row.summary,
-          eventType: row.event_type,
-          venueType: row.venue_type,
-        }),
-        venue_requires_assignment: row.client_name
-          ? clientDefault
-          : (Number(row.venue_service_count || 0) > 0 ? venueDefault : row.venue_requires_assignment_legacy !== false),
-      }
-    })
+    // Joe 2026-04-29: venue.requires_assignment is the staffing default;
+    // events.requires_staffing overrides per-event.
+    const events = result.rows.map((row) => ({
+      ...row,
+      summary: formatVenueEventSummary({
+        summary: row.summary,
+        eventType: row.event_type,
+        venueType: row.venue_type,
+      }),
+      venue_requires_assignment: row.venue_requires_assignment_legacy !== false,
+    }))
 
     return NextResponse.json(events)
   } catch (err) {

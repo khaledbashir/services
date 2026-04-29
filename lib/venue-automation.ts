@@ -8,63 +8,14 @@ export interface VenueAutomationInfo {
   venue_type?: string | null
 }
 
-function serviceText(name: string, description: string): string {
-  return `${name} ${description}`.toLowerCase()
-}
-
-function serviceMetadataRequiresStaffing(name: string, description: string): boolean {
-  const text = serviceText(name, description)
-
-  const passiveSignals = [
-    'warranty',
-    'maintenance',
-    'monitoring',
-    'remote',
-    'on-call',
-    'on call',
-    'no on-site',
-    'no onsite',
-    'content update',
-    'content management',
-  ]
-
-  const staffedSignals = [
-    'full service',
-    'on-site',
-    'onsite',
-    'operation',
-    'operator',
-    'camera',
-    'video',
-    'audio',
-    'lighting',
-    'scoring',
-    'technical support',
-    'setup',
-    'production',
-  ]
-
-  if (passiveSignals.some((signal) => text.includes(signal)) && !staffedSignals.some((signal) => text.includes(signal))) {
-    return false
-  }
-
-  if (staffedSignals.some((signal) => text.includes(signal))) {
-    return true
-  }
-
-  return true
-}
-
+// Joe's 2026-04-29 follow-up: stop inferring per-event staffing from a
+// venue's contracted services. The venue-level `requires_assignment` toggle
+// is the single source of truth — per-event exceptions go through
+// `events.requires_staffing` (null = use the venue default).
 export function computeRequiresStaffingDefault(params: {
-  active_service_names?: string[] | null
-  active_service_descriptions?: string[] | null
+  requires_assignment?: boolean | null
 }): boolean {
-  const names = params.active_service_names || []
-  const descriptions = params.active_service_descriptions || []
-
-  return names.some((name, index) =>
-    serviceMetadataRequiresStaffing(name || '', descriptions[index] || '')
-  )
+  return params.requires_assignment !== false
 }
 
 export function classifyVenueAutomationStatus(params: {
@@ -91,6 +42,7 @@ export function withComputedAutomation<T extends {
   active_service_names?: string[]
   active_service_descriptions?: string[]
   venue_type?: string | null
+  requires_assignment?: boolean | null
 }>(row: T): T & VenueAutomationInfo {
   const active_service_count = Number(row.active_service_count || 0)
   const active_service_names = row.active_service_names || []
@@ -103,8 +55,7 @@ export function withComputedAutomation<T extends {
     active_service_descriptions,
     venue_type: row.venue_type ?? null,
     requires_staffing_default: computeRequiresStaffingDefault({
-      active_service_names,
-      active_service_descriptions,
+      requires_assignment: row.requires_assignment,
     }),
   }
 }
@@ -113,6 +64,7 @@ export async function getVenueAutomationInfo(venueId: string): Promise<VenueAuto
   const result = await query(
     `SELECT
        COALESCE(v.venue_type, 'sports') as venue_type,
+       COALESCE(v.requires_assignment, true) as requires_assignment,
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
      LEFT JOIN client_venues cv ON cv.venue_id = v.id
@@ -127,6 +79,7 @@ export async function getVenueAutomationInfo(venueId: string): Promise<VenueAuto
     active_service_count: 0,
     active_service_names: [],
     active_service_descriptions: [],
+    requires_assignment: true,
   }
 
   return withComputedAutomation(row)

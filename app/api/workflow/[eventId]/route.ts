@@ -319,21 +319,24 @@ export async function POST(
 
     // Slack notification for workflow step.
     //
-    // Joe asked 2026-04-29 to silence the success blasts and only ping on
-    // misses (handled by the tech-reminders cron). Gated behind the
-    // workflow-success-pings automation toggle so admins can re-enable from
-    // Settings → Automation if Chris's local-team pulse view is needed again.
+    // Joe's 2026-04-29 follow-up split the rule asymmetrically:
+    //   - check_in + game_ready: silent on success, only the tech-reminders
+    //     cron pings if the step is missed. Re-enabled via the
+    //     workflow-success-pings toggle if Chris's local-team pulse view is
+    //     needed again.
+    //   - post_game_report: ALWAYS pings on submit (and the cron also pings
+    //     if it isn't done). Joe wants the post-game stream visible
+    //     regardless of the toggle, so we bypass it for this type only.
     const successPingsRes = await query(
       `SELECT enabled FROM automation_jobs WHERE id = 'workflow-success-pings'`
     )
     const successPingsEnabled = successPingsRes.rows[0]?.enabled === true
     const venueSlackRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [eventResult.rows[0]?.venue_id])
-    const venueChannel = successPingsEnabled
-      ? (venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || '')
-      : ''
-    const auditChannel = successPingsEnabled
-      ? (process.env.SLACK_WORKFLOW_AUDIT_CHANNEL || '')
-      : ''
+    const fallbackVenueChannel = venueSlackRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+    const fallbackAuditChannel = process.env.SLACK_WORKFLOW_AUDIT_CHANNEL || ''
+    const isAlwaysOnSuccess = dbType === 'post_game_report'
+    const venueChannel = isAlwaysOnSuccess || successPingsEnabled ? fallbackVenueChannel : ''
+    const auditChannel = isAlwaysOnSuccess || successPingsEnabled ? fallbackAuditChannel : ''
 
     const POST_TO_VENUE_CHANNEL: Record<string, boolean> = {
       check_in: true,
