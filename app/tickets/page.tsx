@@ -13,16 +13,26 @@ interface Ticket {
   status: string
   priority: string
   category: string
+  venue_id?: string
   venue_name: string
   event_name?: string
+  assigned_to?: string | null
   created_by_name: string
   assigned_to_name: string | null
+  created_at?: string
   created_date: string
   created_time: string
   source?: string
   contact_phone?: string | null
   contact_name?: string | null
 }
+
+type SortField = 'ticket_number' | 'title' | 'venue_name' | 'category' | 'priority' | 'status' | 'assigned_to_name' | 'created_at'
+type SortDir = 'asc' | 'desc'
+
+// Custom orderings — alphabetical sort doesn't make sense for these.
+const priorityRank: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 }
+const statusRank: Record<string, number> = { closed: 0, on_hold: 1, in_progress: 2, escalated: 3, new: 4 }
 
 interface Venue { id: string; name: string }
 interface Event { id: string; summary: string; event_date: string }
@@ -52,6 +62,32 @@ const categoryLabels: Record<string, string> = {
   voicemail: 'Voicemail',
 }
 
+function SortHeader({
+  field, sortField, sortDir, onClick, children,
+}: {
+  field: SortField
+  sortField: SortField
+  sortDir: SortDir
+  onClick: (f: SortField) => void
+  children: React.ReactNode
+}) {
+  const active = sortField === field
+  return (
+    <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">
+      <button
+        type="button"
+        onClick={() => onClick(field)}
+        className={`group inline-flex items-center gap-1 hover:text-zinc-900 transition-colors ${active ? 'text-zinc-900' : ''}`}
+      >
+        <span>{children}</span>
+        <span className={`text-[9px] leading-none ${active ? 'text-zinc-700' : 'text-zinc-300 group-hover:text-zinc-500'}`}>
+          {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </th>
+  )
+}
+
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
@@ -60,6 +96,8 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'cards' | 'list'>('list')
   const [viewHydrated, setViewHydrated] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
@@ -118,6 +156,23 @@ export default function TicketsPage() {
         if (d?.value === 'cards' || d?.value === 'list') setView(d.value)
       })
       .finally(() => setViewHydrated(true))
+
+    // Chris D's 2026-04-29 ask: sortable column headers (e.g. click "Assigned"
+    // to cluster all of Steve's tickets). Persisted per-user so a sort survives
+    // reload — same pattern as the view toggle.
+    fetch('/api/preferences?key=tickets_sort')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (typeof d?.value === 'string') {
+          const [f, dir] = d.value.split(':')
+          const validFields: SortField[] = ['ticket_number', 'title', 'venue_name', 'category', 'priority', 'status', 'assigned_to_name', 'created_at']
+          if (validFields.includes(f as SortField) && (dir === 'asc' || dir === 'desc')) {
+            setSortField(f as SortField)
+            setSortDir(dir)
+          }
+        }
+      })
+      .catch(() => {})
   }, [])
 
   // Chris D's 2026-04-23 ask: auto-refresh the tickets page so voicemails /
@@ -163,6 +218,23 @@ export default function TicketsPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'tickets_view', value: v }),
+    }).catch(() => {})
+  }
+
+  const toggleSort = (field: SortField) => {
+    let nextDir: SortDir
+    if (sortField === field) {
+      nextDir = sortDir === 'asc' ? 'desc' : 'asc'
+    } else {
+      // Numbers and dates feel natural newest-first; text columns ascending.
+      nextDir = (field === 'ticket_number' || field === 'created_at') ? 'desc' : 'asc'
+    }
+    setSortField(field)
+    setSortDir(nextDir)
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'tickets_sort', value: `${field}:${nextDir}` }),
     }).catch(() => {})
   }
 
@@ -282,6 +354,39 @@ export default function TicketsPage() {
     const matchesFrom = !fromFilter || created >= fromFilter
     const matchesTo = !toFilter || created <= toFilter
     return matchesSearch && matchesStatus && matchesAssignee && matchesVenue && matchesFrom && matchesTo
+  })
+
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
+    const dirMul = sortDir === 'asc' ? 1 : -1
+    let av: string | number
+    let bv: string | number
+    switch (sortField) {
+      case 'ticket_number':
+        av = a.ticket_number; bv = b.ticket_number; break
+      case 'title':
+        av = (a.title || '').toLowerCase(); bv = (b.title || '').toLowerCase(); break
+      case 'venue_name':
+        av = (a.venue_name || '').toLowerCase(); bv = (b.venue_name || '').toLowerCase(); break
+      case 'category':
+        av = (a.category || '').toLowerCase(); bv = (b.category || '').toLowerCase(); break
+      case 'priority':
+        av = priorityRank[a.priority] ?? -1; bv = priorityRank[b.priority] ?? -1; break
+      case 'status':
+        av = statusRank[a.status] ?? -1; bv = statusRank[b.status] ?? -1; break
+      case 'assigned_to_name':
+        // Unassigned always sinks to the bottom regardless of direction.
+        av = a.assigned_to_name ? a.assigned_to_name.toLowerCase() : '￿'
+        bv = b.assigned_to_name ? b.assigned_to_name.toLowerCase() : '￿'
+        break
+      case 'created_at':
+      default:
+        av = a.created_at || `${a.created_date} ${a.created_time}`
+        bv = b.created_at || `${b.created_date} ${b.created_time}`
+        break
+    }
+    if (av < bv) return -1 * dirMul
+    if (av > bv) return 1 * dirMul
+    return 0
   })
 
   const counts: Record<string, number> = {
@@ -448,7 +553,7 @@ export default function TicketsPage() {
                 : null}
               {fromFilter && <>From <b>{fromFilter}</b>{' · '}</>}
               {toFilter && <>To <b>{toFilter}</b>{' · '}</>}
-              Showing {filteredTickets.length} of {tickets.length}
+              Showing {sortedTickets.length} of {tickets.length}
             </span>
             <a href="/tickets" className="ml-auto text-xs text-blue-700 hover:underline">Clear filters</a>
           </div>
@@ -507,7 +612,7 @@ export default function TicketsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36" />)}
           </div>
-        ) : filteredTickets.length === 0 ? (
+        ) : sortedTickets.length === 0 ? (
           <div className="py-20 text-center">
             <p className="text-sm text-zinc-500">{tickets.length === 0 ? 'No tickets yet.' : 'No tickets match your filter.'}</p>
             <p className="text-xs text-zinc-400 mt-1">{tickets.length === 0 ? 'Create your first ticket to get started.' : 'Try adjusting your search or filter.'}</p>
@@ -515,7 +620,7 @@ export default function TicketsPage() {
         ) : view === 'cards' ? (
           /* CARD VIEW */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-zinc-200 border border-zinc-200">
-            {filteredTickets.map(ticket => {
+            {sortedTickets.map(ticket => {
               const pri = priorityConfig[ticket.priority] || priorityConfig.medium
               const st = statusConfig[ticket.status] || statusConfig.new
               return (
@@ -587,31 +692,31 @@ export default function TicketsPage() {
                   <th className="w-10 text-center py-2.5 px-2 text-xs font-medium text-zinc-500">
                     <input
                       type="checkbox"
-                      checked={filteredTickets.length > 0 && filteredTickets.every(t => selectedIds.has(t.id))}
+                      checked={sortedTickets.length > 0 && sortedTickets.every(t => selectedIds.has(t.id))}
                       onChange={(e) => {
                         e.stopPropagation()
-                        if (filteredTickets.every(t => selectedIds.has(t.id))) {
+                        if (sortedTickets.every(t => selectedIds.has(t.id))) {
                           clearSelection()
                         } else {
-                          setSelectedIds(new Set(filteredTickets.map(t => t.id)))
+                          setSelectedIds(new Set(sortedTickets.map(t => t.id)))
                         }
                       }}
                       className="cursor-pointer"
                     />
                   </th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">#</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Title</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Venue</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Category</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Priority</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Status</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Assigned</th>
+                  <SortHeader field="ticket_number" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>#</SortHeader>
+                  <SortHeader field="title" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Title</SortHeader>
+                  <SortHeader field="venue_name" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Venue</SortHeader>
+                  <SortHeader field="category" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Category</SortHeader>
+                  <SortHeader field="priority" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Priority</SortHeader>
+                  <SortHeader field="status" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Status</SortHeader>
+                  <SortHeader field="assigned_to_name" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Assigned</SortHeader>
                   <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Time</th>
-                  <th className="text-left py-2.5 px-4 text-xs font-medium text-zinc-500">Created</th>
+                  <SortHeader field="created_at" sortField={sortField} sortDir={sortDir} onClick={toggleSort}>Created</SortHeader>
                 </tr>
               </thead>
               <tbody>
-                {filteredTickets.map(ticket => {
+                {sortedTickets.map(ticket => {
                   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
                   const st = statusConfig[ticket.status] || statusConfig.new
                   return (

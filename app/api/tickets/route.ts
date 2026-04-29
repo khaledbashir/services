@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
 
     const result = await query(
       `SELECT t.id, t.ticket_number, t.title, t.description, t.priority, t.status, t.category,
-              t.resolution_notes, t.event_id,
+              t.resolution_notes, t.event_id, t.venue_id, t.assigned_to,
+              t.created_at,
               COALESCE(t.source, 'web') as source,
               t.contact_phone, t.contact_name,
               v.name as venue_name,
