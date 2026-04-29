@@ -74,11 +74,13 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
             dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
             v.name as venue_name,
             d.full_name as designer_name,
-            ec.full_name as enterprise_contact_name
+            ec.full_name as enterprise_contact_name,
+            ic.category as internal_category
      FROM design_requests dr
      LEFT JOIN venues v ON dr.venue_id = v.id
      LEFT JOIN staff d ON dr.designer_id = d.id
      LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
+     LEFT JOIN design_request_internal_categories ic ON ic.design_request_id = dr.id::text
      WHERE dr.id = $1 ${vf.clause}`,
     params,
   )
@@ -88,6 +90,20 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // Helper for the Twenty-backed branch: lookup the local internal-category
+    // tag (Twenty has no concept of this taxonomy).
+    const lookupInternalCategory = async (id: string): Promise<string | null> => {
+      try {
+        const r = await query(
+          `SELECT category FROM design_request_internal_categories WHERE design_request_id = $1`,
+          [id],
+        )
+        return r.rows[0]?.category || null
+      } catch {
+        return null
+      }
+    }
+
     if (isTwentyBackedEnabled('DESIGNS')) {
       const auth = await requireRole(request, 'technician')
       if (isAuthError(auth)) return auth
@@ -143,6 +159,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           wrike_task_id: d.wrikeTaskId || null,
           created_at: d.createdAt,
           updated_at: d.updatedAt,
+          internal_category: await lookupInternalCategory(d.id),
         },
       })
     }

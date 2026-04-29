@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
 import { Skeleton } from '@/components/skeleton'
 import { formatDate } from '@/lib/format-date'
+import { INTERNAL_CATEGORIES } from '@/lib/design-internal-category'
 
 interface DesignRequest {
   id: string
@@ -27,6 +28,7 @@ interface DesignRequest {
   sizes_requested: string | null
   created_date: string
   is_rando?: boolean
+  internal_category?: string | null
 }
 
 interface Venue {
@@ -114,6 +116,12 @@ export default function DesignsPage() {
   // `randoFilter`    = 'all' | 'only'  | 'exclude'
   const [designerFilter, setDesignerFilter] = useState<string>('all')
   const [randoFilter, setRandoFilter] = useState<'all' | 'only' | 'exclude'>('all')
+  // Alexis's internal-job tag filter from the 2026-04-29 call. Values:
+  //   'all'         — every request (default)
+  //   'client'      — only untagged (regular billable client work)
+  //   'internal'    — any internal tag (rolled up)
+  //   <category-key> — only that specific tag
+  const [internalFilter, setInternalFilter] = useState<string>('all')
   const [venueRailOpen, setVenueRailOpen] = useState(true)
   const [openLeagues, setOpenLeagues] = useState<Record<string, boolean>>({})
   // selectedVenueId + selectedLeague are mutually exclusive: clicking a venue
@@ -125,6 +133,11 @@ export default function DesignsPage() {
     try {
       const uid = localStorage.getItem('userId') || ''
       setCurrentUserId(uid)
+    } catch {}
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const internal = sp.get('internal')
+      if (internal) setInternalFilter(internal)
     } catch {}
   }, [])
 
@@ -338,6 +351,11 @@ export default function DesignsPage() {
         (randoFilter === 'only' && item.is_rando) ||
         (randoFilter === 'exclude' && !item.is_rando)
 
+      let matchesInternal = true
+      if (internalFilter === 'client') matchesInternal = !item.internal_category
+      else if (internalFilter === 'internal') matchesInternal = !!item.internal_category
+      else if (internalFilter !== 'all') matchesInternal = item.internal_category === internalFilter
+
       let matchesVenue = true
       if (selectedVenueId) {
         const v = venueOfRequest(item)
@@ -347,9 +365,9 @@ export default function DesignsPage() {
         matchesVenue = v ? classifyVenue(v) === selectedLeague : false
       }
 
-      return matchesSearch && matchesStatus && matchesDesigner && matchesRando && matchesVenue
+      return matchesSearch && matchesStatus && matchesDesigner && matchesRando && matchesVenue && matchesInternal
     })
-  }, [designRequests, search, statusFilter, designerFilter, randoFilter, currentUserId, selectedVenueId, selectedLeague, venueById, venueByLowerName])
+  }, [designRequests, search, statusFilter, designerFilter, randoFilter, currentUserId, selectedVenueId, selectedLeague, venueById, venueByLowerName, internalFilter])
 
   // Bucketed venue tree for the left rail. We include only venues that have
   // at least one design request OR are likely to get one (i.e. all of them
@@ -907,6 +925,36 @@ export default function DesignsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
+            {/* Internal-job tag filter — Alexis's non-billable hours-tracking ask. */}
+            <div className="relative">
+              <select
+                value={internalFilter}
+                onChange={(e) => setInternalFilter(e.target.value)}
+                className="h-9 pl-3 pr-9 rounded-lg ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
+                title="Filter by internal/non-billable category"
+              >
+                <option value="all">Client + internal</option>
+                <option value="client">Client work only</option>
+                <option value="internal">Any internal tag</option>
+                <option disabled>──────────</option>
+                {INTERNAL_CATEGORIES.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            <Link
+              href="/designs/internal-hours"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm text-zinc-700 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
+              title="Hours summary by internal category"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19a3 3 0 11-6 0 3 3 0 016 0zM21 16a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Internal Hours</span>
+            </Link>
           </div>
         </div>
 
@@ -952,6 +1000,13 @@ export default function DesignsPage() {
                     </span>
                   )}
                 </div>
+                {item.internal_category && (
+                  <div>
+                    <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 ring-1 ring-amber-200 px-1.5 py-0.5 rounded">
+                      Internal · {INTERNAL_CATEGORIES.find((c) => c.key === item.internal_category)?.label || item.internal_category}
+                    </span>
+                  </div>
+                )}
 
                 {/* Context line: venue · company */}
                 <div className="flex items-center gap-1.5 text-[11.5px] text-zinc-500 min-w-0">

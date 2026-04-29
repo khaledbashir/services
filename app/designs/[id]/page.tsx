@@ -7,6 +7,8 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { DesignProofUpload } from '@/components/design-proof-upload'
 
+import { INTERNAL_CATEGORIES, labelForCategory } from '@/lib/design-internal-category'
+
 interface DesignRequestDetail {
   id: string
   venue_id: string | null
@@ -14,6 +16,7 @@ interface DesignRequestDetail {
   company_name: string | null
   job_title: string
   tricode: string | null
+  internal_category?: string | null
   ftp_proof_link: string | null
   ftp_final_link: string | null
   final_file_name: string | null
@@ -153,6 +156,19 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     }
   }
 
+  const setInternalCategory = async (next: string | null) => {
+    try {
+      const res = await fetch(`/api/design-requests/${params.id}/internal-category`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: next }),
+      })
+      if (res.ok) await fetchData()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const saveAsTemplate = async () => {
     const suggested = dr ? `${dr.company_name || dr.venue_name || dr.job_title} template` : ''
     const name = window.prompt('Save this request as a template — what should we call it?', suggested)
@@ -232,6 +248,30 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 <span className="font-medium text-zinc-700">{dr.company_name || dr.venue_name || 'No client'}</span>
                 {dr.tricode && <><span className="text-zinc-300">·</span><span className="text-xs font-mono bg-zinc-100 px-1.5 py-0.5 rounded">{dr.tricode}</span></>}
                 {dr.due_date && <><span className="text-zinc-300">·</span><span>Due {formatDate(dr.due_date)}</span></>}
+                {dr.internal_category && (
+                  <>
+                    <span className="text-zinc-300">·</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 ring-1 ring-amber-200 px-1.5 py-0.5 rounded">
+                      Internal · {labelForCategory(dr.internal_category)}
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="mt-2">
+                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mr-2">
+                  Internal tag
+                </label>
+                <select
+                  value={dr.internal_category || ''}
+                  onChange={(e) => setInternalCategory(e.target.value || null)}
+                  className="text-xs rounded ring-1 ring-zinc-200 px-2 py-1 bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                  title="Tag this as non-billable internal work for hours tracking"
+                >
+                  <option value="">Client work (default)</option>
+                  {INTERNAL_CATEGORIES.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex items-center gap-2">

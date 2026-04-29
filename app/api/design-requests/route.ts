@@ -91,6 +91,19 @@ function toTwentyStatus(dashboardValue: string): string {
   return `STATUS_${normalized.toUpperCase()}`
 }
 
+async function loadInternalCategoryMap(ids: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (ids.length === 0) return map
+  const res = await query(
+    `SELECT design_request_id, category
+     FROM design_request_internal_categories
+     WHERE design_request_id = ANY($1::text[])`,
+    [ids],
+  )
+  for (const row of res.rows) map.set(row.design_request_id, row.category)
+  return map
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireRole(request, 'technician')
@@ -116,6 +129,8 @@ export async function GET(request: NextRequest) {
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
+      const tagMap = await loadInternalCategoryMap(items.map((i) => i.id))
+      for (const item of items) item.internal_category = tagMap.get(item.id) || null
       return NextResponse.json({ design_requests: items, total: items.length, limit })
     }
 
@@ -171,11 +186,13 @@ export async function GET(request: NextRequest) {
               TO_CHAR(dr.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
               d.full_name as designer_name, d.id as designer_id,
-              ec.full_name as enterprise_contact_name, ec.id as enterprise_contact_id
+              ec.full_name as enterprise_contact_name, ec.id as enterprise_contact_id,
+              ic.category as internal_category
        FROM design_requests dr
        LEFT JOIN venues v ON dr.venue_id = v.id
        LEFT JOIN staff d ON dr.designer_id = d.id
        LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
+       LEFT JOIN design_request_internal_categories ic ON ic.design_request_id = dr.id::text
        ${whereClause}
        ORDER BY ${orderBy}
        LIMIT $${params.length}`,
