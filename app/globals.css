@@ -11,6 +11,16 @@
   --anc-sidebar: #0A1628;
   --anc-text: #09090b;
   --anc-muted: #71717a;
+  color-scheme: light;
+}
+
+.dark {
+  --anc-brand-light: rgba(56, 120, 255, 0.16);
+  --anc-border: #263244;
+  --anc-sidebar: #07111f;
+  --anc-text: #e5e7eb;
+  --anc-muted: #94a3b8;
+  color-scheme: dark;
 }
 
 html { scroll-behavior: smooth; }
@@ -20,6 +30,107 @@ body {
   color: var(--anc-text);
   background: #fff;
   -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background: #0b1120;
+}
+
+/* Dark mode is centralized because much of the dashboard uses direct Tailwind
+   utility colors. Keep these overrides broad but limited to ANC's common light
+   surface, border, and zinc text utilities. */
+.dark .bg-white,
+.dark [class~="bg-white/95"],
+.dark [class~="bg-[#FBFDFF]"],
+.dark [class~="bg-[#FCFDFF]"],
+.dark [class~="bg-[#FAFCFF]"],
+.dark [class~="bg-[#F8FBFF]"] {
+  background-color: #111827 !important;
+}
+
+.dark .bg-zinc-50,
+.dark [class~="bg-zinc-50/70"] {
+  background-color: #0f172a !important;
+}
+
+.dark .bg-zinc-100 {
+  background-color: #1f2937 !important;
+}
+
+.dark [class*="from-[#F8FBFF]"],
+.dark [class*="to-[#EEF4FF]"] {
+  background-image: linear-gradient(135deg, #111827 0%, #0f172a 52%, #172554 100%) !important;
+}
+
+.dark .text-zinc-950,
+.dark .text-zinc-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-zinc-800,
+.dark .text-zinc-700 {
+  color: #dbe4ef !important;
+}
+
+.dark .text-zinc-600 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-zinc-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-zinc-400 {
+  color: #7c8da4 !important;
+}
+
+.dark .border-zinc-100,
+.dark .border-zinc-200,
+.dark .border-zinc-300,
+.dark [class*="border-zinc-100"],
+.dark [class*="border-zinc-200"],
+.dark [class*="border-zinc-300"],
+.dark [class*="border-[#E8E8E8]"],
+.dark [class*="border-[#E6ECF5]"],
+.dark [class*="border-[#D9E4FF]"],
+.dark [class*="border-[#DDE7FF]"] {
+  border-color: #263244 !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  color: #e5e7eb;
+  background-color: #111827;
+  border-color: #263244;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+.dark table tr {
+  border-color: #263244;
+}
+
+.dark .hover\:bg-zinc-50:hover,
+.dark [class*="hover:bg-zinc-50"]:hover {
+  background-color: #172033 !important;
+}
+
+.dark .hover\:text-zinc-700:hover,
+.dark .hover\:text-zinc-900:hover,
+.dark [class*="hover:text-zinc-700"]:hover,
+.dark [class*="hover:text-zinc-900"]:hover {
+  color: #f8fafc !important;
+}
+
+.dark .shadow-sm,
+.dark .shadow-lg,
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28) !important;
 }
 
 .leaflet-container {

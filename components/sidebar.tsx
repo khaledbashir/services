@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo, ReactNode } from 'react'
+import { ThemeToggle } from './theme-toggle'
 
 type Role = 'admin' | 'tech_support' | 'manager' | 'technician' | 'any'
 
@@ -290,6 +291,7 @@ export function Sidebar() {
           <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z" /></Icon>
           Account
         </Link>
+        <ThemeToggle />
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"

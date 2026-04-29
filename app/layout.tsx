@@ -14,9 +14,16 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon/favicon.ico" />
+        <Script
+          id="anc-theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var key='anc-theme';var saved=localStorage.getItem(key);var prefers=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var theme=saved||(prefers?'dark':'light');var root=document.documentElement;root.classList.toggle('dark',theme==='dark');root.style.colorScheme=theme;}catch(e){}})();`,
+          }}
+        />
         <Script
           defer
           src="https://abc-umami.izcgmb.easypanel.host/script.js"
