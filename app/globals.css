@@ -9,17 +9,25 @@
   --anc-brand-light: rgba(10, 82, 239, 0.08);
   --anc-border: #E8E8E8;
   --anc-sidebar: #0A1628;
+  --anc-page: #ffffff;
+  --anc-surface: #ffffff;
+  --anc-surface-muted: #fafafa;
+  --anc-surface-raised: #ffffff;
   --anc-text: #09090b;
   --anc-muted: #71717a;
   color-scheme: light;
 }
 
 .dark {
-  --anc-brand-light: rgba(56, 120, 255, 0.16);
-  --anc-border: #263244;
-  --anc-sidebar: #07111f;
-  --anc-text: #e5e7eb;
-  --anc-muted: #94a3b8;
+  --anc-brand-light: rgba(255, 255, 255, 0.08);
+  --anc-border: #2a2a2a;
+  --anc-sidebar: #101010;
+  --anc-page: #0f0f0f;
+  --anc-surface: #151515;
+  --anc-surface-muted: #1a1a1a;
+  --anc-surface-raised: #1d1d1d;
+  --anc-text: #f4f4f5;
+  --anc-muted: #a1a1aa;
   color-scheme: dark;
 }
 
@@ -28,12 +36,12 @@ html { scroll-behavior: smooth; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   color: var(--anc-text);
-  background: #fff;
+  background: var(--anc-page);
   -webkit-font-smoothing: antialiased;
 }
 
 .dark body {
-  background: #0b1120;
+  background: var(--anc-page);
 }
 
 /* Dark mode is centralized because much of the dashboard uses direct Tailwind
@@ -45,43 +53,46 @@ body {
 .dark [class~="bg-[#FCFDFF]"],
 .dark [class~="bg-[#FAFCFF]"],
 .dark [class~="bg-[#F8FBFF]"] {
-  background-color: #111827 !important;
+  background-color: var(--anc-surface) !important;
 }
 
 .dark .bg-zinc-50,
 .dark [class~="bg-zinc-50/70"] {
-  background-color: #0f172a !important;
+  background-color: var(--anc-surface-muted) !important;
 }
 
-.dark .bg-zinc-100 {
-  background-color: #1f2937 !important;
+.dark .bg-zinc-100,
+.dark .bg-zinc-200,
+.dark .bg-zinc-300 {
+  background-color: #242424 !important;
 }
 
 .dark [class*="from-[#F8FBFF]"],
-.dark [class*="to-[#EEF4FF]"] {
-  background-image: linear-gradient(135deg, #111827 0%, #0f172a 52%, #172554 100%) !important;
+.dark [class*="to-[#EEF4FF]"],
+.dark [class*="from-zinc-50"][class*="to-white"] {
+  background-image: linear-gradient(135deg, #1d1d1d 0%, #171717 58%, #111111 100%) !important;
 }
 
 .dark .text-zinc-950,
 .dark .text-zinc-900 {
-  color: #f8fafc !important;
+  color: #fafafa !important;
 }
 
 .dark .text-zinc-800,
 .dark .text-zinc-700 {
-  color: #dbe4ef !important;
+  color: #e4e4e7 !important;
 }
 
 .dark .text-zinc-600 {
-  color: #cbd5e1 !important;
+  color: #d4d4d8 !important;
 }
 
 .dark .text-zinc-500 {
-  color: #94a3b8 !important;
+  color: #a1a1aa !important;
 }
 
 .dark .text-zinc-400 {
-  color: #7c8da4 !important;
+  color: #8a8a8a !important;
 }
 
 .dark .border-zinc-100,
@@ -94,29 +105,45 @@ body {
 .dark [class*="border-[#E6ECF5]"],
 .dark [class*="border-[#D9E4FF]"],
 .dark [class*="border-[#DDE7FF]"] {
-  border-color: #263244 !important;
+  border-color: var(--anc-border) !important;
+}
+
+.dark [class*="divide-zinc-100"] > :not([hidden]) ~ :not([hidden]),
+.dark [class*="divide-zinc-200"] > :not([hidden]) ~ :not([hidden]),
+.dark [class*="divide-[#E8E8E8]"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--anc-border) !important;
+}
+
+.dark [class*="ring-zinc-100"],
+.dark [class*="ring-zinc-200"],
+.dark [class*="ring-zinc-300"],
+.dark [class*="ring-[#E8E8E8]"],
+.dark [class*="ring-[#E6ECF5]"],
+.dark [class*="ring-[#D9E4FF]"],
+.dark [class*="ring-[#DDE7FF]"] {
+  --tw-ring-color: var(--anc-border) !important;
 }
 
 .dark input,
 .dark textarea,
 .dark select {
-  color: #e5e7eb;
-  background-color: #111827;
-  border-color: #263244;
+  color: #f4f4f5;
+  background-color: var(--anc-surface);
+  border-color: var(--anc-border);
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #64748b;
+  color: #707070;
 }
 
 .dark table tr {
-  border-color: #263244;
+  border-color: var(--anc-border);
 }
 
 .dark .hover\:bg-zinc-50:hover,
 .dark [class*="hover:bg-zinc-50"]:hover {
-  background-color: #172033 !important;
+  background-color: #202020 !important;
 }
 
 .dark .hover\:text-zinc-700:hover,
@@ -130,7 +157,7 @@ body {
 .dark .shadow-lg,
 .dark .shadow-xl,
 .dark .shadow-2xl {
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38) !important;
 }
 
 .leaflet-container {

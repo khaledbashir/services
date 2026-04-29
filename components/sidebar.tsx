@@ -307,7 +307,7 @@ export function Sidebar() {
     <>
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-[#0A1628] text-white p-2 rounded-md shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 bg-[var(--anc-sidebar)] text-white p-2 rounded-md shadow-lg"
         aria-label="Open menu"
       >
         <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></Icon>
@@ -317,7 +317,7 @@ export function Sidebar() {
         <div className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
       )}
 
-      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-[#0A1628] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-[var(--anc-sidebar)] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button
           onClick={() => setMobileOpen(false)}
           className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
@@ -328,7 +328,7 @@ export function Sidebar() {
         {sidebarContent}
       </div>
 
-      <div className="hidden lg:flex w-60 bg-[#0A1628] text-white h-screen flex-col fixed left-0 top-0 border-r border-white/5">
+      <div className="hidden lg:flex w-60 bg-[var(--anc-sidebar)] text-white h-screen flex-col fixed left-0 top-0 border-r border-white/5">
         {sidebarContent}
       </div>
     </>
