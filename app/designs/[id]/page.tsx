@@ -153,6 +153,30 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     }
   }
 
+  const saveAsTemplate = async () => {
+    const suggested = dr ? `${dr.company_name || dr.venue_name || dr.job_title} template` : ''
+    const name = window.prompt('Save this request as a template — what should we call it?', suggested)
+    if (!name || !name.trim()) return
+    try {
+      const res = await fetch(`/api/design-requests/${params.id}/save-as-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not save template')
+        return
+      }
+      if (window.confirm(`Template "${name.trim()}" saved. Open the templates library now?`)) {
+        router.push('/designs/templates')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Could not save template')
+    }
+  }
+
   const currentIdx = useMemo(() => {
     if (!dr) return 0
     const i = STAGES.findIndex((s) => s.key === dr.status)
@@ -211,6 +235,18 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveAsTemplate}
+                className="inline-flex items-center gap-1.5 rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+                title="Save this request as a reusable template"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5" />
+                </svg>
+                <span>Save as Template</span>
+              </button>
               <button
                 type="button"
                 onClick={duplicate}

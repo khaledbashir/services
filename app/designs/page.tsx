@@ -293,6 +293,17 @@ export default function DesignsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
+            <Link
+              href="/designs/templates"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm font-medium text-zinc-700 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
+              title="Saved request templates"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5h5M9 13h6M9 17h4" />
+              </svg>
+              <span>Templates</span>
+            </Link>
             <button
               onClick={() => setShowForm(!showForm)}
               className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg bg-zinc-900 text-white text-sm font-medium shadow-[0_4px_12px_-4px_rgba(15,23,42,0.35)] hover:bg-zinc-800 hover:shadow-[0_6px_16px_-4px_rgba(15,23,42,0.4)] transition-all"

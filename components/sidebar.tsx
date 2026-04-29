@@ -182,6 +182,7 @@ export function Sidebar() {
       links: [
         { href: '/wrike-airtable-scope', label: 'Scope doc' },
         { href: '/designs', label: 'Design Requests' },
+        { href: '/designs/templates', label: 'Request Templates' },
         { href: '/cg-designs', label: 'CG Designs' },
         { href: '/content-schedules', label: 'Content Schedule' },
         { href: '/print-requests', label: 'Print Requests' },
