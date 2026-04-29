@@ -462,6 +462,23 @@ async function runMigrations() {
       WHERE c.legacy_venue_id = e.venue_id
         AND e.client_id IS NULL
     `)
+
+    // Toggle for the synchronous workflow-success Slack blasts. Joe asked
+    // 2026-04-29 to silence venue-channel pings on completed check-ins /
+    // game-ready / post-game and only get pinged on misses (handled by the
+    // tech-reminders cron). Default off; admins can re-enable via Settings →
+    // Automation if Chris's local-team pulse view becomes important again.
+    await client.query(`
+      INSERT INTO automation_jobs (id, name, description, schedule, enabled)
+      VALUES (
+        'workflow-success-pings',
+        'Workflow Success Pings',
+        'Slack message on every check-in / game-ready / post-game completion. Off = only miss-based reminders fire.',
+        'on-event',
+        false
+      )
+      ON CONFLICT (id) DO NOTHING
+    `)
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
