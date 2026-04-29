@@ -57,10 +57,10 @@ const leagueColors: Record<string, { bg: string; text: string }> = {
 }
 
 const workflowStatusColors: Record<string, { dot: string; bg: string; text: string; label: string; border: string }> = {
-  pending: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-700', label: 'Pending', border: '#f43f5e' },
-  checked_in: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Checked In', border: '#f59e0b' },
-  game_ready: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Game Ready', border: '#10b981' },
-  post_game_submitted: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', label: 'Submitted', border: '#3b82f6' },
+  pending: { dot: 'bg-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', text: 'text-rose-700', label: 'Pending', border: '#f43f5e' },
+  checked_in: { dot: 'bg-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700', label: 'Checked In', border: '#f59e0b' },
+  game_ready: { dot: 'bg-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-700', label: 'Game Ready', border: '#10b981' },
+  post_game_submitted: { dot: 'bg-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700', label: 'Submitted', border: '#3b82f6' },
 }
 
 export default function DashboardPage() {
@@ -176,6 +176,14 @@ export default function DashboardPage() {
   const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][today.getDay()]
   const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][today.getMonth()]
   const todayFormatted = `${dayName}, ${monthName} ${today.getDate()}, ${today.getFullYear()}`
+  const timelineEvents = todaysEvents.slice(0, 8)
+  const upcomingEvents = todaysEvents.slice(0, 10)
+  const liveActivityItems = activity.slice(0, 5)
+  const displayMarketLabel = (market: string) => {
+    const label = market?.trim()
+    if (!label || label.toLowerCase() === 'unknown') return 'Unassigned Market'
+    return label
+  }
 
   return (
     <DashboardLayout>
@@ -222,15 +230,15 @@ export default function DashboardPage() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Auto-Sync Active</div>
-              <div className="mt-2 text-3xl font-semibold text-emerald-900">{stats.autoSyncingVenues}</div>
-              <div className="mt-1 text-xs text-emerald-700">Active venues with services and feed URLs</div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Auto-Sync Active</div>
+              <div className="mt-2 text-3xl font-semibold text-emerald-900 dark:text-emerald-100">{stats.autoSyncingVenues}</div>
+              <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300/80">Active venues with services and feed URLs</div>
             </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Need Feed URLs</div>
-              <div className="mt-2 text-3xl font-semibold text-amber-900">{stats.venuesNeedingFeedUrls}</div>
-              <div className="mt-1 text-xs text-amber-700">Services are on, but no feed is configured yet</div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Need Feed URLs</div>
+              <div className="mt-2 text-3xl font-semibold text-amber-900 dark:text-amber-100">{stats.venuesNeedingFeedUrls}</div>
+              <div className="mt-1 text-xs text-amber-700 dark:text-amber-300/80">Services are on, but no feed is configured yet</div>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">Inactive Venues</div>
@@ -245,9 +253,9 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {alerts.map((alert, idx) => {
               const styles = {
-                critical: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-800', dot: 'bg-rose-500' },
-                warning: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', dot: 'bg-amber-500' },
-                info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', dot: 'bg-blue-500' },
+                critical: { bg: 'bg-rose-50 dark:bg-rose-500/10', border: 'border-rose-200 dark:border-rose-500/30', text: 'text-rose-800 dark:text-rose-200', dot: 'bg-rose-500' },
+                warning: { bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/30', text: 'text-amber-800 dark:text-amber-200', dot: 'bg-amber-500' },
+                info: { bg: 'bg-blue-50 dark:bg-blue-500/10', border: 'border-blue-200 dark:border-blue-500/30', text: 'text-blue-800 dark:text-blue-200', dot: 'bg-blue-500' },
               }
               const s = styles[alert.severity as keyof typeof styles] || styles.info
               return (
@@ -279,8 +287,13 @@ export default function DashboardPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Today's Timeline */}
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#E8E8E8]">
+              <div className="px-6 py-4 border-b border-[#E8E8E8] flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-zinc-900">Today's Timeline</h2>
+                {todaysEvents.length > timelineEvents.length && (
+                  <button onClick={() => router.push('/events?filter=today')} className="text-xs font-medium text-[#0A52EF] hover:text-[#0840C0]">
+                    View all →
+                  </button>
+                )}
               </div>
               <div className="px-6 py-4">
                 {loading ? (
@@ -291,13 +304,13 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {todaysEvents.map((event) => {
+                    {timelineEvents.map((event) => {
                       const statusColor = getWorkflowStatus(event.workflow_status)
                       return (
                         <div
                           key={event.id}
                           onClick={() => router.push(`/events/${event.id}`)}
-                          className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors hover:bg-zinc-50 border-l-4 ${statusColor.bg}`}
+                          className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-white/5 border-l-4 ${statusColor.bg}`}
                           style={{ borderLeftColor: statusColor.border }}
                         >
                           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor.dot}`}></div>
@@ -309,6 +322,14 @@ export default function DashboardPage() {
                         </div>
                       )
                     })}
+                    {todaysEvents.length > timelineEvents.length && (
+                      <button
+                        onClick={() => router.push('/events?filter=today')}
+                        className="w-full rounded border border-dashed border-[#E8E8E8] py-2 text-xs font-medium text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-900"
+                      >
+                        Show {todaysEvents.length - timelineEvents.length} more today
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -332,7 +353,7 @@ export default function DashboardPage() {
                 ) : (
                   <table className="w-full text-sm">
                     <tbody>
-                      {todaysEvents.slice(0, 15).map((event) => {
+                      {upcomingEvents.map((event) => {
                         const leagueColor = getLeagueBadge(event.league)
                         const statusColor = getWorkflowStatus(event.workflow_status)
                         return (
@@ -375,7 +396,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="flex flex-col items-center space-y-4">
                   <svg viewBox="0 0 100 100" className="w-32 h-32">
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#e4e4e7" strokeWidth="10" />
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="10" className="text-zinc-200 dark:text-zinc-700" />
                     <circle
                       cx="50"
                       cy="50"
@@ -386,7 +407,7 @@ export default function DashboardPage() {
                       strokeDasharray={`${(chartData.workflow.completed / (chartData.workflow.completed + chartData.workflow.in_progress + chartData.workflow.pending)) * 283} 283`}
                       strokeDashoffset="0"
                     />
-                    <text x="50" y="50" textAnchor="middle" dy="0.3em" className="text-xl font-semibold fill-zinc-900">
+                    <text x="50" y="50" textAnchor="middle" dy="0.3em" className="text-xl font-semibold fill-zinc-900 dark:fill-zinc-100">
                       {chartData.workflow.completed + chartData.workflow.in_progress + chartData.workflow.pending}
                     </text>
                   </svg>
@@ -455,7 +476,7 @@ export default function DashboardPage() {
                 <p className="text-zinc-500 text-sm">No recent activity</p>
               ) : (
                 <div className="space-y-3">
-                  {activity.slice(0, 8).map((item, idx) => (
+                  {liveActivityItems.map((item, idx) => (
                     <div key={idx} className="flex items-start gap-3 text-xs">
                       <div className="w-2 h-2 mt-1 flex-shrink-0 rounded-full bg-[#0A52EF]"></div>
                       <div className="flex-1 min-w-0">
@@ -467,6 +488,11 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ))}
+                  {activity.length > liveActivityItems.length && (
+                    <div className="border-t border-[#E8E8E8] pt-3 text-xs text-zinc-400">
+                      Showing latest {liveActivityItems.length} of {activity.length}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -484,7 +510,7 @@ export default function DashboardPage() {
                   onClick={() => router.push(`/events?market=${market.market}`)}
                   className="bg-white rounded border border-[#E8E8E8] shadow-sm p-4 hover:shadow-md hover:border-zinc-300 transition-all text-left"
                 >
-                  <p className="text-sm font-medium text-zinc-900">{market.market}</p>
+                  <p className="text-sm font-medium text-zinc-900">{displayMarketLabel(market.market)}</p>
                   <p className="text-2xl font-semibold text-zinc-900 mt-2">{market.count}</p>
                   <p className="text-xs text-zinc-500 mt-1">events this week</p>
                 </button>
