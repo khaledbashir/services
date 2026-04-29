@@ -731,14 +731,10 @@ function parseApiError(res: Response, text: string, data: any): string {
 }
 
 function getServicesApiUrl(path: string) {
-  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
-  const browserOrigin = typeof window === 'undefined' ? '' : window.location.origin
-  const browserHost = typeof window === 'undefined' ? '' : window.location.hostname
-  const origin =
-    configuredOrigin ||
-    (browserHost === 'crm.ancsports.net' ? 'https://services.ancsports.net' : browserOrigin)
-
-  return `${origin}${path}`
+  // Keep browser calls on the current ANC Services origin. Absolute public app
+  // URLs can drift between EasyPanel hosts and make API requests return the app
+  // shell HTML instead of JSON.
+  return path
 }
 
 function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {

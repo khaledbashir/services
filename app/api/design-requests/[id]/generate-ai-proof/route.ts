@@ -229,7 +229,7 @@ async function handle(request: NextRequest, params: { id: string }) {
     ]
   )
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
+  const baseUrl = request.nextUrl.origin
   const downloadUrl = `${baseUrl}/api/design-requests/${params.id}/proofs/${inserted.rows[0].id}/download`
 
   return NextResponse.json({
