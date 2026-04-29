@@ -29,8 +29,52 @@ interface DesignRequest {
   is_rando?: boolean
 }
 
-interface Venue { id: string; name: string }
+interface Venue {
+  id: string
+  name: string
+  sports?: string[] | null
+  venue_type?: string | null
+}
 interface Staff { id: string; full_name: string }
+
+// League buckets Alexis named on the 2026-04-29 call: "college / venue / places,
+// MLB, MiLB, NBA, WNBA, Pro Hockey, NFL." Order matters — the rail renders
+// these in the order listed here so familiar groups stay near the top.
+const LEAGUE_BUCKETS = [
+  { key: 'college', label: 'College' },
+  { key: 'mlb', label: 'MLB' },
+  { key: 'milb', label: 'MiLB' },
+  { key: 'nba', label: 'NBA' },
+  { key: 'wnba', label: 'WNBA' },
+  { key: 'nhl', label: 'Pro Hockey' },
+  { key: 'nfl', label: 'NFL' },
+  { key: 'mls', label: 'MLS' },
+  { key: 'ooh', label: 'OOH / Out-of-Home' },
+  { key: 'other', label: 'Other Places' },
+] as const
+
+type LeagueKey = typeof LEAGUE_BUCKETS[number]['key']
+
+function classifyVenue(v: Venue): LeagueKey {
+  // Sports come from the venue's linked clients (clients.sport). One venue
+  // can have multiple — we pick the first match against our bucket order
+  // so a Penn-State-and-NCAA venue lands in College, not in MLB by accident.
+  const sports = (v.sports || []).map((s) => s.toLowerCase())
+  const looksLike = (needle: string) => sports.some((s) => s.includes(needle))
+
+  if (looksLike('college') || looksLike('ncaa') || looksLike('university')) return 'college'
+  if (looksLike('milb') || looksLike('minor league')) return 'milb'
+  if (looksLike('mlb') || looksLike('baseball')) return 'mlb'
+  if (looksLike('wnba')) return 'wnba'
+  if (looksLike('nba') || looksLike('basketball')) return 'nba'
+  if (looksLike('nhl') || looksLike('hockey')) return 'nhl'
+  if (looksLike('nfl') || looksLike('football')) return 'nfl'
+  if (looksLike('mls') || looksLike('soccer')) return 'mls'
+
+  // No sport association — fall through to the venue's own type.
+  if ((v.venue_type || '').toLowerCase() === 'ooh') return 'ooh'
+  return 'other'
+}
 
 const statusColumns: KanbanColumn[] = [
   { key: 'request_submitted', label: 'Submitted', accent: 'bg-sky-500' },
@@ -70,6 +114,12 @@ export default function DesignsPage() {
   // `randoFilter`    = 'all' | 'only'  | 'exclude'
   const [designerFilter, setDesignerFilter] = useState<string>('all')
   const [randoFilter, setRandoFilter] = useState<'all' | 'only' | 'exclude'>('all')
+  const [venueRailOpen, setVenueRailOpen] = useState(true)
+  const [openLeagues, setOpenLeagues] = useState<Record<string, boolean>>({})
+  // selectedVenueId + selectedLeague are mutually exclusive: clicking a venue
+  // narrows to that venue, clicking a league header narrows to that bucket.
+  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null)
+  const [selectedLeague, setSelectedLeague] = useState<LeagueKey | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string>('')
   useEffect(() => {
     try {
@@ -77,6 +127,48 @@ export default function DesignsPage() {
       setCurrentUserId(uid)
     } catch {}
   }, [])
+
+  // Hydrate the venue rail from DB-backed prefs (open/closed, expanded
+  // leagues). Stored as one key so we only round-trip once. selected venue
+  // and league filters are NOT persisted — they reset each session because
+  // most days Alexis works across many venues.
+  useEffect(() => {
+    fetch('/api/preferences?key=designs_venue_rail')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.value) return
+        try {
+          const parsed = JSON.parse(d.value)
+          if (typeof parsed.open === 'boolean') setVenueRailOpen(parsed.open)
+          if (parsed.leagues && typeof parsed.leagues === 'object') setOpenLeagues(parsed.leagues)
+        } catch {}
+      })
+      .catch(() => {})
+  }, [])
+
+  const persistRailPrefs = (next: { open?: boolean; leagues?: Record<string, boolean> }) => {
+    const payload = {
+      open: next.open ?? venueRailOpen,
+      leagues: next.leagues ?? openLeagues,
+    }
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'designs_venue_rail', value: JSON.stringify(payload) }),
+    }).catch(() => {})
+  }
+
+  const toggleRail = () => {
+    const next = !venueRailOpen
+    setVenueRailOpen(next)
+    persistRailPrefs({ open: next })
+  }
+
+  const toggleLeague = (key: LeagueKey) => {
+    const next = { ...openLeagues, [key]: !openLeagues[key] }
+    setOpenLeagues(next)
+    persistRailPrefs({ leagues: next })
+  }
   const [formData, setFormData] = useState({
     venue_id: '',
     company_name: '',
@@ -201,6 +293,26 @@ export default function DesignsPage() {
     }
   }
 
+  // Index venues by id and by name (lowercased) so we can match a design
+  // request whether it carries venue_id (Postgres path) or just venue_name
+  // (Twenty path — Twenty designs have no venue relation, just a client).
+  const venueById = useMemo(() => {
+    const m = new Map<string, Venue>()
+    venues.forEach((v) => m.set(v.id, v))
+    return m
+  }, [venues])
+  const venueByLowerName = useMemo(() => {
+    const m = new Map<string, Venue>()
+    venues.forEach((v) => m.set(v.name.toLowerCase(), v))
+    return m
+  }, [venues])
+
+  const venueOfRequest = (item: DesignRequest): Venue | null => {
+    if (item.venue_id && venueById.has(item.venue_id)) return venueById.get(item.venue_id)!
+    if (item.venue_name) return venueByLowerName.get(item.venue_name.toLowerCase()) || null
+    return null
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     const targetDesignerId = designerFilter === 'mine' ? currentUserId : designerFilter
@@ -226,9 +338,42 @@ export default function DesignsPage() {
         (randoFilter === 'only' && item.is_rando) ||
         (randoFilter === 'exclude' && !item.is_rando)
 
-      return matchesSearch && matchesStatus && matchesDesigner && matchesRando
+      let matchesVenue = true
+      if (selectedVenueId) {
+        const v = venueOfRequest(item)
+        matchesVenue = v?.id === selectedVenueId
+      } else if (selectedLeague) {
+        const v = venueOfRequest(item)
+        matchesVenue = v ? classifyVenue(v) === selectedLeague : false
+      }
+
+      return matchesSearch && matchesStatus && matchesDesigner && matchesRando && matchesVenue
     })
-  }, [designRequests, search, statusFilter, designerFilter, randoFilter, currentUserId])
+  }, [designRequests, search, statusFilter, designerFilter, randoFilter, currentUserId, selectedVenueId, selectedLeague, venueById, venueByLowerName])
+
+  // Bucketed venue tree for the left rail. We include only venues that have
+  // at least one design request OR are likely to get one (i.e. all of them
+  // for now — Alexis wants to see the full taxonomy, not just venues with
+  // active work, so the structure is browsable even before requests land).
+  const venueTree = useMemo(() => {
+    const counts: Record<string, number> = {}
+    designRequests.forEach((item) => {
+      const v = venueOfRequest(item)
+      if (v) counts[v.id] = (counts[v.id] || 0) + 1
+    })
+    const buckets = new Map<LeagueKey, { venues: Array<Venue & { count: number }>; total: number }>()
+    LEAGUE_BUCKETS.forEach((b) => buckets.set(b.key, { venues: [], total: 0 }))
+    venues.forEach((v) => {
+      const k = classifyVenue(v)
+      const bucket = buckets.get(k)!
+      const count = counts[v.id] || 0
+      bucket.venues.push({ ...v, count })
+      bucket.total += count
+    })
+    // Sort venues alphabetically inside each bucket — Wrike-style.
+    buckets.forEach((b) => b.venues.sort((a, z) => a.name.localeCompare(z.name)))
+    return buckets
+  }, [venues, designRequests, venueById, venueByLowerName])
 
   const counts: Record<string, number> = {
     active: designRequests.filter((item) => item.status !== 'done').length,
@@ -534,6 +679,130 @@ export default function DesignsPage() {
           </div>
         )}
 
+        {/* Layout: collapsible venue tree on the left, filter bar + kanban on
+            the right. Alexis's left-rail ask from the 2026-04-29 call —
+            buckets venues by league so she can drill into a single venue's
+            history (e.g. all of Heinz Athletic Center's design work) the
+            way Wrike's left tree did. */}
+        <div className="flex items-start gap-4">
+          {venueRailOpen && (
+            <aside className="w-60 flex-shrink-0 rounded-xl bg-white ring-1 ring-zinc-200 p-2 max-h-[calc(100vh-13rem)] overflow-y-auto">
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  Venues
+                </div>
+                <div className="flex items-center gap-1">
+                  {(selectedVenueId || selectedLeague) && (
+                    <button
+                      onClick={() => { setSelectedVenueId(null); setSelectedLeague(null) }}
+                      className="text-[10.5px] text-zinc-500 hover:text-zinc-900 px-1.5 py-0.5 rounded hover:bg-zinc-100"
+                      title="Clear venue filter"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleRail}
+                    className="h-6 w-6 flex items-center justify-center text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded"
+                    title="Hide venue tree"
+                    aria-label="Hide venue tree"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => { setSelectedVenueId(null); setSelectedLeague(null) }}
+                className={`w-full text-left px-2 py-1.5 rounded-md text-[12.5px] font-medium transition-colors ${
+                  !selectedVenueId && !selectedLeague
+                    ? 'bg-[#0A52EF]/10 text-[#0A52EF]'
+                    : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                }`}
+              >
+                <span className="inline-flex items-center justify-between w-full">
+                  <span>All venues</span>
+                  <span className="text-[10.5px] tabular-nums text-zinc-400">{designRequests.length}</span>
+                </span>
+              </button>
+              <div className="mt-1 space-y-0.5">
+                {LEAGUE_BUCKETS.map((bucket) => {
+                  const data = venueTree.get(bucket.key)
+                  if (!data || data.venues.length === 0) return null
+                  const expanded = openLeagues[bucket.key] ?? bucket.key === 'college'
+                  const leagueSelected = selectedLeague === bucket.key && !selectedVenueId
+                  return (
+                    <div key={bucket.key} className="text-[12.5px]">
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => toggleLeague(bucket.key)}
+                          className="h-6 w-6 flex items-center justify-center text-zinc-400 hover:text-zinc-700 rounded"
+                          title={expanded ? 'Collapse' : 'Expand'}
+                          aria-label={expanded ? 'Collapse' : 'Expand'}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => { setSelectedLeague(bucket.key); setSelectedVenueId(null) }}
+                          className={`flex-1 text-left px-1.5 py-1 rounded-md font-medium transition-colors ${
+                            leagueSelected
+                              ? 'bg-[#0A52EF]/10 text-[#0A52EF]'
+                              : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900'
+                          }`}
+                        >
+                          <span className="inline-flex items-center justify-between w-full">
+                            <span>{bucket.label}</span>
+                            <span className={`text-[10.5px] tabular-nums ${leagueSelected ? 'text-[#0A52EF]/70' : 'text-zinc-400'}`}>{data.total || data.venues.length}</span>
+                          </span>
+                        </button>
+                      </div>
+                      {expanded && (
+                        <div className="ml-6 space-y-0.5 mt-0.5 mb-1">
+                          {data.venues.map((v) => {
+                            const venueSelected = selectedVenueId === v.id
+                            return (
+                              <button
+                                key={v.id}
+                                onClick={() => { setSelectedVenueId(v.id); setSelectedLeague(null) }}
+                                className={`w-full text-left px-2 py-1 rounded-md text-[12px] transition-colors ${
+                                  venueSelected
+                                    ? 'bg-[#0A52EF]/10 text-[#0A52EF] font-medium'
+                                    : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                                }`}
+                              >
+                                <span className="inline-flex items-center justify-between gap-2 w-full">
+                                  <span className="truncate">{v.name}</span>
+                                  {v.count > 0 && (
+                                    <span className={`flex-shrink-0 text-[10px] tabular-nums ${venueSelected ? 'text-[#0A52EF]/70' : 'text-zinc-400'}`}>{v.count}</span>
+                                  )}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </aside>
+          )}
+          <div className="flex-1 min-w-0 space-y-5">
+            {!venueRailOpen && (
+              <button
+                onClick={toggleRail}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg ring-1 ring-zinc-200 bg-white text-xs text-zinc-600 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
+                title="Show venue tree"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+                <span>Show venues</span>
+              </button>
+            )}
         {/* Tabs + search — pill bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center rounded-lg bg-zinc-100/80 p-1 ring-1 ring-zinc-200/60">
@@ -772,6 +1041,8 @@ export default function DesignsPage() {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   )
