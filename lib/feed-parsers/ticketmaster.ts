@@ -1,4 +1,4 @@
-import { dedupeFeedEvents, fetchFeedText, inferLeague, normalizeClock, toIsoDate } from '@/lib/feed-parsers/shared'
+import { dedupeFeedEvents, fetchFeedText, inferLeague, normalizeClock, stripPlayoffSuffix, toIsoDate } from '@/lib/feed-parsers/shared'
 import type { FeedEvent, ParseFeedParams } from '@/lib/feed-parsers/types'
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY || ''
@@ -51,7 +51,7 @@ function classifyTicketmasterEvent(name: string, segmentName?: string | null): F
 }
 
 function normalizeDiscoveryEvent(event: TicketmasterDiscoveryEvent, params: ParseFeedParams): FeedEvent | null {
-  const name = (event.name || '').trim()
+  const name = stripPlayoffSuffix((event.name || '').trim())
   const localDate = event.dates?.start?.localDate || null
   if (!name || !localDate) return null
 
@@ -433,7 +433,7 @@ export async function parseTicketmasterFeed(params: ParseFeedParams): Promise<Fe
     const isoDate = toIsoDate(month, day)
     if (!isoDate) continue
 
-    const name = heading.replace(/\s+/g, ' ').trim()
+    const name = stripPlayoffSuffix(heading.replace(/\s+/g, ' ').trim())
     const teams = name.includes(' vs. ') ? name.split(/\s+vs\.\s+/i) : []
 
     events.push({

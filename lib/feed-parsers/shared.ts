@@ -117,6 +117,15 @@ export function inferLeague(name: string): string | null {
   return null
 }
 
+// Ticketmaster keeps "(If Necessary)" and "(TBA)" markers on playoff games
+// even after the series is decided, e.g. "Raptors at Cavaliers Rd 1 Hm Gm 3
+// (If Necessary)" stays tagged after Game 2 makes the game necessary. The
+// matchup itself is real and tickets are being sold, so strip the suffix at
+// the parser boundary instead of dropping the whole event downstream.
+export function stripPlayoffSuffix(name: string): string {
+  return name.replace(/\s*\((?:if necessary|tba)\)\s*$/i, '').trim()
+}
+
 export function dedupeFeedEvents(events: FeedEvent[]): FeedEvent[] {
   const seen = new Set<string>()
   return events.filter((event) => {

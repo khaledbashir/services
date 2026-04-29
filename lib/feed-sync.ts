@@ -69,7 +69,10 @@ async function loadExistingEvents(venueId: string, startDate: string, endDate: s
   return result.rows
 }
 
-const PLACEHOLDER_PATTERN = /(if necessary|vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd|home game (one|two|three|four|five|six|seven|[1-7])\b|round (one|two|three|four|[1-4]).*(home game|game [1-7]))/i
+// Only filter genuinely TBD placeholder schedule entries, not real matchups
+// that Ticketmaster has tagged "(If Necessary)" — those are stripped at the
+// parser boundary (see stripPlayoffSuffix) and the underlying game is real.
+const PLACEHOLDER_PATTERN = /(vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|playoff game\s*$|playoffs:.*tbd|home game (one|two|three|four|five|six|seven|[1-7])\b|round (one|two|three|four|[1-4]).*(home game|game [1-7]))/i
 
 function isPlaceholderSummary(summary: string | null | undefined): boolean {
   if (!summary) return false
