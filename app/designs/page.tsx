@@ -449,6 +449,16 @@ export default function DesignsPage() {
               </svg>
               <span>Templates</span>
             </Link>
+            <Link
+              href="/designs/samples"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm font-medium text-zinc-700 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
+              title="Bundle past examples into a single share link for sponsors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 015.656 5.656l-3 3a4 4 0 01-5.656-5.656m-1.656-1.656a4 4 0 00-5.656 5.656l3 3a4 4 0 005.656-5.656" />
+              </svg>
+              <span>Samples</span>
+            </Link>
             <button
               onClick={() => setShowForm(!showForm)}
               className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg bg-zinc-900 text-white text-sm font-medium shadow-[0_4px_12px_-4px_rgba(15,23,42,0.35)] hover:bg-zinc-800 hover:shadow-[0_6px_16px_-4px_rgba(15,23,42,0.4)] transition-all"
