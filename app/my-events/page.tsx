@@ -108,8 +108,8 @@ export default function MyEventsPage() {
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="px-5 py-8 text-center">
-          <p className="text-sm text-zinc-500">No assigned events in this section.</p>
+        <div className="px-5 py-6 text-center">
+          <p className="text-sm text-zinc-500">No assigned events here.</p>
         </div>
       ) : (
         <div className="divide-y divide-[#E8E8E8]">
@@ -155,15 +155,13 @@ export default function MyEventsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="relative overflow-hidden rounded-2xl border border-[#DDE7FF] bg-[linear-gradient(135deg,#0A52EF_0%,#1F7BF2_62%,#63A5FF_100%)] px-5 py-5 text-white shadow-sm">
-          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
-          <div className="absolute bottom-0 right-0 h-24 w-24 rounded-full bg-[#7FB5FF]/25 blur-2xl"></div>
+      <div className="space-y-5">
+        <div className="relative overflow-hidden rounded-xl border border-[#16306A] bg-[linear-gradient(135deg,#071017_0%,#0B1B35_48%,#0A52EF_100%)] px-5 py-4 text-white shadow-sm">
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-white/70 font-semibold">Technician View</p>
-              <h1 className="text-2xl font-semibold mt-2">My Events</h1>
-              <p className="text-sm text-white/80 mt-1.5">
+              <h1 className="text-2xl font-semibold mt-1.5">My Events</h1>
+              <p className="text-sm text-white/75 mt-1">
                 {auth.loaded && auth.userName
                   ? `${auth.userName.split(' ')[0]}, open the next assigned event and move through the workflow without waiting on a shared link.`
                   : 'Open the next assigned event and move through the workflow without waiting on a shared link.'}
@@ -171,7 +169,7 @@ export default function MyEventsPage() {
             </div>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {statCards.map((card) => (
-                <div key={card.label} className={`min-w-[84px] rounded-xl border px-3 py-3 backdrop-blur-sm ${card.tone}`}>
+                <div key={card.label} className={`min-w-[78px] rounded-lg border px-3 py-2.5 backdrop-blur-sm ${card.tone}`}>
                   <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{card.label}</p>
                   <p className="text-2xl font-semibold mt-1">{card.value}</p>
                 </div>
@@ -226,7 +224,7 @@ export default function MyEventsPage() {
           </div>
         </div>
 
-        <div className="-mt-3 flex flex-wrap gap-2 px-1">
+        <div className="flex flex-wrap gap-2">
           {[
             { key: 'upcoming', label: 'Upcoming' },
             { key: 'today', label: 'Today' },
@@ -254,15 +252,16 @@ export default function MyEventsPage() {
             <Skeleton className="h-28 w-full" />
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {filter === 'today' && renderSection('Today', grouped.today)}
             {filter === 'upcoming' && renderSection('Upcoming', grouped.upcoming)}
             {filter === 'past' && renderSection('Past', grouped.past)}
             {filter === 'all' && (
               <>
-                {renderSection('Today', grouped.today)}
-                {renderSection('Upcoming', grouped.upcoming)}
-                {renderSection('Past', grouped.past)}
+                {grouped.today.length > 0 && renderSection('Today', grouped.today)}
+                {grouped.upcoming.length > 0 && renderSection('Upcoming', grouped.upcoming)}
+                {grouped.past.length > 0 && renderSection('Past', grouped.past)}
+                {filteredEvents.length === 0 && renderSection('Assignments', [])}
               </>
             )}
           </div>

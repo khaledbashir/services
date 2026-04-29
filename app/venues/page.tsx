@@ -233,7 +233,7 @@ export default function VenuesPage() {
 
         {/* Venue grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36" />)}
           </div>
         ) : filtered.length === 0 ? (
@@ -257,7 +257,7 @@ export default function VenuesPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             {filtered.map((venue) => {
               const eventCount = Number(venue.event_count) || 0
               const assignedCount = Number(venue.assigned_count) || 0
@@ -288,10 +288,10 @@ export default function VenuesPage() {
                   onClick={() => venue.is_active && router.push(`/venues/${venue.id}`)}>
                   {/* Health strip */}
                   <div className={`h-1 ${venue.is_active ? healthColors[health] : 'bg-zinc-300'}`}></div>
-                  <div className="p-5">
+                  <div className="p-4">
                     {/* Row 1: Logo + Name + Type badge */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2.5">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center border border-zinc-200">
                           {venue.logo_url ? (
                             <img src={venue.logo_url} alt="" className="w-full h-full object-cover" />
@@ -301,9 +301,9 @@ export default function VenuesPage() {
                             </div>
                           )}
                         </div>
-                        <h3 className="text-sm font-bold text-zinc-900 group-hover:text-[#0A52EF] transition-colors leading-tight">{venue.name}</h3>
+                        <h3 className="min-w-0 text-sm font-bold text-zinc-900 group-hover:text-[#0A52EF] transition-colors leading-tight">{venue.name}</h3>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="flex max-w-[48%] flex-wrap items-center justify-end gap-1.5 flex-shrink-0">
                         {!venue.is_active && (
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border bg-zinc-100 text-zinc-500 border-zinc-200">Inactive</span>
                         )}

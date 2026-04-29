@@ -170,18 +170,17 @@ export default function VenueMapPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="relative overflow-hidden rounded-[30px] border border-[#D8E6FF] bg-[linear-gradient(135deg,#07162f_0%,#0d2b61_46%,#1d67ef_100%)] px-6 py-7 text-white shadow-sm">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(125,211,252,0.18),transparent_30%)]" />
-          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <div className="space-y-5">
+        <div className="relative overflow-hidden rounded-2xl border border-[#16306A] bg-[linear-gradient(135deg,#071017_0%,#0B1B35_52%,#0A52EF_100%)] px-5 py-5 text-white shadow-sm">
+          <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
-              <p className="text-[11px] uppercase tracking-[0.32em] text-white/60 font-semibold">Venue Intelligence</p>
-              <h1 className="mt-2 text-3xl font-semibold">Live Venue Map</h1>
-              <p className="mt-3 max-w-2xl text-sm text-white/78">
-                Real map tiles, pan and zoom controls, and a cleaner venue review flow. This is now built to feel closer to a Google Maps-style ops screen instead of a static mockup.
+              <p className="text-[11px] uppercase tracking-[0.28em] text-white/60 font-semibold">Venue Intelligence</p>
+              <h1 className="mt-1.5 text-2xl font-semibold">Live Venue Map</h1>
+              <p className="mt-2 max-w-2xl text-sm text-white/75">
+                Monitor mapped venues, geocoding gaps, and upcoming event volume.
               </p>
               {geocodeMessage && (
-                <p className={`mt-3 text-sm font-medium ${geocodeMessage.type === 'success' ? 'text-emerald-200' : 'text-rose-200'}`}>
+                <p className={`mt-2 text-sm font-medium ${geocodeMessage.type === 'success' ? 'text-emerald-200' : 'text-rose-200'}`}>
                   {geocodeMessage.text}
                 </p>
               )}
@@ -189,9 +188,9 @@ export default function VenueMapPage() {
 
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               {statCards.map((card) => (
-                <div key={card.label} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4 backdrop-blur-sm">
+                <div key={card.label} className="rounded-xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-sm">
                   <p className="text-[11px] uppercase tracking-[0.2em] text-white/55">{card.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{card.value}</p>
+                  <p className="mt-1.5 text-2xl font-semibold text-white">{card.value}</p>
                   <p className="mt-1 text-[11px] text-white/60">{card.caption}</p>
                 </div>
               ))}
@@ -206,7 +205,7 @@ export default function VenueMapPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search venues, markets, or addresses..."
-                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
               />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -215,7 +214,7 @@ export default function VenueMapPage() {
                   key={type}
                   type="button"
                   onClick={() => setFilterType(type)}
-                  className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                  className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                     filterType === type
                       ? 'border-[#0A52EF] bg-[#0A52EF] text-white shadow-sm'
                       : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
@@ -229,7 +228,7 @@ export default function VenueMapPage() {
               <select
                 value={filterService}
                 onChange={(e) => setFilterService(e.target.value)}
-                className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
               >
                 <option value="all">All Services</option>
                 {(data?.serviceTypes || []).map((svc) => (
@@ -244,7 +243,7 @@ export default function VenueMapPage() {
               type="button"
               onClick={handleGeocode}
               disabled={geocoding}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0A52EF] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {geocoding ? (
                 <>
@@ -267,16 +266,16 @@ export default function VenueMapPage() {
           )}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_380px]">
-          <div className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/70 px-5 py-4">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_360px]">
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/70 px-5 py-3.5">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-900">Interactive Map</h2>
                 <p className="mt-1 text-xs text-zinc-500">Pan, zoom, and click markers to inspect venues.</p>
               </div>
               <p className="text-xs text-zinc-500">{mappedVenues.length} visible pins</p>
             </div>
-            <div className="relative h-[680px] bg-[#dfe8f3]">
+            <div className="relative h-[min(62vh,620px)] min-h-[440px] bg-[#dfe8f3]">
               {mappedVenues.length > 0 ? (
                 <VenueMapCanvas
                   venues={mappedVenues}
@@ -296,11 +295,11 @@ export default function VenueMapPage() {
 
           <div className="space-y-4">
             {selectedVenue ? (
-              <div className={`overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm`}>
+              <div className={`overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm`}>
                 <div className={`bg-gradient-to-br ${selectedTheme.glow} px-5 py-5`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-sm font-semibold text-white shadow-sm">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white shadow-sm">
                         {venueInitials(selectedVenue.name)}
                       </div>
                       <div className="min-w-0">
@@ -316,11 +315,11 @@ export default function VenueMapPage() {
                   <p className="mt-4 text-sm text-zinc-600">{selectedVenue.address || 'No address on file.'}</p>
 
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3">
+                    <div className="rounded-xl border border-zinc-200 bg-white/80 px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-400">Upcoming</p>
                       <p className="mt-1 text-2xl font-semibold text-zinc-900">{selectedVenue.event_count}</p>
                     </div>
-                    <div className="rounded-2xl border border-zinc-200 bg-white/80 px-4 py-3">
+                    <div className="rounded-xl border border-zinc-200 bg-white/80 px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-400">Assigned Staff</p>
                       <p className="mt-1 text-2xl font-semibold text-zinc-900">{selectedVenue.staff.length}</p>
                     </div>
@@ -343,14 +342,14 @@ export default function VenueMapPage() {
                     <button
                       type="button"
                       onClick={() => router.push(`/venues/${selectedVenue.id}`)}
-                      className="inline-flex items-center justify-center rounded-2xl bg-[#0A52EF] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0840C0]"
+                      className="inline-flex items-center justify-center rounded-lg bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0840C0]"
                     >
                       Open Venue
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedVenue(null)}
-                      className="inline-flex items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300"
+                      className="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-600 transition hover:border-zinc-300"
                     >
                       Clear
                     </button>
@@ -382,7 +381,7 @@ export default function VenueMapPage() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
                 <div className="px-5 py-5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#0A52EF]">Selection</p>
                   <h2 className="mt-2 text-lg font-semibold text-zinc-900">Choose a venue on the map</h2>
@@ -394,7 +393,7 @@ export default function VenueMapPage() {
             )}
 
             {filteredUnmapped.length > 0 && (
-              <div className="overflow-hidden rounded-[28px] border border-amber-200 bg-amber-50 shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
                 <div className="px-5 py-5">
                   <p className="text-sm font-semibold text-amber-900">{filteredUnmapped.length} visible venues still need geocoding</p>
                   <p className="mt-1 text-sm text-amber-700">They have addresses but no coordinates yet, so they cannot appear on the live map.</p>

@@ -188,16 +188,16 @@ export default function ShiftTemplatesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Shift Templates</h1>
             <p className="text-sm text-zinc-500 mt-1">Create recurring shift patterns and auto-generate schedules</p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] transition-colors"
+            className="px-4 py-2 bg-[#0A52EF] text-white rounded-md text-sm font-medium hover:bg-[#0840C0] transition-colors"
           >
             {showForm ? 'Cancel' : '+ New Template'}
           </button>
@@ -320,10 +320,10 @@ export default function ShiftTemplatesPage() {
             <p className="text-zinc-500 text-sm">No shift templates yet. Create one to start auto-generating schedules.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {templates.map(template => (
-              <div key={template.id} className={`bg-white rounded border shadow-sm overflow-hidden ${template.is_active ? 'border-[#E8E8E8]' : 'border-zinc-200 opacity-60'}`}>
-                <div className="p-5">
+              <div key={template.id} className={`bg-white rounded-lg border shadow-sm overflow-hidden ${template.is_active ? 'border-[#E8E8E8]' : 'border-zinc-200 opacity-60'}`}>
+                <div className="p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="text-sm font-semibold text-zinc-900">{template.name}</h3>
@@ -336,16 +336,16 @@ export default function ShiftTemplatesPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-3">
-                    <div className="bg-zinc-50 rounded px-3 py-2">
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="bg-zinc-50 rounded-md px-3 py-2">
                       <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Time</p>
                       <p className="text-sm font-medium text-zinc-900 mt-0.5">{formatTime(template.start_time)} – {formatTime(template.end_time)}</p>
                     </div>
-                    <div className="bg-zinc-50 rounded px-3 py-2">
+                    <div className="bg-zinc-50 rounded-md px-3 py-2">
                       <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Pattern</p>
                       <p className="text-sm font-medium text-zinc-900 mt-0.5">{recurrenceLabels[template.recurrence] || template.recurrence}</p>
                     </div>
-                    <div className="bg-zinc-50 rounded px-3 py-2">
+                    <div className="bg-zinc-50 rounded-md px-3 py-2">
                       <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Staff</p>
                       <p className="text-sm font-medium text-zinc-900 mt-0.5">{template.required_staff} needed</p>
                     </div>
@@ -362,23 +362,23 @@ export default function ShiftTemplatesPage() {
                     </div>
                   )}
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       onClick={() => startGenerate(template.id)}
                       disabled={!template.is_active}
-                      className="flex-1 px-3 py-1.5 bg-[#0A52EF] text-white rounded text-xs font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
+                      className="min-w-[160px] flex-1 px-3 py-2 bg-[#0A52EF] text-white rounded-md text-xs font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
                     >
                       Generate Shifts
                     </button>
                     <button
                       onClick={() => toggleTemplate(template.id, !template.is_active)}
-                      className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 transition-colors"
+                      className="px-3 py-2 border border-[#E8E8E8] rounded-md text-xs font-medium text-zinc-600 hover:border-zinc-300 transition-colors"
                     >
                       {template.is_active ? 'Pause' : 'Resume'}
                     </button>
                     <button
                       onClick={() => { if (confirm('Delete this template?')) deleteTemplate(template.id) }}
-                      className="px-3 py-1.5 border border-red-200 rounded text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                      className="px-3 py-2 border border-red-200 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
                     >
                       Delete
                     </button>
