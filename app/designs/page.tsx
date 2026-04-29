@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
 import { Skeleton } from '@/components/skeleton'
@@ -52,7 +53,9 @@ const statusTone: Record<string, string> = {
 }
 
 export default function DesignsPage() {
+  const router = useRouter()
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>([])
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,6 +128,34 @@ export default function DesignsPage() {
       }
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const duplicateRequest = async (id: string) => {
+    if (duplicatingId) return
+    setDuplicatingId(id)
+    try {
+      const res = await fetch(`/api/design-requests/${id}/duplicate`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not duplicate this request')
+        return
+      }
+      const data = await res.json()
+      const newId = data?.design_request?.id
+      if (newId) {
+        // Drop the user straight into the new request so they can fill in the
+        // cycle-specific fields (date, asset link, designer) — that's exactly
+        // Alexis's South Street workflow.
+        router.push(`/designs/${newId}`)
+      } else {
+        await fetchData()
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Could not duplicate this request')
+    } finally {
+      setDuplicatingId(null)
     }
   }
 
@@ -618,10 +649,11 @@ export default function DesignsPage() {
               : null
 
             return (
-              <Link href={`/designs/${item.id}`} className="block space-y-3">
+              <div className="relative">
+                <Link href={`/designs/${item.id}`} className="block space-y-3">
                 {/* Header: title + tricode pill */}
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug line-clamp-2">
+                  <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug line-clamp-2 pr-7">
                     {item.job_title}
                   </h3>
                   {item.tricode && (
@@ -694,6 +726,27 @@ export default function DesignsPage() {
                   </div>
                 )}
               </Link>
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); duplicateRequest(item.id) }}
+                disabled={duplicatingId === item.id}
+                className="absolute top-0 right-0 p-1 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                title="Duplicate this request as a fresh Submitted ticket"
+                aria-label="Duplicate request"
+              >
+                {duplicatingId === item.id ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                  </svg>
+                )}
+              </button>
+              </div>
             )
           }}
         />

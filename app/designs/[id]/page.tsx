@@ -80,6 +80,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
   const [hoursEstimatedDraft, setHoursEstimatedDraft] = useState('')
   const [hoursSpentDraft, setHoursSpentDraft] = useState('')
@@ -128,6 +129,27 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       console.error(err)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const duplicate = async () => {
+    if (duplicating) return
+    setDuplicating(true)
+    try {
+      const res = await fetch(`/api/design-requests/${params.id}/duplicate`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not duplicate this request')
+        return
+      }
+      const data = await res.json()
+      const newId = data?.design_request?.id
+      if (newId) router.push(`/designs/${newId}`)
+    } catch (err) {
+      console.error(err)
+      alert('Could not duplicate this request')
+    } finally {
+      setDuplicating(false)
     }
   }
 
@@ -188,15 +210,37 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 {dr.due_date && <><span className="text-zinc-300">·</span><span>Due {formatDate(dr.due_date)}</span></>}
               </div>
             </div>
-            <select
-              value={dr.status}
-              onChange={(e) => updateField({ status: e.target.value })}
-              disabled={saving}
-              data-ai-target="design-status"
-              className="rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30 disabled:opacity-60"
-            >
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={duplicate}
+                disabled={duplicating}
+                className="inline-flex items-center gap-1.5 rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors disabled:opacity-60"
+                title="Create a fresh Submitted request with the same brief"
+              >
+                {duplicating ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                  </svg>
+                )}
+                <span>Duplicate</span>
+              </button>
+              <select
+                value={dr.status}
+                onChange={(e) => updateField({ status: e.target.value })}
+                disabled={saving}
+                data-ai-target="design-status"
+                className="rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30 disabled:opacity-60"
+              >
+                {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
