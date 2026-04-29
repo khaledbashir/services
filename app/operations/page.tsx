@@ -4,23 +4,22 @@ import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 
 // Embedded NocoDB instance — Nick's Airtable replacement after the
-// 2026-04-29 meeting. NocoDB lives on its own host (set via
-// NEXT_PUBLIC_NOCODB_URL, e.g. https://ops.ancsports.net) so we can
-// rebrand the chassis without touching anc-services. Iframe gives us
-// "looks native, single dashboard" UX without rebuilding a table view
-// we already get for free.
-//
-// The user has to be logged into NocoDB once on its own host; the
-// iframe carries the cookie. If you want SSO (one login for both), we
-// add JWT-based auth-pass-through later — not blocking today.
+// 2026-04-29 meeting. NocoDB runs on its own EasyPanel container and
+// is iframed here so the dashboard stays the single entry point.
+// NEXT_PUBLIC_NOCODB_URL overrides the default if set at build time;
+// the fallback points at the build-phase instance. Swap the fallback
+// to the prod URL once Nick signs off and we promote /operations out
+// of the admin-only "Airtable (build)" sidebar section.
+const DEFAULT_NOCODB_URL = 'https://ahmad-nocodb.izcgmb.easypanel.host'
+
 export default function OperationsPage() {
   const [nocoUrl, setNocoUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_NOCODB_URL
+    const url = process.env.NEXT_PUBLIC_NOCODB_URL || DEFAULT_NOCODB_URL
     if (!url) {
-      setError('NEXT_PUBLIC_NOCODB_URL is not set on the server.')
+      setError('NocoDB URL is not configured.')
       return
     }
     setNocoUrl(url)
