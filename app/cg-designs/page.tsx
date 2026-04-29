@@ -162,13 +162,20 @@ export default function CgDesignsPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-56 w-full" />
-          <div className="grid grid-cols-3 gap-4">
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-80 w-full" />
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-56" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <Skeleton className="h-9 w-36" />
+          </div>
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
           </div>
         </div>
       </DashboardLayout>
@@ -177,26 +184,27 @@ export default function CgDesignsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div className="space-y-5">
+        <div className="flex justify-between items-center gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-zinc-900">CG Design Requests</h1>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 mb-1.5">Creative Workflow</div>
+            <h1 className="text-2xl font-semibold text-zinc-900">CG Design Requests</h1>
             <p className="text-sm text-zinc-500 mt-0.5">{counts.active} active · {counts.all} total</p>
           </div>
-          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
+          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
             {showForm ? 'Cancel' : 'New CG Request'}
           </button>
         </div>
 
         {showForm && (
-          <div className="border border-zinc-200 bg-zinc-50 p-6">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5">
             <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create CG Design Request</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Job Title *</label>
                 <input type="text" value={formData.job_title} onChange={(e) => setFormData((prev) => ({ ...prev, job_title: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 outline-none bg-white" required />
               </div>
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Venue</label>
                   <select value={formData.venue_id} onChange={(e) => setFormData((prev) => ({ ...prev, venue_id: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
@@ -230,31 +238,31 @@ export default function CgDesignsPage() {
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Notes</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} rows={4} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" />
               </div>
-              <button type="submit" disabled={submitting} className="px-5 py-2 bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
+              <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
                 {submitting ? 'Creating...' : 'Create CG Request'}
               </button>
             </form>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-200">
-          <div className="flex items-center gap-0 -mb-px overflow-x-auto">
+        <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-1 overflow-x-auto">
             {[{ key: 'active', label: 'Active' }, ...statusColumns, { key: 'all', label: 'All' }].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
-                <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${isActive ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'}`}>
+                <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${isActive ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'}`}>
                   {tab.label}
-                  <span className={`ml-1.5 text-xs tabular-nums ${isActive ? 'text-zinc-900' : 'text-zinc-400'}`}>{counts[tab.key]}</span>
+                  <span className={`ml-1.5 text-[11px] tabular-nums ${isActive ? 'text-white/80' : 'text-zinc-400'}`}>{counts[tab.key]}</span>
                 </button>
               )
             })}
           </div>
-          <div className="pb-2">
-            <input type="text" placeholder="Search CG requests..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-72 border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input type="text" placeholder="Search CG requests..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:w-72 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
             <select
               value={designerFilter}
               onChange={(e) => setDesignerFilter(e.target.value)}
-              className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
               title="Filter to one designer"
             >
               <option value="all">All designers</option>
@@ -265,11 +273,11 @@ export default function CgDesignsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {statusColumns.map((column) => {
             const columnItems = filtered.filter((item) => item.status === column.key)
             return (
-              <div key={column.key} className="border border-zinc-200 bg-zinc-50 min-h-[22rem]">
+              <div key={column.key} className="rounded-xl border border-zinc-200 bg-zinc-50 min-h-[18rem] overflow-hidden">
                 <div className="px-4 py-3 border-b border-zinc-200 bg-white flex items-center justify-between">
                   <div>
                     <h2 className="text-sm font-semibold text-zinc-900">{column.label}</h2>
@@ -277,9 +285,9 @@ export default function CgDesignsPage() {
                   </div>
                 </div>
                 <div className="p-3 space-y-3">
-                  {columnItems.length === 0 && <div className="border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No requests</div>}
+                  {columnItems.length === 0 && <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No requests</div>}
                   {columnItems.map((item) => (
-                    <Link key={item.id} href={`/cg-designs/${item.id}`} className="block border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
+                    <Link key={item.id} href={`/cg-designs/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.job_title}</h3>
                         <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{column.label}</span>

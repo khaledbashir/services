@@ -40,7 +40,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
   }
 
   return (
-    <div className="grid gap-3 overflow-x-auto pb-2" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(260px, 1fr))` }}>
+    <div className="grid gap-3 overflow-x-auto pb-2" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(240px, 1fr))` }}>
       {columns.map(col => {
         const list = byColumn[col.key] || []
         const isHover = hoverCol === col.key
@@ -59,7 +59,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                 await onStatusChange(dropped, col.key)
               }
             }}
-            className={`rounded-2xl ring-1 transition-colors min-h-80 flex flex-col overflow-hidden ${
+            className={`rounded-xl ring-1 transition-colors min-h-72 flex flex-col overflow-hidden ${
               isHover
                 ? 'ring-[#0A52EF] bg-[#0A52EF]/[0.04]'
                 : 'ring-zinc-200/80 bg-white'
@@ -90,7 +90,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                 )
               })}
               {list.length === 0 && (
-                <div className="text-[11px] text-zinc-400 text-center py-8 tracking-wide">
+                <div className="text-[11px] text-zinc-400 text-center py-6 tracking-wide">
                   <span className="opacity-60">nothing here</span>
                 </div>
               )}

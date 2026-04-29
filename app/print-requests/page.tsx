@@ -251,39 +251,39 @@ export default function PrintRequestsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-[#D9E4FF] bg-gradient-to-br from-[#F8FBFF] via-white to-[#EEF4FF] p-6 shadow-sm">
+      <div className="space-y-5">
+        <div className="rounded-xl border border-[#D9E4FF] bg-gradient-to-br from-[#F8FBFF] via-white to-[#EEF4FF] p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0A52EF]">Operations</div>
-              <h1 className="mt-2 text-2xl font-semibold text-zinc-950">Print Requests</h1>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0A52EF]">Creative Production</div>
+              <h1 className="mt-1.5 text-2xl font-semibold text-zinc-950">Print Requests</h1>
               <p className="mt-1 text-sm text-zinc-500">
                 {counts.active || 0} active requests across the Britain production pipeline.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <a
                 href="/api/print-requests/export?format=csv"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-xl bg-white border border-[#E6ECF5] px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:text-zinc-900"
+                className="flex items-center gap-2 rounded-lg bg-white border border-[#E6ECF5] px-3.5 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:text-zinc-900"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 Export
               </a>
-              <div className="inline-flex rounded-xl border border-[#D9E4FF] bg-white p-1 shadow-sm">
+              <div className="inline-flex rounded-lg border border-[#D9E4FF] bg-white p-1 shadow-sm">
                 <button
                   onClick={() => setView('list')}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${view === 'list' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${view === 'list' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
                 >
                   List View
                 </button>
                 <button
                   onClick={() => setView('kanban')}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${view === 'kanban' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${view === 'kanban' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
                 >
                   Kanban
                 </button>
@@ -291,7 +291,7 @@ export default function PrintRequestsPage() {
 
               <button
                 onClick={openCreate}
-                className="rounded-xl bg-[#0A52EF] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#0840C0]"
+                className="rounded-lg bg-[#0A52EF] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#0840C0]"
               >
                 New Print Request
               </button>
@@ -299,7 +299,7 @@ export default function PrintRequestsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-[#E6ECF5] bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-[#E6ECF5] bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <svg xmlns="http://www.w3.org/2000/svg" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -310,14 +310,14 @@ export default function PrintRequestsPage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search print requests, clients, notes, tracking..."
-                className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] py-2.5 pl-10 pr-4 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                className="w-full rounded-lg border border-[#E6ECF5] bg-[#FBFDFF] py-2.5 pl-10 pr-4 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
               />
             </div>
 
             <select
               value={clientFilter}
               onChange={(event) => setClientFilter(event.target.value)}
-              className="rounded-xl border border-[#E6ECF5] bg-white px-3 py-2.5 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+              className="rounded-lg border border-[#E6ECF5] bg-white px-3 py-2.5 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
             >
               <option value="all">All Clients</option>
               {clients.map((client) => (
@@ -331,28 +331,28 @@ export default function PrintRequestsPage() {
 
         {loading || !auth.loaded ? (
           <div className="space-y-4">
-            <Skeleton className="h-20 w-full rounded-2xl" />
-            <Skeleton className="h-96 w-full rounded-2xl" />
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-80 w-full rounded-xl" />
           </div>
         ) : view === 'list' ? (
           filteredRecords.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[#D9E4FF] bg-white p-16 text-center shadow-sm">
+            <div className="rounded-xl border border-dashed border-[#D9E4FF] bg-white p-12 text-center shadow-sm">
               <p className="text-sm font-medium text-zinc-900">No print requests match this filter.</p>
               <p className="mt-1 text-sm text-zinc-500">Try another client or create a new print request.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-[#E6ECF5] bg-white shadow-sm">
+            <div className="overflow-hidden rounded-xl border border-[#E6ECF5] bg-white shadow-sm">
               <table className="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr className="border-b border-[#E6ECF5] bg-[#F8FBFF]">
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Job</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Client</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Status</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice</th>
-                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Proofs</th>
-                    <th className="px-6 py-4 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Updated</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Job</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Client</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Status</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice</th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Proofs</th>
+                    <th className="px-5 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Updated</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -360,21 +360,21 @@ export default function PrintRequestsPage() {
                     const statusMeta = STATUS_COLUMNS.find((column) => column.key === record.status) || STATUS_COLUMNS[0]
                     return (
                       <tr key={record.id} className="cursor-pointer border-b border-[#EEF2F7] transition hover:bg-[#FAFCFF]" onClick={() => openEdit(record)}>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3.5">
                           <div className="font-medium text-zinc-950">{record.job_title}</div>
                           <div className="mt-1 line-clamp-1 text-xs text-zinc-500">{record.shipping_address || 'No shipping address yet'}</div>
                         </td>
-                        <td className="px-6 py-4 text-zinc-700">{record.client_name || 'Unlinked'}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3.5 text-zinc-700">{record.client_name || 'Unlinked'}</td>
+                        <td className="px-5 py-3.5">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusMeta.tone}`}>
                             {statusMeta.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-zinc-600">{formatShortDate(record.ship_date)}</td>
-                        <td className="px-6 py-4 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
-                        <td className="px-6 py-4 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
-                        <td className="px-6 py-4 text-zinc-600">{record.proof_links.length}</td>
-                        <td className="px-6 py-4 text-right text-zinc-500">{formatShortDate(record.updated_at)}</td>
+                        <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
+                        <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
+                        <td className="px-5 py-3.5 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
+                        <td className="px-5 py-3.5 text-zinc-600">{record.proof_links.length}</td>
+                        <td className="px-5 py-3.5 text-right text-zinc-500">{formatShortDate(record.updated_at)}</td>
                       </tr>
                     )
                   })}

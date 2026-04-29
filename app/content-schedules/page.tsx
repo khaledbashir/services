@@ -153,13 +153,20 @@ export default function ContentSchedulesPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-56 w-full" />
-          <div className="grid grid-cols-3 gap-4">
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-80 w-full" />
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-52" />
+              <Skeleton className="h-4 w-36" />
+            </div>
+            <Skeleton className="h-9 w-44" />
+          </div>
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
           </div>
         </div>
       </DashboardLayout>
@@ -168,26 +175,27 @@ export default function ContentSchedulesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div className="space-y-5">
+        <div className="flex justify-between items-center gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-zinc-900">Content Schedules</h1>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 mb-1.5">Creative Workflow</div>
+            <h1 className="text-2xl font-semibold text-zinc-900">Content Schedules</h1>
             <p className="text-sm text-zinc-500 mt-0.5">{counts.all} total schedules</p>
           </div>
-          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
+          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
             {showForm ? 'Cancel' : 'New Content Schedule'}
           </button>
         </div>
 
         {showForm && (
-          <div className="border border-zinc-200 bg-zinc-50 p-6">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5">
             <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create Content Schedule</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Content Name *</label>
                 <input type="text" value={formData.content_name} onChange={(e) => setFormData((prev) => ({ ...prev, content_name: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 outline-none bg-white" required />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Venue</label>
                   <select value={formData.venue_id} onChange={(e) => setFormData((prev) => ({ ...prev, venue_id: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
@@ -200,7 +208,7 @@ export default function ContentSchedulesPage() {
                   <input type="text" value={formData.company_name} onChange={(e) => setFormData((prev) => ({ ...prev, company_name: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Launch Date</label>
                   <input type="date" value={formData.launch_date} onChange={(e) => setFormData((prev) => ({ ...prev, launch_date: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
@@ -225,35 +233,35 @@ export default function ContentSchedulesPage() {
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Notes</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} rows={4} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" />
               </div>
-              <button type="submit" disabled={submitting} className="px-5 py-2 bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
+              <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
                 {submitting ? 'Creating...' : 'Create Content Schedule'}
               </button>
             </form>
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-zinc-200">
-          <div className="flex items-center gap-0 -mb-px overflow-x-auto w-full md:w-auto">
+        <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-1 overflow-x-auto w-full xl:w-auto">
             {[...statusColumns, { key: 'all', label: 'All' }].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
-                <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${isActive ? 'border-zinc-900 text-zinc-900' : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'}`}>
+                <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${isActive ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'}`}>
                   {tab.label}
-                  <span className={`ml-1.5 text-xs tabular-nums ${isActive ? 'text-zinc-900' : 'text-zinc-400'}`}>{counts[tab.key]}</span>
+                  <span className={`ml-1.5 text-[11px] tabular-nums ${isActive ? 'text-white/80' : 'text-zinc-400'}`}>{counts[tab.key]}</span>
                 </button>
               )
             })}
           </div>
-          <div className="flex items-center gap-3 pb-2 w-full md:w-auto">
-            <select value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white">
+          <div className="flex flex-col gap-2 w-full sm:flex-row xl:w-auto">
+            <select value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white">
               <option value="all">All Venues</option>
               {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
             </select>
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white max-w-[160px]">
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white sm:max-w-[180px]">
               <option value="all">All Clients</option>
               {clients.map((client) => <option key={client} value={client}>{client}</option>)}
             </select>
-            <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-32 md:w-48 border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
+            <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:w-48 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400 bg-white" />
             <div className="flex bg-zinc-100 rounded-md p-1 border border-zinc-200">
               <button onClick={() => setViewMode('list')} className={`px-3 py-1 text-xs font-medium rounded-sm ${viewMode === 'list' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>List</button>
               <button onClick={() => setViewMode('calendar')} className={`px-3 py-1 text-xs font-medium rounded-sm ${viewMode === 'calendar' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>Calendar</button>
@@ -262,15 +270,15 @@ export default function ContentSchedulesPage() {
         </div>
 
         {viewMode === 'calendar' ? (
-          <div className="border border-zinc-200 bg-zinc-50 p-6 min-h-[500px] flex items-center justify-center text-sm text-zinc-500">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-6 min-h-[360px] flex items-center justify-center text-sm text-zinc-500">
             Calendar view placeholder (to be implemented with react-big-calendar or similar if needed)
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {statusColumns.map((column) => {
             const columnItems = filtered.filter((item) => item.status === column.key)
             return (
-              <div key={column.key} className="border border-zinc-200 bg-zinc-50 min-h-[22rem]">
+              <div key={column.key} className="rounded-xl border border-zinc-200 bg-zinc-50 min-h-[18rem] overflow-hidden">
                 <div className="px-4 py-3 border-b border-zinc-200 bg-white flex items-center justify-between">
                   <div>
                     <h2 className="text-sm font-semibold text-zinc-900">{column.label}</h2>
@@ -278,9 +286,9 @@ export default function ContentSchedulesPage() {
                   </div>
                 </div>
                 <div className="p-3 space-y-3">
-                  {columnItems.length === 0 && <div className="border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No schedules</div>}
+                  {columnItems.length === 0 && <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No schedules</div>}
                   {columnItems.map((item) => (
-                    <Link key={item.id} href={`/content-schedules/${item.id}`} className="block border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
+                    <Link key={item.id} href={`/content-schedules/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.content_name}</h3>
                         <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{column.label}</span>

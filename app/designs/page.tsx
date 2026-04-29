@@ -237,14 +237,14 @@ export default function DesignsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Hero header — refined, generous, enterprise feel. */}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400 mb-1.5">
               Creative Workflow
             </div>
-            <h1 className="text-[28px] leading-tight font-semibold text-zinc-900 tracking-tight">
+            <h1 className="text-2xl leading-tight font-semibold text-zinc-900 tracking-tight">
               Design Requests
             </h1>
             <p className="text-sm text-zinc-500 mt-1.5">
@@ -254,7 +254,7 @@ export default function DesignsPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => fetchData()}
-              className="h-10 w-10 flex items-center justify-center rounded-xl ring-1 ring-zinc-200 bg-white text-zinc-500 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
+              className="h-9 w-9 flex items-center justify-center rounded-lg ring-1 ring-zinc-200 bg-white text-zinc-500 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
               title="Refresh"
               aria-label="Refresh"
             >
@@ -264,7 +264,7 @@ export default function DesignsPage() {
             </button>
             <button
               onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-zinc-900 text-white text-sm font-medium shadow-[0_4px_12px_-4px_rgba(15,23,42,0.35)] hover:bg-zinc-800 hover:shadow-[0_6px_16px_-4px_rgba(15,23,42,0.4)] transition-all"
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg bg-zinc-900 text-white text-sm font-medium shadow-[0_4px_12px_-4px_rgba(15,23,42,0.35)] hover:bg-zinc-800 hover:shadow-[0_6px_16px_-4px_rgba(15,23,42,0.4)] transition-all"
             >
               {showForm ? (
                 <>
@@ -289,12 +289,12 @@ export default function DesignsPage() {
             { label: 'In review', value: inReview, tone: 'text-zinc-900', accent: 'bg-blue-500' },
             { label: overdue > 0 ? 'Overdue' : 'Unassigned', value: overdue > 0 ? overdue : unassigned, tone: overdue > 0 ? 'text-red-600' : 'text-zinc-900', accent: overdue > 0 ? 'bg-red-500' : 'bg-zinc-400' },
           ].map((metric) => (
-            <div key={metric.label} className="group relative rounded-2xl bg-white ring-1 ring-zinc-200/80 px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_6px_16px_-8px_rgba(15,23,42,0.2)] hover:ring-zinc-300 transition-all">
-              <div className="absolute top-4 right-4">
+            <div key={metric.label} className="group relative rounded-xl bg-white ring-1 ring-zinc-200/80 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_6px_16px_-8px_rgba(15,23,42,0.2)] hover:ring-zinc-300 transition-all">
+              <div className="absolute top-3.5 right-3.5">
                 <span className={`block w-1.5 h-1.5 rounded-full ${metric.accent} ring-2 ring-white`} />
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{metric.label}</div>
-              <div className={`mt-1 text-[28px] font-semibold tabular-nums tracking-tight ${metric.tone}`}>
+              <div className={`mt-1 text-2xl font-semibold tabular-nums tracking-tight ${metric.tone}`}>
                 {metric.value}
               </div>
             </div>
@@ -494,7 +494,7 @@ export default function DesignsPage() {
 
         {/* Tabs + search — pill bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex items-center rounded-xl bg-zinc-100/80 p-1 ring-1 ring-zinc-200/60">
+          <div className="inline-flex items-center rounded-lg bg-zinc-100/80 p-1 ring-1 ring-zinc-200/60">
             {[
               { key: 'active', label: 'Active' },
               { key: 'all', label: 'All' },
@@ -505,7 +505,7 @@ export default function DesignsPage() {
                 <button
                   key={tab.key}
                   onClick={() => setStatusFilter(tab.key)}
-                  className={`inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-[13px] font-medium transition-all ${
+                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[13px] font-medium transition-all ${
                     isActive
                       ? 'bg-white text-zinc-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-zinc-200/60'
                       : 'text-zinc-500 hover:text-zinc-800'
@@ -519,7 +519,7 @@ export default function DesignsPage() {
               )
             })}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4 4m0 0l4-4m-4 4V4" />
@@ -527,7 +527,7 @@ export default function DesignsPage() {
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value)}
-                className="h-10 pl-9 pr-8 rounded-xl ring-1 ring-zinc-200 bg-white text-sm text-zinc-700 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow appearance-none cursor-pointer"
+                className="h-9 pl-9 pr-8 rounded-lg ring-1 ring-zinc-200 bg-white text-sm text-zinc-700 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow appearance-none cursor-pointer"
                 title="Sort order"
               >
                 <option value="newest">Newest first</option>
@@ -550,7 +550,7 @@ export default function DesignsPage() {
                 placeholder="Search by title, company, venue, designer…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-72 h-10 pl-10 pr-3 rounded-xl ring-1 ring-zinc-200 bg-white text-sm placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
+                className="w-64 h-9 pl-10 pr-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
               />
             </div>
             {/* Designer filter — Alexis's per-designer dashboard ask (2026-04-23). */}
@@ -558,7 +558,7 @@ export default function DesignsPage() {
               <select
                 value={designerFilter}
                 onChange={(e) => setDesignerFilter(e.target.value)}
-                className="h-10 pl-3 pr-9 rounded-xl ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
+                className="h-9 pl-3 pr-9 rounded-lg ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
                 title="Filter to one designer's assignments"
               >
                 <option value="all">All designers</option>
@@ -575,7 +575,7 @@ export default function DesignsPage() {
               <select
                 value={randoFilter}
                 onChange={(e) => setRandoFilter(e.target.value as 'all' | 'only' | 'exclude')}
-                className="h-10 pl-3 pr-9 rounded-xl ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
+                className="h-9 pl-3 pr-9 rounded-lg ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
                 title="Show all, only ad-hoc randos, or exclude randos"
               >
                 <option value="all">All requests</option>
