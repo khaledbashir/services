@@ -13,8 +13,9 @@ function assistantMuted(): boolean {
 function shouldHandleEvent(event: any, botUserId?: string): boolean {
   if (!event || event.subtype === 'bot_message' || event.bot_id) return false
   if (assistantMuted()) return false
+  // Require an explicit @-mention everywhere — channels AND DMs. Without
+  // this, a bare "ANC hi" in a DM (channel_type=im) would auto-reply.
   if (event.type === 'app_mention') return true
-  if (event.channel_type === 'im') return true
   if (botUserId && typeof event.text === 'string' && event.text.includes(`<@${botUserId}>`)) return true
   return false
 }
