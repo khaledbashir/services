@@ -130,7 +130,7 @@ export default function TicketsPage() {
   const [venueMenuOpen, setVenueMenuOpen] = useState(false)
   const [formData, setFormData] = useState({
     venue_id: '', event_id: '', title: '', description: '',
-    category: 'general', priority: 'medium', assigned_to: ''
+    category: 'general', priority: 'medium', assigned_to: '', status: 'new'
   })
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
@@ -328,7 +328,7 @@ export default function TicketsPage() {
       if (res.ok) {
         const fresh = await fetch('/api/tickets').then(r => r.json())
         setTickets(fresh.tickets || [])
-        setFormData({ venue_id: '', event_id: '', title: '', description: '', category: 'general', priority: 'medium', assigned_to: '' })
+        setFormData({ venue_id: '', event_id: '', title: '', description: '', category: 'general', priority: 'medium', assigned_to: '', status: 'new' })
         setSelectedVenueId('')
         setVenueQuery('')
         setShowForm(false)
@@ -496,7 +496,18 @@ export default function TicketsPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Status</label>
+                  <select value={formData.status} onChange={e => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+                    <option value="new">New</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="escalated">Escalated</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Category</label>
                   <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
