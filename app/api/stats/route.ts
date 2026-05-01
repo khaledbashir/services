@@ -67,15 +67,21 @@ export async function GET(request: NextRequest) {
       [today, weekEndStr, ...vfLabor.params, ...afLabor.params]
     )
 
+    // Only sports venues run on event feeds. OOH and facility venues don't
+    // have schedules to pull, so they're excluded from both auto-sync and
+    // needs-feed counts (Joe confirmed 2026-05-01: "If it's an OOH venue we
+    // do not need a feed URL").
     const venueAutomationResult = await query(
       `SELECT
          COUNT(*) FILTER (
            WHERE COALESCE(v.is_active, true) = true
+             AND COALESCE(v.venue_type, 'sports') = 'sports'
              AND active.active_service_count > 0
              AND COALESCE(v.feed_url, '') <> ''
          )::int as auto_syncing_venues,
          COUNT(*) FILTER (
            WHERE COALESCE(v.is_active, true) = true
+             AND COALESCE(v.venue_type, 'sports') = 'sports'
              AND active.active_service_count > 0
              AND COALESCE(v.feed_url, '') = ''
          )::int as venues_needing_feed_urls,

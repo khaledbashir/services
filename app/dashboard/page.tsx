@@ -220,7 +220,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Automation Coverage</p>
               <h2 className="text-lg font-semibold text-zinc-900 mt-2">Venue Sync Status</h2>
-              <p className="text-sm text-zinc-500 mt-1">Every active venue is scanned by AI discovery. Feed URLs upgrade a venue from human-confirms to auto-import.</p>
+              <p className="text-sm text-zinc-500 mt-1">Sports venues only. OOH and facility venues don't run on event feeds and aren't counted here.</p>
             </div>
             <button
               onClick={() => router.push('/venues')}
@@ -231,14 +231,14 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Auto-Import</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Auto-Sync Active</div>
               <div className="mt-2 text-3xl font-semibold text-emerald-900 dark:text-emerald-100">{stats.autoSyncingVenues}</div>
-              <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300/80">Feed URL set — events flow straight into the schedule</div>
+              <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300/80">Sports venues with services and feed URLs</div>
             </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 dark:border-blue-500/30 dark:bg-blue-500/10">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">AI Discovery (Pending Review)</div>
-              <div className="mt-2 text-3xl font-semibold text-blue-900 dark:text-blue-100">{stats.venuesNeedingFeedUrls}</div>
-              <div className="mt-1 text-xs text-blue-700 dark:text-blue-300/80">AI finds the events — add a feed URL to skip the human-confirm step</div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Need Feed URLs</div>
+              <div className="mt-2 text-3xl font-semibold text-amber-900 dark:text-amber-100">{stats.venuesNeedingFeedUrls}</div>
+              <div className="mt-1 text-xs text-amber-700 dark:text-amber-300/80">Sports venues with services on but no feed configured</div>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">Inactive Venues</div>
