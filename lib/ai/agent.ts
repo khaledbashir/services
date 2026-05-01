@@ -190,20 +190,55 @@ function buildPageContextBlock(pageContext?: PageContext): string {
     })
     .filter(Boolean) as string[]
 
+  // /operations renders a cross-origin iframe of NocoDB at ops.ancsports.net.
+  // Browser security blocks the parent window from inspecting iframe DOM —
+  // visible_fields will always be empty here, and ui_fill / ui_click /
+  // ui_highlight CANNOT reach into NocoDB cells. The right tool path is
+  // the ops_* skills which act on the workspace via NocoDB's REST API.
+  // Without this branch the model improvises "I don't have vision
+  // capabilities" and refuses to act, instead of routing to ops_*.
+  const isOps = !!path && (path === '/operations' || path.startsWith('/operations/'))
+
   if (!path && !title && fields.length === 0) return ''
 
   const lines = ['\nCURRENT PAGE CONTEXT:']
   if (path) lines.push(`- Path: ${path}`)
   if (title) lines.push(`- Title: ${title}`)
-  if (fields.length > 0) {
+
+  if (isOps) {
+    lines.push(
+      '- The user is on the Operations workspace — an embedded iframe of the',
+      '  NocoDB ops workspace at ops.ancsports.net. This is a cross-origin',
+      '  iframe so ui_fill / ui_click / ui_highlight CANNOT reach into',
+      '  NocoDB cells. Do NOT say "I can\'t see the page" or "I have no',
+      '  vision capabilities." Instead use the ops_* skills which manipulate',
+      '  the same workspace via NocoDB\'s REST API:',
+      '    1. ops_list_tables — discover bases + tables',
+      '    2. ops_table_schema — get exact column titles + types + select-',
+      '       option values BEFORE create/update (avoids validation errors)',
+      '    3. ops_query_table / ops_count_records — read filtered data',
+      '    4. ops_create_records / ops_update_records / ops_delete_records —',
+      '       bulk write. NocoDB accepts arrays so do it all in one call.',
+      '  After any write, tell the user "refresh the table to see it."',
+      '- Bases in this workspace include: WMATA Inventory, ANC Service -',
+      '  WMATA, ANC Service - South, ANC Advertising, Inventory Tracking,',
+      '  WinStar World Casino, New York, ANC Test Sandbox.'
+    )
+  } else if (fields.length > 0) {
     lines.push('- Visible editable fields:')
     lines.push(...fields.slice(0, 20))
+    lines.push(
+      '- Treat this as the live UI state right now.',
+      '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill_form or ui_fill/ui_select on these visible fields first.',
+      '- Do NOT call create_* unless the user explicitly asks for a brand-new record.'
+    )
+  } else {
+    lines.push(
+      '- Treat this as the live UI state right now.',
+      '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill_form or ui_fill/ui_select on these visible fields first.',
+      '- Do NOT call create_* unless the user explicitly asks for a brand-new record.'
+    )
   }
-  lines.push(
-    '- Treat this as the live UI state right now.',
-    '- If the user says "fill", "populate", or "autofill" on an existing detail/edit page, use ui_fill_form or ui_fill/ui_select on these visible fields first.',
-    '- Do NOT call create_* unless the user explicitly asks for a brand-new record.'
-  )
   return `${lines.join('\n')}\n`
 }
 
