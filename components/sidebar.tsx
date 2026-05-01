@@ -307,21 +307,32 @@ export function Sidebar() {
     </>
   )
 
+  // Single collapsible drawer for ALL viewport sizes — default closed.
+  // Hamburger top-left to open, X / backdrop / link-click to close.
+  // Removes the always-on desktop rail so iframe pages (like /operations)
+  // get full screen width.
   return (
     <>
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-[var(--anc-sidebar)] text-white p-2 rounded-md shadow-lg"
+        className="fixed top-4 left-4 z-50 bg-[var(--anc-sidebar)] text-white p-2 rounded-md shadow-lg hover:bg-white/10 transition-colors"
         aria-label="Open menu"
       >
         <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></Icon>
       </button>
 
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
       )}
 
-      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-[var(--anc-sidebar)] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[var(--anc-sidebar)] text-white flex flex-col transform transition-transform duration-200 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <button
           onClick={() => setMobileOpen(false)}
           className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
@@ -329,10 +340,6 @@ export function Sidebar() {
         >
           <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></Icon>
         </button>
-        {sidebarContent}
-      </div>
-
-      <div className="hidden lg:flex w-60 bg-[var(--anc-sidebar)] text-white h-screen flex-col fixed left-0 top-0 border-r border-white/5">
         {sidebarContent}
       </div>
     </>

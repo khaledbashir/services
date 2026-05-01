@@ -24,7 +24,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-[var(--anc-page)]">
       <Sidebar />
       <div
-        className="lg:ml-60 flex-1 flex flex-col overflow-hidden transition-[padding] duration-200 ease-out"
+        className="flex-1 flex flex-col overflow-hidden transition-[padding] duration-200 ease-out"
         style={{ paddingRight: 'var(--ai-panel-shrink, 0px)' }}
       >
         <div className="flex-1 overflow-auto">
