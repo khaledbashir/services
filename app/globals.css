@@ -25,15 +25,15 @@
   --anc-brand: #3b82f6;
   --anc-brand-hover: #60a5fa;
   --anc-brand-light: rgba(59, 130, 246, 0.14);
-  --anc-border: #2b3548;
-  --anc-sidebar: #07101f;
-  --anc-page: #0b1220;
-  --anc-surface: #111827;
-  --anc-surface-muted: #162033;
-  --anc-surface-raised: #1b2435;
+  --anc-border: #262626;
+  --anc-sidebar: #101010;
+  --anc-page: #0f0f0f;
+  --anc-surface: #151515;
+  --anc-surface-muted: #1a1a1a;
+  --anc-surface-raised: #1d1d1d;
   --anc-text: #f8fafc;
-  --anc-muted: #9aa6b2;
-  --anc-subtle: #526071;
+  --anc-muted: #a1a1aa;
+  --anc-subtle: #52525b;
   --anc-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
