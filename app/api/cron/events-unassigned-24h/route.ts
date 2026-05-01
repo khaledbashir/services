@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (unassigned.length === 0) {
-      return NextResponse.json({ ok: true, sent: false, count: 0 })
+      return NextResponse.json({ ok: true, sent: false, count: 0, mode: force ? 'force' : 'normal' })
     }
 
     const channel = process.env.SLACK_DEFAULT_CHANNEL || ''
@@ -108,10 +108,10 @@ export async function GET(request: NextRequest) {
     })
 
     if (!sent) {
-      return NextResponse.json({ error: 'Failed to send Slack alert' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to send Slack alert', mode: force ? 'force' : 'normal' }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, sent: true, count: unassigned.length })
+    return NextResponse.json({ ok: true, sent: true, count: unassigned.length, mode: force ? 'force' : 'normal' })
   } catch (err) {
     console.error('Error in events-unassigned-24h cron:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
