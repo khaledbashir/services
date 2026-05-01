@@ -1,0 +1,74 @@
+# Saltcorn deploy for EasyPanel — MIT-licensed Airtable replacement for ANC ops.
+#
+# Architecture:
+#   - Saltcorn container (single image, all-in-one)
+#   - Postgres 16 (separate container, persisted volume)
+#
+# After it boots:
+#   1. Visit SALTCORN_PUBLIC_URL → register the first user (becomes admin).
+#   2. Install plugins from the Plugin Store via the Settings → Plugins UI:
+#        - large-language-model   (BYO API key for OpenAI/Anthropic/Ollama)
+#        - copilot                (AI builder + chat over data)
+#        - fullcalendar           (Calendar view)
+#        - any-bootstrap-theme    (custom CSS / dark mode / brand color)
+#        - kanban                 (drag-drop kanban view)
+#        - gallery                (card / gallery view)
+#   3. Configure the LLM plugin with your OpenAI/Anthropic key.
+#   4. Run the migrator at /root/anc-services/scripts/airtable-to-saltcorn/.
+#   5. Wire the rebrand via Settings → any-bootstrap-theme → upload anc.bootstrap.css
+
+services:
+  saltcorn:
+    container_name: anc-saltcorn
+    image: saltcorn/saltcorn:latest
+    restart: unless-stopped
+    depends_on:
+      - saltcorn-db
+    environment:
+      # Required — external URL Saltcorn renders into emails / share links / OAuth callbacks
+      SALTCORN_PUBLIC_URL: ${SALTCORN_PUBLIC_URL:?Set e.g. https://ops.ancsports.net}
+
+      # Required — session signing key (openssl rand -hex 32)
+      SALTCORN_SESSION_SECRET: ${SALTCORN_SESSION_SECRET:?Set a long random string}
+
+      # Postgres connection (points at the saltcorn-db service below)
+      PGHOST: saltcorn-db
+      PGPORT: '5432'
+      PGUSER: saltcorn
+      PGPASSWORD: ${SALTCORN_DB_PASSWORD:?Set a strong password}
+      PGDATABASE: saltcorn
+
+      # Multi-tenant off — single tenant for ANC ops
+      SALTCORN_MULTI_TENANT: 'false'
+
+      # Where Saltcorn stores file uploads (inside container; persisted via volume)
+      SALTCORN_FILE_STORE: /saltcorn-data/files
+
+      # Optional — wire the iframe later from anc-services. Saltcorn lets us
+      # set frame-ancestors via this; safer than messing with reverse-proxy.
+      SALTCORN_CSP_FRAME_ANCESTORS: ${SALTCORN_CSP_FRAME_ANCESTORS:-'self' https://services.ancsports.net}
+
+      # Cross-origin cookies needed when iframed from services.ancsports.net.
+      SALTCORN_COOKIE_SAMESITE: none
+      SALTCORN_COOKIE_SECURE: 'true'
+
+    volumes:
+      - saltcorn_data:/saltcorn-data
+
+    ports:
+      - '3000:3000'
+
+  saltcorn-db:
+    container_name: anc-saltcorn-db
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: saltcorn
+      POSTGRES_PASSWORD: ${SALTCORN_DB_PASSWORD:?Set a strong password}
+      POSTGRES_DB: saltcorn
+    volumes:
+      - saltcorn_db:/var/lib/postgresql/data
+
+volumes:
+  saltcorn_data:
+  saltcorn_db:
