@@ -109,7 +109,7 @@ export default function FeedFinderPage() {
     setSuggestions((prev) => ({ ...prev, [venueId]: { ...prev[venueId], saving: true } }))
     try {
       const res = await fetch(`/api/venues/${venueId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feed_url: url }),
       })
