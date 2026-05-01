@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 
@@ -10,8 +10,17 @@ import { sendSlackMessage } from '@/lib/slack'
 //
 // Replaces the per-assignment Slack pings that Joe + Alexis + Nick + Gianni
 // agreed were too noisy on 2026-05-01.
+//
+// ?force=1 widens the window to "next 7 days" for verification — same
+// digest format, just lets you SEE it land without waiting for a real
+// event to cross the 24h boundary.
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const force = request.nextUrl.searchParams.get('force') === '1'
+  const windowSql = force
+    ? "BETWEEN NOW() AND NOW() + INTERVAL '7 days'"
+    : "BETWEEN NOW() + INTERVAL '23 hours' AND NOW() + INTERVAL '25 hours'"
+
   try {
     const result = await query(
       `SELECT
@@ -26,9 +35,11 @@ export async function GET() {
        FROM events e
        LEFT JOIN venues v ON e.venue_id = v.id
        LEFT JOIN event_assignments ea ON ea.event_id = e.id
-       WHERE e.start_time BETWEEN NOW() + INTERVAL '23 hours' AND NOW() + INTERVAL '25 hours'
+       WHERE e.start_time ${windowSql}
        GROUP BY e.id, v.name, v.timezone, v.requires_assignment
-       HAVING COUNT(ea.id) = 0`
+       HAVING COUNT(ea.id) = 0
+       ORDER BY e.start_time ASC
+       LIMIT 25`
     )
 
     // Per Joe 2026-04-29: venue.requires_assignment is the source of truth,
@@ -64,16 +75,17 @@ export async function GET() {
       return `• *${e.summary}* at *${e.venue_name}* — ${when}`
     })
 
+    const headline = force
+      ? `:warning: *${unassigned.length} unassigned event${unassigned.length === 1 ? '' : 's'} in the next 7 days* (test fire)`
+      : `:warning: *${unassigned.length} event${unassigned.length === 1 ? '' : 's'} need staffing — starting in ~24h*`
+
     const sent = await sendSlackMessage({
       channel,
-      text: `${unassigned.length} event${unassigned.length === 1 ? '' : 's'} unassigned ~24h out`,
+      text: `${unassigned.length} event${unassigned.length === 1 ? '' : 's'} unassigned${force ? ' (test fire)' : ' ~24h out'}`,
       blocks: [
         {
           type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `:warning: *${unassigned.length} event${unassigned.length === 1 ? '' : 's'} need staffing — starting in ~24h*`,
-          },
+          text: { type: 'mrkdwn', text: headline },
         },
         {
           type: 'section',
