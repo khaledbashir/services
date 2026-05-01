@@ -76,7 +76,9 @@ export async function GET(
     .trim()
     .slice(0, 80) || 'document'
 
-  return new NextResponse(pdf, {
+  // Buffer → Uint8Array for NextResponse (Next.js types want BodyInit, which
+  // accepts Uint8Array but not the Node-specific Buffer subclass).
+  return new NextResponse(new Uint8Array(pdf), {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
