@@ -18,6 +18,49 @@ Last updated: 2026-05-01
 - Done now: fast walkthrough entry inside `/operations`, venue-based display picker, result choices, and "new issue detected" creates a ticket through the existing ticket/Slack path.
 - Still needed: inline edits, richer asset detail, verified live Slack test, Nick walkthrough.
 
+## Previous Work Status
+
+### 1. Plan and Direction
+
+What we did:
+- Read the transcript and repo.
+- Decided to build ANC's own Airtable-style workspace inside Services.
+- Kept Baserow as a fallback/admin tool, not the daily user interface.
+- Created this living plan and checklist.
+
+What users can now do:
+- Everyone has a clear direction for the Airtable replacement.
+- We can track progress in one doc instead of re-explaining the plan each time.
+
+### 2. First `/operations` Workspace Shell
+
+What we did:
+- Replaced the generic operations landing page with an Airtable-style workspace.
+- Added left navigation, top tabs, dense grids, counts, search, venue filter, sorting, and row detail drawers.
+- Added grids for Open Issues, Today's Issues, Displays, Walkthrough Log, and Maintenance.
+- Kept raw Baserow routes available as a fallback.
+
+What users can now do:
+- Open `/operations` and scan ops data in a table-first view.
+- Switch between issues, displays, walkthroughs, and maintenance without jumping through separate form pages.
+- Click a row to see details.
+- Open a display's history timeline from the display drawer.
+
+### 3. Walkthrough-to-Issue Flow
+
+What we did:
+- Added a walkthrough modal inside `/operations`.
+- Venue selection now narrows the display/location picker.
+- Added result choices: No Action Needed, Open Issue Exists, New Issue Detected.
+- New Issue Detected creates a ticket through the existing ticket API, then saves the walkthrough.
+- Updated the checklist and build log.
+
+What users can now do:
+- Log a walkthrough from the Airtable-style workspace.
+- Pick a venue and display/location while logging.
+- Mark a walkthrough as clean, tied to an existing issue, or a new issue.
+- Create a new issue from the walkthrough flow and see the workspace refresh afterward.
+
 ## Status Format
 
 After each major build slice, use:
