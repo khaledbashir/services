@@ -82,11 +82,81 @@ function fieldCurrentValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSele
   return (el.value || '').trim()
 }
 
+// Cross-origin iframe relay — the NocoDB iframe at ops.ancsports.net
+// hosts a sibling listener (anc-overrides.js) that performs ui_* actions
+// inside the iframe DOM and posts back results. We need this because
+// browser security blocks the parent from touching cross-origin iframe
+// DOM directly, so click/fill/highlight against NocoDB cells from the
+// parent's findElement will always come up empty.
+const OPS_IFRAME_ORIGIN = 'https://ops.ancsports.net'
+const OPS_BRIDGE_TIMEOUT_MS = 5000
+
+function findOpsIframe(): HTMLIFrameElement | null {
+  const all = Array.from(document.querySelectorAll('iframe')) as HTMLIFrameElement[]
+  return all.find((f) => {
+    try {
+      return new URL(f.src).origin === OPS_IFRAME_ORIGIN
+    } catch {
+      return false
+    }
+  }) || null
+}
+
+function isOpsRoute(): boolean {
+  return typeof window !== 'undefined' && window.location.pathname.startsWith('/operations')
+}
+
+// Send a UiAction to the NocoDB iframe and wait for the result. Resolves
+// with `{ ok, value? }` on success, rejects with the iframe's error
+// message on failure or after OPS_BRIDGE_TIMEOUT_MS without a reply.
+async function sendToOpsIframe(action: UiAction): Promise<{ ok: boolean; value?: unknown; error?: string }> {
+  const iframe = findOpsIframe()
+  if (!iframe || !iframe.contentWindow) {
+    throw new Error('ops iframe not found — is the user on /operations?')
+  }
+  const requestId = `anc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  return new Promise((resolve, reject) => {
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.origin !== OPS_IFRAME_ORIGIN) return
+      const data = ev.data
+      if (!data || data.type !== 'anc:ai-ui-result' || data.requestId !== requestId) return
+      window.removeEventListener('message', onMessage)
+      clearTimeout(timer)
+      if (data.ok) resolve({ ok: true, value: data.value })
+      else reject(new Error(data.error || 'iframe action failed'))
+    }
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', onMessage)
+      reject(new Error(`ops iframe did not reply within ${OPS_BRIDGE_TIMEOUT_MS}ms`))
+    }, OPS_BRIDGE_TIMEOUT_MS)
+    window.addEventListener('message', onMessage)
+    iframe.contentWindow!.postMessage({ type: 'anc:ai-ui', requestId, action }, OPS_IFRAME_ORIGIN)
+  })
+}
+
 export function AiUiDriver() {
   const router = useRouter()
   const cursorRef = useRef<HTMLDivElement | null>(null)
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; variant: string }>>([])
   const toastIdRef = useRef(0)
+  // Tracks whether the NocoDB iframe bridge has announced itself as ready.
+  // On /operations we prefer the bridge for click/fill/highlight; if it's
+  // not ready (iframe still loading or anc-overrides.js not yet fired its
+  // anc:ai-ui-ready heartbeat), we fall back to the local DOM dispatch and
+  // surface the same warnings as before.
+  const opsBridgeReadyRef = useRef(false)
+
+  // Listen for the bridge's heartbeat (sent on load + every hashchange in
+  // the iframe). Cleared when the iframe goes away (route change off
+  // /operations) so we don't trust a stale ready flag.
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.origin !== OPS_IFRAME_ORIGIN) return
+      if (ev.data?.type === 'anc:ai-ui-ready') opsBridgeReadyRef.current = true
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   const moveCursor = async (el: HTMLElement) => {
     const cursor = cursorRef.current
@@ -161,6 +231,28 @@ export function AiUiDriver() {
     const handler = async (e: Event) => {
       const action = (e as CustomEvent<UiAction>).detail
       if (!action) return
+
+      // On /operations, prefer the cross-origin iframe bridge for any
+      // action that targets DOM (click / fill / highlight). Local
+      // findElement() can't see into the iframe, so without this the
+      // action falls through to a "target not found" warning while the
+      // user stares at the NocoDB cell waiting for something to happen.
+      // Navigate, fill_form, wait, toast, refresh stay on the parent —
+      // those are dashboard-level concerns.
+      const isDomAction = action.type === 'click' || action.type === 'fill' || action.type === 'highlight'
+      if (isOpsRoute() && isDomAction) {
+        try {
+          await sendToOpsIframe(action)
+          return
+        } catch (err) {
+          // Iframe bridge failed (not ready, timeout, or genuinely missing
+          // selector inside the iframe). Fall through to the local DOM
+          // dispatch — selector might still match something on the parent
+          // chrome (e.g. the AI panel itself).
+          console.warn('ai-ui: ops iframe relay failed, falling back to parent DOM:', err)
+        }
+      }
+
       try {
         switch (action.type) {
           case 'navigate': {
