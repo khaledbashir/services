@@ -6,25 +6,9 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
-type TabKey = 'issues' | 'today' | 'assets' | 'walkthroughs' | 'maintenance'
+type TabKey = 'assets' | 'walkthroughs' | 'maintenance'
 type SortDir = 'asc' | 'desc'
-type WalkthroughResult = 'good' | 'open_issue' | 'new_issue'
-
-interface Ticket {
-  id: string
-  ticket_number?: number | string
-  title: string
-  priority: string
-  status: string
-  category?: string
-  venue_id?: string
-  venue_name?: string
-  assigned_to_name?: string | null
-  created_at?: string
-  created_date?: string
-  created_time?: string
-  description?: string
-}
+type WalkthroughResult = 'good' | 'follow_up' | 'problem_detected'
 
 interface Asset {
   id: string
@@ -79,22 +63,18 @@ interface WalkthroughForm {
   venue_id: string
   display_id: string
   result: WalkthroughResult
-  issue_title: string
-  issue_details: string
+  observation_summary: string
+  observation_details: string
   locations_visited: string
-  priority: string
   notes: string
 }
 
 type SelectedRow =
-  | { kind: 'Issue'; row: Ticket }
   | { kind: 'Display'; row: Asset }
   | { kind: 'Walkthrough'; row: Walkthrough }
   | { kind: 'Maintenance'; row: Maintenance }
 
 const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: 'issues', label: 'Open Issues' },
-  { key: 'today', label: "Today's Issues" },
   { key: 'assets', label: 'Displays' },
   { key: 'walkthroughs', label: 'Walkthrough Log' },
   { key: 'maintenance', label: 'Maintenance' },
@@ -105,7 +85,6 @@ const workspaceNav = [
   'WMATA',
   'Venues',
   'Inventory',
-  'Issues',
   'Walkthroughs',
   'Maintenance',
 ]
@@ -119,13 +98,6 @@ function isOpenStatus(status?: string): boolean {
   return !['closed', 'resolved', 'completed', 'cancelled', 'done'].includes(s)
 }
 
-function isToday(value?: string | null): boolean {
-  if (!value) return false
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value.slice(0, 10) === new Date().toISOString().slice(0, 10)
-  return d.toDateString() === new Date().toDateString()
-}
-
 function displayDate(value?: string | null): string {
   if (!value) return '--'
   const d = new Date(value)
@@ -133,13 +105,8 @@ function displayDate(value?: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function pillClass(kind: 'status' | 'priority' | 'result', value?: string | null): string {
+function pillClass(kind: 'status' | 'result', value?: string | null): string {
   const v = normalize(value)
-  if (kind === 'priority') {
-    if (v.includes('critical') || v.includes('high')) return 'border-red-200 bg-red-50 text-red-700'
-    if (v.includes('low')) return 'border-zinc-200 bg-zinc-50 text-zinc-600'
-    return 'border-amber-200 bg-amber-50 text-amber-700'
-  }
   if (kind === 'result') {
     if (v.includes('problem') || v.includes('issue')) return 'border-red-200 bg-red-50 text-red-700'
     if (v.includes('partial') || v.includes('minor')) return 'border-amber-200 bg-amber-50 text-amber-700'
@@ -151,7 +118,7 @@ function pillClass(kind: 'status' | 'priority' | 'result', value?: string | null
   return 'border-amber-200 bg-amber-50 text-amber-700'
 }
 
-function Pill({ kind, value }: { kind: 'status' | 'priority' | 'result'; value?: string | null }) {
+function Pill({ kind, value }: { kind: 'status' | 'result'; value?: string | null }) {
   return (
     <span className={`inline-flex max-w-full items-center rounded border px-1.5 py-0.5 text-[11px] font-medium capitalize ${pillClass(kind, value)}`}>
       {String(value || '--').replace(/_/g, ' ').toLowerCase()}
@@ -193,8 +160,7 @@ function SortButton({
 }
 
 export default function OperationsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('issues')
-  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [activeTab, setActiveTab] = useState<TabKey>('assets')
   const [assets, setAssets] = useState<Asset[]>([])
   const [walkthroughs, setWalkthroughs] = useState<Walkthrough[]>([])
   const [maintenance, setMaintenance] = useState<Maintenance[]>([])
@@ -213,10 +179,9 @@ export default function OperationsPage() {
     venue_id: '',
     display_id: '',
     result: 'good',
-    issue_title: '',
-    issue_details: '',
+    observation_summary: '',
+    observation_details: '',
     locations_visited: '',
-    priority: 'medium',
     notes: '',
   })
 
@@ -224,19 +189,17 @@ export default function OperationsPage() {
     if (showLoader) setLoading(true)
     setError(null)
     try {
-      const [ticketRes, assetRes, walkRes, maintenanceRes, venueRes] = await Promise.all([
-        fetch('/api/tickets'),
+      const [assetRes, walkRes, maintenanceRes, venueRes] = await Promise.all([
         fetch('/api/inventory'),
         fetch('/api/walkthroughs?limit=300'),
         fetch('/api/maintenance?limit=300'),
         fetch('/api/venues'),
       ])
-      const responses = [ticketRes, assetRes, walkRes, maintenanceRes, venueRes]
+      const responses = [assetRes, walkRes, maintenanceRes, venueRes]
       const failed = responses.find((r) => !r.ok)
       if (failed) throw new Error(`Operations data failed to load (${failed.status})`)
 
-      const [ticketData, assetData, walkData, maintenanceData, venueData] = await Promise.all(responses.map((r) => r.json()))
-      setTickets(ticketData.tickets || [])
+      const [assetData, walkData, maintenanceData, venueData] = await Promise.all(responses.map((r) => r.json()))
       setAssets(assetData.items || [])
       setWalkthroughs(walkData.walkthroughs || [])
       setMaintenance(maintenanceData.logs || [])
@@ -260,16 +223,10 @@ export default function OperationsPage() {
     if (activeTab === 'assets') setSortColumn('venue_name')
     else if (activeTab === 'walkthroughs') setSortColumn('log_date')
     else if (activeTab === 'maintenance') setSortColumn('reported_date')
-    else setSortColumn('created_at')
     setSortDir(activeTab === 'assets' ? 'asc' : 'desc')
   }, [activeTab])
 
-  const openTickets = useMemo(() => tickets.filter((t) => isOpenStatus(t.status)), [tickets])
-  const todayTickets = useMemo(() => openTickets.filter((t) => isToday(t.created_at)), [openTickets])
-
   const counts = {
-    issues: openTickets.length,
-    today: todayTickets.length,
     assets: assets.length,
     walkthroughs: walkthroughs.length,
     maintenance: maintenance.filter((m) => isOpenStatus(m.status)).length,
@@ -286,9 +243,7 @@ export default function OperationsPage() {
   const q = search.trim().toLowerCase()
 
   const rows = useMemo(() => {
-    const base: Array<Ticket | Asset | Walkthrough | Maintenance> =
-      activeTab === 'issues' ? openTickets :
-      activeTab === 'today' ? todayTickets :
+    const base: Array<Asset | Walkthrough | Maintenance> =
       activeTab === 'assets' ? assets :
       activeTab === 'walkthroughs' ? walkthroughs :
       maintenance
@@ -305,7 +260,7 @@ export default function OperationsPage() {
       const cmp = av.localeCompare(bv, undefined, { numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [activeTab, openTickets, todayTickets, assets, walkthroughs, maintenance, venueFilter, q, sortColumn, sortDir])
+  }, [activeTab, assets, walkthroughs, maintenance, venueFilter, q, sortColumn, sortDir])
 
   const activeCount = counts[activeTab]
   const walkthroughVenueAssets = useMemo(
@@ -326,10 +281,9 @@ export default function OperationsPage() {
       venue_id: '',
       display_id: '',
       result: 'good',
-      issue_title: '',
-      issue_details: '',
+      observation_summary: '',
+      observation_details: '',
       locations_visited: '',
-      priority: 'medium',
       notes: '',
     })
     setWalkthroughError(null)
@@ -342,8 +296,8 @@ export default function OperationsPage() {
       setWalkthroughError('Pick a venue first.')
       return
     }
-    if (walkthroughForm.result === 'new_issue' && !walkthroughForm.issue_title.trim()) {
-      setWalkthroughError('Add a short issue summary.')
+    if (walkthroughForm.result !== 'good' && !walkthroughForm.observation_summary.trim()) {
+      setWalkthroughError('Add a short observation summary.')
       return
     }
 
@@ -357,30 +311,11 @@ export default function OperationsPage() {
           ].filter(Boolean).join(' - ')
         : ''
       const locationsVisited = displayLabel || walkthroughForm.locations_visited.trim() || null
-      const issueText = [
-        walkthroughForm.issue_title.trim(),
-        walkthroughForm.issue_details.trim(),
+      const observationText = [
+        walkthroughForm.observation_summary.trim(),
+        walkthroughForm.observation_details.trim(),
         displayLabel ? `Display: ${displayLabel}` : '',
       ].filter(Boolean).join('\n\n')
-
-      if (walkthroughForm.result === 'new_issue') {
-        const ticketRes = await fetch('/api/tickets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            venue_id: walkthroughForm.venue_id,
-            title: walkthroughForm.issue_title.trim(),
-            description: issueText,
-            priority: walkthroughForm.priority,
-            category: 'maintenance',
-            source: 'web',
-          }),
-        })
-        if (!ticketRes.ok) {
-          const data = await ticketRes.json().catch(() => ({}))
-          throw new Error(data?.error || 'Could not create the issue ticket.')
-        }
-      }
 
       const walkRes = await fetch('/api/walkthroughs', {
         method: 'POST',
@@ -389,7 +324,7 @@ export default function OperationsPage() {
           venue_id: walkthroughForm.venue_id,
           result: walkthroughForm.result === 'good' ? 'good' : 'problem_detected',
           locations_visited: locationsVisited,
-          issues_found: walkthroughForm.result === 'good' ? null : issueText || 'Existing issue observed',
+          issues_found: walkthroughForm.result === 'good' ? null : observationText || 'Follow-up needed',
           notes: walkthroughForm.notes || null,
           log_date: new Date().toISOString().slice(0, 10),
         }),
@@ -402,7 +337,7 @@ export default function OperationsPage() {
       setShowWalkthroughForm(false)
       resetWalkthroughForm()
       await fetchOperationsData(false)
-      setActiveTab(walkthroughForm.result === 'new_issue' ? 'today' : 'walkthroughs')
+      setActiveTab('walkthroughs')
     } catch (err: any) {
       setWalkthroughError(err?.message || 'Walkthrough save failed.')
     } finally {
@@ -425,9 +360,7 @@ export default function OperationsPage() {
                   key={item}
                   type="button"
                   className={`mb-1 flex h-8 w-full items-center justify-between rounded px-2.5 text-left text-sm ${
-                    item === 'Issues' && (activeTab === 'issues' || activeTab === 'today')
-                      ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-200'
-                      : item === 'Inventory' && activeTab === 'assets'
+                    item === 'Inventory' && activeTab === 'assets'
                       ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-200'
                       : item === 'Walkthroughs' && activeTab === 'walkthroughs'
                       ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-200'
@@ -436,14 +369,12 @@ export default function OperationsPage() {
                       : 'text-zinc-600 hover:bg-white hover:text-zinc-950'
                   }`}
                   onClick={() => {
-                    if (item === 'Issues') setActiveTab('issues')
                     if (item === 'Inventory') setActiveTab('assets')
                     if (item === 'Walkthroughs') setActiveTab('walkthroughs')
                     if (item === 'Maintenance') setActiveTab('maintenance')
                   }}
                 >
                   <span>{item}</span>
-                  {item === 'Issues' && <span className="text-[11px] text-zinc-400">{counts.issues}</span>}
                   {item === 'Inventory' && <span className="text-[11px] text-zinc-400">{counts.assets}</span>}
                   {item === 'Maintenance' && <span className="text-[11px] text-zinc-400">{counts.maintenance}</span>}
                 </button>
@@ -524,9 +455,7 @@ export default function OperationsPage() {
                   ? <AssetsTable rows={rows as Asset[]} sortColumn={sortColumn} sortDir={sortDir} onSort={handleSort} onSelect={(row) => setSelected({ kind: 'Display', row })} />
                   : activeTab === 'walkthroughs'
                   ? <WalkthroughsTable rows={rows as Walkthrough[]} sortColumn={sortColumn} sortDir={sortDir} onSort={handleSort} onSelect={(row) => setSelected({ kind: 'Walkthrough', row })} />
-                  : activeTab === 'maintenance'
-                  ? <MaintenanceTable rows={rows as Maintenance[]} sortColumn={sortColumn} sortDir={sortDir} onSort={handleSort} onSelect={(row) => setSelected({ kind: 'Maintenance', row })} />
-                  : <IssuesTable rows={rows as Ticket[]} sortColumn={sortColumn} sortDir={sortDir} onSort={handleSort} onSelect={(row) => setSelected({ kind: 'Issue', row })} />}
+                  : <MaintenanceTable rows={rows as Maintenance[]} sortColumn={sortColumn} sortDir={sortDir} onSort={handleSort} onSelect={(row) => setSelected({ kind: 'Maintenance', row })} />}
               </div>
             )}
           </main>
@@ -556,37 +485,6 @@ function EmptyRow({ colSpan }: { colSpan: number }) {
     <tr>
       <td colSpan={colSpan} className="px-4 py-16 text-center text-sm text-zinc-500">No rows match this view.</td>
     </tr>
-  )
-}
-
-function IssuesTable({ rows, sortColumn, sortDir, onSort, onSelect }: { rows: Ticket[]; sortColumn: string; sortDir: SortDir; onSort: (c: string) => void; onSelect: (r: Ticket) => void }) {
-  return (
-    <table className="w-full min-w-[1080px] border-collapse text-sm">
-      <thead className="sticky top-0 z-10 bg-white">
-        <tr className="border-b border-zinc-200">
-          <th className="w-28 px-3 py-1.5 text-left"><SortButton label="Ticket" column="ticket_number" active={sortColumn === 'ticket_number'} dir={sortDir} onSort={onSort} /></th>
-          <th className="px-3 py-1.5 text-left"><SortButton label="Title" column="title" active={sortColumn === 'title'} dir={sortDir} onSort={onSort} /></th>
-          <th className="w-56 px-3 py-1.5 text-left"><SortButton label="Venue" column="venue_name" active={sortColumn === 'venue_name'} dir={sortDir} onSort={onSort} /></th>
-          <th className="w-28 px-3 py-1.5 text-left"><SortButton label="Priority" column="priority" active={sortColumn === 'priority'} dir={sortDir} onSort={onSort} /></th>
-          <th className="w-32 px-3 py-1.5 text-left"><SortButton label="Status" column="status" active={sortColumn === 'status'} dir={sortDir} onSort={onSort} /></th>
-          <th className="w-44 px-3 py-1.5 text-left"><SortButton label="Assignee" column="assigned_to_name" active={sortColumn === 'assigned_to_name'} dir={sortDir} onSort={onSort} /></th>
-          <th className="w-36 px-3 py-1.5 text-left"><SortButton label="Created" column="created_at" active={sortColumn === 'created_at'} dir={sortDir} onSort={onSort} /></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length === 0 ? <EmptyRow colSpan={7} /> : rows.map((row) => (
-          <tr key={row.id} onClick={() => onSelect(row)} className="cursor-pointer border-b border-zinc-100 hover:bg-[#F8FBFF]">
-            <td className="px-3 py-2 font-mono text-xs text-zinc-500">{row.ticket_number ? `#${row.ticket_number}` : '--'}</td>
-            <td className="max-w-[360px] truncate px-3 py-2 font-medium text-zinc-900">{row.title}</td>
-            <td className="px-3 py-2"><FieldChip>{row.venue_name || '--'}</FieldChip></td>
-            <td className="px-3 py-2"><Pill kind="priority" value={row.priority} /></td>
-            <td className="px-3 py-2"><Pill kind="status" value={row.status} /></td>
-            <td className="px-3 py-2 text-zinc-600">{row.assigned_to_name || '--'}</td>
-            <td className="px-3 py-2 text-xs text-zinc-500">{displayDate(row.created_at)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   )
 }
 
@@ -655,7 +553,7 @@ function MaintenanceTable({ rows, sortColumn, sortDir, onSort, onSelect }: { row
         <tr className="border-b border-zinc-200">
           <th className="w-56 px-3 py-1.5 text-left"><SortButton label="Venue" column="venue_name" active={sortColumn === 'venue_name'} dir={sortDir} onSort={onSort} /></th>
           <th className="w-40 px-3 py-1.5 text-left"><SortButton label="Type" column="maintenance_type" active={sortColumn === 'maintenance_type'} dir={sortDir} onSort={onSort} /></th>
-          <th className="px-3 py-1.5 text-left"><SortButton label="Issue" column="issue" active={sortColumn === 'issue'} dir={sortDir} onSort={onSort} /></th>
+          <th className="px-3 py-1.5 text-left"><SortButton label="Summary" column="issue" active={sortColumn === 'issue'} dir={sortDir} onSort={onSort} /></th>
           <th className="w-52 px-3 py-1.5 text-left"><SortButton label="Display" column="asset_name" active={sortColumn === 'asset_name'} dir={sortDir} onSort={onSort} /></th>
           <th className="w-32 px-3 py-1.5 text-left"><SortButton label="Status" column="status" active={sortColumn === 'status'} dir={sortDir} onSort={onSort} /></th>
           <th className="w-36 px-3 py-1.5 text-left"><SortButton label="Date" column="reported_date" active={sortColumn === 'reported_date'} dir={sortDir} onSort={onSort} /></th>
@@ -679,9 +577,7 @@ function MaintenanceTable({ rows, sortColumn, sortDir, onSort, onSelect }: { row
 
 function DetailDrawer({ selected, onClose }: { selected: SelectedRow; onClose: () => void }) {
   const row: any = selected.row
-  const title = selected.kind === 'Issue'
-    ? row.title
-    : selected.kind === 'Display'
+  const title = selected.kind === 'Display'
     ? row.item_name
     : selected.kind === 'Walkthrough'
     ? `${row.venue_name || 'Walkthrough'} · ${displayDate(row.log_date)}`
@@ -811,8 +707,8 @@ function WalkthroughModal({
             <div className="grid gap-2 md:grid-cols-3">
               {[
                 { value: 'good', label: 'No Action Needed' },
-                { value: 'open_issue', label: 'Open Issue Exists' },
-                { value: 'new_issue', label: 'New Issue Detected' },
+                { value: 'follow_up', label: 'Follow-Up Needed' },
+                { value: 'problem_detected', label: 'Problem Found' },
               ].map((option) => (
                 <button
                   key={option.value}
@@ -832,44 +728,27 @@ function WalkthroughModal({
 
           {value.result !== 'good' && (
             <div className="grid gap-3 rounded border border-amber-200 bg-amber-50 p-3">
-              <div className="grid gap-3 md:grid-cols-[1fr_140px]">
+              <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
-                  <span className="text-xs font-medium text-amber-800">Issue summary</span>
+                  <span className="text-xs font-medium text-amber-800">Observation summary</span>
                   <input
-                    value={value.issue_title}
-                    onChange={(event) => onChange({ issue_title: event.target.value })}
-                    placeholder={value.result === 'new_issue' ? 'Example: display offline' : 'Optional: existing issue observed'}
+                    value={value.observation_summary}
+                    onChange={(event) => onChange({ observation_summary: event.target.value })}
+                    placeholder="Example: display offline"
                     className="h-9 rounded border border-amber-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="text-xs font-medium text-amber-800">Priority</span>
-                  <select
-                    value={value.priority}
-                    onChange={(event) => onChange({ priority: event.target.value })}
-                    disabled={value.result !== 'new_issue'}
-                    className="h-9 rounded border border-amber-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25 disabled:bg-amber-100/50"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
                 </label>
               </div>
               <label className="grid gap-1.5 text-sm">
                 <span className="text-xs font-medium text-amber-800">Details</span>
                 <textarea
-                  value={value.issue_details}
-                  onChange={(event) => onChange({ issue_details: event.target.value })}
+                  value={value.observation_details}
+                  onChange={(event) => onChange({ observation_details: event.target.value })}
                   rows={3}
                   placeholder="What did the tech see? What display/device is affected?"
                   className="rounded border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
                 />
               </label>
-              {value.result === 'new_issue' && (
-                <p className="text-xs text-amber-800">Saving will create a ticket, which also sends the normal Slack notification.</p>
-              )}
             </div>
           )}
 
@@ -890,7 +769,7 @@ function WalkthroughModal({
             Cancel
           </button>
           <button type="submit" disabled={saving} className="h-9 rounded bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60">
-            {saving ? 'Saving...' : value.result === 'new_issue' ? 'Save + Create Issue' : 'Save Walkthrough'}
+            {saving ? 'Saving...' : 'Save Walkthrough'}
           </button>
         </div>
       </form>
