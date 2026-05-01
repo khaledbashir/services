@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import { notifyOps } from '@/lib/slack'
 import { geocodeAddress } from '@/lib/geocode'
 import { twentyClient } from '@/lib/twenty-client'
 import { formatVenueEventSummary } from '@/lib/event-display'
@@ -481,10 +480,6 @@ export async function PATCH(
     )
 
     const v = fullVenue.rows[0]
-    const changes = Object.keys(body).filter(k => k !== 'service_type_id' && k !== 'enabled').join(', ')
-    const detail = body.service_type_id ? `service toggled` : changes || 'settings updated'
-    notifyOps(':gear:', `*Venue updated:* ${v.name} — ${detail}`, { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${v.id}` }, v.slack_channel_id)
-
     return NextResponse.json({ venue: v, venueServices: servicesResult.rows })
   } catch (err) {
     console.error('Error updating venue:', err)
