@@ -1,43 +1,28 @@
-import { Baserow } from '@/lib/baserow'
+import { NocoOps } from '@/lib/nocodb-ops'
 import type { Skill } from '@/lib/ai/types'
 
 const skill: Skill = {
   name: 'ops_list_tables',
-  description: 'List the tables available in the Operations workspace (Nick\'s self-hosted Airtable replacement at /operations). Returns workspace + database + table ids and names. Use before ops_query_table when you don\'t already know the table id.',
+  description:
+    'List every base + table in the ANC Operations workspace at ops.ancsports.net (the iframe at /operations). Returns base id, base title, table id, table title — call this BEFORE ops_query_table / ops_create_records / ops_update_records when you don\'t already know the table id. Tables are organized into bases like "WMATA Inventory", "ANC Service - South", "Inventory Tracking", etc.',
   category: 'Service Ops',
   icon: '🗂',
-  parameters: {
-    type: 'object',
-    properties: {},
-  },
+  parameters: { type: 'object', properties: {} },
   async handler() {
-    if (!Baserow.configured()) {
-      return { error: 'Operations backend (Baserow) is not configured on this server (BASEROW_API_TOKEN missing).' }
+    if (!NocoOps.configured()) {
+      return { error: 'Operations backend (NocoDB) is not configured (NOCODB_OPS_PAT missing).' }
     }
-    const apps = await Baserow.listApplications()
-    const databases = apps.filter((a) => a.type === 'database')
-    const out: Array<{
-      workspace_id: number
-      workspace_name: string
-      databases: Array<{ id: number; name: string; tables: Array<{ id: number; name: string }> }>
-    }> = []
-    const wsMap = new Map<number, { workspace_id: number; workspace_name: string; databases: any[] }>()
-    for (const db of databases) {
-      const tables = await Baserow.listTables(db.id)
-      const ws = wsMap.get(db.workspace.id) || {
-        workspace_id: db.workspace.id,
-        workspace_name: db.workspace.name,
-        databases: [],
-      }
-      ws.databases.push({
-        id: db.id,
-        name: db.name,
-        tables: tables.map((t) => ({ id: t.id, name: t.name })),
+    const bases = await NocoOps.listBases()
+    const out: Array<{ base_id: string; base_title: string; tables: Array<{ id: string; title: string }> }> = []
+    for (const b of bases) {
+      const tables = await NocoOps.listTables(b.id)
+      out.push({
+        base_id: b.id,
+        base_title: b.title,
+        tables: tables.map((t) => ({ id: t.id, title: t.title })),
       })
-      wsMap.set(db.workspace.id, ws)
     }
-    for (const ws of wsMap.values()) out.push(ws)
-    return { workspaces: out }
+    return { workspace_id: NocoOps.workspaceId(), bases: out }
   },
 }
 export default skill

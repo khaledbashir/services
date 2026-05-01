@@ -40,6 +40,10 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/ops-list-tables'),
     () => import('@/lib/ai/skills/ops-query-table'),
     () => import('@/lib/ai/skills/ops-create-row'),
+    () => import('@/lib/ai/skills/ops-update-records'),
+    () => import('@/lib/ai/skills/ops-delete-records'),
+    () => import('@/lib/ai/skills/ops-count-records'),
+    () => import('@/lib/ai/skills/ops-table-schema'),
   ]
   for (const load of staticImports) {
     try {

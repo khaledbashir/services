@@ -1,0 +1,182 @@
+// Server-side NocoDB client for the ANC ops workspace at ops.ancsports.net.
+// Replaces the now-defunct Baserow client (lib/baserow.ts) — same workspace
+// URL, totally different API. NocoDB v2 conventions:
+//   * xc-token header (not Authorization: Token)
+//   * /api/v2/meta/{workspaces|bases|tables|views}/*
+//   * /api/v2/tables/{tableId}/records   ← data plane
+//
+// Configure via env on the EasyPanel anc-services service:
+//   NOCODB_OPS_BASE_URL=https://ops.ancsports.net
+//   NOCODB_OPS_PAT=nc_pat_<token from /root/.nocodb-creds>
+//   NOCODB_OPS_WORKSPACE_ID=w2116qsq    (default — the ANC workspace)
+//
+// Never expose the PAT to the browser. All callers run server-side from
+// the AI skill handlers in /api/ai/invoke.
+
+const DEFAULT_BASE = 'https://ops.ancsports.net'
+const DEFAULT_WORKSPACE = 'w2116qsq'
+
+export class NocoDBOpsError extends Error {
+  status?: number
+  body?: unknown
+  constructor(message: string, status?: number, body?: unknown) {
+    super(message)
+    this.status = status
+    this.body = body
+  }
+}
+
+function baseUrl(): string {
+  return (process.env.NOCODB_OPS_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '')
+}
+
+function token(): string {
+  const t = process.env.NOCODB_OPS_PAT || ''
+  if (!t) throw new NocoDBOpsError('NOCODB_OPS_PAT is not configured on the server.')
+  return t
+}
+
+function workspaceId(): string {
+  return process.env.NOCODB_OPS_WORKSPACE_ID || DEFAULT_WORKSPACE
+}
+
+async function noco<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+  const url = `${baseUrl()}${path}`
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'xc-token': token(),
+      ...(init.headers || {}),
+    },
+    cache: 'no-store',
+  })
+  const text = await res.text()
+  let body: unknown
+  try { body = text ? JSON.parse(text) : null } catch { body = text }
+  if (!res.ok) {
+    throw new NocoDBOpsError(
+      `NocoDB ${init.method || 'GET'} ${path} failed (${res.status}): ${typeof body === 'string' ? body.slice(0, 200) : JSON.stringify(body).slice(0, 200)}`,
+      res.status,
+      body
+    )
+  }
+  return body as T
+}
+
+// ---- Discovery ----
+
+export interface NocoBase {
+  id: string
+  title: string
+  description?: string | null
+}
+
+export interface NocoTable {
+  id: string
+  base_id: string
+  title: string
+  table_name?: string
+  description?: string | null
+}
+
+export interface NocoColumn {
+  id: string
+  title: string
+  column_name: string
+  uidt: string                      // SingleLineText | LongText | SingleSelect | …
+  pv?: boolean                       // primary value (display column)
+  colOptions?: { options?: Array<{ title: string; color?: string }> }
+}
+
+export interface NocoView {
+  id: string
+  title: string
+  type: number                       // 1=Form 2=Gallery 3=Grid 4=Kanban 5=Map 6=Calendar
+}
+
+export const NocoOps = {
+  baseUrl,
+  workspaceId,
+
+  configured(): boolean {
+    return !!process.env.NOCODB_OPS_PAT
+  },
+
+  // The workspace-listing endpoint is forbidden for PAT auth — but enumerating
+  // bases of every workspace IS allowed. We filter to ours.
+  async listBases(): Promise<NocoBase[]> {
+    const r = await noco<{ list: NocoBase[] }>(
+      `/api/v2/meta/workspaces/${workspaceId()}/bases`
+    )
+    return r.list || []
+  },
+
+  async listTables(baseId: string): Promise<NocoTable[]> {
+    const r = await noco<{ list: NocoTable[] }>(`/api/v2/meta/bases/${baseId}/tables`)
+    return r.list || []
+  },
+
+  async getTable(tableId: string): Promise<NocoTable & { columns: NocoColumn[] }> {
+    return await noco(`/api/v2/meta/tables/${tableId}`)
+  },
+
+  async listViews(tableId: string): Promise<NocoView[]> {
+    const r = await noco<{ list: NocoView[] }>(`/api/v2/meta/tables/${tableId}/views`)
+    return r.list || []
+  },
+
+  // ---- Records ----
+
+  async listRecords(tableId: string, opts: {
+    where?: string                    // NocoDB filter syntax e.g. (Status,eq,Done)
+    sort?: string                     // e.g. -CreatedAt,Title
+    fields?: string                   // comma-separated
+    limit?: number
+    offset?: number
+    viewId?: string                   // scope to a specific view
+  } = {}): Promise<{ records: Record<string, unknown>[]; pageInfo: { totalRows: number; page: number; pageSize: number; isFirstPage: boolean; isLastPage: boolean } }> {
+    const qs = new URLSearchParams()
+    if (opts.where) qs.set('where', opts.where)
+    if (opts.sort) qs.set('sort', opts.sort)
+    if (opts.fields) qs.set('fields', opts.fields)
+    if (opts.viewId) qs.set('viewId', opts.viewId)
+    qs.set('limit', String(Math.min(opts.limit ?? 50, 200)))
+    if (opts.offset != null) qs.set('offset', String(opts.offset))
+    const r = await noco<{ list: Record<string, unknown>[]; pageInfo: any }>(
+      `/api/v2/tables/${tableId}/records?${qs.toString()}`
+    )
+    return { records: r.list || [], pageInfo: r.pageInfo || { totalRows: 0, page: 1, pageSize: 0, isFirstPage: true, isLastPage: true } }
+  },
+
+  async countRecords(tableId: string, where?: string): Promise<number> {
+    const qs = new URLSearchParams()
+    if (where) qs.set('where', where)
+    const r = await noco<{ count: number }>(`/api/v2/tables/${tableId}/records/count?${qs.toString()}`)
+    return r.count ?? 0
+  },
+
+  // POST accepts an array → bulk-create. Returns array of {Id} for created rows.
+  async createRecords(tableId: string, rows: Record<string, unknown>[]): Promise<Array<{ Id: number | string }>> {
+    return await noco(`/api/v2/tables/${tableId}/records`, {
+      method: 'POST',
+      body: JSON.stringify(rows),
+    })
+  },
+
+  // PATCH accepts an array of {Id, ...fields} → bulk-update. Returns array of {Id}.
+  async updateRecords(tableId: string, rows: Array<{ Id: number | string } & Record<string, unknown>>): Promise<Array<{ Id: number | string }>> {
+    return await noco(`/api/v2/tables/${tableId}/records`, {
+      method: 'PATCH',
+      body: JSON.stringify(rows),
+    })
+  },
+
+  // DELETE accepts an array of {Id} → bulk-delete. Returns array of {Id}.
+  async deleteRecords(tableId: string, ids: Array<number | string>): Promise<Array<{ Id: number | string }>> {
+    return await noco(`/api/v2/tables/${tableId}/records`, {
+      method: 'DELETE',
+      body: JSON.stringify(ids.map((Id) => ({ Id }))),
+    })
+  },
+}
