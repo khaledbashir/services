@@ -179,4 +179,50 @@ export const NocoOps = {
       body: JSON.stringify(ids.map((Id) => ({ Id }))),
     })
   },
+
+  // ---- Documents ----
+  //
+  // NocoDB documents are first-class models with type='document'. Their
+  // payload is ProseMirror JSON ({type: 'doc', content: [...]}). Read /
+  // write through the internal POST endpoint scoped to a workspace + base.
+  // Updates require an optimistic-lock `version` matching the current
+  // server-side version; bump on every successful update.
+
+  // List every document in a base (returns id, title, parent_id, etc.).
+  async listDocuments(baseId: string): Promise<Array<{ id: string; title: string; parent_id: string | null; updated_at: string }>> {
+    const tables = await noco<{ list: Array<{ id: string; title: string; type: string; parent_id?: string | null; updated_at?: string }> }>(
+      `/api/v2/meta/bases/${baseId}/tables?includeM2M=true`
+    )
+    return (tables.list || [])
+      .filter((t) => t.type === 'document')
+      .map((t) => ({ id: t.id, title: t.title, parent_id: t.parent_id ?? null, updated_at: t.updated_at ?? '' }))
+  },
+
+  // Fetch a document with its full ProseMirror JSON content + version.
+  async getDocument(baseId: string, docId: string): Promise<{ id: string; title: string; version: number; content: any }> {
+    const r = await noco<{ id: string; title: string; version: number; content: any }>(
+      `/api/v2/internal/${workspaceId()}/${baseId}?operation=documentGet&docId=${encodeURIComponent(docId)}`
+    )
+    return r
+  },
+
+  // Replace document content + title. Pass the current version (from
+  // getDocument); NocoDB rejects if it's stale (someone else edited).
+  async updateDocument(baseId: string, opts: {
+    docId: string
+    version: number
+    title?: string
+    content?: any                       // ProseMirror JSON ({type:'doc', content:[...]})
+  }): Promise<{ id: string; title: string; version: number }> {
+    const body: Record<string, unknown> = {
+      docId: opts.docId,
+      version: opts.version,
+    }
+    if (opts.title != null) body.title = opts.title
+    if (opts.content != null) body.content = opts.content
+    return await noco(
+      `/api/v2/internal/${workspaceId()}/${baseId}?operation=documentUpdate`,
+      { method: 'POST', body: JSON.stringify(body) }
+    )
+  },
 }

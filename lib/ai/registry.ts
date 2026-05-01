@@ -44,6 +44,8 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/ops-delete-records'),
     () => import('@/lib/ai/skills/ops-count-records'),
     () => import('@/lib/ai/skills/ops-table-schema'),
+    () => import('@/lib/ai/skills/ops-list-documents'),
+    () => import('@/lib/ai/skills/ops-write-document'),
   ]
   for (const load of staticImports) {
     try {
