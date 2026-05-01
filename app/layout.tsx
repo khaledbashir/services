@@ -35,6 +35,15 @@ export default function RootLayout({
           data-website-id="48e5c173-88f1-45de-85ff-3d0341ef8894"
           strategy="afterInteractive"
         />
+        <Script
+          defer
+          src="https://abc-umami.izcgmb.easypanel.host/recorder.js"
+          data-website-id="48e5c173-88f1-45de-85ff-3d0341ef8894"
+          data-sample-rate="0.15"
+          data-mask-level="moderate"
+          data-max-duration="300000"
+          strategy="afterInteractive"
+        />
         {/* PostHog Analytics (no-op until NEXT_PUBLIC_POSTHOG_KEY is set) */}
         {process.env.NEXT_PUBLIC_POSTHOG_KEY ? (
           <Script
