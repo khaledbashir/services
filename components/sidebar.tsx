@@ -138,12 +138,14 @@ export function Sidebar() {
       role: 'technician',
       links: [
         { href: '/operations', label: 'Operations Workspace' },
-        { href: '/inventory', label: 'Inventory' },
-        { href: '/maintenance', label: 'Maintenance' },
-        { href: '/walkthroughs', label: 'Walkthroughs' },
-        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
-        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
-        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
+        // Hidden 2026-05-01 — Baserow at ops.ancsports.net replaces Nick's field-ops modules.
+        // Routes still exist; uncomment any line to restore. Stadium Prep stays since it's a different workflow.
+        // { href: '/inventory', label: 'Inventory' },
+        // { href: '/maintenance', label: 'Maintenance' },
+        // { href: '/walkthroughs', label: 'Walkthroughs' },
+        // { href: '/rma', label: 'RMA Tracker', role: 'manager' },
+        // { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
+        // { href: '/parts', label: 'Parts Catalog', role: 'manager' },
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
       ],
     },
