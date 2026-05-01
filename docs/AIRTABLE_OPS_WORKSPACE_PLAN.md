@@ -18,6 +18,13 @@ Last updated: 2026-05-01
 - Done now: fast walkthrough entry inside `/operations`, venue-based display picker, result choices, and "new issue detected" creates a ticket through the existing ticket/Slack path.
 - Still needed: inline edits, richer asset detail, verified live Slack test, Nick walkthrough.
 
+## Status Format
+
+After each major build slice, use:
+
+- What we did
+- What users can now do
+
 ## Decision
 
 Build an Airtable-style operations experience inside `anc-services`.
