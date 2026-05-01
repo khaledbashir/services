@@ -7,7 +7,15 @@ import { AiUiDriver } from './ai-ui-driver'
 import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
+interface DashboardLayoutProps {
+  children: React.ReactNode
+  // When true, render children edge-to-edge with no padding, no max-width
+  // cap, and no GlobalSearch row. For iframe pages (e.g. /operations) that
+  // bring their own chrome and want the entire remaining viewport.
+  fullBleed?: boolean
+}
+
+export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const pathname = usePathname() ?? ''
   // When the AI (or any code) fires "anc:data-refresh", remount the page tree
   // by bumping this key. That forces every child's useEffect/useState to
@@ -24,17 +32,26 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-[var(--anc-page)]">
       <Sidebar />
       <div
-        className="flex-1 flex flex-col overflow-hidden transition-[padding] duration-200 ease-out"
-        style={{ paddingRight: 'var(--ai-panel-shrink, 0px)' }}
+        className="flex-1 flex flex-col overflow-hidden transition-[margin,padding] duration-200 ease-out"
+        style={{
+          marginLeft: 'var(--anc-sidebar-w, 0px)',
+          paddingRight: 'var(--ai-panel-shrink, 0px)',
+        }}
       >
-        <div className="flex-1 overflow-auto">
-          <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
-            <div className="mb-4 flex justify-end lg:mb-6">
-              <GlobalSearch />
-            </div>
-            <div key={`${pathname}:${refreshKey}`}>{children}</div>
+        {fullBleed ? (
+          <div key={`${pathname}:${refreshKey}`} className="flex-1 overflow-hidden">
+            {children}
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
+              <div className="mb-4 flex justify-end lg:mb-6">
+                <GlobalSearch />
+              </div>
+              <div key={`${pathname}:${refreshKey}`}>{children}</div>
+            </div>
+          </div>
+        )}
       </div>
       <AiAssistant />
       <AiUiDriver />

@@ -4,13 +4,13 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 
 export default function OperationsPage() {
   return (
-    <DashboardLayout>
+    <DashboardLayout fullBleed>
       <iframe
         src="https://ops.ancsports.net/"
         title="ANC Operations"
         style={{
           width: '100%',
-          height: 'calc(100vh - 64px)',
+          height: '100%',
           border: 'none',
           display: 'block',
           margin: 0,

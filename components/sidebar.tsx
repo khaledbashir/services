@@ -61,6 +61,11 @@ export function Sidebar() {
   const [userName, setUserName] = useState('')
   const [userRole, setUserRole] = useState<Role>('any')
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Desktop expand state — default collapsed (icon-only rail). When the user
+  // clicks the chevron OR any section icon while collapsed, we expand. The
+  // CSS variable --anc-sidebar-w drives DashboardLayout's content margin so
+  // the page reflows responsively (push, not overlay).
+  const [desktopExpanded, setDesktopExpanded] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const [hydrated, setHydrated] = useState(false)
 
@@ -307,32 +312,69 @@ export function Sidebar() {
     </>
   )
 
-  // Single collapsible drawer for ALL viewport sizes — default closed.
-  // Hamburger top-left to open, X / backdrop / link-click to close.
-  // Removes the always-on desktop rail so iframe pages (like /operations)
-  // get full screen width.
+  // Compact collapsed rail — section icons only. Click any icon to expand
+  // the full sidebar (and auto-open that section).
+  const collapsedRail = (
+    <>
+      <Link href="/dashboard" className="block py-4 border-b border-white/5 hover:bg-white/[0.03] transition-colors flex justify-center">
+        <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-6 w-auto" />
+      </Link>
+      <nav className="flex-1 py-3 overflow-y-auto flex flex-col items-center gap-1">
+        {sections.map(section => {
+          if (!roleAllows(section.role)) return null
+          const visibleLinks = section.links.filter(l => roleAllows(l.role))
+          if (visibleLinks.length === 0) return null
+          const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))
+          return (
+            <button
+              key={section.key}
+              onClick={() => {
+                setDesktopExpanded(true)
+                setOpenSections(prev => ({ ...prev, [section.key]: true }))
+              }}
+              title={section.label}
+              className={`w-10 h-10 flex items-center justify-center rounded-md transition-colors ${
+                containsActive
+                  ? 'bg-[#0A52EF]/15 text-white'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              {section.icon}
+            </button>
+          )
+        })}
+      </nav>
+      <div className="py-3 border-t border-white/5 flex flex-col items-center gap-1">
+        <Link href="/account" title="Account" className="w-10 h-10 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition-colors">
+          <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z" /></Icon>
+        </Link>
+        <button
+          onClick={handleLogout}
+          title="Sign out"
+          className="w-10 h-10 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+        >
+          <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></Icon>
+        </button>
+      </div>
+    </>
+  )
+
   return (
     <>
+      {/* Mobile: hamburger overlay drawer (unchanged from original) */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-50 bg-[var(--anc-sidebar)] text-white p-2 rounded-md shadow-lg hover:bg-white/10 transition-colors"
+        className="lg:hidden fixed top-4 left-4 z-50 bg-[var(--anc-sidebar)] text-white p-2 rounded-md shadow-lg"
         aria-label="Open menu"
       >
         <Icon className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></Icon>
       </button>
 
       {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
       )}
 
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[var(--anc-sidebar)] text-white flex flex-col transform transition-transform duration-200 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+      <div className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-[var(--anc-sidebar)] text-white flex flex-col transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button
           onClick={() => setMobileOpen(false)}
           className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
@@ -342,6 +384,37 @@ export function Sidebar() {
         </button>
         {sidebarContent}
       </div>
+
+      {/* Desktop: persistent rail. Width animates between 16 (collapsed,
+          icon-only) and 60 (expanded). The chevron toggle sits at the top-
+          right of the rail and flips direction with the state. The page
+          content reads --anc-sidebar-w to set its left margin. */}
+      <div
+        className={`hidden lg:flex bg-[var(--anc-sidebar)] text-white h-screen flex-col fixed left-0 top-0 border-r border-white/5 transition-[width] duration-200 ease-out ${
+          desktopExpanded ? 'w-60' : 'w-16'
+        }`}
+      >
+        <button
+          onClick={() => setDesktopExpanded(v => !v)}
+          aria-label={desktopExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          className="absolute -right-3 top-6 z-10 w-6 h-6 rounded-full bg-[var(--anc-sidebar)] border border-white/10 text-zinc-400 hover:text-white hover:border-white/30 transition-colors flex items-center justify-center shadow-md"
+        >
+          <Icon className={`h-3 w-3 transition-transform duration-200 ${desktopExpanded ? 'rotate-180' : ''}`}>
+            {IC.chevron}
+          </Icon>
+        </button>
+        {desktopExpanded ? sidebarContent : collapsedRail}
+      </div>
+
+      {/* Publish the desktop rail width as a CSS variable so DashboardLayout
+          (and any other consumer) can offset content responsively. Mobile
+          stays at 0 — the drawer overlays. */}
+      <style jsx global>{`
+        :root { --anc-sidebar-w: 0px; }
+        @media (min-width: 1024px) {
+          :root { --anc-sidebar-w: ${desktopExpanded ? '15rem' : '4rem'}; }
+        }
+      `}</style>
     </>
   )
 }
