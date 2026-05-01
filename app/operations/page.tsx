@@ -2,35 +2,47 @@
 
 import { DashboardLayout } from '@/components/dashboard-layout'
 
-// Operations workspace — embeds the Twenty-backed ops platform inside the
-// services-dashboard chrome. End users see one URL (services.ancsports.net/
-// operations), one nav, one login. The iframe transparently loads
-// ops.ancsports.net which has been ANC-rebranded source-side.
-//
-// Cookie-domain SSO (Twenty configured with Domain=.ancsports.net) means a
-// single login covers both apps. If the user isn't yet authenticated, the
-// iframe shows Twenty's login; after that one-time login the cookie sticks.
-//
-// Legacy NocoDB-headless implementation lives at app/operations/page.legacy.tsx.bak —
-// retained during transition in case rollback is needed.
+const OPS_URL = 'https://ops.ancsports.net/'
 
 export default function OperationsPage() {
   return (
     <DashboardLayout>
-      <iframe
-        src="/embed-ops"
-        title="ANC Operations"
-        style={{
-          width: '100%',
-          height: 'calc(100vh - 64px)',
-          border: 'none',
-          display: 'block',
-          margin: 0,
-          padding: 0,
-        }}
-        // sandbox left off — Twenty needs full cookie + storage access for SSO
-        allow="clipboard-read; clipboard-write; fullscreen"
-      />
+      <div style={{ position: 'relative', height: 'calc(100vh - 64px)' }}>
+        <iframe
+          src={OPS_URL}
+          title="ANC Operations"
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+            margin: 0,
+            padding: 0,
+          }}
+          allow="clipboard-read; clipboard-write; fullscreen"
+        />
+        <a
+          href={OPS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 16,
+            zIndex: 10,
+            background: 'rgba(10, 82, 239, 0.95)',
+            color: '#fff',
+            padding: '6px 12px',
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 500,
+            textDecoration: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}
+        >
+          Open in new tab ↗
+        </a>
+      </div>
     </DashboardLayout>
   )
 }
