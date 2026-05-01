@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
     const whereParts = []
     if (vf.clause) whereParts.push(vf.clause.replace(/^AND /, ''))
     if (!includeInactive) whereParts.push(`v.is_active = true`)
+    // Hide legacy "DELETE …" prefixed venues — old data flag, never an active
+    // venue. Sales team prefixed names instead of toggling is_active=false.
+    whereParts.push(`v.name NOT ILIKE 'DELETE %'`)
     if (whereParts.length) whereClause = 'WHERE ' + whereParts.join(' AND ')
 
     const result = await query(

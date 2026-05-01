@@ -89,13 +89,13 @@ const statusColumns: KanbanColumn[] = [
 ] as const
 
 const statusTone: Record<string, string> = {
-  request_submitted: 'bg-sky-50 text-sky-700',
-  in_queue: 'bg-violet-50 text-violet-700',
-  in_progress: 'bg-amber-50 text-amber-700',
-  in_qc: 'bg-orange-50 text-orange-700',
-  client_review: 'bg-blue-50 text-blue-700',
-  approved: 'bg-emerald-50 text-emerald-700',
-  done: 'bg-zinc-100 text-zinc-600',
+  request_submitted: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  in_queue: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+  in_progress: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  in_qc: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300',
+  client_review: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  done: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300',
 }
 
 export default function DesignsPage() {

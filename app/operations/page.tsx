@@ -16,7 +16,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 
 export default function OperationsPage() {
   return (
-    <DashboardLayout title="Operations Workspace" description="Field operations, walkthroughs, inventory, and maintenance.">
+    <DashboardLayout>
       <iframe
         src="https://ops.ancsports.net/"
         title="ANC Operations"
