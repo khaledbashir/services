@@ -4,6 +4,20 @@ Living plan for replacing ANC's Airtable operations workflow with a native Servi
 
 Last updated: 2026-05-01
 
+## Short Version
+
+- We are building ANC's own Airtable-style Ops Workspace inside `/operations`.
+- Users should get the Airtable feel: left workspace nav, top view tabs, dense grids, filters, row drawers, linked records, and fast entry.
+- Baserow stays as a fallback/admin scratchpad. It is not the daily user experience.
+- First shell is live in code: `/operations` now shows Issues, Today's Issues, Displays, Walkthrough Log, and Maintenance from existing APIs.
+- Current build target: issues/display polish and deeper asset detail.
+
+## Current Status
+
+- Done: plan doc, native `/operations` shell, dense grids, counts, search, venue filter, sorting, row detail drawer, asset history link.
+- Done now: fast walkthrough entry inside `/operations`, venue-based display picker, result choices, and "new issue detected" creates a ticket through the existing ticket/Slack path.
+- Still needed: inline edits, richer asset detail, verified live Slack test, Nick walkthrough.
+
 ## Decision
 
 Build an Airtable-style operations experience inside `anc-services`.
@@ -98,30 +112,30 @@ Baserow can remain:
 
 ### Phase 2 - Issues Table
 
-- [ ] Open Issues view.
-- [ ] Today's Issues view.
-- [ ] Sort by title, venue, status, priority, assignee, created date.
-- [ ] Filters for venue/status/assignee/priority.
-- [ ] Row drawer with ticket details and linked display when available.
+- [x] Open Issues view.
+- [x] Today's Issues view.
+- [x] Sort by title, venue, status, priority, assignee, created date.
+- [~] Filters for venue/status/assignee/priority. Current: venue + search. Still needs status/assignee/priority controls.
+- [x] Row drawer with ticket details. Linked display still needs schema/API support.
 - [ ] Inline status update.
 
 ### Phase 3 - Displays / Assets Table
 
-- [ ] Dense display grid with venue, type, location, IP, tri-code, connected devices.
-- [ ] Filters for venue, display type, status, manufacturer, location.
-- [ ] Click asset opens detail drawer.
-- [ ] Link to existing asset history timeline.
+- [x] Dense display grid with venue, type, location, tri-code, connected devices.
+- [~] Filters for venue, display type, status, manufacturer, location. Current: venue + search.
+- [x] Click asset opens detail drawer.
+- [x] Link to existing asset history timeline.
 - [ ] Add connected devices/rack view.
 - [ ] Add docs/photo fields if available.
 
 ### Phase 4 - Walkthrough Workflow
 
-- [ ] Fast walkthrough add flow inside `/operations`.
-- [ ] Venue selection loads display/location choices.
-- [ ] Result options: no action needed, open issue exists, new issue detected.
-- [ ] New issue path creates ticket/issue automatically.
-- [ ] New issue appears in Today's Issues and Open Issues.
-- [ ] Slack notification fires to venue/default channel.
+- [x] Fast walkthrough add flow inside `/operations`.
+- [x] Venue selection loads display/location choices.
+- [x] Result options: no action needed, open issue exists, new issue detected.
+- [x] New issue path creates ticket/issue automatically.
+- [x] New issue appears in Today's Issues and Open Issues after refresh.
+- [~] Slack notification fires to venue/default channel through existing `/api/tickets`; needs live smoke test.
 - [ ] Link walkthrough to issue/display where schema supports it.
 
 ### Phase 5 - Maintenance Table
@@ -153,3 +167,4 @@ Baserow can remain:
 
 - 2026-05-01: Created this living plan from the stakeholder transcript and repo inspection.
 - 2026-05-01: Shipped first `/operations` workspace shell: left nav, view tabs, search, venue filter, sortable dense grids for Open Issues, Today's Issues, Displays, Walkthrough Log, and Maintenance, plus row detail drawer and asset history link. `npm run build` completed; local build still prints existing Docker-network warnings for cron/database routes.
+- 2026-05-01: Added walkthrough modal inside `/operations`: pick venue, pick venue-specific display/location, choose result, optionally create a new issue ticket, save walkthrough, refresh workspace. `npm run build` completed with the same existing local Docker-network warnings.

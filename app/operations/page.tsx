@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 
 type TabKey = 'issues' | 'today' | 'assets' | 'walkthroughs' | 'maintenance'
 type SortDir = 'asc' | 'desc'
+type WalkthroughResult = 'good' | 'open_issue' | 'new_issue'
 
 interface Ticket {
   id: string
@@ -73,6 +74,17 @@ interface Maintenance {
 }
 
 interface Venue { id: string; name: string }
+
+interface WalkthroughForm {
+  venue_id: string
+  display_id: string
+  result: WalkthroughResult
+  issue_title: string
+  issue_details: string
+  locations_visited: string
+  priority: string
+  notes: string
+}
 
 type SelectedRow =
   | { kind: 'Issue'; row: Ticket }
@@ -194,39 +206,51 @@ export default function OperationsPage() {
   const [sortColumn, setSortColumn] = useState('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selected, setSelected] = useState<SelectedRow | null>(null)
+  const [showWalkthroughForm, setShowWalkthroughForm] = useState(false)
+  const [walkthroughSaving, setWalkthroughSaving] = useState(false)
+  const [walkthroughError, setWalkthroughError] = useState<string | null>(null)
+  const [walkthroughForm, setWalkthroughForm] = useState<WalkthroughForm>({
+    venue_id: '',
+    display_id: '',
+    result: 'good',
+    issue_title: '',
+    issue_details: '',
+    locations_visited: '',
+    priority: 'medium',
+    notes: '',
+  })
+
+  const fetchOperationsData = async (showLoader = true) => {
+    if (showLoader) setLoading(true)
+    setError(null)
+    try {
+      const [ticketRes, assetRes, walkRes, maintenanceRes, venueRes] = await Promise.all([
+        fetch('/api/tickets'),
+        fetch('/api/inventory'),
+        fetch('/api/walkthroughs?limit=300'),
+        fetch('/api/maintenance?limit=300'),
+        fetch('/api/venues'),
+      ])
+      const responses = [ticketRes, assetRes, walkRes, maintenanceRes, venueRes]
+      const failed = responses.find((r) => !r.ok)
+      if (failed) throw new Error(`Operations data failed to load (${failed.status})`)
+
+      const [ticketData, assetData, walkData, maintenanceData, venueData] = await Promise.all(responses.map((r) => r.json()))
+      setTickets(ticketData.tickets || [])
+      setAssets(assetData.items || [])
+      setWalkthroughs(walkData.walkthroughs || [])
+      setMaintenance(maintenanceData.logs || [])
+      setVenues(venueData.venues || [])
+    } catch (err: any) {
+      setError(err?.message || 'Operations data failed to load')
+    } finally {
+      if (showLoader) setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const [ticketRes, assetRes, walkRes, maintenanceRes, venueRes] = await Promise.all([
-          fetch('/api/tickets'),
-          fetch('/api/inventory'),
-          fetch('/api/walkthroughs?limit=300'),
-          fetch('/api/maintenance?limit=300'),
-          fetch('/api/venues'),
-        ])
-        const responses = [ticketRes, assetRes, walkRes, maintenanceRes, venueRes]
-        const failed = responses.find((r) => !r.ok)
-        if (failed) throw new Error(`Operations data failed to load (${failed.status})`)
-
-        const [ticketData, assetData, walkData, maintenanceData, venueData] = await Promise.all(responses.map((r) => r.json()))
-        if (cancelled) return
-        setTickets(ticketData.tickets || [])
-        setAssets(assetData.items || [])
-        setWalkthroughs(walkData.walkthroughs || [])
-        setMaintenance(maintenanceData.logs || [])
-        setVenues(venueData.venues || [])
-      } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'Operations data failed to load')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
+    fetchOperationsData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -284,6 +308,107 @@ export default function OperationsPage() {
   }, [activeTab, openTickets, todayTickets, assets, walkthroughs, maintenance, venueFilter, q, sortColumn, sortDir])
 
   const activeCount = counts[activeTab]
+  const walkthroughVenueAssets = useMemo(
+    () => assets.filter((asset) => asset.venue_id && asset.venue_id === walkthroughForm.venue_id),
+    [assets, walkthroughForm.venue_id],
+  )
+  const selectedWalkthroughAsset = useMemo(
+    () => assets.find((asset) => asset.id === walkthroughForm.display_id) || null,
+    [assets, walkthroughForm.display_id],
+  )
+
+  const updateWalkthroughForm = (patch: Partial<WalkthroughForm>) => {
+    setWalkthroughForm((prev) => ({ ...prev, ...patch }))
+  }
+
+  const resetWalkthroughForm = () => {
+    setWalkthroughForm({
+      venue_id: '',
+      display_id: '',
+      result: 'good',
+      issue_title: '',
+      issue_details: '',
+      locations_visited: '',
+      priority: 'medium',
+      notes: '',
+    })
+    setWalkthroughError(null)
+  }
+
+  const submitWalkthrough = async (event: FormEvent) => {
+    event.preventDefault()
+    setWalkthroughError(null)
+    if (!walkthroughForm.venue_id) {
+      setWalkthroughError('Pick a venue first.')
+      return
+    }
+    if (walkthroughForm.result === 'new_issue' && !walkthroughForm.issue_title.trim()) {
+      setWalkthroughError('Add a short issue summary.')
+      return
+    }
+
+    setWalkthroughSaving(true)
+    try {
+      const displayLabel = selectedWalkthroughAsset
+        ? [
+            selectedWalkthroughAsset.item_name,
+            selectedWalkthroughAsset.location_code,
+            selectedWalkthroughAsset.screen_location,
+          ].filter(Boolean).join(' - ')
+        : ''
+      const locationsVisited = displayLabel || walkthroughForm.locations_visited.trim() || null
+      const issueText = [
+        walkthroughForm.issue_title.trim(),
+        walkthroughForm.issue_details.trim(),
+        displayLabel ? `Display: ${displayLabel}` : '',
+      ].filter(Boolean).join('\n\n')
+
+      if (walkthroughForm.result === 'new_issue') {
+        const ticketRes = await fetch('/api/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            venue_id: walkthroughForm.venue_id,
+            title: walkthroughForm.issue_title.trim(),
+            description: issueText,
+            priority: walkthroughForm.priority,
+            category: 'maintenance',
+            source: 'web',
+          }),
+        })
+        if (!ticketRes.ok) {
+          const data = await ticketRes.json().catch(() => ({}))
+          throw new Error(data?.error || 'Could not create the issue ticket.')
+        }
+      }
+
+      const walkRes = await fetch('/api/walkthroughs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          venue_id: walkthroughForm.venue_id,
+          result: walkthroughForm.result === 'good' ? 'good' : 'problem_detected',
+          locations_visited: locationsVisited,
+          issues_found: walkthroughForm.result === 'good' ? null : issueText || 'Existing issue observed',
+          notes: walkthroughForm.notes || null,
+          log_date: new Date().toISOString().slice(0, 10),
+        }),
+      })
+      if (!walkRes.ok) {
+        const data = await walkRes.json().catch(() => ({}))
+        throw new Error(data?.error || 'Could not save the walkthrough.')
+      }
+
+      setShowWalkthroughForm(false)
+      resetWalkthroughForm()
+      await fetchOperationsData(false)
+      setActiveTab(walkthroughForm.result === 'new_issue' ? 'today' : 'walkthroughs')
+    } catch (err: any) {
+      setWalkthroughError(err?.message || 'Walkthrough save failed.')
+    } finally {
+      setWalkthroughSaving(false)
+    }
+  }
 
   return (
     <DashboardLayout>
@@ -338,9 +463,13 @@ export default function OperationsPage() {
                   <p className="mt-0.5 text-xs text-zinc-500">{loading ? 'Loading rows...' : `${activeCount} active ${activeCount === 1 ? 'record' : 'records'}`}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link href="/walkthroughs" className="h-8 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
+                  <button
+                    type="button"
+                    onClick={() => setShowWalkthroughForm(true)}
+                    className="h-8 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
                     Log Walkthrough
-                  </Link>
+                  </button>
                   <Link href="/maintenance" className="h-8 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
                     Log Maintenance
                   </Link>
@@ -405,6 +534,19 @@ export default function OperationsPage() {
       </div>
 
       {selected && <DetailDrawer selected={selected} onClose={() => setSelected(null)} />}
+      {showWalkthroughForm && (
+        <WalkthroughModal
+          venues={venues}
+          assets={walkthroughVenueAssets}
+          value={walkthroughForm}
+          selectedAsset={selectedWalkthroughAsset}
+          saving={walkthroughSaving}
+          error={walkthroughError}
+          onChange={updateWalkthroughForm}
+          onClose={() => { setShowWalkthroughForm(false); resetWalkthroughForm() }}
+          onSubmit={submitWalkthrough}
+        />
+      )}
     </DashboardLayout>
   )
 }
@@ -575,6 +717,183 @@ function DetailDrawer({ selected, onClose }: { selected: SelectedRow; onClose: (
           ))}
         </div>
       </aside>
+    </div>
+  )
+}
+
+function WalkthroughModal({
+  venues,
+  assets,
+  value,
+  selectedAsset,
+  saving,
+  error,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  venues: Venue[]
+  assets: Asset[]
+  value: WalkthroughForm
+  selectedAsset: Asset | null
+  saving: boolean
+  error: string | null
+  onChange: (patch: Partial<WalkthroughForm>) => void
+  onClose: () => void
+  onSubmit: (event: FormEvent) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-zinc-950/30 px-4 py-10" onClick={onClose}>
+      <form
+        onSubmit={onSubmit}
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-2xl overflow-hidden rounded border border-zinc-200 bg-white shadow-2xl"
+      >
+        <div className="border-b border-zinc-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">Walkthrough</div>
+              <h3 className="mt-1 text-lg font-semibold text-zinc-950">Log Site Visit</h3>
+              <p className="mt-1 text-xs text-zinc-500">Pick a venue, choose the visited display/location, then mark the result.</p>
+            </div>
+            <button type="button" onClick={onClose} className="rounded border border-zinc-200 px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-50">
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 px-5 py-4">
+          {error && <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-xs font-medium text-zinc-500">Venue</span>
+              <select
+                value={value.venue_id}
+                onChange={(event) => onChange({ venue_id: event.target.value, display_id: '' })}
+                className="h-9 rounded border border-zinc-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
+              >
+                <option value="">Select venue</option>
+                {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+              </select>
+            </label>
+
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-xs font-medium text-zinc-500">Display / Location</span>
+              <select
+                value={value.display_id}
+                onChange={(event) => onChange({ display_id: event.target.value })}
+                disabled={!value.venue_id}
+                className="h-9 rounded border border-zinc-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25 disabled:bg-zinc-50 disabled:text-zinc-400"
+              >
+                <option value="">{value.venue_id ? 'Select display or use manual location' : 'Pick venue first'}</option>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {[asset.item_name, asset.location_code, asset.screen_location].filter(Boolean).join(' - ')}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="grid gap-1.5 text-sm">
+            <span className="text-xs font-medium text-zinc-500">Manual location / locations visited</span>
+            <input
+              value={value.locations_visited}
+              onChange={(event) => onChange({ locations_visited: event.target.value })}
+              placeholder={selectedAsset ? 'Optional notes about location walked' : 'Example: lobby ribbon, rack room, concourse display'}
+              className="h-9 rounded border border-zinc-200 px-3 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
+            />
+          </label>
+
+          <div className="grid gap-2">
+            <span className="text-xs font-medium text-zinc-500">Result</span>
+            <div className="grid gap-2 md:grid-cols-3">
+              {[
+                { value: 'good', label: 'No Action Needed' },
+                { value: 'open_issue', label: 'Open Issue Exists' },
+                { value: 'new_issue', label: 'New Issue Detected' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onChange({ result: option.value as WalkthroughResult })}
+                  className={`h-10 rounded border px-3 text-sm font-medium ${
+                    value.result === option.value
+                      ? 'border-[#0A52EF] bg-[#0A52EF] text-white'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {value.result !== 'good' && (
+            <div className="grid gap-3 rounded border border-amber-200 bg-amber-50 p-3">
+              <div className="grid gap-3 md:grid-cols-[1fr_140px]">
+                <label className="grid gap-1.5 text-sm">
+                  <span className="text-xs font-medium text-amber-800">Issue summary</span>
+                  <input
+                    value={value.issue_title}
+                    onChange={(event) => onChange({ issue_title: event.target.value })}
+                    placeholder={value.result === 'new_issue' ? 'Example: display offline' : 'Optional: existing issue observed'}
+                    className="h-9 rounded border border-amber-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="text-xs font-medium text-amber-800">Priority</span>
+                  <select
+                    value={value.priority}
+                    onChange={(event) => onChange({ priority: event.target.value })}
+                    disabled={value.result !== 'new_issue'}
+                    className="h-9 rounded border border-amber-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25 disabled:bg-amber-100/50"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </label>
+              </div>
+              <label className="grid gap-1.5 text-sm">
+                <span className="text-xs font-medium text-amber-800">Details</span>
+                <textarea
+                  value={value.issue_details}
+                  onChange={(event) => onChange({ issue_details: event.target.value })}
+                  rows={3}
+                  placeholder="What did the tech see? What display/device is affected?"
+                  className="rounded border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
+                />
+              </label>
+              {value.result === 'new_issue' && (
+                <p className="text-xs text-amber-800">Saving will create a ticket, which also sends the normal Slack notification.</p>
+              )}
+            </div>
+          )}
+
+          <label className="grid gap-1.5 text-sm">
+            <span className="text-xs font-medium text-zinc-500">Walkthrough notes</span>
+            <textarea
+              value={value.notes}
+              onChange={(event) => onChange({ notes: event.target.value })}
+              rows={3}
+              placeholder="Optional technician notes"
+              className="rounded border border-zinc-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/25"
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-5 py-3">
+          <button type="button" onClick={onClose} className="h-9 rounded border border-zinc-200 bg-white px-3 text-sm text-zinc-700 hover:bg-zinc-50">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving} className="h-9 rounded bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60">
+            {saving ? 'Saving...' : value.result === 'new_issue' ? 'Save + Create Issue' : 'Save Walkthrough'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
