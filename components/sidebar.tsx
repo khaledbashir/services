@@ -166,6 +166,7 @@ export function Sidebar() {
       role: 'tech_support',
       links: [
         { href: '/staff', label: 'Staff', role: 'admin' },
+        { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
         { href: '/settings', label: 'Settings', role: 'admin' },
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
       ],
