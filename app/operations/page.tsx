@@ -18,7 +18,7 @@ export default function OperationsPage() {
   return (
     <DashboardLayout>
       <iframe
-        src="https://ops.ancsports.net/?embed=1"
+        src="https://nocodb.ancsports.net/"
         title="ANC Operations"
         style={{
           width: '100%',
