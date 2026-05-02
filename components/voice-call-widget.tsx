@@ -45,6 +45,12 @@ export function VoiceCallWidget({
   const recogRef = useRef<unknown>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const finalTranscriptRef = useRef('')
+  const interimRef = useRef('')
+  // True between recog.start() and the next onend so we know the lifecycle
+  // is actually running. Avoids the closured `recState === 'listening'`
+  // check inside onend, which goes stale because the handler is bound when
+  // recState is still 'idle'.
+  const recRunningRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -129,6 +135,7 @@ export function VoiceCallWidget({
     }
 
     finalTranscriptRef.current = ''
+    interimRef.current = ''
     setInterim('')
     setError(null)
     const recog = new (Ctor as new () => {
@@ -152,29 +159,51 @@ export function VoiceCallWidget({
         if (result.isFinal) finalTranscriptRef.current += transcript
         else interimText += transcript
       }
+      interimRef.current = interimText
       setInterim(interimText)
     }
     recog.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return
-      setError(`mic error: ${e.error}`)
+      // 'aborted' fires when we manually stop — treat it like a normal stop.
+      // 'no-speech' is harmless silence; recog will end naturally.
+      if (e.error === 'no-speech') return
+      if (e.error !== 'aborted') {
+        setError(`mic error: ${e.error}`)
+      }
+      recRunningRef.current = false
       setRecState('idle')
     }
     recog.onend = () => {
-      const finalText = (finalTranscriptRef.current + ' ' + interim).trim()
+      // Always reset UI when recog ends, regardless of how we got here.
+      // Don't rely on closured recState — it goes stale.
+      const wasRunning = recRunningRef.current
+      recRunningRef.current = false
+      const finalText = (finalTranscriptRef.current + ' ' + interimRef.current).trim()
+      finalTranscriptRef.current = ''
+      interimRef.current = ''
       setInterim('')
-      if (recState === 'listening') {
-        if (finalText.length > 0) sendTurn(finalText)
-        else setRecState('idle')
+      if (wasRunning && finalText.length > 0) {
+        sendTurn(finalText)
+      } else {
+        setRecState('idle')
       }
     }
     recogRef.current = recog
+    recRunningRef.current = true
     setRecState('listening')
     recog.start()
-  }, [greeting, interim, recState, sendTurn, turns.length, playTts])
+  }, [greeting, sendTurn, turns.length, playTts])
 
   const stopListening = useCallback(() => {
-    const recog = recogRef.current as { stop: () => void } | null
-    if (recog) recog.stop()
+    const recog = recogRef.current as { stop: () => void; abort?: () => void } | null
+    if (!recog) return
+    try {
+      recog.stop()
+    } catch (err) {
+      console.error('recog.stop() failed:', err)
+      // Force the UI back to idle even if the underlying API misbehaved.
+      recRunningRef.current = false
+      setRecState('idle')
+    }
   }, [])
 
   const handleAudioEnded = () => {
