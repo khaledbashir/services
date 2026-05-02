@@ -1,4 +1,6 @@
 import { DashboardLayout } from '@/components/dashboard-layout'
+import Script from 'next/script'
+import { createElement } from 'react'
 
 const agentUrl =
   'https://elevenlabs.io/app/talk-to?agent_id=agent_7601kqk8kx3pfsnsh603zw5nkvhv&branch_id=agtbrch_4601kqk8kz71fy0vadxr959xs4kr'
@@ -150,11 +152,14 @@ export default function VoiceAgentDemoPage() {
                   </div>
                 </div>
               </div>
-              <iframe
-                src={agentUrl}
-                title="ANC ElevenLabs Voice Agent"
-                className="min-h-0 flex-1 border-0 bg-white"
-                allow="microphone; autoplay; clipboard-read; clipboard-write"
+              <div className="flex min-h-0 flex-1 items-center justify-center bg-[#f7f9fc] p-6">
+                {createElement('elevenlabs-convai', {
+                  'agent-id': 'agent_7601kqk8kx3pfsnsh603zw5nkvhv',
+                })}
+              </div>
+              <Script
+                src="https://unpkg.com/@elevenlabs/convai-widget-embed"
+                strategy="afterInteractive"
               />
             </div>
           </aside>
