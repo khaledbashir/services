@@ -11,6 +11,12 @@ export interface ProviderConfig {
   availableModels?: string[]
   /** Human-readable label for the UI. */
   label?: string
+  /**
+   * Surface this provider near the top of UI dropdowns. Used for
+   * voice-tuned / curated providers (Mercury, MiMo) so they aren't
+   * buried under the long AI_PROVIDERS_JSON list.
+   */
+  featured?: boolean
 }
 
 function providerPriority(p: ProviderConfig): number {
@@ -36,11 +42,12 @@ function autoDiscoveredProviders(): ProviderConfig[] {
     // buildRequestBody() when model name contains "mercury".
     out.push({
       name: 'inception-mercury',
-      label: 'Inception Mercury',
+      label: '⚡ Inception Mercury (recommended for voice)',
       baseUrl: 'https://api.inceptionlabs.ai/v1',
       apiKey: process.env.INCEPTION_API_KEY,
       model: process.env.INCEPTION_MODEL || 'mercury-2',
       availableModels: ['mercury-2'],
+      featured: true,
     })
   }
 
@@ -55,6 +62,7 @@ function autoDiscoveredProviders(): ProviderConfig[] {
       apiKey: process.env.MIMO_API_KEY,
       model: process.env.MIMO_CHAT_MODEL || 'mimo-v2.5-pro',
       availableModels: ['mimo-v2.5-pro', 'mimo-v2.5', 'mimo-v2-pro', 'mimo-v2-omni'],
+      featured: true,
     })
   }
 
@@ -353,6 +361,13 @@ export interface AgentOverrides {
   systemPrompt?: string | null
   kbText?: string | null
   greeting?: string | null
+  /**
+   * Per-agent tool allowlist.
+   *  null/undefined → all skills available (default)
+   *  [] empty array → NO tools (agent can only talk)
+   *  [name, ...] → only those names (intersected with role allowlist)
+   */
+  allowedTools?: string[] | null
 }
 
 async function buildSystemPrompt(
@@ -597,7 +612,11 @@ export async function runChat(params: {
     [chatId]
   )
 
-  const tools = await toolDefinitions(userRole)
+  const allTools = await toolDefinitions(userRole)
+  const allowed = agentOverrides?.allowedTools
+  const tools = allowed === null || allowed === undefined
+    ? allTools
+    : allTools.filter(t => allowed.includes(t.function.name))
 
   // Build messages array
   const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext, channel, agentOverrides) }]

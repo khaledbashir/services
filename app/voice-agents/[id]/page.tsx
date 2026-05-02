@@ -6,6 +6,29 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { VoiceCallWidget } from '@/components/voice-call-widget'
 
+interface ToolNode {
+  name: string
+  description: string
+  category?: string
+  role?: string
+  icon?: string
+}
+
+interface SubgroupNode {
+  key: string
+  label: string
+  description?: string
+  comingSoon?: boolean
+  tools: ToolNode[]
+}
+
+interface GroupNode {
+  key: 'anc' | 'general'
+  label: string
+  description: string
+  subgroups: SubgroupNode[]
+}
+
 interface KbDocument {
   id: string
   type: 'file' | 'url' | 'text'
@@ -20,6 +43,7 @@ interface AvailableProvider {
   label: string
   model: string
   availableModels: string[]
+  featured?: boolean
 }
 
 interface VoiceAgent {
@@ -34,6 +58,7 @@ interface VoiceAgent {
   ttsModel: string | null
   llmProvider: string | null
   llmModel: string | null
+  allowedTools: string[] | null
   visibility: 'internal' | 'public'
   embedOrigins: string[] | null
   greeting: string | null
@@ -257,6 +282,14 @@ function SettingsForm({
   const [llmProvider, setLlmProvider] = useState(agent.llmProvider || '')
   const [llmModel, setLlmModel] = useState(agent.llmModel || '')
   const [llmProviders, setLlmProviders] = useState<AvailableProvider[]>([])
+  // Tool permissions: null = all tools (default for legacy agents), otherwise
+  // explicit allowlist. We keep a Set for fast checkbox state.
+  const [toolMode, setToolMode] = useState<'all' | 'custom'>(
+    agent.allowedTools === null || agent.allowedTools === undefined ? 'all' : 'custom'
+  )
+  const [allowedTools, setAllowedTools] = useState<Set<string>>(
+    new Set(agent.allowedTools || [])
+  )
   const [visibility, setVisibility] = useState(agent.visibility)
   const [saving, setSaving] = useState(false)
 
@@ -284,6 +317,7 @@ function SettingsForm({
       ttsVoice,
       llmProvider: llmProvider || null,
       llmModel: llmModel || null,
+      allowedTools: toolMode === 'all' ? null : Array.from(allowedTools),
       visibility,
     } as Partial<VoiceAgent>)
     setSaving(false)
@@ -332,9 +366,20 @@ function SettingsForm({
             className={inputCls}
           >
             <option value="">Default (global pool)</option>
-            {llmProviders.map((p) => (
-              <option key={p.name} value={p.name}>{p.label} ({p.model})</option>
-            ))}
+            {llmProviders.filter(p => p.featured).length > 0 && (
+              <optgroup label="Featured for voice">
+                {llmProviders.filter(p => p.featured).map((p) => (
+                  <option key={p.name} value={p.name}>{p.label} ({p.model})</option>
+                ))}
+              </optgroup>
+            )}
+            {llmProviders.filter(p => !p.featured).length > 0 && (
+              <optgroup label="All providers">
+                {llmProviders.filter(p => !p.featured).map((p) => (
+                  <option key={p.name} value={p.name}>{p.label} ({p.model})</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </Field>
         <Field label="LLM model" hint="Specific model on the chosen provider. Leave on default unless you know you want a different one.">
@@ -355,6 +400,13 @@ function SettingsForm({
           )}
         </Field>
       </div>
+
+      <ToolPermissionsTree
+        mode={toolMode}
+        setMode={setToolMode}
+        allowed={allowedTools}
+        setAllowed={setAllowedTools}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="TTS provider">
@@ -427,6 +479,207 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="mt-1 block text-xs text-zinc-500">{hint}</span>}
     </label>
+  )
+}
+
+function ToolPermissionsTree({
+  mode,
+  setMode,
+  allowed,
+  setAllowed,
+}: {
+  mode: 'all' | 'custom'
+  setMode: (m: 'all' | 'custom') => void
+  allowed: Set<string>
+  setAllowed: (s: Set<string>) => void
+}) {
+  const [groups, setGroups] = useState<GroupNode[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ anc: true, general: false })
+  const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    fetch('/api/voice-agents/tool-tree')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) setGroups(data.groups || [])
+        else setError(data.error || 'Failed to load tools')
+      })
+      .catch((err) => setError(String(err)))
+  }, [])
+
+  const toggleTool = (name: string) => {
+    const next = new Set(allowed)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+    setAllowed(next)
+  }
+
+  const toggleSubgroup = (sub: SubgroupNode) => {
+    const subToolNames = sub.tools.map((t) => t.name)
+    const allChecked = subToolNames.every((n) => allowed.has(n))
+    const next = new Set(allowed)
+    if (allChecked) {
+      for (const n of subToolNames) next.delete(n)
+    } else {
+      for (const n of subToolNames) next.add(n)
+    }
+    setAllowed(next)
+  }
+
+  const toggleGroup = (group: GroupNode) => {
+    const all = group.subgroups.flatMap((s) => s.tools.map((t) => t.name))
+    const allChecked = all.length > 0 && all.every((n) => allowed.has(n))
+    const next = new Set(allowed)
+    if (allChecked) {
+      for (const n of all) next.delete(n)
+    } else {
+      for (const n of all) next.add(n)
+    }
+    setAllowed(next)
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Tool permissions</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Restrict which capabilities this agent can call. Default is full access; switch to custom to lock the agent down to a curated set.
+        </p>
+      </div>
+
+      <div className="flex gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={mode === 'all'} onChange={() => setMode('all')} />
+          All tools (full access)
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={mode === 'custom'} onChange={() => setMode('custom')} />
+          Custom — pick from the tree below
+        </label>
+      </div>
+
+      {mode === 'custom' && (
+        <div className="space-y-2">
+          {error && (
+            <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800">{error}</div>
+          )}
+          {!groups && !error && <p className="text-xs text-zinc-500">Loading tools…</p>}
+          {groups && groups.length > 0 && (
+            <div className="space-y-2">
+              {groups.map((group) => {
+                const groupTools = group.subgroups.flatMap((s) => s.tools.map((t) => t.name))
+                const groupAllChecked = groupTools.length > 0 && groupTools.every((n) => allowed.has(n))
+                const groupSomeChecked = groupTools.some((n) => allowed.has(n))
+                const isOpen = !!openGroups[group.key]
+                return (
+                  <div key={group.key} className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex items-center justify-between gap-2 bg-zinc-50 px-3 py-2 dark:bg-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => setOpenGroups({ ...openGroups, [group.key]: !isOpen })}
+                        className="flex flex-1 items-center gap-2 text-left text-sm font-bold"
+                      >
+                        <span className="text-xs">{isOpen ? '▼' : '▶'}</span>
+                        <span>{group.label}</span>
+                        <span className="text-xs font-normal text-zinc-500">({groupTools.length} tools)</span>
+                      </button>
+                      <label className="flex shrink-0 items-center gap-1 text-xs text-zinc-600 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={groupAllChecked}
+                          ref={(el) => { if (el) el.indeterminate = !groupAllChecked && groupSomeChecked }}
+                          onChange={() => toggleGroup(group)}
+                          disabled={groupTools.length === 0}
+                        />
+                        Select all
+                      </label>
+                    </div>
+                    {isOpen && (
+                      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {group.subgroups.map((sub) => {
+                          const subToolNames = sub.tools.map((t) => t.name)
+                          const allSubChecked = subToolNames.length > 0 && subToolNames.every((n) => allowed.has(n))
+                          const someSubChecked = subToolNames.some((n) => allowed.has(n))
+                          const subOpen = !!openSubs[sub.key]
+                          return (
+                            <div key={sub.key} className="bg-white dark:bg-zinc-900">
+                              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenSubs({ ...openSubs, [sub.key]: !subOpen })}
+                                  className="flex flex-1 items-center gap-2 text-left"
+                                  disabled={sub.tools.length === 0}
+                                >
+                                  <span className="text-xs">{subOpen ? '▼' : '▶'}</span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                      {sub.label}
+                                      {sub.comingSoon && (
+                                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                                          Coming soon
+                                        </span>
+                                      )}
+                                    </p>
+                                    {sub.description && (
+                                      <p className="text-[11px] text-zinc-500">{sub.description}</p>
+                                    )}
+                                  </div>
+                                  <span className="ml-auto text-xs text-zinc-500">{sub.tools.length}</span>
+                                </button>
+                                <label className="flex shrink-0 items-center gap-1 text-xs text-zinc-600 dark:text-zinc-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={allSubChecked}
+                                    ref={(el) => { if (el) el.indeterminate = !allSubChecked && someSubChecked }}
+                                    onChange={() => toggleSubgroup(sub)}
+                                    disabled={sub.tools.length === 0}
+                                  />
+                                </label>
+                              </div>
+                              {subOpen && sub.tools.length > 0 && (
+                                <ul className="divide-y divide-zinc-100 bg-zinc-50/40 dark:divide-zinc-800 dark:bg-zinc-900/50">
+                                  {sub.tools.map((tool) => (
+                                    <li key={tool.name} className="px-5 py-1.5">
+                                      <label className="flex items-start gap-2 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          checked={allowed.has(tool.name)}
+                                          onChange={() => toggleTool(tool.name)}
+                                          className="mt-0.5"
+                                        />
+                                        <div className="min-w-0">
+                                          <p className="font-mono text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">
+                                            {tool.icon ? `${tool.icon} ` : ''}{tool.name}
+                                            {tool.role && tool.role !== 'any' && (
+                                              <span className="ml-2 rounded bg-zinc-200 px-1.5 py-0.5 text-[9px] uppercase text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                                                {tool.role}
+                                              </span>
+                                            )}
+                                          </p>
+                                          <p className="mt-0.5 truncate text-[11px] text-zinc-600 dark:text-zinc-400">{tool.description}</p>
+                                        </div>
+                                      </label>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <p className="text-[11px] text-zinc-500">
+            {allowed.size} tool{allowed.size === 1 ? '' : 's'} selected. Save the form to apply.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -157,15 +157,17 @@ export function Sidebar() {
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
       ],
     },
-    {
-      key: 'voice-agents',
-      label: 'Voice Agents',
-      icon: <Icon>{IC.voice}</Icon>,
-      role: 'technician',
-      links: [
-        { href: '/voice-agents', label: 'All voice agents' },
-      ],
-    },
+    // Hidden 2026-05-02 — work in progress, surface to the team once Joe/
+    // Charlie sign off. Route still works at /voice-agents direct.
+    // {
+    //   key: 'voice-agents',
+    //   label: 'Voice Agents',
+    //   icon: <Icon>{IC.voice}</Icon>,
+    //   role: 'technician',
+    //   links: [
+    //     { href: '/voice-agents', label: 'All voice agents' },
+    //   ],
+    // },
     {
       key: 'external',
       label: 'External',

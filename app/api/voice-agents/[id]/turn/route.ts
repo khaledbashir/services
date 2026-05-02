@@ -95,6 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         systemPrompt: agent.systemPrompt,
         kbText: mergedKbText,
         greeting: agent.greeting,
+        allowedTools: agent.allowedTools,
       },
       emit,
     })
