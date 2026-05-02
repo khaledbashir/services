@@ -54,6 +54,19 @@ async function main() {
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_chats_voice_agent ON ai_chats(voice_agent_id);`)
 
+    // Each agent gets a dedicated AnythingLLM workspace for its KB so
+    // file uploads / URL ingestion / vector search are isolated per agent.
+    // Lazy-created on first KB upload to avoid creating empty workspaces.
+    await client.query(`
+      ALTER TABLE voice_agents ADD COLUMN IF NOT EXISTS allm_workspace_slug TEXT;
+    `)
+    // Document list cached locally so the KB tab can render without
+    // round-tripping AnythingLLM on every page load. Refreshed on
+    // upload / delete. Each entry: {id, type, name, source, addedAt}.
+    await client.query(`
+      ALTER TABLE voice_agents ADD COLUMN IF NOT EXISTS kb_documents JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `)
+
     // Seed the default internal agent if nothing exists yet.
     const existing = await client.query(`SELECT 1 FROM voice_agents LIMIT 1`)
     if (existing.rowCount === 0) {

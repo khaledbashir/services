@@ -1,5 +1,17 @@
 import { query } from '@/lib/db'
 
+export interface KbDocument {
+  id: string
+  type: 'file' | 'url' | 'text'
+  name: string
+  /** AnythingLLM document location (the value used for embedding refs). */
+  source: string
+  /** Original URL when type === 'url'. */
+  url?: string
+  /** ISO timestamp the doc was added. */
+  addedAt: string
+}
+
 export interface VoiceAgent {
   id: string
   slug: string
@@ -16,6 +28,8 @@ export interface VoiceAgent {
   embedOrigins: string[] | null
   greeting: string | null
   isActive: boolean
+  allmWorkspaceSlug: string | null
+  kbDocuments: KbDocument[]
   createdBy: string | null
   createdAt: string
   updatedAt: string
@@ -37,6 +51,8 @@ interface AgentRow {
   embed_origins: string[] | null
   greeting: string | null
   is_active: boolean
+  allm_workspace_slug: string | null
+  kb_documents: KbDocument[] | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -59,10 +75,26 @@ function rowOf(r: AgentRow): VoiceAgent {
     embedOrigins: r.embed_origins,
     greeting: r.greeting,
     isActive: r.is_active,
+    allmWorkspaceSlug: r.allm_workspace_slug,
+    kbDocuments: Array.isArray(r.kb_documents) ? r.kb_documents : [],
     createdBy: r.created_by,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
+}
+
+export async function setAgentWorkspaceSlug(id: string, slug: string): Promise<void> {
+  await query(
+    `UPDATE voice_agents SET allm_workspace_slug = $1, updated_at = NOW() WHERE id = $2::uuid`,
+    [slug, id]
+  )
+}
+
+export async function setAgentKbDocuments(id: string, docs: KbDocument[]): Promise<void> {
+  await query(
+    `UPDATE voice_agents SET kb_documents = $1::jsonb, updated_at = NOW() WHERE id = $2::uuid`,
+    [JSON.stringify(docs), id]
+  )
 }
 
 export async function listVoiceAgents(opts: { includeInactive?: boolean } = {}): Promise<VoiceAgent[]> {

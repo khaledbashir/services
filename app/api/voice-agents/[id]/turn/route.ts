@@ -3,6 +3,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { query } from '@/lib/db'
 import { runChat, type StreamEvent } from '@/lib/ai/agent'
 import { getVoiceAgent } from '@/lib/voice/agents'
+import { vectorSearch } from '@/lib/voice/anythingllm'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const agent = await getVoiceAgent(params.id)
@@ -58,6 +59,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
   }
 
+  // RAG retrieval — vector-search the agent's KB workspace for snippets
+  // relevant to this turn and merge them into the system prompt as
+  // additional context. Best-effort: the helper swallows errors so a
+  // workspace outage doesn't block the conversation.
+  let retrievedKb: string | null = null
+  if (agent.allmWorkspaceSlug && agent.kbDocuments.length > 0) {
+    const chunks = await vectorSearch(agent.allmWorkspaceSlug, message, 4)
+    if (chunks.length > 0) {
+      retrievedKb = chunks
+        .map((c, i) => `[${i + 1}] ${(c.text || '').slice(0, 800)}`)
+        .join('\n\n')
+    }
+  }
+
+  // Stitch retrieved KB chunks onto the agent's static kbText so both
+  // sources reach the model in one block.
+  const mergedKbText = [agent.kbText?.trim(), retrievedKb ? `Retrieved from knowledge base:\n${retrievedKb}` : null]
+    .filter(Boolean)
+    .join('\n\n') || null
+
   try {
     await runChat({
       chatId,
@@ -71,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         name: agent.name,
         description: agent.description,
         systemPrompt: agent.systemPrompt,
-        kbText: agent.kbText,
+        kbText: mergedKbText,
         greeting: agent.greeting,
       },
       emit,

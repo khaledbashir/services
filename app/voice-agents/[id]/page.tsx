@@ -6,6 +6,15 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { VoiceCallWidget } from '@/components/voice-call-widget'
 
+interface KbDocument {
+  id: string
+  type: 'file' | 'url' | 'text'
+  name: string
+  source: string
+  url?: string
+  addedAt: string
+}
+
 interface VoiceAgent {
   id: string
   slug: string
@@ -21,6 +30,8 @@ interface VoiceAgent {
   embedOrigins: string[] | null
   greeting: string | null
   isActive: boolean
+  allmWorkspaceSlug: string | null
+  kbDocuments: KbDocument[]
 }
 
 const TTS_VOICE_OPTIONS: Record<string, string[]> = {
@@ -276,15 +287,17 @@ function SettingsForm({
           placeholder="You are the receptionist for ANC Sports. Always confirm the venue before creating a ticket…"
         />
       </Field>
-      <Field label="Knowledge base" hint="Plain text the agent should remember for this conversation. Add team contacts, policies, scripts, anything reference-y.">
+      <Field label="Knowledge base — inline notes" hint="Plain text the agent always sees. Use for short, always-relevant rules. Bigger reference material → upload as a file or URL below.">
         <textarea
           value={kbText}
           onChange={(e) => setKbText(e.target.value)}
-          rows={6}
+          rows={5}
           className={inputCls}
           placeholder="ANC team:&#10;- Joe Occhipinti runs ops; route urgent escalations to him.&#10;- Charlie Dinh runs IT; tech-platform issues go to him.&#10;- Default ticket assignee for non-critical issues: ops queue."
         />
       </Field>
+
+      <KbAttachments agent={agent} />
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="TTS provider">
           <select
@@ -356,5 +369,207 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="mt-1 block text-xs text-zinc-500">{hint}</span>}
     </label>
+  )
+}
+
+function KbAttachments({ agent }: { agent: VoiceAgent }) {
+  const [docs, setDocs] = useState<KbDocument[]>(agent.kbDocuments || [])
+  const [dragActive, setDragActive] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+
+  const refresh = async () => {
+    const res = await fetch(`/api/voice-agents/${agent.id}/kb`)
+    const data = await res.json()
+    if (data.ok) setDocs(data.documents || [])
+  }
+
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
+    setBusy(true)
+    setError(null)
+    setStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`)
+    try {
+      const form = new FormData()
+      for (const f of files) form.append('file', f)
+      const res = await fetch(`/api/voice-agents/${agent.id}/kb`, {
+        method: 'POST',
+        body: form,
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `upload failed (${res.status})`)
+      setDocs(data.documents || [])
+      setStatus(`Added ${(data.added || []).length} document${(data.added || []).length === 1 ? '' : 's'}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setStatus(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addUrl = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const cleaned = url.trim()
+    if (!cleaned) return
+    setBusy(true)
+    setError(null)
+    setStatus(`Scraping ${cleaned}…`)
+    try {
+      const res = await fetch(`/api/voice-agents/${agent.id}/kb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cleaned }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `url ingest failed (${res.status})`)
+      setDocs(data.documents || [])
+      setUrl('')
+      setStatus(`Added ${(data.added || []).length} document${(data.added || []).length === 1 ? '' : 's'} from URL.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setStatus(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeDoc = async (docId: string) => {
+    if (!confirm('Remove this document from the agent\'s knowledge base?')) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/voice-agents/${agent.id}/kb`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: docId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `remove failed (${res.status})`)
+      setDocs(data.documents || [])
+      setStatus('Document removed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Knowledge files & URLs
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Drop files (PDF, DOCX, TXT, MD) or paste a URL. Content is embedded into a searchable knowledge base — the agent retrieves the most relevant chunks during every voice turn.
+        </p>
+      </div>
+
+      <div
+        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true) }}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true) }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false) }}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setDragActive(false)
+          if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files)
+        }}
+        className={[
+          'rounded-md border-2 border-dashed px-4 py-6 text-center text-sm transition',
+          dragActive
+            ? 'border-[#0A52EF] bg-[#0A52EF]/10 text-[#0A52EF]'
+            : 'border-zinc-300 bg-white text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400',
+        ].join(' ')}
+      >
+        <p className="font-semibold">Drag & drop files here</p>
+        <p className="mt-1 text-xs">or</p>
+        <label className="mt-2 inline-block cursor-pointer rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900">
+          Browse files
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void uploadFiles(e.target.files)
+              e.currentTarget.value = ''
+            }}
+          />
+        </label>
+      </div>
+
+      <form onSubmit={addUrl} className="flex gap-2">
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://docs.example.com/policy"
+          className={inputCls}
+          disabled={busy}
+        />
+        <button
+          type="submit"
+          disabled={busy || !url.trim()}
+          className="rounded-md bg-[#0A52EF] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          Add URL
+        </button>
+      </form>
+
+      {(status || error) && (
+        <div
+          className={`rounded-md px-3 py-2 text-xs ${
+            error
+              ? 'border border-rose-300 bg-rose-50 text-rose-800'
+              : 'border border-emerald-300 bg-emerald-50 text-emerald-800'
+          }`}
+        >
+          {error || status}
+        </div>
+      )}
+
+      {docs.length > 0 ? (
+        <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+          {docs.map((d) => (
+            <li key={d.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">
+                  {d.type === 'url' ? '🔗 ' : '📄 '}
+                  {d.name}
+                </p>
+                {d.url && (
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate font-mono text-[11px] text-zinc-500 hover:text-[#0A52EF]"
+                  >
+                    {d.url}
+                  </a>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => removeDoc(d.id)}
+                disabled={busy}
+                className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold text-zinc-600 hover:border-rose-300 hover:text-rose-600 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-zinc-500">No documents attached yet.</p>
+      )}
+
+      <p className="text-[11px] text-zinc-500">
+        Powered by AnythingLLM workspace <code className="font-mono">{agent.allmWorkspaceSlug || 'created on first upload'}</code>. Refreshing the page also refetches the latest list — <button type="button" onClick={() => void refresh()} className="underline">refresh now</button>.
+      </p>
+    </div>
   )
 }
