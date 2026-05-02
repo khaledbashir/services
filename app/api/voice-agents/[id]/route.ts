@@ -33,6 +33,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (typeof body.ttsVoice === 'string') patch.ttsVoice = body.ttsVoice
   if (typeof body.ttsModel === 'string' || body.ttsModel === null) patch.ttsModel = body.ttsModel
   if (typeof body.llmProvider === 'string' || body.llmProvider === null) patch.llmProvider = body.llmProvider
+  if (typeof body.llmModel === 'string' || body.llmModel === null) patch.llmModel = body.llmModel
   if (Array.isArray(body.allowedTools) || body.allowedTools === null) {
     patch.allowedTools = Array.isArray(body.allowedTools)
       ? body.allowedTools.filter((s: unknown) => typeof s === 'string')

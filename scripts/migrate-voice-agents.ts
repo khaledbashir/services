@@ -67,6 +67,14 @@ async function main() {
       ALTER TABLE voice_agents ADD COLUMN IF NOT EXISTS kb_documents JSONB NOT NULL DEFAULT '[]'::jsonb;
     `)
 
+    // Per-agent LLM model override. The provider name still picks WHICH
+    // backend (Mercury / MiMo / GPT / Kimi); llm_model lets a specific
+    // model be pinned per agent without changing global config. NULL =
+    // use the provider's default model.
+    await client.query(`
+      ALTER TABLE voice_agents ADD COLUMN IF NOT EXISTS llm_model TEXT;
+    `)
+
     // Seed the default internal agent if nothing exists yet.
     const existing = await client.query(`SELECT 1 FROM voice_agents LIMIT 1`)
     if (existing.rowCount === 0) {

@@ -23,6 +23,7 @@ export interface VoiceAgent {
   ttsVoice: string
   ttsModel: string | null
   llmProvider: string | null
+  llmModel: string | null
   allowedTools: string[] | null
   visibility: 'internal' | 'public'
   embedOrigins: string[] | null
@@ -46,6 +47,7 @@ interface AgentRow {
   tts_voice: string
   tts_model: string | null
   llm_provider: string | null
+  llm_model: string | null
   allowed_tools: string[] | null
   visibility: 'internal' | 'public'
   embed_origins: string[] | null
@@ -70,6 +72,7 @@ function rowOf(r: AgentRow): VoiceAgent {
     ttsVoice: r.tts_voice,
     ttsModel: r.tts_model,
     llmProvider: r.llm_provider,
+    llmModel: r.llm_model,
     allowedTools: r.allowed_tools,
     visibility: r.visibility,
     embedOrigins: r.embed_origins,
@@ -146,6 +149,7 @@ export interface CreateVoiceAgentInput {
   ttsVoice?: string
   ttsModel?: string | null
   llmProvider?: string | null
+  llmModel?: string | null
   allowedTools?: string[] | null
   visibility?: 'internal' | 'public'
   embedOrigins?: string[] | null
@@ -158,8 +162,8 @@ export async function createVoiceAgent(input: CreateVoiceAgentInput): Promise<Vo
   const r = await query(
     `INSERT INTO voice_agents
        (slug, name, description, system_prompt, kb_text, tts_provider, tts_voice, tts_model,
-        llm_provider, allowed_tools, visibility, embed_origins, greeting, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        llm_provider, llm_model, allowed_tools, visibility, embed_origins, greeting, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     [
       slug,
@@ -171,6 +175,7 @@ export async function createVoiceAgent(input: CreateVoiceAgentInput): Promise<Vo
       input.ttsVoice || 'mimo_default',
       input.ttsModel ?? null,
       input.llmProvider ?? null,
+      input.llmModel ?? null,
       input.allowedTools ?? null,
       input.visibility || 'internal',
       input.embedOrigins ?? null,
@@ -190,6 +195,7 @@ export interface UpdateVoiceAgentInput {
   ttsVoice?: string
   ttsModel?: string | null
   llmProvider?: string | null
+  llmModel?: string | null
   allowedTools?: string[] | null
   visibility?: 'internal' | 'public'
   embedOrigins?: string[] | null
@@ -209,6 +215,7 @@ export async function updateVoiceAgent(id: string, patch: UpdateVoiceAgentInput)
     ttsVoice: 'tts_voice',
     ttsModel: 'tts_model',
     llmProvider: 'llm_provider',
+    llmModel: 'llm_model',
     allowedTools: 'allowed_tools',
     visibility: 'visibility',
     embedOrigins: 'embed_origins',

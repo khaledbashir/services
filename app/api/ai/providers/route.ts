@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, isAuthError } from '@/lib/rbac'
-
-interface ProviderConfig { name: string; baseUrl: string; apiKey: string; model: string }
-
-function loadProviders(): Array<{ name: string; model: string }> {
-  const raw = process.env.AI_PROVIDERS_JSON || ''
-  if (raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw) as ProviderConfig[]
-      const valid = parsed.filter(p => p?.baseUrl && p?.apiKey && p?.model)
-      if (valid.length > 0) return valid.map(p => ({ name: p.name, model: p.model }))
-    } catch {}
-  }
-  // Only surface a provider to the UI when the backend actually has creds.
-  // Otherwise the dropdown offers a phantom option and the user hits a
-  // "No AI providers configured" error on send.
-  if (process.env.AI_API_KEY) {
-    return [{ name: 'default', model: process.env.AI_MODEL || 'default' }]
-  }
-  return []
-}
+import { loadProviders } from '@/lib/ai/agent'
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'technician')
   if (isAuthError(auth)) return auth
-  return NextResponse.json({ providers: loadProviders() })
+
+  const providers = loadProviders().map((p) => ({
+    name: p.name,
+    label: p.label || p.name,
+    model: p.model,
+    availableModels: p.availableModels && p.availableModels.length > 0 ? p.availableModels : [p.model],
+  }))
+
+  return NextResponse.json({ providers })
 }

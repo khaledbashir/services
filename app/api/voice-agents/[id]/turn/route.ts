@@ -87,6 +87,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       userName: auth.fullName,
       userMessage: message,
       preferredProvider: agent.llmProvider || undefined,
+      preferredModel: agent.llmModel || undefined,
       channel: 'voice',
       agentOverrides: {
         name: agent.name,

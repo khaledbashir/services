@@ -15,6 +15,13 @@ interface KbDocument {
   addedAt: string
 }
 
+interface AvailableProvider {
+  name: string
+  label: string
+  model: string
+  availableModels: string[]
+}
+
 interface VoiceAgent {
   id: string
   slug: string
@@ -26,6 +33,7 @@ interface VoiceAgent {
   ttsVoice: string
   ttsModel: string | null
   llmProvider: string | null
+  llmModel: string | null
   visibility: 'internal' | 'public'
   embedOrigins: string[] | null
   greeting: string | null
@@ -246,10 +254,22 @@ function SettingsForm({
   const [kbText, setKbText] = useState(agent.kbText || '')
   const [ttsProvider, setTtsProvider] = useState(agent.ttsProvider)
   const [ttsVoice, setTtsVoice] = useState(agent.ttsVoice)
+  const [llmProvider, setLlmProvider] = useState(agent.llmProvider || '')
+  const [llmModel, setLlmModel] = useState(agent.llmModel || '')
+  const [llmProviders, setLlmProviders] = useState<AvailableProvider[]>([])
   const [visibility, setVisibility] = useState(agent.visibility)
   const [saving, setSaving] = useState(false)
 
   const voiceOptions = TTS_VOICE_OPTIONS[ttsProvider] || []
+  const selectedLlm = llmProviders.find((p) => p.name === llmProvider) || null
+  const llmModelOptions = selectedLlm?.availableModels || (selectedLlm ? [selectedLlm.model] : [])
+
+  useEffect(() => {
+    fetch('/api/ai/providers')
+      .then((r) => r.json())
+      .then((data) => setLlmProviders(data.providers || []))
+      .catch(() => setLlmProviders([]))
+  }, [])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -262,6 +282,8 @@ function SettingsForm({
       kbText: kbText || null,
       ttsProvider,
       ttsVoice,
+      llmProvider: llmProvider || null,
+      llmModel: llmModel || null,
       visibility,
     } as Partial<VoiceAgent>)
     setSaving(false)
@@ -298,6 +320,42 @@ function SettingsForm({
       </Field>
 
       <KbAttachments agent={agent} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="LLM provider" hint="Brain that runs the conversation. Mercury = ultra-fast voice-tuned reasoning. MiMo = cheap general. Default = global pool.">
+          <select
+            value={llmProvider}
+            onChange={(e) => {
+              setLlmProvider(e.target.value)
+              const next = llmProviders.find((p) => p.name === e.target.value)
+              setLlmModel(next?.model || '')
+            }}
+            className={inputCls}
+          >
+            <option value="">Default (global pool)</option>
+            {llmProviders.map((p) => (
+              <option key={p.name} value={p.name}>{p.label} ({p.model})</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="LLM model" hint="Specific model on the chosen provider. Leave on default unless you know you want a different one.">
+          {llmProvider && llmModelOptions.length > 0 ? (
+            <select value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className={inputCls}>
+              {llmModelOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+              className={inputCls}
+              placeholder={llmProvider ? 'model id' : 'auto — uses provider default'}
+              disabled={!llmProvider}
+            />
+          )}
+        </Field>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="TTS provider">
           <select

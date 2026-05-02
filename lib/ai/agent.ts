@@ -2,7 +2,16 @@ import { query } from '@/lib/db'
 import type { AgentRole, AgentChannel } from '@/lib/ai/types'
 import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
 
-interface ProviderConfig { name: string; baseUrl: string; apiKey: string; model: string }
+export interface ProviderConfig {
+  name: string
+  baseUrl: string
+  apiKey: string
+  model: string
+  /** Model ids the user can pick from this provider in the UI. */
+  availableModels?: string[]
+  /** Human-readable label for the UI. */
+  label?: string
+}
 
 function providerPriority(p: ProviderConfig): number {
   const text = `${p.name} ${p.model}`.toLowerCase()
@@ -12,19 +21,104 @@ function providerPriority(p: ProviderConfig): number {
   return 3
 }
 
-function loadProviders(): ProviderConfig[] {
+/**
+ * Auto-discovered providers driven by env vars. Add a new provider here by
+ * checking for its API key and pushing a ProviderConfig entry — no JSON
+ * env wrangling needed. UI sees these via /api/ai/providers and the voice
+ * agent settings dropdown.
+ */
+function autoDiscoveredProviders(): ProviderConfig[] {
+  const out: ProviderConfig[] = []
+
+  if (process.env.INCEPTION_API_KEY) {
+    // Mercury — diffusion-based reasoning model, voice-tuned.
+    // Special body params (reasoning_effort, realtime) are added in
+    // buildRequestBody() when model name contains "mercury".
+    out.push({
+      name: 'inception-mercury',
+      label: 'Inception Mercury',
+      baseUrl: 'https://api.inceptionlabs.ai/v1',
+      apiKey: process.env.INCEPTION_API_KEY,
+      model: process.env.INCEPTION_MODEL || 'mercury-2',
+      availableModels: ['mercury-2'],
+    })
+  }
+
+  if (process.env.MIMO_API_KEY) {
+    // MiMo's chat models — same key as TTS, OpenAI-compatible /v1 surface.
+    // We list only the chat-capable models; the TTS-only ones are filtered
+    // by their model id (mimo-v2.5-tts*) in the dropdown.
+    out.push({
+      name: 'mimo',
+      label: 'MiMo (Xiaomi)',
+      baseUrl: process.env.MIMO_BASE_URL || 'https://token-plan-sgp.xiaomimimo.com/v1',
+      apiKey: process.env.MIMO_API_KEY,
+      model: process.env.MIMO_CHAT_MODEL || 'mimo-v2.5-pro',
+      availableModels: ['mimo-v2.5-pro', 'mimo-v2.5', 'mimo-v2-pro', 'mimo-v2-omni'],
+    })
+  }
+
+  return out
+}
+
+export function loadProviders(): ProviderConfig[] {
+  const collected: ProviderConfig[] = []
+
   const raw = process.env.AI_PROVIDERS_JSON || ''
   if (raw.trim()) {
     try {
       const parsed = JSON.parse(raw) as ProviderConfig[]
-      const valid = parsed.filter(p => p?.baseUrl && p?.apiKey && p?.model)
-      if (valid.length > 0) return [...valid].sort((a, b) => providerPriority(a) - providerPriority(b))
+      collected.push(...parsed.filter(p => p?.baseUrl && p?.apiKey && p?.model))
     } catch {}
   }
-  const apiKey = process.env.AI_API_KEY || ''
-  const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1'
-  const model = process.env.AI_MODEL || 'gpt-4.1-mini'
-  return apiKey ? [{ name: 'default', baseUrl, apiKey, model }] : []
+
+  // Single-provider fallback (legacy AI_API_KEY/BASE_URL/MODEL).
+  if (collected.length === 0 && process.env.AI_API_KEY) {
+    collected.push({
+      name: 'default',
+      baseUrl: process.env.AI_BASE_URL || 'https://api.openai.com/v1',
+      apiKey: process.env.AI_API_KEY,
+      model: process.env.AI_MODEL || 'gpt-4.1-mini',
+    })
+  }
+
+  // Auto-discovered providers (Mercury, MiMo, etc) layered on top of
+  // whatever the ops team configured manually. De-dupe by name.
+  for (const p of autoDiscoveredProviders()) {
+    if (!collected.some(c => c.name === p.name)) collected.push(p)
+  }
+
+  return collected.sort((a, b) => providerPriority(a) - providerPriority(b))
+}
+
+/**
+ * Request body shaping per provider/model. Mercury needs reasoning_effort
+ * and realtime; everything else gets the standard OpenAI-compat shape.
+ */
+function buildRequestBody(
+  provider: ProviderConfig,
+  model: string,
+  messages: ChatMsg[],
+  tools: unknown[]
+): Record<string, unknown> {
+  const lc = model.toLowerCase()
+  const isMercury = lc.includes('mercury') || provider.name === 'inception-mercury'
+
+  const base: Record<string, unknown> = {
+    model,
+    messages: sanitizeForProvider(messages),
+    tools: tools.length > 0 ? tools : undefined,
+    tool_choice: tools.length > 0 ? 'auto' : undefined,
+    temperature: isMercury ? 0.6 : 0.2,
+    max_tokens: isMercury ? 8192 : 4000,
+  }
+
+  if (isMercury) {
+    base.reasoning_effort = process.env.MERCURY_REASONING_EFFORT || 'medium'
+    base.realtime = true
+  }
+
+  return base
 }
 
 const PROVIDERS = loadProviders()
@@ -74,21 +168,24 @@ function sanitizeForProvider(messages: ChatMsg[]): ChatMsg[] {
   })
 }
 
-async function callLlm(messages: ChatMsg[], tools: unknown[], preferredProvider?: string, attempt = 0): Promise<ChatMsg> {
+async function callLlm(
+  messages: ChatMsg[],
+  tools: unknown[],
+  preferredProvider?: string,
+  preferredModel?: string,
+  attempt = 0
+): Promise<ChatMsg> {
   const provider = preferredProvider && attempt === 0
     ? PROVIDERS.find(p => p.name === preferredProvider) || pickProvider()
     : pickProvider()
+  // Per-agent model override wins; fallback to the provider's default.
+  // Only honor on the first attempt — if we roll to a backup provider
+  // because the preferred one failed, use that provider's own default.
+  const model = (preferredModel && attempt === 0) ? preferredModel : provider.model
   const res = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
-    body: JSON.stringify({
-      model: provider.model,
-      messages: sanitizeForProvider(messages),
-      tools: tools.length > 0 ? tools : undefined,
-      tool_choice: tools.length > 0 ? 'auto' : undefined,
-      temperature: 0.2,
-      max_tokens: 4000,
-    }),
+    body: JSON.stringify(buildRequestBody(provider, model, messages, tools)),
     signal: AbortSignal.timeout(90000),
   })
   if (!res.ok) {
@@ -97,7 +194,7 @@ async function callLlm(messages: ChatMsg[], tools: unknown[], preferredProvider?
     // edge-cases (Gemini 400 on null content, MiniMax 1302 rate limit,
     // Ollama 503). Cycling gives us resilience without guessing which
     // provider hates which input shape.
-    if (attempt < PROVIDERS.length - 1) return callLlm(messages, tools, preferredProvider, attempt + 1)
+    if (attempt < PROVIDERS.length - 1) return callLlm(messages, tools, preferredProvider, preferredModel, attempt + 1)
     throw new Error(`AI API ${provider.name} ${res.status}: ${body.slice(0, 300)}`)
   }
   const data = await res.json() as { choices?: Array<{ message?: ChatMsg }> }
@@ -472,11 +569,12 @@ export async function runChat(params: {
   userMessage: string
   pageContext?: PageContext
   preferredProvider?: string
+  preferredModel?: string
   channel?: AgentChannel
   agentOverrides?: AgentOverrides
   emit: (event: StreamEvent) => void
 }): Promise<void> {
-  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, channel = 'web', agentOverrides, emit } = params
+  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, preferredModel, channel = 'web', agentOverrides, emit } = params
 
   // Persist user message
   await query(
@@ -526,7 +624,7 @@ export async function runChat(params: {
     // Tool loop: keep calling until the assistant returns a message with no tool_calls.
     const MAX_ITERS = 6
     for (let i = 0; i < MAX_ITERS; i++) {
-      const reply = await callLlm(messages, tools, preferredProvider)
+      const reply = await callLlm(messages, tools, preferredProvider, preferredModel)
       messages.push(reply)
 
       // Persist assistant turn
