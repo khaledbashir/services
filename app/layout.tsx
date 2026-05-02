@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import { ToastProvider } from '@/components/toast'
+import { UmamiIdentify } from '@/components/umami-identify'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -56,6 +57,7 @@ export default function RootLayout({
         ) : null}
       </head>
       <body>
+        <UmamiIdentify />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

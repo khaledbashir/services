@@ -45,6 +45,11 @@ function LoginForm() {
         localStorage.setItem('userName', data.user.fullName)
         localStorage.setItem('userRole', data.user.role)
         localStorage.setItem('userId', data.user.userId)
+        ;(window as unknown as { umami?: { identify: (d: Record<string, unknown>) => void } }).umami?.identify?.({
+          id: data.user.userId,
+          name: data.user.fullName,
+          role: data.user.role,
+        })
       }
 
       const defaultPath = data.user?.role === 'technician' ? '/my-events' : '/dashboard'
