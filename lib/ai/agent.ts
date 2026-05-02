@@ -250,11 +250,20 @@ function buildPageContextBlock(pageContext?: PageContext): string {
   return `${lines.join('\n')}\n`
 }
 
+export interface AgentOverrides {
+  name?: string
+  description?: string | null
+  systemPrompt?: string | null
+  kbText?: string | null
+  greeting?: string | null
+}
+
 async function buildSystemPrompt(
   userName: string | undefined,
   userRole: AgentRole,
   pageContext?: PageContext,
-  channel: AgentChannel = 'web'
+  channel: AgentChannel = 'web',
+  agentOverrides?: AgentOverrides
 ): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
   const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })
@@ -263,6 +272,44 @@ async function buildSystemPrompt(
     ? `\nCURRENT STATE (as of ${today}):\n${userContext}\nUse these numbers when relevant (e.g. "you have 3 urgent tickets"). Don't refetch what you already see here — just answer.\n`
     : ''
   const pageContextBlock = buildPageContextBlock(pageContext)
+  if (channel === 'voice') {
+    const persona = agentOverrides?.name
+      ? `You are "${agentOverrides.name}", a voice assistant built on the ANC Services platform.`
+      : `You are the ANC Services voice assistant — internal only, talking to a logged-in staff member.`
+    const customPrompt = agentOverrides?.systemPrompt?.trim()
+    const customKb = agentOverrides?.kbText?.trim()
+    const overridesBlock = [
+      customPrompt ? `\nAGENT INSTRUCTIONS:\n${customPrompt}` : '',
+      customKb ? `\nAGENT KNOWLEDGE BASE — read and remember:\n${customKb}` : '',
+    ].join('')
+
+    return `${persona}
+
+Speaking style:
+- Speak like a calm, direct ops colleague over the phone.
+- Short answers. Two or three sentences max unless the user explicitly asks for detail.
+- No markdown, no asterisks, no bullet points, no code blocks, no emoji, no <suggestions> tags. Plain spoken English.
+- No headings or lists — your text is read aloud.
+- Money: speak amounts naturally ("about forty-seven thousand dollars", not "$47,000").
+- Dates: spoken form ("May fifth", not "5/5").
+- Numbers under 100: spell them out when natural.
+
+Tool use:
+- You have full read and write access to the ANC services platform via tools (find, create, update, delete on every table). Use them.
+- Resolve names to IDs by searching first — never invent IDs.
+- For ticket actions, prefer create_ticket / update_ticket. For venue/account context, prefer find_many_venues / find_many_clients.
+- After you act, confirm what you did out loud in one short sentence ("Ticket two-four-six-three created for Prudential Center, priority high"). Do not list every field.
+- If a tool fails or you need clarification, ask ONE short follow-up question — don't dump options.
+
+Internal mode:
+- This is staff-only, so you may discuss internal financial details, contract values, and status without redacting.
+- Never read out a long URL. If you opened or created something, say it's "saved" or "in the dashboard" and stop.
+
+User: ${userName || 'staff member'} (role: ${userRole}).
+Today is ${weekday}, ${today} (America/New_York). Resolve relative dates yourself.
+${overridesBlock}${contextBlock}`
+  }
+
   const identityBlock = channel === 'slack'
     ? `You are Ahmad AI Assistant.
 You are Ahmad's Slack assistant. Speak like a direct, useful personal operator for Ahmad, not like a generic ANC product bot. Help with Slack recaps, canvases, operations questions, and actions across the ANC services platform when relevant.
@@ -426,9 +473,10 @@ export async function runChat(params: {
   pageContext?: PageContext
   preferredProvider?: string
   channel?: AgentChannel
+  agentOverrides?: AgentOverrides
   emit: (event: StreamEvent) => void
 }): Promise<void> {
-  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, channel = 'web', emit } = params
+  const { chatId, userId, userRole, userName, userMessage, pageContext, preferredProvider, channel = 'web', agentOverrides, emit } = params
 
   // Persist user message
   await query(
@@ -454,7 +502,7 @@ export async function runChat(params: {
   const tools = await toolDefinitions(userRole)
 
   // Build messages array
-  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext, channel) }]
+  const messages: ChatMsg[] = [{ role: 'system', content: await buildSystemPrompt(userName, userRole, pageContext, channel, agentOverrides) }]
   for (const row of history.rows) {
     if (row.role === 'assistant') {
       messages.push({

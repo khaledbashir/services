@@ -45,6 +45,9 @@ const IC = {
   chevron: (
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
   ),
+  voice: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-14 0M12 18v3m-4 0h8M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3z" />
+  ),
 }
 
 function Icon({ children, className = 'h-4 w-4' }: { children: ReactNode; className?: string }) {
@@ -152,6 +155,15 @@ export function Sidebar() {
         // { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
         // { href: '/parts', label: 'Parts Catalog', role: 'manager' },
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
+      ],
+    },
+    {
+      key: 'voice-agents',
+      label: 'Voice Agents',
+      icon: <Icon>{IC.voice}</Icon>,
+      role: 'technician',
+      links: [
+        { href: '/voice-agents', label: 'All voice agents' },
       ],
     },
     {

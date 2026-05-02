@@ -7,7 +7,7 @@ export type AgentRole = 'admin' | 'tech_support' | 'manager' | 'technician' | 'a
  * side-effects — e.g. when ctx.channel === 'slack', suppress the direct
  * Slack notification since OpenClaw will format the final reply itself.
  */
-export type AgentChannel = 'web' | 'slack'
+export type AgentChannel = 'web' | 'slack' | 'voice'
 
 export interface SkillContext {
   userId: string
