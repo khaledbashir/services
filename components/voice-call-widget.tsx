@@ -51,6 +51,17 @@ export function VoiceCallWidget({
   // check inside onend, which goes stale because the handler is bound when
   // recState is still 'idle'.
   const recRunningRef = useRef(false)
+  // Auto-finalize after a quiet pause — the natural turn-taking loop. Tuned
+  // long enough that mid-thought breaths don't cut you off, short enough
+  // that completed sentences don't sit waiting.
+  const SILENCE_MS = 1600
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSilenceTimer = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -161,6 +172,22 @@ export function VoiceCallWidget({
       }
       interimRef.current = interimText
       setInterim(interimText)
+
+      // Reset the silence timer on every new chunk of speech. When the user
+      // actually stops talking, the next tick will fire and we end recog,
+      // which routes through onend → sendTurn — the natural-pause submit.
+      clearSilenceTimer()
+      const haveContent =
+        finalTranscriptRef.current.trim().length > 0 || interimText.trim().length > 0
+      if (haveContent) {
+        silenceTimerRef.current = setTimeout(() => {
+          silenceTimerRef.current = null
+          const r = recogRef.current as { stop: () => void } | null
+          if (r && recRunningRef.current) {
+            try { r.stop() } catch { /* ignore */ }
+          }
+        }, SILENCE_MS)
+      }
     }
     recog.onerror = (e) => {
       // 'aborted' fires when we manually stop — treat it like a normal stop.
@@ -169,12 +196,14 @@ export function VoiceCallWidget({
       if (e.error !== 'aborted') {
         setError(`mic error: ${e.error}`)
       }
+      clearSilenceTimer()
       recRunningRef.current = false
       setRecState('idle')
     }
     recog.onend = () => {
       // Always reset UI when recog ends, regardless of how we got here.
       // Don't rely on closured recState — it goes stale.
+      clearSilenceTimer()
       const wasRunning = recRunningRef.current
       recRunningRef.current = false
       const finalText = (finalTranscriptRef.current + ' ' + interimRef.current).trim()
@@ -194,6 +223,7 @@ export function VoiceCallWidget({
   }, [greeting, sendTurn, turns.length, playTts])
 
   const stopListening = useCallback(() => {
+    clearSilenceTimer()
     const recog = recogRef.current as { stop: () => void; abort?: () => void } | null
     if (!recog) return
     try {
@@ -211,6 +241,12 @@ export function VoiceCallWidget({
   }
 
   const newConversation = () => {
+    clearSilenceTimer()
+    const recog = recogRef.current as { abort?: () => void; stop?: () => void } | null
+    if (recog) {
+      recRunningRef.current = false
+      try { recog.abort?.() ?? recog.stop?.() } catch { /* ignore */ }
+    }
     setChatId(null)
     setTurns([])
     setInterim('')
@@ -334,7 +370,7 @@ export function VoiceCallWidget({
         </button>
         <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">
           {recState === 'idle' && 'Tap to talk'}
-          {recState === 'listening' && 'Listening — tap to stop'}
+          {recState === 'listening' && 'Listening — pause to send'}
           {recState === 'thinking' && 'Working…'}
           {recState === 'speaking' && 'Speaking…'}
         </p>
