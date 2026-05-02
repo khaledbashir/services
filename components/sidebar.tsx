@@ -162,6 +162,7 @@ export function Sidebar() {
       links: [
         { href: '/clients', label: 'Clients' },
         { href: '/portals', label: 'Client Portals' },
+        { href: '/voice-agent-demo', label: 'Voice Agent Demo' },
       ],
     },
     {
