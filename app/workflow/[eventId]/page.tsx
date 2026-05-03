@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useToast } from '@/components/toast'
 import { useDictation, MicChip } from '@/components/dictation'
+import { ATTACHMENT_ACCEPT } from '@/lib/ticket-attachments'
 
 interface EventDetail {
   id: string
@@ -69,7 +70,7 @@ export default function WorkflowPage() {
   const [reportTitle, setReportTitle] = useState('')
   const [reportDescription, setReportDescription] = useState('')
   const [reportPriority, setReportPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
-  const [reportImage, setReportImage] = useState<{ data: string; mimeType: string } | null>(null)
+  const [reportImage, setReportImage] = useState<{ data: string; mimeType: string; name: string } | null>(null)
   const [recentTickets, setRecentTickets] = useState<CreatedTicketSummary[]>([])
 
   const dictation = useDictation()
@@ -79,11 +80,16 @@ export default function WorkflowPage() {
   const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 22 * 1024 * 1024) {
+      showToast('File must be under 22 MB', 'error')
+      e.target.value = ''
+      return
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result as string
-      const mime = file.type || 'image/jpeg'
-      setReportImage({ data: result, mimeType: mime })
+      const mime = file.type || 'application/octet-stream'
+      setReportImage({ data: result, mimeType: mime, name: file.name })
     }
     reader.readAsDataURL(file)
   }
@@ -607,15 +613,29 @@ export default function WorkflowPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-900 mb-2">Photo (optional)</label>
+                <label className="block text-sm font-medium text-zinc-900 mb-2">Attachment (optional)</label>
                 {reportImage ? (
                   <div className="relative inline-block">
-                    <img src={reportImage.data} alt="Issue" className="rounded border border-slate-200 max-h-40" />
+                    {reportImage.mimeType.startsWith('image/') ? (
+                      <img src={reportImage.data} alt={reportImage.name} className="rounded border border-slate-200 max-h-40" />
+                    ) : reportImage.mimeType.startsWith('video/') ? (
+                      <video src={reportImage.data} controls className="rounded border border-slate-200 max-h-48 bg-black" />
+                    ) : (
+                      <div className="flex items-center gap-3 p-3 rounded border border-slate-200 bg-zinc-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <div className="text-xs">
+                          <p className="font-semibold text-zinc-900">{reportImage.name}</p>
+                          <p className="text-zinc-500">{reportImage.mimeType}</p>
+                        </div>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => setReportImage(null)}
                       className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-zinc-900/90 text-white text-xs flex items-center justify-center shadow"
-                      aria-label="Remove photo"
+                      aria-label="Remove attachment"
                     >
                       ✕
                     </button>
@@ -626,11 +646,10 @@ export default function WorkflowPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <circle cx="12" cy="13" r="3" />
                     </svg>
-                    Take or upload a photo
+                    Photo, video, PDF, or doc
                     <input
                       type="file"
-                      accept="image/*"
-                      capture="environment"
+                      accept={ATTACHMENT_ACCEPT}
                       onChange={onPickImage}
                       className="hidden"
                     />

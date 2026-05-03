@@ -8,6 +8,7 @@ import * as path from 'path'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { normalizeAttachment } from '@/lib/ticket-attachments'
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -128,13 +129,31 @@ export async function POST(request: NextRequest) {
       [venue_id, event_id || null, user.userId, effectiveAssignee, title, description || '', ticketPriority, initialStatus, category || 'general', resolution_notes || null, slaResponseDue, slaResolutionDue, source || 'web', ticket_type || 'support', contact_name || null, contact_email || null, contact_phone || null, parent_ticket_id || null]
     )
 
-    // Save image if provided (store data URL directly — works in Docker)
+    // Save attachment if provided (image, video, PDF, doc). Always recorded
+    // in ticket_attachments. tickets.image_url stays image-only because
+    // Slack/portal/gallery consume it as a real image — using it for video
+    // or PDF data would break those surfaces.
     let imageUrl: string | null = null
-    if (image?.data) {
+    const normalizedAttachment = normalizeAttachment(image)
+    if (normalizedAttachment) {
       try {
-        imageUrl = image.data.startsWith('data:') ? image.data : `data:${image.mimeType || 'image/jpeg'};base64,${image.data}`
-        await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [imageUrl, result.rows[0].id])
-      } catch (err) { console.error('Image save failed:', err) }
+        if (normalizedAttachment.mimeType.startsWith('image/')) {
+          imageUrl = normalizedAttachment.imageUrl
+          await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [imageUrl, result.rows[0].id])
+        }
+        await query(
+          `INSERT INTO ticket_attachments (ticket_id, filename, mime_type, image_url, uploaded_by, is_internal)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            result.rows[0].id,
+            normalizedAttachment.filename,
+            normalizedAttachment.mimeType,
+            normalizedAttachment.imageUrl,
+            user.userId,
+            false,
+          ]
+        )
+      } catch (err) { console.error('Attachment save failed:', err) }
     }
 
     // Get venue info for notification log

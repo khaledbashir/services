@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { TicketContent, CommentContent } from '@/components/ticket-content'
+import { ATTACHMENT_ACCEPT } from '@/lib/ticket-attachments'
 import Link from 'next/link'
 
 interface TicketDetail {
@@ -280,12 +281,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   }
 
   const uploadAttachment = async (file: File | null) => {
-    if (!file || !file.type.startsWith('image/')) {
-      setAttachmentStatus({ type: 'error', message: 'Choose an image file' })
-      return
-    }
-    if (file.size > 6 * 1024 * 1024) {
-      setAttachmentStatus({ type: 'error', message: 'Image must be under 6 MB' })
+    if (!file) return
+    if (file.size > 22 * 1024 * 1024) {
+      setAttachmentStatus({ type: 'error', message: 'File must be under 22 MB' })
       return
     }
     setUploadingAttachment(true)
@@ -301,7 +299,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: { data: dataUrl, mimeType: file.type, name: file.name },
+          attachment: { data: dataUrl, mimeType: file.type, name: file.name },
           caption: attachmentCaption,
           is_internal: attachmentInternal,
         }),
@@ -560,7 +558,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
               <button key={step.key} onClick={() => updateField('status', step.key)}
                 className="flex-1 group" title={`Set to ${step.label}`}>
                 <div className={`h-1.5 rounded-full transition-all ${isActive ? 'scale-y-150' : 'group-hover:scale-y-125'}`}
-                  style={{ backgroundColor: isActive ? step.color : isPast ? step.color + '60' : '#e4e4e7' }} />
+                  style={{ backgroundColor: isActive ? step.color : isPast ? step.color + '60' : 'var(--anc-subtle)' }} />
                 <p className={`text-[10px] font-medium mt-1.5 text-center transition-colors ${isActive ? 'text-zinc-900' : isPast ? 'text-zinc-500' : 'text-zinc-300'}`}>
                   {step.label}
                 </p>
@@ -1257,8 +1255,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     <div className="border border-zinc-200 rounded-lg bg-zinc-50/50 p-4">
                       <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                         <div>
-                          <h3 className="text-sm font-semibold text-zinc-900">Add Photo Evidence</h3>
-                          <p className="text-xs text-zinc-500 mt-0.5">Upload screenshots, error photos, damaged parts, or field reference images.</p>
+                          <h3 className="text-sm font-semibold text-zinc-900">Add Attachment</h3>
+                          <p className="text-xs text-zinc-500 mt-0.5">Photos, video, PDFs, or office docs. Up to 22 MB.</p>
                         </div>
                         {attachmentStatus && (
                           <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${attachmentStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
@@ -1274,10 +1272,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           className="border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
                         />
                         <label className={`cursor-pointer text-center border border-zinc-200 bg-white rounded-lg px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:border-zinc-400 ${uploadingAttachment ? 'opacity-50 pointer-events-none' : ''}`}>
-                          {uploadingAttachment ? 'Uploading...' : 'Choose Image'}
+                          {uploadingAttachment ? 'Uploading...' : 'Choose File'}
                           <input
                             type="file"
-                            accept="image/*"
+                            accept={ATTACHMENT_ACCEPT}
                             className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0] || null
@@ -1300,30 +1298,56 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     </div>
 
                     {displayAttachments.length === 0 ? (
-                      <p className="text-sm text-zinc-400 py-10 text-center">No photos or attachments yet</p>
+                      <p className="text-sm text-zinc-400 py-10 text-center">No attachments yet</p>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {displayAttachments.map((attachment) => (
-                          <button
-                            key={attachment.id}
-                            type="button"
-                            onClick={() => window.open(attachment.image_url, '_blank')}
-                            className="text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300 hover:shadow-sm transition-all bg-white"
-                          >
-                            <div className="aspect-video bg-zinc-100">
-                              <img src={attachment.image_url} alt={attachment.caption || attachment.filename || 'Ticket attachment'} className="w-full h-full object-cover" />
-                            </div>
-                            <div className="p-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-sm font-semibold text-zinc-900 line-clamp-1">{attachment.caption || attachment.filename || 'Ticket photo'}</p>
-                                {attachment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                        {displayAttachments.map((attachment) => {
+                          const mime = attachment.mime_type || ''
+                          const isImage = mime.startsWith('image/')
+                          const isVideo = mime.startsWith('video/')
+                          const isAudio = mime.startsWith('audio/')
+                          const isPdf = mime === 'application/pdf'
+                          const kindLabel = isImage ? 'Image' : isVideo ? 'Video' : isAudio ? 'Audio' : isPdf ? 'PDF' : (mime.split('/').pop() || 'File').toUpperCase()
+                          return (
+                            <div
+                              key={attachment.id}
+                              className="text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300 hover:shadow-sm transition-all bg-white"
+                            >
+                              <div className="aspect-video bg-zinc-100 flex items-center justify-center">
+                                {isImage ? (
+                                  <button type="button" onClick={() => window.open(attachment.image_url, '_blank')} className="w-full h-full">
+                                    <img src={attachment.image_url} alt={attachment.caption || attachment.filename || 'Ticket attachment'} className="w-full h-full object-cover" />
+                                  </button>
+                                ) : isVideo ? (
+                                  <video src={attachment.image_url} controls className="w-full h-full bg-black" />
+                                ) : isAudio ? (
+                                  <audio src={attachment.image_url} controls className="w-3/4" />
+                                ) : (
+                                  <a href={attachment.image_url} target="_blank" rel="noopener noreferrer" download={attachment.filename || undefined}
+                                    className="flex flex-col items-center justify-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors p-6 text-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span className="text-xs font-semibold">{kindLabel}</span>
+                                    <span className="text-[10px] text-zinc-400">Click to open or download</span>
+                                  </a>
+                                )}
                               </div>
-                              <p className="text-xs text-zinc-400 mt-1">
-                                {attachment.uploaded_by_name || 'Uploaded'} / {attachment.created_date}
-                              </p>
+                              <div className="p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm font-semibold text-zinc-900 line-clamp-1">{attachment.caption || attachment.filename || `Ticket ${kindLabel.toLowerCase()}`}</p>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded uppercase">{kindLabel}</span>
+                                    {attachment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                                  </div>
+                                </div>
+                                <p className="text-xs text-zinc-400 mt-1">
+                                  {attachment.uploaded_by_name || 'Uploaded'} / {attachment.created_date}
+                                </p>
+                              </div>
                             </div>
-                          </button>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -1439,8 +1463,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
             {/* Venue Equipment */}
             <details open className="group">
-              <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer select-none"
-                style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}>
+              <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white border border-zinc-200 cursor-pointer select-none shadow-sm hover:border-zinc-300 transition-colors">
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold flex items-center justify-center">AS</span>
                   <span className="text-zinc-900 text-xs font-semibold">Account Assets</span>
@@ -1458,8 +1481,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
             {/* Parts */}
             <details open className="group">
-              <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer select-none"
-                style={{ background: '#ffffff', border: '1px solid #e4e4e7' }}>
+              <summary className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white border border-zinc-200 cursor-pointer select-none shadow-sm hover:border-zinc-300 transition-colors">
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-md bg-red-50 text-red-700 text-[10px] font-bold flex items-center justify-center">PT</span>
                   <span className="text-zinc-900 text-xs font-semibold">Parts</span>
