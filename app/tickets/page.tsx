@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { useDictation, MicChip } from '@/components/dictation'
 
 interface Ticket {
   id: string
@@ -134,6 +135,9 @@ export default function TicketsPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const router = useRouter()
+  const dictation = useDictation()
+  const appendTitle = (t: string) => setFormData(prev => ({ ...prev, title: (prev.title ? prev.title + ' ' : '') + t }))
+  const appendDescription = (t: string) => setFormData(prev => ({ ...prev, description: (prev.description ? prev.description + ' ' : '') + t }))
 
   useEffect(() => {
     Promise.all([
@@ -446,7 +450,10 @@ export default function TicketsPage() {
             <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create Ticket</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-600 mb-1">Title *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-600">Title *</label>
+                  <MicChip id="ticket-title" dictation={dictation} append={appendTitle} />
+                </div>
                 <input type="text" value={formData.title} onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Brief description of the issue"
                   className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 outline-none bg-white" required />
@@ -539,7 +546,10 @@ export default function TicketsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-600 mb-1">Description</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-600">Description</label>
+                  <MicChip id="ticket-description" dictation={dictation} append={appendDescription} />
+                </div>
                 <textarea value={formData.description} onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Provide details..."
                   className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" rows={3} />
