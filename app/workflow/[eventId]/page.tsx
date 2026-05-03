@@ -1,17 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useToast } from '@/components/toast'
 
 interface EventDetail {
   id: string
   summary: string
+  venue_id: string
   venue_name: string
   league: string
   start_time: string
   end_time: string | null
   event_date: string
+}
+
+interface CreatedTicketSummary {
+  id: string
+  ticket_number: string | number
+  title: string
 }
 
 interface Workflow {
@@ -53,6 +60,89 @@ export default function WorkflowPage() {
     communications_test: false,
   })
   const [postGameData, setPostGameData] = useState({ notes: '', incidents: '' })
+
+  // Inline ticket reporting from the workflow page so techs can flag issues
+  // mid-event without leaving the screen (Herve / Chris ask 2026-05-03).
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [reportTitle, setReportTitle] = useState('')
+  const [reportDescription, setReportDescription] = useState('')
+  const [reportPriority, setReportPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
+  const [reportImage, setReportImage] = useState<{ data: string; mimeType: string } | null>(null)
+  const [recentTickets, setRecentTickets] = useState<CreatedTicketSummary[]>([])
+
+  // Dictation: tap a mic next to a field, speak, transcript appends in. Uses
+  // the browser's native SpeechRecognition (Chrome / Safari iOS 14+ / Android
+  // Chrome). Falls back gracefully — mic just doesn't render if unsupported.
+  const [dictatingField, setDictatingField] = useState<'title' | 'description' | null>(null)
+  const [dictationSupported, setDictationSupported] = useState(false)
+  const recognitionRef = useRef<any>(null)
+  const dictationTargetRef = useRef<'title' | 'description' | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) return
+    setDictationSupported(true)
+    const rec = new SR()
+    rec.continuous = true
+    rec.interimResults = false
+    rec.lang = 'en-US'
+    rec.onresult = (e: any) => {
+      let chunk = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) chunk += e.results[i][0].transcript + ' '
+      }
+      const text = chunk.trim()
+      if (!text) return
+      const target = dictationTargetRef.current
+      if (target === 'title') {
+        setReportTitle(prev => (prev ? prev + ' ' : '') + text)
+      } else if (target === 'description') {
+        setReportDescription(prev => (prev ? prev + ' ' : '') + text)
+      }
+    }
+    rec.onend = () => {
+      setDictatingField(null)
+      dictationTargetRef.current = null
+    }
+    rec.onerror = () => {
+      setDictatingField(null)
+      dictationTargetRef.current = null
+    }
+    recognitionRef.current = rec
+    return () => { try { rec.stop() } catch {} }
+  }, [])
+
+  const toggleDictation = (field: 'title' | 'description') => {
+    const rec = recognitionRef.current
+    if (!rec) return
+    if (dictatingField === field) {
+      try { rec.stop() } catch {}
+      return
+    }
+    if (dictatingField) {
+      try { rec.stop() } catch {}
+    }
+    dictationTargetRef.current = field
+    setDictatingField(field)
+    try { rec.start() } catch {
+      setDictatingField(null)
+      dictationTargetRef.current = null
+    }
+  }
+
+  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const mime = file.type || 'image/jpeg'
+      setReportImage({ data: result, mimeType: mime })
+    }
+    reader.readAsDataURL(file)
+  }
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -145,6 +235,54 @@ export default function WorkflowPage() {
       showToast('Error submitting workflow', 'error')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const submitReport = async () => {
+    if (!event || !reportTitle.trim() || reportSubmitting) return
+    if (dictatingField && recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch {}
+    }
+    try {
+      setReportSubmitting(true)
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          venue_id: event.venue_id,
+          event_id: event.id,
+          title: reportTitle.trim(),
+          description: reportDescription.trim() || `Reported from on-site workflow for ${event.summary}.`,
+          priority: reportPriority,
+          category: 'general',
+          source: 'workflow',
+          ticket_type: 'support',
+          image: reportImage,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        showToast(err?.error || 'Could not create ticket', 'error')
+        return
+      }
+      const data = await res.json()
+      const created: CreatedTicketSummary = {
+        id: data.ticket?.id || data.id,
+        ticket_number: data.ticket?.ticket_number ?? data.ticket_number ?? '',
+        title: reportTitle.trim(),
+      }
+      setRecentTickets(prev => [created, ...prev].slice(0, 5))
+      setReportTitle('')
+      setReportDescription('')
+      setReportPriority('medium')
+      setReportImage(null)
+      setReportOpen(false)
+      showToast('Ticket created', 'success')
+    } catch (err) {
+      console.error('Report submit failed:', err)
+      showToast('Could not create ticket', 'error')
+    } finally {
+      setReportSubmitting(false)
     }
   }
 
@@ -469,6 +607,176 @@ export default function WorkflowPage() {
             </div>
           )}
         </div>
+
+        {/* Report Issue — always available so techs can flag problems any
+            time during the event, not only after a workflow step. Creates a
+            ticket scoped to this venue + event. */}
+        <div className="mt-6 bg-white rounded-2xl border border-[#E8E8E8] shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setReportOpen(o => !o)}
+            className="w-full flex items-center justify-between px-4 py-4 text-left hover:bg-zinc-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 4h.01M10.29 3.86l-8.18 14.16A2 2 0 003.85 21h16.3a2 2 0 001.74-2.98L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-900">Report an issue</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Create a ticket for this event or venue</p>
+              </div>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-zinc-400 transition-transform ${reportOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {reportOpen && (
+            <div className="px-4 pb-4 border-t border-[#E8E8E8] space-y-3 pt-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-zinc-900">What's the issue?</label>
+                  {dictationSupported && (
+                    <button
+                      type="button"
+                      onClick={() => toggleDictation('title')}
+                      aria-label={dictatingField === 'title' ? 'Stop dictation' : 'Dictate the issue'}
+                      className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors ${
+                        dictatingField === 'title'
+                          ? 'bg-red-50 text-red-600 ring-2 ring-red-300 animate-pulse'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-14 0M12 18v3m-4 0h8M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3z" />
+                      </svg>
+                      {dictatingField === 'title' ? 'Listening… tap to stop' : 'Speak'}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={reportTitle}
+                  onChange={(e) => setReportTitle(e.target.value)}
+                  placeholder="e.g. Center hung scoreboard not powering on"
+                  className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:ring-slate-500 text-sm"
+                  maxLength={200}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-zinc-900">Details (optional)</label>
+                  {dictationSupported && (
+                    <button
+                      type="button"
+                      onClick={() => toggleDictation('description')}
+                      aria-label={dictatingField === 'description' ? 'Stop dictation' : 'Dictate the details'}
+                      className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors ${
+                        dictatingField === 'description'
+                          ? 'bg-red-50 text-red-600 ring-2 ring-red-300 animate-pulse'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-14 0M12 18v3m-4 0h8M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3z" />
+                      </svg>
+                      {dictatingField === 'description' ? 'Listening… tap to stop' : 'Speak'}
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  rows={3}
+                  placeholder="What happened, what you tried, anything ops should know."
+                  className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:ring-slate-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-900 mb-2">Photo (optional)</label>
+                {reportImage ? (
+                  <div className="relative inline-block">
+                    <img src={reportImage.data} alt="Issue" className="rounded border border-slate-200 max-h-40" />
+                    <button
+                      type="button"
+                      onClick={() => setReportImage(null)}
+                      className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-zinc-900/90 text-white text-xs flex items-center justify-center shadow"
+                      aria-label="Remove photo"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 w-full p-3 border border-dashed border-slate-300 rounded text-sm text-zinc-600 hover:bg-zinc-50 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <circle cx="12" cy="13" r="3" />
+                    </svg>
+                    Take or upload a photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={onPickImage}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-900 mb-2">Priority</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['low', 'medium', 'high', 'critical'] as const).map(p => {
+                    const active = reportPriority === p
+                    const tone = p === 'critical' ? 'border-red-300 text-red-700 bg-red-50'
+                      : p === 'high' ? 'border-orange-300 text-orange-700 bg-orange-50'
+                      : p === 'medium' ? 'border-amber-300 text-amber-700 bg-amber-50'
+                      : 'border-zinc-300 text-zinc-700 bg-zinc-50'
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setReportPriority(p)}
+                        className={`py-2 rounded text-xs font-semibold capitalize transition-colors border ${active ? tone : 'border-slate-300 text-zinc-600 hover:bg-zinc-50'}`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={submitReport}
+                disabled={reportSubmitting || !reportTitle.trim()}
+                className="w-full bg-[#0A52EF] text-white py-3 rounded font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
+              >
+                {reportSubmitting ? 'Creating ticket...' : 'Create ticket'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {recentTickets.length > 0 && (
+          <div className="mt-4 bg-white rounded-2xl border border-[#E8E8E8] shadow-sm p-4">
+            <p className="text-xs uppercase tracking-wide text-zinc-500 font-semibold mb-2">Tickets you created</p>
+            <ul className="space-y-1">
+              {recentTickets.map(t => (
+                <li key={t.id} className="text-sm">
+                  <a href={`/tickets/${t.id}`} className="text-[#0A52EF] font-medium hover:underline">
+                    {t.ticket_number ? `#${t.ticket_number} · ` : ''}{t.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   )

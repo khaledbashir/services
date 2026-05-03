@@ -51,9 +51,10 @@ export async function GET(
 
     // Get event details
     const eventResult = await query(
-      `SELECT 
+      `SELECT
         e.id,
         e.summary,
+        e.venue_id,
         v.name as venue_name,
         e.league,
         e.start_time,
