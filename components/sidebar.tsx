@@ -58,6 +58,15 @@ function Icon({ children, className = 'h-4 w-4' }: { children: ReactNode; classN
   )
 }
 
+// Module-level cache survives Sidebar remounts. Every page wraps itself in
+// <DashboardLayout>, so the Sidebar unmounts on every client-side nav and
+// loses local state — without this, the rail snaps shut whenever the user
+// clicks a link. localStorage seeds the cache on first load so the choice
+// also survives a full page reload.
+let cachedExpanded = false
+let cachedSections: Record<string, boolean> = {}
+let cachedSeeded = false
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -68,17 +77,46 @@ export function Sidebar() {
   // clicks the chevron OR any section icon while collapsed, we expand. The
   // CSS variable --anc-sidebar-w drives DashboardLayout's content margin so
   // the page reflows responsively (push, not overlay).
-  const [desktopExpanded, setDesktopExpanded] = useState(false)
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const [desktopExpanded, setDesktopExpandedRaw] = useState(cachedExpanded)
+  const [openSections, setOpenSectionsRaw] = useState<Record<string, boolean>>(cachedSections)
   const [hydrated, setHydrated] = useState(false)
+
+  const setDesktopExpanded: typeof setDesktopExpandedRaw = (v) => {
+    setDesktopExpandedRaw(prev => {
+      const next = typeof v === 'function' ? (v as (p: boolean) => boolean)(prev) : v
+      cachedExpanded = next
+      try { localStorage.setItem('sidebarExpanded', String(next)) } catch {}
+      return next
+    })
+  }
+
+  const setOpenSections: typeof setOpenSectionsRaw = (v) => {
+    setOpenSectionsRaw(prev => {
+      const next = typeof v === 'function' ? (v as (p: Record<string, boolean>) => Record<string, boolean>)(prev) : v
+      cachedSections = next
+      try { localStorage.setItem('sidebarSections', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   useEffect(() => {
     setUserName(localStorage.getItem('userName') || '')
     setUserRole((localStorage.getItem('userRole') as Role) || 'any')
-    try {
-      const stored = localStorage.getItem('sidebarSections')
-      if (stored) setOpenSections(JSON.parse(stored))
-    } catch {}
+    if (!cachedSeeded) {
+      cachedSeeded = true
+      try {
+        if (localStorage.getItem('sidebarExpanded') === 'true') {
+          cachedExpanded = true
+          setDesktopExpandedRaw(true)
+        }
+        const stored = localStorage.getItem('sidebarSections')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          cachedSections = parsed
+          setOpenSectionsRaw(parsed)
+        }
+      } catch {}
+    }
     setHydrated(true)
   }, [])
 
@@ -207,11 +245,7 @@ export function Sidebar() {
   }, [pathname, hydrated])
 
   const toggleSection = (key: string) => {
-    setOpenSections(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      try { localStorage.setItem('sidebarSections', JSON.stringify(next)) } catch {}
-      return next
-    })
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleLogout = async () => {
