@@ -366,11 +366,22 @@ export async function PATCH(
       await query(`UPDATE venues SET is_active = $1 WHERE id = $2`, [body.is_active, venueId])
     }
 
-    // Handle requires_assignment toggle
+    // Handle requires_assignment toggle. Joe 2026-05-04: also clear any
+    // baked-in per-event override on this venue's future events so the new
+    // venue setting is the single source of truth on the events list. Manual
+    // per-event overrides set after this PATCH still win going forward.
     if (body.requires_assignment !== undefined) {
       await query(
         `UPDATE venues SET requires_assignment = $1 WHERE id = $2`,
         [body.requires_assignment, venueId]
+      )
+      await query(
+        `UPDATE events
+         SET requires_staffing = NULL
+         WHERE venue_id = $1
+           AND event_date >= CURRENT_DATE
+           AND requires_staffing IS NOT NULL`,
+        [venueId]
       )
     }
 

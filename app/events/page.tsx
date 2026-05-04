@@ -83,7 +83,7 @@ interface DiscoveryEventRow {
   trust_reasons?: string[]
   duplicate: boolean
   duplicate_reason: string | null
-  requires_staffing: boolean
+  requires_staffing: boolean | null
   status: 'discovered' | 'confirmed' | 'imported'
   auto_importable: boolean
   selected: boolean

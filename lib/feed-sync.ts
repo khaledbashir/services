@@ -1,7 +1,6 @@
 import { query } from '@/lib/db'
 import { importDiscoveryEvents, type DiscoveryCandidate } from '@/lib/event-discovery'
 import { parseVenueFeed, type FeedEvent, type FeedType } from '@/lib/feed-parsers'
-import { notifyOps } from '@/lib/slack'
 import { buildAutomationSelect, withComputedAutomation } from '@/lib/venue-automation'
 
 export interface FeedVenue {
@@ -143,7 +142,7 @@ function feedEventToCandidate(feedEvent: FeedEvent, venue: FeedVenue): Discovery
     ],
     duplicate: false,
     duplicate_reason: null,
-    requires_staffing: venue.requires_staffing_default,
+    requires_staffing: null,
     status: 'discovered',
     auto_importable: matchType === 'official_source' && trustScore >= 0.9,
   }
@@ -248,19 +247,8 @@ export async function syncVenueFeed(
       [venue.id, status]
     )
 
-    if (imported.imported > 0) {
-      const sample = autoImportable
-        .slice(0, 5)
-        .map((event) => `- ${event.event_date}${event.start_time ? ` ${event.start_time}` : ''} - ${event.summary}`)
-        .join('\n')
-      const more = imported.imported > 5 ? `\n...and ${imported.imported - 5} more` : ''
-      await notifyOps(
-        ':calendar:',
-        `*Feed sync imported ${imported.imported} event${imported.imported === 1 ? '' : 's'} for ${venue.name}*\n${sample}${more}`,
-        { label: 'View Events', url: 'https://abc-anc-services.izcgmb.easypanel.host/events' },
-        venue.slack_channel_id || undefined
-      )
-    }
+    // Joe 2026-05-04: auto-feed Slack pings retired — events list / dashboard
+    // are the canonical surface. Keep the discovery_log row above for audit.
 
     return {
       venue,

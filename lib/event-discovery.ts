@@ -114,7 +114,7 @@ export interface DiscoveryCandidate {
   trust_reasons: string[]
   duplicate: boolean
   duplicate_reason: string | null
-  requires_staffing: boolean
+  requires_staffing: boolean | null
   status: DiscoveryStatus
   auto_importable: boolean
 }
@@ -484,7 +484,7 @@ function buildExistingDemoCandidates(
       trust_reasons: ['Loaded directly from the ANC event database for demo mode review'],
       duplicate: true,
       duplicate_reason: 'Already exists in database (demo mode)',
-      requires_staffing: venue.requires_staffing_default,
+      requires_staffing: null,
       status: 'discovered',
       auto_importable: false,
     }
@@ -532,7 +532,7 @@ function feedEventToDiscoveryCandidate(feedEvent: Awaited<ReturnType<typeof pars
     ],
     duplicate: false,
     duplicate_reason: null,
-    requires_staffing: venue.requires_staffing_default,
+    requires_staffing: null,
     status: 'discovered',
     auto_importable: matchType === 'official_source' && trustScore >= 0.78 && feedEvent.confidence >= 0.85,
   }
@@ -820,7 +820,7 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
     trust_reasons: trustReasons,
     duplicate: false,
     duplicate_reason: null,
-    requires_staffing: venue.requires_staffing_default,
+    requires_staffing: null,
     status: 'discovered',
     auto_importable: matchType === 'official_source' && trustScore >= 0.78 && confidence >= 0.85 && isOfficialSourceKind(sourceKind),
   }
@@ -1094,12 +1094,15 @@ export async function importDiscoveryEvents(
       ? clientResult.rows[0]?.client_id || null
       : null
 
+    // Joe 2026-05-04: do NOT bake requires_staffing on import. Venue-level
+    // `requires_assignment` is the single source of truth; `events.requires_staffing`
+    // stays NULL unless an admin sets a per-event override via the UI.
     const result = await query(
       `INSERT INTO events (
          summary, event_date, start_time, end_time, venue_id, client_id, league,
-         workflow_status, event_type, source, requires_staffing
+         workflow_status, event_type, source
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)
        RETURNING id`,
       [
         event.summary,
@@ -1111,7 +1114,6 @@ export async function importDiscoveryEvents(
         event.league || null,
         event.event_type,
         event.source || 'ai_discovery',
-        automation.requires_staffing_default,
       ]
     )
 
