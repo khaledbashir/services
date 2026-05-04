@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
         v.logo_url,
         COALESCE(v.is_active, true) as is_active,
         v.feed_url,
+        COALESCE(v.aliases, '{}') as aliases,
         COUNT(DISTINCT cv.client_id)::int as client_count,
         -- Distinct sports across the venue's linked clients. Used by the
         -- design module's left-rail venue tree to bucket venues into
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id
       ${whereClause}
-      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active, v.feed_url
+      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active, v.feed_url, v.aliases
       ORDER BY v.name`,
       [...vf.params]
     )

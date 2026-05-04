@@ -138,6 +138,10 @@ async function runMigrations() {
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS requires_staffing BOOLEAN`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`)
+    // Joe 2026-05-04: team aliases for venue search. Tech support gets calls
+    // like "Philadelphia Flyers" — typing "Flyers" should resolve to Xfinity
+    // Mobile Arena. Stored as a TEXT[] of free-form strings.
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS aliases TEXT[] DEFAULT '{}'`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`)
     await client.query(`CREATE TABLE IF NOT EXISTS venue_documents (

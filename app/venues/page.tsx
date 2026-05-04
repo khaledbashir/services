@@ -19,6 +19,7 @@ interface Venue {
   feed_url: string | null
   active_service_count: number
   automation_status: 'auto_sync_active' | 'no_services' | 'no_feed_url' | 'inactive'
+  aliases?: string[]
 }
 
 const venueTypeConfig: Record<string, { label: string; badge: string; dot: string }> = {
@@ -46,6 +47,13 @@ export default function VenuesPage() {
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
   const [myVenuesOnly, setMyVenuesOnly] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    if (typeof window === 'undefined') return 'grid'
+    return (localStorage.getItem('venuesViewMode') as 'grid' | 'list') || 'grid'
+  })
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('venuesViewMode', viewMode)
+  }, [viewMode])
   const router = useRouter()
   const auth = useAuth()
 
@@ -74,7 +82,11 @@ export default function VenuesPage() {
 
   const filtered = venues.filter(v => {
     const q = search.toLowerCase()
-    const matchesSearch = !q || (v.name || '').toLowerCase().includes(q) || (v.market || '').toLowerCase().includes(q)
+    // Joe 2026-05-04: aliases participate in search ("Flyers" → Xfinity Mobile Arena).
+    const matchesSearch = !q
+      || (v.name || '').toLowerCase().includes(q)
+      || (v.market || '').toLowerCase().includes(q)
+      || (v.aliases || []).some(a => a.toLowerCase().includes(q))
     const matchesType = typeFilter === 'all' || v.venue_type === typeFilter
     const matchesUnassigned = !showUnassignedOnly || (v.requires_assignment && Number(v.event_count) > 0 && Number(v.assigned_count) < Number(v.event_count))
     return matchesSearch && matchesType && matchesUnassigned
@@ -164,6 +176,28 @@ export default function VenuesPage() {
                 {f === 'today' ? 'Today' : f === 'week' ? 'Week' : 'Month'}
               </button>
             ))}
+          </div>
+
+          {/* View toggle (Joe 2026-05-04: list view for managers scanning many venues) */}
+          <div className="flex bg-zinc-100 rounded-lg p-1 border border-zinc-200">
+            <button onClick={() => setViewMode('grid')} title="Grid view"
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                viewMode === 'grid' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h6v6H4zM14 6h6v6h-6zM4 16h6v4H4zM14 16h6v4h-6z" />
+              </svg>
+              Grid
+            </button>
+            <button onClick={() => setViewMode('list')} title="List view"
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                viewMode === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              List
+            </button>
           </div>
         </div>
 
@@ -255,6 +289,96 @@ export default function VenuesPage() {
                 ? 'Click "+ Add Venue" to create your first one.'
                 : 'Try adjusting your search or filter.'}
             </p>
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 border-b border-zinc-200">
+                  <tr className="text-left">
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Venue</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Market</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Aliases</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Events</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Assigned</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Coverage</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Automation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {filtered.map((venue) => {
+                    const eventCount = Number(venue.event_count) || 0
+                    const assignedCount = Number(venue.assigned_count) || 0
+                    const allAssigned = eventCount > 0 && assignedCount >= eventCount
+                    const hasEvents = eventCount > 0
+                    const needsAssignment = venue.requires_assignment
+                    const typeConf = venueTypeConfig[venue.venue_type] || venueTypeConfig.sports
+                    const coveragePct = eventCount > 0 ? Math.round((assignedCount / eventCount) * 100) : 0
+                    const coverageColor = !needsAssignment
+                      ? 'text-zinc-400'
+                      : !hasEvents
+                        ? 'text-zinc-400'
+                        : allAssigned
+                          ? 'text-emerald-700'
+                          : assignedCount > 0
+                            ? 'text-amber-700'
+                            : 'text-red-700'
+                    return (
+                      <tr key={venue.id}
+                        onClick={() => venue.is_active && router.push(`/venues/${venue.id}`)}
+                        className={`${venue.is_active ? 'hover:bg-zinc-50 cursor-pointer' : 'opacity-60'} transition-colors`}>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-7 h-7 rounded-md flex-shrink-0 overflow-hidden flex items-center justify-center border border-zinc-200">
+                              {venue.logo_url ? (
+                                <img src={venue.logo_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-[#0A52EF] to-[#0840C0] flex items-center justify-center">
+                                  <span className="text-white font-bold text-[9px]">{(venue.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="font-semibold text-zinc-900 truncate">{venue.name}</span>
+                            {!venue.is_active && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-zinc-100 text-zinc-500 border-zinc-200">Inactive</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-600">{venue.market || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${typeConf.badge}`}>
+                            {typeConf.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-600 max-w-xs">
+                          {venue.aliases && venue.aliases.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {venue.aliases.slice(0, 3).map((a, i) => (
+                                <span key={`${a}-${i}`} className="text-[10px] bg-zinc-100 text-zinc-700 rounded px-1.5 py-0.5">{a}</span>
+                              ))}
+                              {venue.aliases.length > 3 && (
+                                <span className="text-[10px] text-zinc-400">+{venue.aliases.length - 3}</span>
+                              )}
+                            </div>
+                          ) : <span className="text-zinc-300">—</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{eventCount}</td>
+                        <td className="px-4 py-2.5 text-right text-zinc-700">{needsAssignment ? `${assignedCount}/${eventCount}` : '—'}</td>
+                        <td className={`px-4 py-2.5 font-bold text-xs ${coverageColor}`}>
+                          {!needsAssignment ? 'Support only' : !hasEvents ? `No events ${periodLabel}` : `${coveragePct}%`}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${automationStatusConfig[venue.automation_status]?.style || automationStatusConfig.no_services.style}`}>
+                            {automationStatusConfig[venue.automation_status]?.label || 'No Services'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">

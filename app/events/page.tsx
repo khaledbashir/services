@@ -109,6 +109,7 @@ function EventsPageInner() {
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
   const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
   const [showVenueFilter, setShowVenueFilter] = useState(false)
+  const [venueFilterQuery, setVenueFilterQuery] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'needs_staffing' | 'warranty_only'>('all')
   const [aiFilter, setAiFilter] = useState<'all' | 'ai_only' | 'url_only'>('all')
@@ -1000,29 +1001,53 @@ function EventsPageInner() {
                 </svg>
                 Venues {selectedVenues.size > 0 && `(${selectedVenues.size})`}
               </button>
-              {showVenueFilter && (
-                <div className="absolute left-0 top-full z-50 mt-2 max-h-64 w-72 overflow-y-auto rounded-lg border border-[#E8E8E8] bg-white shadow-lg">
-                  <div className="border-b border-[#E8E8E8] p-2">
-                    <p className="px-2 text-xs font-medium text-zinc-500">Select venues to filter</p>
-                  </div>
-                  {venueOptions.map(v => (
-                    <label key={v.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-50">
+              {showVenueFilter && (() => {
+                const q = venueFilterQuery.toLowerCase().trim()
+                const matched = q
+                  ? venueOptions.filter(v => v.name.toLowerCase().includes(q))
+                  : venueOptions
+                return (
+                  <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-lg border border-[#E8E8E8] bg-white shadow-lg flex flex-col" style={{ maxHeight: '20rem' }}>
+                    {/* Joe 2026-05-04: search input — long venue list was hard to scan */}
+                    <div className="border-b border-[#E8E8E8] p-2 sticky top-0 bg-white z-10">
                       <input
-                        type="checkbox"
-                        checked={selectedVenues.has(v.id)}
-                        onChange={() => toggleVenue(v.id)}
-                        className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                        type="text"
+                        autoFocus
+                        value={venueFilterQuery}
+                        onChange={(e) => setVenueFilterQuery(e.target.value)}
+                        placeholder="Search venues..."
+                        className="w-full px-2 py-1.5 text-xs border border-[#E8E8E8] rounded focus:outline-none focus:ring-1 focus:ring-[#0A52EF] focus:border-[#0A52EF]"
                       />
-                      <span className="text-zinc-700">{v.name}</span>
-                    </label>
-                  ))}
-                  <div className="border-t border-[#E8E8E8] p-2">
-                    <button onClick={() => setShowVenueFilter(false)} className="w-full py-1 text-center text-xs font-medium text-[#0A52EF] hover:underline">
-                      Done
-                    </button>
+                    </div>
+                    <div className="overflow-y-auto flex-1">
+                      {matched.map(v => (
+                        <label key={v.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-50">
+                          <input
+                            type="checkbox"
+                            checked={selectedVenues.has(v.id)}
+                            onChange={() => toggleVenue(v.id)}
+                            className="rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                          />
+                          <span className="text-zinc-700">{v.name}</span>
+                        </label>
+                      ))}
+                      {matched.length === 0 && (
+                        <p className="px-3 py-3 text-xs text-zinc-400">No venues match &ldquo;{venueFilterQuery}&rdquo;</p>
+                      )}
+                    </div>
+                    <div className="border-t border-[#E8E8E8] p-2 flex items-center justify-between gap-2">
+                      {selectedVenues.size > 0 ? (
+                        <button onClick={clearVenueFilter} className="text-xs text-zinc-500 hover:text-zinc-800">
+                          Clear ({selectedVenues.size})
+                        </button>
+                      ) : <span />}
+                      <button onClick={() => { setShowVenueFilter(false); setVenueFilterQuery('') }} className="py-1 text-xs font-medium text-[#0A52EF] hover:underline">
+                        Done
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
             {selectedVenues.size > 0 && (
               <>

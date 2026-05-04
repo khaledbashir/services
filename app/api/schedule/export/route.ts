@@ -11,6 +11,91 @@ function fmtTime(d: string) {
   } catch { return '' }
 }
 
+function csvEscape(v: unknown): string {
+  if (v === null || v === undefined) return ''
+  const s = String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+function buildScheduleCSV(rows: any[]): string {
+  const header = ['Date', 'Start Time', 'End Time', 'Event', 'League', 'Assigned Staff', 'Status']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    const status = r.workflow_status === 'pending' ? 'Pending'
+      : r.workflow_status === 'checked_in' ? 'Checked In'
+      : r.workflow_status === 'game_ready' ? 'Game Ready'
+      : r.workflow_status === 'post_game_submitted' ? 'Complete'
+      : r.workflow_status || 'Pending'
+    lines.push([
+      csvEscape(r.event_date),
+      csvEscape(r.start_time ? new Date(r.start_time).toISOString() : ''),
+      csvEscape(r.end_time ? new Date(r.end_time).toISOString() : ''),
+      csvEscape(r.summary || ''),
+      csvEscape(r.league || ''),
+      csvEscape(r.assigned_techs || ''),
+      csvEscape(status),
+    ].join(','))
+  }
+  // BOM for Excel UTF-8 compatibility
+  return '﻿' + lines.join('\r\n') + '\r\n'
+}
+
+function icsEscape(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+}
+
+function fmtIcsUtc(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
+}
+
+function foldIcsLine(line: string): string {
+  // RFC 5545: lines >75 octets must be folded with CRLF + space.
+  if (line.length <= 75) return line
+  const out: string[] = []
+  let i = 0
+  while (i < line.length) {
+    out.push((i === 0 ? '' : ' ') + line.slice(i, i + 73))
+    i += 73
+  }
+  return out.join('\r\n')
+}
+
+function buildScheduleICS(venueName: string, rows: any[], _venueTimezone: string): string {
+  const now = fmtIcsUtc(new Date())
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//ANC Sports//Service Dashboard//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    foldIcsLine(`X-WR-CALNAME:${icsEscape(`Staff Schedule — ${venueName}`)}`),
+  ]
+  for (const r of rows) {
+    const start = r.start_time ? new Date(r.start_time) : null
+    if (!start || isNaN(start.getTime())) continue
+    const end = r.end_time && !isNaN(new Date(r.end_time).getTime())
+      ? new Date(r.end_time)
+      : new Date(start.getTime() + 3 * 60 * 60 * 1000) // default 3h
+    const summary = r.summary || 'Event'
+    const desc = [
+      r.league ? `League: ${r.league}` : '',
+      r.assigned_techs ? `Assigned: ${r.assigned_techs}` : 'Unassigned',
+    ].filter(Boolean).join(' | ')
+    lines.push('BEGIN:VEVENT')
+    lines.push(`UID:${r.id}@anc-services`)
+    lines.push(`DTSTAMP:${now}`)
+    lines.push(`DTSTART:${fmtIcsUtc(start)}`)
+    lines.push(`DTEND:${fmtIcsUtc(end)}`)
+    lines.push(foldIcsLine(`SUMMARY:${icsEscape(summary)}`))
+    lines.push(foldIcsLine(`LOCATION:${icsEscape(venueName)}`))
+    if (desc) lines.push(foldIcsLine(`DESCRIPTION:${icsEscape(desc)}`))
+    lines.push('END:VEVENT')
+  }
+  lines.push('END:VCALENDAR')
+  return lines.join('\r\n') + '\r\n'
+}
+
 function buildScheduleHTML(venueName: string, rows: any[], startDate: string, endDate: string) {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
@@ -80,6 +165,7 @@ export async function GET(request: NextRequest) {
     const venueId = searchParams.get('venue_id')
     const period = searchParams.get('period') || '30' // days
     const action = searchParams.get('action') || 'download' // download or email
+    const format = (searchParams.get('format') || 'pdf').toLowerCase() // pdf | csv | ics
 
     if (!venueId) {
       return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
@@ -87,7 +173,7 @@ export async function GET(request: NextRequest) {
 
     // Get venue info
     const venueResult = await query(
-      `SELECT v.name, v.primary_contact_name, v.primary_contact_email FROM venues v WHERE v.id = $1`,
+      `SELECT v.name, v.primary_contact_name, v.primary_contact_email, COALESCE(v.timezone, 'America/New_York') as timezone FROM venues v WHERE v.id = $1`,
       [venueId]
     )
     if (venueResult.rows.length === 0) {
@@ -101,9 +187,11 @@ export async function GET(request: NextRequest) {
     // Get events with assignments
     const eventsResult = await query(
       `SELECT
+        e.id,
         e.summary,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         e.start_time,
+        e.end_time,
         e.league,
         COALESCE(e.workflow_status, 'pending') as workflow_status,
         STRING_AGG(s.full_name, ', ' ORDER BY s.full_name) as assigned_techs
@@ -111,10 +199,34 @@ export async function GET(request: NextRequest) {
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= $3
-      GROUP BY e.id, e.summary, e.event_date, e.start_time, e.league, e.workflow_status
+      GROUP BY e.id, e.summary, e.event_date, e.start_time, e.end_time, e.league, e.workflow_status
       ORDER BY e.start_time`,
       [venueId, today, endDate]
     )
+
+    const safeName = venue.name.replace(/[^a-zA-Z0-9]/g, '_')
+
+    // CSV export — Joe 2026-05-04, for managers who want to scan in Excel.
+    if (format === 'csv') {
+      const csv = buildScheduleCSV(eventsResult.rows)
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="Staff_Schedule_${safeName}_${today}.csv"`,
+        },
+      })
+    }
+
+    // iCal export — Joe 2026-05-04, so contacts can subscribe in Google / Outlook.
+    if (format === 'ics') {
+      const ics = buildScheduleICS(venue.name, eventsResult.rows, venue.timezone)
+      return new NextResponse(ics, {
+        headers: {
+          'Content-Type': 'text/calendar; charset=utf-8',
+          'Content-Disposition': `attachment; filename="Staff_Schedule_${safeName}.ics"`,
+        },
+      })
+    }
 
     const html = buildScheduleHTML(venue.name, eventsResult.rows, today, endDate)
 

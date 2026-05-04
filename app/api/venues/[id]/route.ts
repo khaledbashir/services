@@ -39,6 +39,7 @@ export async function GET(
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.distribution_emails, '{}') as distribution_emails,
+        COALESCE(v.aliases, '{}') as aliases,
         v.venue_manager_id,
         v.lead_field_rep_id,
         sm.full_name as venue_manager_name,
@@ -413,6 +414,28 @@ export async function PATCH(
       )
     }
 
+    // Handle aliases (Joe 2026-05-04 — team-name lookups for tech support).
+    // Trim, drop blanks, dedupe case-insensitively, cap length to keep it sane.
+    if (body.aliases !== undefined) {
+      const seen = new Set<string>()
+      const aliases = Array.isArray(body.aliases)
+        ? body.aliases
+            .map((a: unknown) => (typeof a === 'string' ? a.trim() : ''))
+            .filter((a: string) => {
+              if (!a || a.length > 80) return false
+              const k = a.toLowerCase()
+              if (seen.has(k)) return false
+              seen.add(k)
+              return true
+            })
+            .slice(0, 50)
+        : []
+      await query(
+        `UPDATE venues SET aliases = $1 WHERE id = $2`,
+        [aliases, venueId]
+      )
+    }
+
     // Handle venue_manager_id
     if (body.venue_manager_id !== undefined) {
       await query(
@@ -444,6 +467,7 @@ export async function PATCH(
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.distribution_emails, '{}') as distribution_emails,
+        COALESCE(v.aliases, '{}') as aliases,
         v.venue_manager_id,
         v.lead_field_rep_id,
         sm.full_name as venue_manager_name,

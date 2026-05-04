@@ -25,6 +25,7 @@ interface VenueDetail {
   portal_token: string | null
   venue_type: string
   distribution_emails: string[]
+  aliases: string[]
   venue_manager_id: string | null
   lead_field_rep_id: string | null
   logo_url: string | null
@@ -149,6 +150,11 @@ export default function VenueDetailPage() {
   const [emailingSchedule, setEmailingSchedule] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [distEmails, setDistEmails] = useState<string[]>([])
+  const [aliases, setAliases] = useState<string[]>([])
+  const [newAlias, setNewAlias] = useState('')
+  const [savingAliases, setSavingAliases] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [newDistEmail, setNewDistEmail] = useState('')
   const [savingDist, setSavingDist] = useState(false)
   const [savingFeed, setSavingFeed] = useState(false)
@@ -246,6 +252,7 @@ export default function VenueDetailPage() {
           setCreative(data.creative || { designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
           setSlackChannelId(data.venue.slack_channel_id || '')
           setDistEmails(data.venue.distribution_emails || [])
+          setAliases(data.venue.aliases || [])
           // Load who the viewer is so we can scope the delete affordance.
           if (typeof window !== 'undefined') {
             setViewerId(localStorage.getItem('userId'))
@@ -827,16 +834,60 @@ export default function VenueDetailPage() {
                 </svg>
                 {discovering ? 'Searching...' : 'Discover Events'}
               </button>
-              <a
-                href={`/api/schedule/export?venue_id=${venueId}&period=30`}
-                download
-                className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition-colors inline-flex items-center gap-1.5"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Export PDF
-              </a>
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="px-3 py-1.5 border border-[#E8E8E8] rounded text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export Schedule
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showExportMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-[#E8E8E8] bg-white shadow-lg overflow-hidden">
+                      {([
+                        { fmt: 'pdf',  label: 'PDF',          desc: 'Print-ready letter format' },
+                        { fmt: 'csv',  label: 'CSV',          desc: 'Open in Excel / Sheets' },
+                        { fmt: 'ics',  label: 'Calendar (.ics)', desc: 'Subscribe in Google / Outlook' },
+                      ] as const).map(opt => (
+                        <button key={opt.fmt}
+                          onClick={async () => {
+                            setShowExportMenu(false)
+                            setExportingFormat(opt.fmt)
+                            try {
+                              const res = await fetch(`/api/schedule/export?venue_id=${venueId}&period=30&format=${opt.fmt}`)
+                              if (!res.ok) return
+                              const blob = await res.blob()
+                              const cd = res.headers.get('Content-Disposition') || ''
+                              const m = cd.match(/filename="([^"]+)"/)
+                              const filename = m ? m[1] : `schedule.${opt.fmt}`
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = filename
+                              document.body.appendChild(a)
+                              a.click()
+                              a.remove()
+                              URL.revokeObjectURL(url)
+                            } catch {} finally { setExportingFormat(null) }
+                          }}
+                          disabled={exportingFormat === opt.fmt}
+                          className="w-full text-left px-3 py-2 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+                        >
+                          <div className="text-sm font-medium text-zinc-900">{opt.label}</div>
+                          <div className="text-[11px] text-zinc-500">{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               {venue.primary_contact_email && (
                 <button
                   onClick={async () => {
@@ -2082,6 +2133,59 @@ export default function VenueDetailPage() {
                   <button type="submit" disabled={savingSlack}
                     className="w-full px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50">
                     {savingSlack ? 'Saving...' : 'Save'}
+                  </button>
+                </form>
+              </div>
+              {/* Team Aliases — Joe 2026-05-04 */}
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Team Aliases</h3>
+                <p className="text-xs text-zinc-500 mb-3">When a team calls in by name (&ldquo;Philadelphia Flyers&rdquo;, &ldquo;Sixers&rdquo;), tech support can search any of these and pull this venue. Add nicknames, mascots, school names — anything callers actually say.</p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {aliases.map((a, idx) => (
+                    <span key={`${a}-${idx}`} className="inline-flex items-center gap-1.5 bg-zinc-100 text-zinc-800 rounded-full px-3 py-1 text-xs">
+                      {a}
+                      <button
+                        onClick={async () => {
+                          const updated = aliases.filter((_, i) => i !== idx)
+                          setAliases(updated)
+                          setSavingAliases(true)
+                          try {
+                            await fetch(`/api/venues/${venueId}`, {
+                              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ aliases: updated }),
+                            })
+                          } catch {} finally { setSavingAliases(false) }
+                        }}
+                        className="text-zinc-400 hover:text-red-500"
+                        aria-label={`Remove alias ${a}`}
+                      >×</button>
+                    </span>
+                  ))}
+                  {aliases.length === 0 && <p className="text-xs text-zinc-400">No aliases yet</p>}
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  const v = newAlias.trim()
+                  if (!v) return
+                  if (aliases.some(a => a.toLowerCase() === v.toLowerCase())) { setNewAlias(''); return }
+                  const updated = [...aliases, v]
+                  setAliases(updated)
+                  setNewAlias('')
+                  setSavingAliases(true)
+                  try {
+                    await fetch(`/api/venues/${venueId}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ aliases: updated }),
+                    })
+                  } catch {} finally { setSavingAliases(false) }
+                }} className="flex gap-2">
+                  <input type="text" value={newAlias} onChange={e => setNewAlias(e.target.value)}
+                    placeholder="e.g., Flyers, Sixers, Phila Eagles"
+                    maxLength={80}
+                    className="flex-1 px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
+                  <button type="submit" disabled={savingAliases || !newAlias.trim()}
+                    className="px-3 py-2 bg-[#0A52EF] text-white text-sm rounded hover:bg-[#0840C0] font-medium transition-colors disabled:opacity-50">
+                    {savingAliases ? '...' : 'Add'}
                   </button>
                 </form>
               </div>

@@ -35,7 +35,7 @@ type SortDir = 'asc' | 'desc'
 const priorityRank: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 }
 const statusRank: Record<string, number> = { closed: 0, on_hold: 1, in_progress: 2, escalated: 3, new: 4 }
 
-interface Venue { id: string; name: string }
+interface Venue { id: string; name: string; aliases?: string[] }
 interface Event { id: string; summary: string; event_date: string; venue_id: string }
 interface Staff { id: string; full_name: string }
 
@@ -471,26 +471,38 @@ export default function TicketsPage() {
                     className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
                     required
                   />
-                  {venueMenuOpen && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 max-h-60 overflow-auto border border-zinc-200 bg-white shadow-lg rounded">
-                      {venues
-                        .filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim()))
-                        .slice(0, 50)
-                        .map(v => (
-                          <button
-                            type="button"
-                            key={v.id}
-                            onMouseDown={(e) => { e.preventDefault(); setFormData(prev => ({ ...prev, venue_id: v.id, event_id: '' })); setSelectedVenueId(v.id); setVenueQuery(v.name); setVenueMenuOpen(false) }}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 ${formData.venue_id === v.id ? 'bg-[#0A52EF]/10 text-[#0A52EF]' : 'text-zinc-700'}`}
-                          >
-                            {v.name}
-                          </button>
-                        ))}
-                      {venues.filter(v => v.name.toLowerCase().includes(venueQuery.toLowerCase().trim())).length === 0 && (
-                        <div className="px-3 py-2 text-sm text-zinc-400">No venues match "{venueQuery}"</div>
-                      )}
-                    </div>
-                  )}
+                  {venueMenuOpen && (() => {
+                    // Joe 2026-05-04: search both venue name and team aliases.
+                    // ("Philadelphia Flyers" → Xfinity Mobile Arena).
+                    const q = venueQuery.toLowerCase().trim()
+                    const matchedAlias = (v: Venue) =>
+                      q ? (v.aliases || []).find(a => a.toLowerCase().includes(q)) : null
+                    const matched = venues.filter(v => {
+                      const nameHit = v.name.toLowerCase().includes(q)
+                      return nameHit || (q ? Boolean(matchedAlias(v)) : true)
+                    }).slice(0, 50)
+                    return (
+                      <div className="absolute z-10 left-0 right-0 mt-1 max-h-60 overflow-auto border border-zinc-200 bg-white shadow-lg rounded">
+                        {matched.map(v => {
+                          const alias = q && !v.name.toLowerCase().includes(q) ? matchedAlias(v) : null
+                          return (
+                            <button
+                              type="button"
+                              key={v.id}
+                              onMouseDown={(e) => { e.preventDefault(); setFormData(prev => ({ ...prev, venue_id: v.id, event_id: '' })); setSelectedVenueId(v.id); setVenueQuery(v.name); setVenueMenuOpen(false) }}
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 ${formData.venue_id === v.id ? 'bg-[#0A52EF]/10 text-[#0A52EF]' : 'text-zinc-700'}`}
+                            >
+                              {v.name}
+                              {alias && <span className="ml-2 text-[11px] text-zinc-400">match: &ldquo;{alias}&rdquo;</span>}
+                            </button>
+                          )
+                        })}
+                        {matched.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-zinc-400">No venues match &ldquo;{venueQuery}&rdquo;</div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Event (optional)</label>
