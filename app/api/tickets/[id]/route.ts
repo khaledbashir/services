@@ -85,6 +85,7 @@ export async function GET(
          ta.image_url,
          ta.caption,
          ta.is_internal,
+         ta.uploaded_by,
          s.full_name as uploaded_by_name,
          TO_CHAR(ta.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date
        FROM ticket_attachments ta

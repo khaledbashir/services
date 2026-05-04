@@ -42,6 +42,7 @@ interface TicketAttachment {
   image_url: string
   caption: string | null
   is_internal: boolean
+  uploaded_by?: string | null
   uploaded_by_name?: string | null
   created_date: string
 }
@@ -122,10 +123,17 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [mergeCandidates, setMergeCandidates] = useState<Array<{ id: string; ticket_number: number; title: string; venue_name?: string | null }>>([])
   const [merging, setMerging] = useState(false)
   const [canDelete, setCanDelete] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [canManageAttachments, setCanManageAttachments] = useState(false)
   useEffect(() => {
     // Tightened 2026-04-23 at Chris D's ask: admin-only delete. Managers still
     // use "close" via the Mark Complete button — delete is irrecoverable.
-    try { setCanDelete(localStorage.getItem('userRole') === 'admin') } catch {}
+    try {
+      const role = localStorage.getItem('userRole')
+      setCanDelete(role === 'admin')
+      setCanManageAttachments(role === 'admin' || role === 'tech_support' || role === 'manager')
+      setCurrentUserId(localStorage.getItem('userId'))
+    } catch {}
   }, [])
   const router = useRouter()
 
@@ -316,6 +324,23 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       setAttachmentStatus({ type: 'error', message: 'Unable to upload attachment' })
     } finally {
       setUploadingAttachment(false)
+    }
+  }
+
+  const deleteAttachment = async (attachment: TicketAttachment) => {
+    const label = attachment.caption || attachment.filename || 'this attachment'
+    if (!confirm(`Delete ${label}? This can't be undone.`)) return
+    try {
+      const res = await fetch(`/api/tickets/${params.id}/attachments/${attachment.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        setAttachmentStatus({ type: 'success', message: 'Attachment deleted' })
+        await fetchData()
+      } else {
+        setAttachmentStatus({ type: 'error', message: data?.error || 'Could not delete attachment' })
+      }
+    } catch {
+      setAttachmentStatus({ type: 'error', message: 'Could not delete attachment' })
     }
   }
 
@@ -1308,11 +1333,23 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           const isAudio = mime.startsWith('audio/')
                           const isPdf = mime === 'application/pdf'
                           const kindLabel = isImage ? 'Image' : isVideo ? 'Video' : isAudio ? 'Audio' : isPdf ? 'PDF' : (mime.split('/').pop() || 'File').toUpperCase()
+                          const canRemove = canManageAttachments || (currentUserId && attachment.uploaded_by === currentUserId)
                           return (
                             <div
                               key={attachment.id}
-                              className="text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300 hover:shadow-sm transition-all bg-white"
+                              className="relative text-left border border-zinc-200 rounded-lg overflow-hidden hover:border-zinc-300 hover:shadow-sm transition-all bg-white"
                             >
+                              {canRemove && (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAttachment(attachment)}
+                                  className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-zinc-900/80 text-white text-xs flex items-center justify-center shadow hover:bg-rose-600 transition-colors"
+                                  aria-label="Delete attachment"
+                                  title="Delete attachment"
+                                >
+                                  ✕
+                                </button>
+                              )}
                               <div className="aspect-video bg-zinc-100 flex items-center justify-center">
                                 {isImage ? (
                                   <button type="button" onClick={() => window.open(attachment.image_url, '_blank')} className="w-full h-full">
