@@ -38,14 +38,29 @@ function readStaffEmail(request: NextRequest, fallback: string | null): string |
   return null
 }
 
+const VOICE_FALLBACK_EMAIL = 'voice-agent@ancsports.net'
+
 async function resolveStaff(email: string | null): Promise<VoiceStaff | null> {
-  if (!email) return null
-  const result = await query(
-    `SELECT id, full_name, email, role FROM staff WHERE LOWER(email) = $1 AND is_active = true LIMIT 1`,
-    [email]
-  )
-  if (!result.rows.length) return null
-  const row = result.rows[0]
+  // Fall back to the Voice Agent system identity when no email is provided
+  // OR the supplied email isn't a real staff member (dashboard testing path).
+  // Production embed should override with the logged-in user's email so
+  // tickets attribute correctly; this just keeps the agent functional.
+  const lookup = email
+    ? await query(
+        `SELECT id, full_name, email, role FROM staff WHERE LOWER(email) = $1 AND is_active = true LIMIT 1`,
+        [email]
+      )
+    : { rows: [] as Array<{ id: string; full_name: string; email: string; role: string }> }
+
+  let row = lookup.rows[0]
+  if (!row) {
+    const fallback = await query(
+      `SELECT id, full_name, email, role FROM staff WHERE email = $1 AND is_active = true LIMIT 1`,
+      [VOICE_FALLBACK_EMAIL]
+    )
+    row = fallback.rows[0]
+  }
+  if (!row) return null
   return { id: row.id, fullName: row.full_name, email: row.email, role: row.role }
 }
 
