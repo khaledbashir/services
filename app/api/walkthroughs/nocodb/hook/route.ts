@@ -84,9 +84,20 @@ async function processRow(id: number, row: any) {
   let ticket_number: number | null = null
   if (result === 'New Issue Detected' && !/Linked ticket: #\d+/.test(comments)) {
     try {
+      // Match dashboard venues by exact name first, then by either side
+      // containing the other (handles "Moynihan" ↔ "Moynihan Station"
+      // mismatches between NocoDB and the dashboard's local venues table).
+      // Skip the substring path if the name is too short — protects against
+      // matches like "PST" hitting too many rows.
       const venueLookup = await query(
-        `SELECT id FROM venues WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-        [venueName]
+        `SELECT id, name FROM venues
+         WHERE LOWER(name) = LOWER($1)
+            OR ($2::int >= 4 AND LOWER(name) LIKE '%' || LOWER($1) || '%')
+            OR ($2::int >= 4 AND LOWER($1) LIKE '%' || LOWER(name) || '%')
+         ORDER BY CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END,
+                  LENGTH(name) ASC
+         LIMIT 1`,
+        [venueName, venueName.length]
       )
       const dashboardVenueId = venueLookup.rows[0]?.id
       if (dashboardVenueId) {
