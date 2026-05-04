@@ -1,0 +1,211 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
+import { NocoOps } from '@/lib/nocodb-ops'
+import { Browserless } from '@/lib/browserless'
+import { buildWalkthroughHtml } from '@/lib/walkthrough-pdf'
+import { TABLES } from '@/lib/walkthrough-config'
+
+// POST /api/walkthroughs/nocodb/hook?secret=...
+//
+// Called by a NocoDB webhook on the Walkthrough Log table after-insert.
+// Nick's tech submits via NocoDB's native "Add Visit" form; NocoDB POSTs
+// the new row here, and we apply the smart bits that NocoDB can't do
+// natively:
+//   - Generate a print-ready PDF of the walkthrough and attach it back to
+//     the same row.
+//   - Open a high-priority ticket in the dashboard's tickets table when
+//     the result is "New Issue Detected", and write the ticket number
+//     into the walkthrough comments so it's traceable both ways.
+//
+// The webhook URL has a shared secret in the query string; reject anything
+// else.
+
+const HOOK_SECRET = process.env.WALKTHROUGH_HOOK_SECRET || 'walkthrough-hook-anc-5ae19'
+
+export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  if (searchParams.get('secret') !== HOOK_SECRET) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  let body: any
+  try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  // NocoDB after-insert hook payload shape:
+  //   { type, data: { table_name, table_id, view_id, rows: [<the new row>] } }
+  // We accept the row-array form, plus a permissive fallback.
+  const rows: any[] = Array.isArray(body?.data?.rows) ? body.data.rows
+    : Array.isArray(body?.rows) ? body.rows
+    : Array.isArray(body) ? body
+    : body?.data ? [body.data] : [body]
+
+  const results: any[] = []
+  for (const row of rows) {
+    const id = Number(row?.Id)
+    if (!id) { results.push({ ok: false, error: 'no Id on row' }); continue }
+    try {
+      results.push(await processRow(id, row))
+    } catch (e: any) {
+      console.error('[walkthroughs/nocodb/hook] row processing error:', e)
+      results.push({ ok: false, id, error: e?.message || 'process failed' })
+    }
+  }
+
+  return NextResponse.json({ ok: true, processed: results })
+}
+
+async function processRow(id: number, row: any) {
+  // 1. Pull the canonical row + linked venue + linked locations + linked
+  //    displays so the PDF + ticket have full context.
+  const { records: full } = await NocoOps.listRecords(TABLES.walkthroughLog, {
+    where: `(Id,eq,${id})`,
+    limit: 1,
+  })
+  const r = (full[0] as any) || row
+  const venueLink = Array.isArray(r.Venue) ? r.Venue[0] : null
+  const venueName = venueLink?.['Venue Name'] || r['Venue Name'] || 'Unknown venue'
+  const venueAbbr = venueLink?.Abbreviation || r['Three Letter Code'] || ''
+  const result = String(r.Result || '').trim()
+  const type = String(r.Type || '').trim() || 'In-Person'
+  const comments = String(r['Comments (log issues above)'] || '').trim()
+  const technician = String(r.Technician || '').trim() || 'Field tech'
+
+  const locationsLinked: any[] = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
+  const locationIds = locationsLinked.map((l: any) => Number(l?.Id)).filter(Boolean)
+
+  const dt = r['Log Date Dt'] || r['Log Date'] || new Date().toISOString()
+  const when = new Date(dt)
+
+  const log_id = r['Log ID']
+    || `${when.toISOString().slice(2, 10)} [${venueAbbr || 'venue'}]`
+
+  // 2. Open ticket if New Issue Detected (idempotent — skip if comments
+  //    already reference a ticket number).
+  let ticket_number: number | null = null
+  if (result === 'New Issue Detected' && !/Linked ticket: #\d+/.test(comments)) {
+    try {
+      const venueLookup = await query(
+        `SELECT id FROM venues WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+        [venueName]
+      )
+      const dashboardVenueId = venueLookup.rows[0]?.id
+      if (dashboardVenueId) {
+        const techLookup = await query(
+          `SELECT id FROM staff WHERE LOWER(full_name) = LOWER($1) OR LOWER(email) = LOWER($1) LIMIT 1`,
+          [technician]
+        )
+        const createdBy = techLookup.rows[0]?.id || '7fb556c3-5d2d-430a-b3dc-42f58d79be33' // ANC Bot fallback
+        const titleSeed = comments.split('\n')[0] || `Walkthrough finding — ${venueName}`
+        const title = titleSeed.length > 120 ? titleSeed.slice(0, 117) + '…' : titleSeed
+        const description = [
+          `Auto-generated from walkthrough log entry "${log_id}".`,
+          comments ? `\nTech notes:\n${comments}` : '',
+          `\nReported by: ${technician}`,
+          `\nWalkthrough record id: ${id} (NocoDB Walkthrough Log).`,
+        ].filter(Boolean).join('\n')
+
+        const inserted = await query(
+          `INSERT INTO tickets (venue_id, created_by, title, description, priority, status, category, source, ticket_type)
+           VALUES ($1, $2, $3, $4, 'high', 'new', 'general', 'walkthrough', 'support')
+           RETURNING ticket_number`,
+          [dashboardVenueId, createdBy, title, description]
+        )
+        ticket_number = inserted.rows[0]?.ticket_number || null
+      }
+    } catch (e) {
+      console.warn('[walkthroughs/nocodb/hook] ticket creation failed:', e)
+    }
+  }
+
+  // 3. Generate the PDF and attach it (alongside any existing attachments).
+  let pdfAttached = false
+  if (Browserless.configured()) {
+    try {
+      // Best-effort: pull the displays for the linked locations so the PDF
+      // can show the asset list (no per-asset findings on the native form
+      // path — that's the dashboard form's domain).
+      const locationGroups: Array<{ name: string; findings: any[] }> = []
+      if (locationIds.length) {
+        const { records: locs } = await NocoOps.listRecords(TABLES.displayLocations, {
+          where: `(Id,in,${locationIds.join(',')})`,
+          limit: 200,
+        })
+        const idToName = new Map<number, string>()
+        for (const l of locs) idToName.set(Number((l as any).Id), String((l as any).Name || `Location #${(l as any).Id}`))
+
+        const { records: dRows } = await NocoOps.listRecords(TABLES.displays, {
+          where: `(Display Location,in,${locationIds.join(',')})`,
+          limit: 500,
+        })
+        const byLoc = new Map<number, any[]>()
+        for (const d of dRows) {
+          const did = Number((d as any).Id)
+          const dname = String((d as any)['Display Name'] || (d as any)['Nick Name'] || `Display #${did}`)
+          const dlArr = (d as any)['Display Location']
+          const loc = Array.isArray(dlArr) && dlArr[0]?.Id ? Number(dlArr[0].Id) : 0
+          if (!byLoc.has(loc)) byLoc.set(loc, [])
+          // Native-form path has no per-dimension data — render passing.
+          byLoc.get(loc)!.push({
+            display_id: did, display_name: dname,
+            image_quality: true, av_rotation: true,
+            physical_damage: true, pixel_outages: true, cleanliness: true,
+          })
+        }
+        for (const lid of locationIds) {
+          locationGroups.push({ name: idToName.get(lid) || `Location #${lid}`, findings: byLoc.get(lid) || [] })
+        }
+      }
+
+      const html = buildWalkthroughHtml({
+        log_id,
+        technician,
+        venue_name: venueName,
+        date_label: when.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        time_label: when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        type,
+        result: result || 'No Action Required',
+        comments,
+        ticket_number,
+        locations: locationGroups,
+      })
+      const pdf = await Browserless.renderPdf({ html, options: { format: 'Letter', printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } } })
+      const safeVenue = (venueName || 'venue').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)
+      const filename = `Walkthrough_${safeVenue}_${log_id.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`
+      const uploaded = await NocoOps.uploadFile({
+        filename,
+        contentType: 'application/pdf',
+        body: pdf,
+        pathHint: 'walkthroughs',
+      })
+      if (uploaded.length) {
+        const prior = Array.isArray(r.Attachments) ? r.Attachments : []
+        await NocoOps.updateRecords(TABLES.walkthroughLog, [{ Id: id, Attachments: [...prior, ...uploaded] }])
+        pdfAttached = true
+      }
+    } catch (e) {
+      console.warn('[walkthroughs/nocodb/hook] PDF gen / attach failed:', e)
+    }
+  }
+
+  // 4. Patch the comments with the ticket number for two-way trace, plus
+  //    backfill any missing date fields.
+  const patch: Record<string, unknown> = { Id: id }
+  let needsPatch = false
+  if (ticket_number) {
+    patch['Comments (log issues above)'] = `${comments}\n\nLinked ticket: #${String(ticket_number).padStart(5, '0')}`.trim()
+    needsPatch = true
+  }
+  if (!r['Log Date'] || !r['Log Date Dt']) {
+    const iso = (r['Log Date Dt'] ? new Date(r['Log Date Dt']) : new Date()).toISOString()
+    patch['Log Date'] = iso
+    patch['Log Date Dt'] = iso.replace('T', ' ').replace(/\.\d+Z$/, '+00:00')
+    needsPatch = true
+  }
+  if (needsPatch) {
+    await NocoOps.updateRecords(TABLES.walkthroughLog, [patch as any]).catch((e) =>
+      console.warn('[walkthroughs/nocodb/hook] post-process patch failed:', e)
+    )
+  }
+
+  return { ok: true, id, ticket_number, pdf_attached: pdfAttached }
+}
