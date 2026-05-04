@@ -182,10 +182,45 @@ export function formatTicketNotification(ticket: {
   ]
 
   if (ticket.description) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `> ${ticket.description.substring(0, 200)}${ticket.description.length > 200 ? '...' : ''}` },
-    })
+    // Stevie 2026-05-04 ask: full ticket body in the Slack preview, not a
+    // 200-char teaser. Slack section blocks cap at 3000 chars; chunk on
+    // paragraph boundaries when needed and prefix every line with `> ` so
+    // the whole body renders as a multi-line quote (Slack only quotes the
+    // first line of mrkdwn otherwise).
+    const quoted = ticket.description
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(line => `> ${line}`)
+      .join('\n')
+
+    const SECTION_LIMIT = 2900 // headroom under Slack's 3000-char cap
+    if (quoted.length <= SECTION_LIMIT) {
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: quoted } })
+    } else {
+      const chunks: string[] = []
+      let buf = ''
+      for (const para of quoted.split('\n\n')) {
+        const next = buf ? `${buf}\n\n${para}` : para
+        if (next.length > SECTION_LIMIT) {
+          if (buf) chunks.push(buf)
+          if (para.length > SECTION_LIMIT) {
+            for (let i = 0; i < para.length; i += SECTION_LIMIT) chunks.push(para.slice(i, i + SECTION_LIMIT))
+            buf = ''
+          } else {
+            buf = para
+          }
+        } else {
+          buf = next
+        }
+      }
+      if (buf) chunks.push(buf)
+      // Cap to 8 description blocks to keep within Slack's 50-block ceiling.
+      const capped = chunks.slice(0, 8)
+      for (const c of capped) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: c } })
+      if (chunks.length > capped.length) {
+        blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `_…note continues — open the ticket to see the rest._` }] })
+      }
+    }
   }
 
   if (ticket.image_url) {
