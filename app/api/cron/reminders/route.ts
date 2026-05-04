@@ -297,7 +297,7 @@ export async function GET() {
          )
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
-           WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'post_game_submitted'
+           WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'post_game_report'
          )`,
       [postGameStart.toISOString(), postGameEnd.toISOString()]
     )
