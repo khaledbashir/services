@@ -74,7 +74,7 @@ const TTS_VOICE_OPTIONS: Record<string, string[]> = {
   gemini: ['Charon', 'Aoede', 'Fenrir', 'Kore', 'Orus', 'Puck'],
 }
 
-type Tab = 'call' | 'share' | 'embed' | 'settings'
+type Tab = 'call' | 'history' | 'share' | 'embed' | 'settings'
 
 export default function VoiceAgentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -161,7 +161,7 @@ export default function VoiceAgentDetailPage({ params }: { params: { id: string 
           </header>
 
           <nav className="mt-6 flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
-            {(['call', 'share', 'embed', 'settings'] as Tab[]).map((t) => (
+            {(['call', 'history', 'share', 'embed', 'settings'] as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -182,6 +182,10 @@ export default function VoiceAgentDetailPage({ params }: { params: { id: string 
               <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <VoiceCallWidget agentRef={agent.slug} agentName={agent.name} greeting={agent.greeting} />
               </div>
+            )}
+
+            {tab === 'history' && (
+              <AgentHistory agentSlug={agent.slug} />
             )}
 
             {tab === 'share' && (
@@ -883,4 +887,116 @@ function KbAttachments({ agent }: { agent: VoiceAgent }) {
       </p>
     </div>
   )
+}
+
+interface HistoryRow {
+  id: string
+  title: string
+  updatedAt: string
+  userName: string | null
+  messageCount: number
+  durationSeconds: number
+  status: 'successful' | 'error' | 'empty'
+}
+
+function AgentHistory({ agentSlug }: { agentSlug: string }) {
+  const [rows, setRows] = useState<HistoryRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
+
+  useEffect(() => {
+    fetch(`/api/voice-agents/conversations?agent=${encodeURIComponent(agentSlug)}&limit=20`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setRows(data.conversations)
+          setTotal(data.total)
+        } else {
+          setError(data.error || 'Failed to load history')
+        }
+      })
+      .catch((err) => setError(String(err)))
+  }, [agentSlug])
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-3 flex items-end justify-between">
+        <div>
+          <h2 className="text-base font-bold">Recent conversations</h2>
+          <p className="text-sm text-zinc-500">
+            Last 20 conversations for this agent. Click any row for the full transcript and tool calls.
+          </p>
+        </div>
+        <Link
+          href={`/voice-agents/conversations?agent=${encodeURIComponent(agentSlug)}`}
+          className="text-xs font-semibold text-[#0A52EF] hover:underline"
+        >
+          View all ({total}) →
+        </Link>
+      </div>
+
+      {error && (
+        <div className="mb-3 rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>
+      )}
+
+      {!rows && !error && <p className="text-sm text-zinc-500">Loading…</p>}
+
+      {rows && rows.length === 0 && (
+        <p className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/40">
+          No conversations yet. Start a call from the Call tab to see history here.
+        </p>
+      )}
+
+      {rows && rows.length > 0 && (
+        <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <Link
+                href={`/voice-agents/conversations/${row.id}`}
+                className="flex items-center justify-between gap-3 px-3 py-3 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">{row.title || 'Untitled'}</p>
+                  <p className="text-xs text-zinc-500">
+                    {row.userName || '—'} · {formatHistoryTime(row.updatedAt)} · {row.messageCount} msg · {formatHistoryDuration(row.durationSeconds)}
+                  </p>
+                </div>
+                <HistoryStatusPill status={row.status} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function HistoryStatusPill({ status }: { status: HistoryRow['status'] }) {
+  const cls =
+    status === 'successful'
+      ? 'bg-emerald-100 text-emerald-700'
+      : status === 'error'
+        ? 'bg-rose-100 text-rose-700'
+        : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+  const label = status === 'successful' ? 'Successful' : status === 'error' ? 'Error' : 'Empty'
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}>{label}</span>
+}
+
+function formatHistoryDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '—'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  if (m === 0) return `${s}s`
+  return `${m}m ${s.toString().padStart(2, '0')}s`
+}
+
+function formatHistoryTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diff = Math.max(0, now - then) / 1000
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`
+  return new Date(iso).toLocaleDateString()
 }

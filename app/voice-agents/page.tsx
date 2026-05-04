@@ -68,13 +68,21 @@ export default function VoiceAgentsListPage() {
                 Build voice-driven assistants on top of the ANC services platform. Each agent has its own prompt, knowledge base, voice, and shareable link or embed snippet.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowForm(v => !v)}
-              className="rounded-md bg-[#0A52EF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0840C0]"
-            >
-              {showForm ? 'Cancel' : 'New agent'}
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/voice-agents/conversations"
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 hover:border-[#0A52EF]/40 hover:text-[#0A52EF] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                Conversation history
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowForm(v => !v)}
+                className="rounded-md bg-[#0A52EF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0840C0]"
+              >
+                {showForm ? 'Cancel' : 'New agent'}
+              </button>
+            </div>
           </header>
 
           {showForm && (
