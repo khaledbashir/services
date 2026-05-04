@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { formatDateTime } from '@/lib/format-date'
 
@@ -27,6 +28,7 @@ const RESULT_STYLE: Record<string, string> = {
 }
 
 export default function WalkthroughsPage() {
+  const router = useRouter()
   const [walks, setWalks] = useState<Walk[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,9 +97,17 @@ export default function WalkthroughsPage() {
             <h1 className="text-2xl font-semibold text-zinc-900">Walkthrough Logs</h1>
             <p className="mt-1 text-sm text-zinc-500">Technician site visits and findings.</p>
           </div>
-          <button onClick={() => setShowCreate(!showCreate)} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0]">
-            {showCreate ? 'Cancel' : '+ Log Walkthrough'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => router.push('/walkthroughs/new')} className="px-4 py-2 bg-[#0A52EF] text-white rounded text-sm font-medium hover:bg-[#0840C0] inline-flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              + New Walkthrough
+            </button>
+            <button onClick={() => setShowCreate(!showCreate)} className="px-4 py-2 border border-[#E8E8E8] text-zinc-600 rounded text-sm font-medium hover:border-zinc-300 hover:text-zinc-900">
+              {showCreate ? 'Cancel' : 'Quick Log (legacy)'}
+            </button>
+          </div>
         </div>
 
         {showCreate && (

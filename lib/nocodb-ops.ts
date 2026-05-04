@@ -180,6 +180,15 @@ export const NocoOps = {
     })
   },
 
+  // ---- Linked records ----
+  // Add child rows to a LinkToAnotherRecord field on a parent row.
+  async addLinks(tableId: string, linkColumnId: string, parentRowId: number | string, childIds: Array<number | string>): Promise<unknown> {
+    return await noco(`/api/v2/tables/${tableId}/links/${linkColumnId}/records/${parentRowId}`, {
+      method: 'POST',
+      body: JSON.stringify(childIds.map((Id) => ({ Id }))),
+    })
+  },
+
   // ---- Documents ----
   //
   // NocoDB documents are first-class models with type='document'. Their
