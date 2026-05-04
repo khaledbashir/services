@@ -345,7 +345,6 @@ export default function TicketsPage() {
     const q = search.toLowerCase()
     const matchesSearch = !q
       || (t.title || '').toLowerCase().includes(q)
-      || (t.description || '').toLowerCase().includes(q)
       || (t.venue_name || '').toLowerCase().includes(q)
       || (t.assigned_to_name || '').toLowerCase().includes(q)
       || (t.category || '').toLowerCase().includes(q)
@@ -676,16 +675,9 @@ export default function TicketsPage() {
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-sm font-medium text-zinc-900 mb-1 leading-snug group-hover:text-zinc-700">
+                  <h3 className="text-sm font-medium text-zinc-900 mb-1 line-clamp-2 leading-snug group-hover:text-zinc-700">
                     {ticket.title}
                   </h3>
-
-                  {/* Full note inline — Tech ask 2026-05-02: read without clicking through */}
-                  {ticket.description && ticket.description.trim() && (
-                    <p className="text-xs text-zinc-600 mb-2 whitespace-pre-wrap break-words leading-relaxed">
-                      {ticket.description}
-                    </p>
-                  )}
 
                   {/* Voicemail phone number */}
                   {ticket.source === 'voicemail' && ticket.contact_phone && (
@@ -774,13 +766,8 @@ export default function TicketsPage() {
                         />
                       </td>
                       <td className="py-2.5 px-4 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(5, '0')}</td>
-                      <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-md align-top">
-                        <div className="font-medium">{ticket.title}</div>
-                        {ticket.description && ticket.description.trim() && (
-                          <div className="text-[11px] text-zinc-500 mt-1 whitespace-pre-wrap break-words leading-relaxed">
-                            {ticket.description}
-                          </div>
-                        )}
+                      <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-xs">
+                        <div className="truncate">{ticket.title}</div>
                         {ticket.source === 'voicemail' && ticket.contact_phone && (
                           <div className="text-[11px] text-blue-600 font-mono mt-0.5">📞 {ticket.contact_phone}</div>
                         )}
