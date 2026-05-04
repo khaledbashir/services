@@ -189,6 +189,35 @@ export const NocoOps = {
     })
   },
 
+  // ---- Storage / attachments ----
+  // NocoDB attachments live in /api/v2/storage/upload as multipart. Returns
+  // an array of file metadata objects ({ url, title, mimetype, size, ... })
+  // that can be set directly on an Attachment field via record update.
+  async uploadFile(opts: {
+    filename: string
+    contentType: string
+    body: Buffer | Uint8Array
+    pathHint?: string  // optional folder hint, e.g. 'walkthroughs/2026-05'
+  }): Promise<Array<Record<string, unknown>>> {
+    const url = `${baseUrl()}/api/v2/storage/upload?path=${encodeURIComponent(opts.pathHint || 'misc')}`
+    const form = new FormData()
+    const u8 = new Uint8Array(opts.body)
+    const blob = new Blob([u8], { type: opts.contentType })
+    form.append('file', blob, opts.filename)
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'xc-token': token() },
+      body: form,
+    })
+    const text = await res.text()
+    let body: unknown
+    try { body = text ? JSON.parse(text) : null } catch { body = text }
+    if (!res.ok) {
+      throw new NocoDBOpsError(`NocoDB upload failed (${res.status}): ${typeof body === 'string' ? body.slice(0, 200) : JSON.stringify(body).slice(0, 200)}`, res.status, body)
+    }
+    return Array.isArray(body) ? (body as Array<Record<string, unknown>>) : []
+  },
+
   // ---- Documents ----
   //
   // NocoDB documents are first-class models with type='document'. Their

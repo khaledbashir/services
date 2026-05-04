@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/rbac'
 import { query } from '@/lib/db'
 import { NocoOps } from '@/lib/nocodb-ops'
+import { Browserless } from '@/lib/browserless'
+import { buildWalkthroughHtml } from '@/lib/walkthrough-pdf'
 import {
   NY_BASE_ID,
   TABLES,
@@ -218,6 +220,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Step 5 — generate the PDF report and attach it to the row. Fire and
+    // forget so the user gets a fast response; the PDF lands within ~10s
+    // and shows up on the NocoDB record's Attachments column.
+    const locationsForPdf = locationIds.length
+      ? await buildPdfLocationGroups(locationIds, assetFindings)
+      : []
+    generatePdfAndAttach({
+      newRowId,
+      log_id: logId,
+      technician: user.fullName || user.email,
+      venue_name: venueName,
+      date_label: now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      time_label: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      type,
+      result,
+      comments: composedComments,
+      ticket_number: ticketNumber,
+      locations: locationsForPdf,
+    }).catch((e) => console.warn('[walkthroughs/nocodb] PDF gen failed:', e))
+
+    // Step 6 — relay any uploaded user attachments into the same column
+    // on the walkthrough row, alongside the PDF.
+    const userUploads: Array<Record<string, unknown>> = Array.isArray(body.attachments) ? body.attachments : []
+    if (userUploads.length) {
+      // Patch in user uploads non-destructively after PDF settles. Use a
+      // setTimeout so the PDF write isn't clobbered by a concurrent patch.
+      setTimeout(() => {
+        appendAttachments(newRowId, userUploads).catch((e) => console.warn('[walkthroughs/nocodb] attachment merge failed:', e))
+      }, 12_000)
+    }
+
     return NextResponse.json({
       ok: true,
       walkthrough: {
@@ -229,12 +262,114 @@ export async function POST(request: NextRequest) {
         type,
         result,
         ticket_number: ticketNumber,
+        pdf_status: 'generating',
       },
     })
   } catch (err: any) {
     console.error('[walkthroughs/nocodb POST]', err)
     return NextResponse.json({ error: err?.message || 'walkthrough write failed' }, { status: 502 })
   }
+}
+
+// Group findings under their Display Locations so the PDF mirrors the
+// matrix layout of the live form / paper checklist.
+async function buildPdfLocationGroups(locationIds: number[], findings: Array<any>): Promise<Array<{ name: string; findings: any[] }>> {
+  if (!locationIds.length) return []
+  const where = `(Id,in,${locationIds.join(',')})`
+  const { records } = await NocoOps.listRecords(TABLES.displayLocations, { where, limit: 200 })
+  // Map DL id → name.
+  const idToName = new Map<number, string>()
+  for (const r of records) {
+    const id = Number((r as any).Id)
+    const name = String((r as any).Name || `Location #${id}`).trim()
+    idToName.set(id, name)
+  }
+  // Map display id → location id (best effort) by re-fetching displays.
+  const displayWhere = `(Display Location,in,${locationIds.join(',')})`
+  const { records: dRows } = await NocoOps.listRecords(TABLES.displays, { where: displayWhere, limit: 500 })
+  const displayToLoc = new Map<number, number>()
+  for (const r of dRows) {
+    const did = Number((r as any).Id)
+    const loc = Array.isArray((r as any)['Display Location']) && (r as any)['Display Location'][0]?.Id
+      ? Number((r as any)['Display Location'][0].Id)
+      : null
+    if (loc) displayToLoc.set(did, loc)
+  }
+  // Group findings by their Display Location.
+  const byLoc = new Map<number, any[]>()
+  for (const f of findings) {
+    const loc = displayToLoc.get(Number(f.display_id)) || 0
+    if (!byLoc.has(loc)) byLoc.set(loc, [])
+    byLoc.get(loc)!.push(f)
+  }
+  // Materialize in the order of the original locationIds.
+  const out: Array<{ name: string; findings: any[] }> = []
+  for (const lid of locationIds) {
+    out.push({
+      name: idToName.get(lid) || `Location #${lid}`,
+      findings: byLoc.get(lid) || [],
+    })
+  }
+  return out
+}
+
+async function generatePdfAndAttach(w: {
+  newRowId: number
+  log_id: string
+  technician: string
+  venue_name: string
+  date_label: string
+  time_label: string
+  type: string
+  result: string
+  comments: string
+  ticket_number?: number | null
+  locations: Array<{ name: string; findings: any[] }>
+}) {
+  if (!Browserless.configured()) {
+    console.warn('[walkthroughs/nocodb] BROWSERLESS_TOKEN missing; skipping PDF gen')
+    return
+  }
+  const html = buildWalkthroughHtml(w)
+  const pdf = await Browserless.renderPdf({
+    html,
+    options: {
+      format: 'Letter',
+      printBackground: true,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    },
+  })
+  const safeVenue = (w.venue_name || 'venue').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)
+  const filename = `Walkthrough_${safeVenue}_${w.log_id.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`
+  const uploaded = await NocoOps.uploadFile({
+    filename,
+    contentType: 'application/pdf',
+    body: pdf,
+    pathHint: 'walkthroughs',
+  })
+  if (!uploaded.length) return
+  // Patch the row's Attachments field with the new PDF (additive — preserves
+  // anything already there, e.g. user uploads queued via the form).
+  const existing = await NocoOps.listRecords(TABLES.walkthroughLog, {
+    where: `(Id,eq,${w.newRowId})`,
+    fields: 'Id,Attachments',
+    limit: 1,
+  })
+  const prior = (existing.records[0] as any)?.['Attachments']
+  const merged = Array.isArray(prior) ? [...prior, ...uploaded] : uploaded
+  await NocoOps.updateRecords(TABLES.walkthroughLog, [{ Id: w.newRowId, Attachments: merged }])
+}
+
+async function appendAttachments(rowId: number, uploads: Array<Record<string, unknown>>) {
+  if (!uploads.length) return
+  const existing = await NocoOps.listRecords(TABLES.walkthroughLog, {
+    where: `(Id,eq,${rowId})`,
+    fields: 'Id,Attachments',
+    limit: 1,
+  })
+  const prior = (existing.records[0] as any)?.['Attachments']
+  const merged = Array.isArray(prior) ? [...prior, ...uploads] : uploads
+  await NocoOps.updateRecords(TABLES.walkthroughLog, [{ Id: rowId, Attachments: merged }])
 }
 
 function summarizeAssetFindings(findings: Array<{

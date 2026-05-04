@@ -44,6 +44,8 @@ export default function NewWalkthroughPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<Array<Record<string, unknown> & { title?: string }>>([])
+  const [uploading, setUploading] = useState(false)
 
   // Auto-recognize tech from local auth context. Falls back to a server fetch
   // if not in localStorage (rare — the dashboard layout sets these on login).
@@ -149,6 +151,31 @@ export default function NewWalkthroughPage() {
     })
   }
 
+  async function handleAttachmentUpload(files: FileList | null) {
+    if (!files || !files.length) return
+    setUploading(true)
+    setErrorMsg(null)
+    try {
+      const newAttachments: any[] = []
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/walkthroughs/nocodb/upload', { method: 'POST', body: fd })
+        if (!res.ok) {
+          const d = await res.json().catch(() => null)
+          throw new Error(d?.error || `Upload failed for ${file.name}`)
+        }
+        const data = await res.json()
+        for (const att of data.attachments || []) newAttachments.push(att)
+      }
+      setAttachments((prev) => [...prev, ...newAttachments])
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function handleSubmit() {
     setErrorMsg(null); setSuccessMsg(null)
     if (!venueId) { setErrorMsg('Pick a venue'); return }
@@ -164,6 +191,7 @@ export default function NewWalkthroughPage() {
           comments,
           location_ids: Array.from(selectedLocationIds),
           asset_findings: Object.values(findings),
+          attachments,
         }),
       })
       const data = await res.json().catch(() => null)
@@ -330,6 +358,33 @@ export default function NewWalkthroughPage() {
           <textarea value={comments} onChange={(e) => setComments(e.target.value)} rows={4}
             placeholder="Anything else worth logging — context for the ticket if New Issue Detected, photos to follow up on, etc."
             className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 resize-y" />
+        </div>
+
+        {/* Attachments */}
+        <div>
+          <label className="text-xs font-semibold text-zinc-600 block mb-1.5">Attachments</label>
+          <p className="text-xs text-zinc-500 mb-2">Photos, screenshots, anything that helps document a finding. Uploaded straight to the walkthrough record.</p>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attachments.map((a, idx) => (
+              <span key={idx} className="inline-flex items-center gap-1.5 bg-zinc-100 text-zinc-800 rounded-full px-3 py-1 text-xs">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                {String(a.title || 'attachment')}
+                <button type="button" onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                  className="text-zinc-400 hover:text-rose-500" aria-label="Remove">×</button>
+              </span>
+            ))}
+            {!attachments.length && <span className="text-xs text-zinc-400">No files attached yet.</span>}
+          </div>
+          <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-zinc-300 rounded text-xs text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 cursor-pointer transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            {uploading ? 'Uploading…' : 'Add files (photos / docs)'}
+            <input type="file" multiple disabled={uploading} className="hidden"
+              onChange={(e) => { handleAttachmentUpload(e.target.files); e.target.value = '' }} />
+          </label>
         </div>
 
         {/* Submit + status */}
