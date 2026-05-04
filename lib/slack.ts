@@ -34,25 +34,30 @@ export async function slackApi(method: string, body: any) {
 }
 
 export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
+  const res = await sendSlackMessageDetailed(msg)
+  return res.ok
+}
+
+export async function sendSlackMessageDetailed(msg: SlackMessage & { thread_ts?: string }): Promise<{ ok: boolean; ts?: string; channel?: string }> {
   if (!SLACK_BOT_TOKEN) {
     console.warn('SLACK_BOT_TOKEN not set, skipping Slack notification')
-    return false
+    return { ok: false }
   }
   if (globalMuted()) {
     console.log('[slack-muted]', msg.channel, msg.text.slice(0, 80))
-    return false
+    return { ok: false }
   }
 
   try {
     const data = await slackApi('chat.postMessage', msg)
     if (!data.ok) {
       console.error('Slack API error:', data.error)
-      return false
+      return { ok: false }
     }
-    return true
+    return { ok: true, ts: data.ts, channel: data.channel }
   } catch (err) {
     console.error('Failed to send Slack message:', err)
-    return false
+    return { ok: false }
   }
 }
 
@@ -133,6 +138,56 @@ const statusLabels: Record<string, string> = {
 
 const DASHBOARD_URL = DASHBOARD_URL_BASE
 
+// Joe 2026-05-04 9:00 PM: keep tickets scannable in-channel; full body in thread.
+const TICKET_TEASER_CHAR_CAP = 400
+const SLACK_SECTION_CHAR_CAP = 2900 // headroom under Slack's 3000-char block limit
+
+function quoteEachLine(s: string): string {
+  return s.replace(/\r\n/g, '\n').split('\n').map(l => `> ${l}`).join('\n')
+}
+
+export function buildTicketDescriptionTeaser(description: string): { text: string; hasMore: boolean } {
+  const desc = description.trim()
+  if (!desc) return { text: '', hasMore: false }
+  const firstPara = desc.split(/\n\s*\n/)[0] || desc
+  const fits = firstPara.length <= TICKET_TEASER_CHAR_CAP && firstPara.length === desc.length
+  if (fits) return { text: quoteEachLine(firstPara), hasMore: false }
+  if (firstPara.length <= TICKET_TEASER_CHAR_CAP) {
+    return { text: quoteEachLine(firstPara), hasMore: true }
+  }
+  return { text: quoteEachLine(firstPara.slice(0, TICKET_TEASER_CHAR_CAP).trimEnd() + '…'), hasMore: true }
+}
+
+export function buildTicketDescriptionThreadBlocks(description: string): any[] {
+  const quoted = quoteEachLine(description)
+  if (quoted.length <= SLACK_SECTION_CHAR_CAP) {
+    return [{ type: 'section', text: { type: 'mrkdwn', text: quoted } }]
+  }
+  const chunks: string[] = []
+  let buf = ''
+  for (const para of quoted.split('\n\n')) {
+    const next = buf ? `${buf}\n\n${para}` : para
+    if (next.length > SLACK_SECTION_CHAR_CAP) {
+      if (buf) chunks.push(buf)
+      if (para.length > SLACK_SECTION_CHAR_CAP) {
+        for (let i = 0; i < para.length; i += SLACK_SECTION_CHAR_CAP) chunks.push(para.slice(i, i + SLACK_SECTION_CHAR_CAP))
+        buf = ''
+      } else {
+        buf = para
+      }
+    } else {
+      buf = next
+    }
+  }
+  if (buf) chunks.push(buf)
+  const capped = chunks.slice(0, 8)
+  const blocks: any[] = capped.map(c => ({ type: 'section', text: { type: 'mrkdwn', text: c } }))
+  if (chunks.length > capped.length) {
+    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '_…note continues — open the ticket to see the rest._' }] })
+  }
+  return blocks
+}
+
 export function formatTicketNotification(ticket: {
   id?: string
   ticket_number: number
@@ -182,43 +237,18 @@ export function formatTicketNotification(ticket: {
   ]
 
   if (ticket.description) {
-    // Stevie 2026-05-04 ask: full ticket body in the Slack preview, not a
-    // 200-char teaser. Slack section blocks cap at 3000 chars; chunk on
-    // paragraph boundaries when needed and prefix every line with `> ` so
-    // the whole body renders as a multi-line quote (Slack only quotes the
-    // first line of mrkdwn otherwise).
-    const quoted = ticket.description
-      .replace(/\r\n/g, '\n')
-      .split('\n')
-      .map(line => `> ${line}`)
-      .join('\n')
-
-    const SECTION_LIMIT = 2900 // headroom under Slack's 3000-char cap
-    if (quoted.length <= SECTION_LIMIT) {
-      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: quoted } })
-    } else {
-      const chunks: string[] = []
-      let buf = ''
-      for (const para of quoted.split('\n\n')) {
-        const next = buf ? `${buf}\n\n${para}` : para
-        if (next.length > SECTION_LIMIT) {
-          if (buf) chunks.push(buf)
-          if (para.length > SECTION_LIMIT) {
-            for (let i = 0; i < para.length; i += SECTION_LIMIT) chunks.push(para.slice(i, i + SECTION_LIMIT))
-            buf = ''
-          } else {
-            buf = para
-          }
-        } else {
-          buf = next
-        }
-      }
-      if (buf) chunks.push(buf)
-      // Cap to 8 description blocks to keep within Slack's 50-block ceiling.
-      const capped = chunks.slice(0, 8)
-      for (const c of capped) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: c } })
-      if (chunks.length > capped.length) {
-        blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `_…note continues — open the ticket to see the rest._` }] })
+    // Joe 2026-05-04 9:00 PM follow-up: keep the channel post scannable —
+    // show only the first paragraph (or first ~400 chars) inline, and post
+    // the full body as a thread reply (handled by sendTicketNotification).
+    // The teaser keeps the same `> `-per-line quote so styling matches.
+    const teaser = buildTicketDescriptionTeaser(ticket.description)
+    if (teaser.text) {
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: teaser.text } })
+      if (teaser.hasMore) {
+        blocks.push({
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: ':thread: _Full note posted in thread below._' }],
+        })
       }
     }
   }
@@ -246,4 +276,46 @@ export function formatTicketNotification(ticket: {
   }
 
   return { text, blocks, channel: '' }
+}
+
+/**
+ * Joe 2026-05-04 9:00 PM: post a ticket notification as a scannable card,
+ * then drop the full body as a thread reply on the same message. Slack
+ * doesn't auto-collapse Block Kit messages, so this is the manual collapse:
+ * channel stays clean, full note is one click away in-thread.
+ */
+export async function sendTicketNotification(ticket: {
+  id?: string
+  ticket_number: number
+  title: string
+  category: string
+  priority: string
+  venue_name: string
+  description?: string
+  status?: string
+  image_url?: string
+}, action: 'created' | 'updated' | 'resolved', channel: string): Promise<boolean> {
+  const main = formatTicketNotification(ticket, action)
+  main.channel = channel
+  const res = await sendSlackMessageDetailed(main)
+  if (!res.ok) return false
+  // Did the teaser truncate? If so, post the full body in-thread.
+  const desc = (ticket.description || '').trim()
+  if (desc) {
+    const teaser = buildTicketDescriptionTeaser(desc)
+    if (teaser.hasMore && res.ts) {
+      const threadBlocks = buildTicketDescriptionThreadBlocks(desc)
+      const caseNum = String(ticket.ticket_number).padStart(8, '0')
+      await sendSlackMessageDetailed({
+        channel,
+        thread_ts: res.ts,
+        text: `Full note for Case #${caseNum}`,
+        blocks: [
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `:memo: *Full note — Case #${caseNum}*` }] },
+          ...threadBlocks,
+        ],
+      })
+    }
+  }
+  return true
 }

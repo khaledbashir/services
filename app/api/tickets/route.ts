@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
+import { sendSlackMessage, formatTicketNotification, sendTicketNotification } from '@/lib/slack'
 import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
     const channelId = slackChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
     if (channelId) {
       const ticket = result.rows[0]
-      const msg = formatTicketNotification({
+      sendTicketNotification({
         id: ticket.id,
         ticket_number: ticket.ticket_number,
         title: ticket.title,
@@ -191,9 +191,7 @@ export async function POST(request: NextRequest) {
         venue_name: venueName,
         description: description || undefined,
         image_url: imageUrl || undefined,
-      }, 'created')
-      msg.channel = channelId
-      sendSlackMessage(msg)
+      }, 'created', channelId)
     }
 
     // Email distribution list
