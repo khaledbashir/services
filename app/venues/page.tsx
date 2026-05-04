@@ -47,6 +47,9 @@ export default function VenuesPage() {
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
   const [myVenuesOnly, setMyVenuesOnly] = useState(false)
+  // Joe 2026-05-04 8:56 PM: filter venues by their default-staffing toggle.
+  // Mirrors the "Needs Staffing" filter on /events.
+  const [staffingFilter, setStaffingFilter] = useState<'all' | 'on' | 'off'>('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     if (typeof window === 'undefined') return 'grid'
     return (localStorage.getItem('venuesViewMode') as 'grid' | 'list') || 'grid'
@@ -89,8 +92,15 @@ export default function VenuesPage() {
       || (v.aliases || []).some(a => a.toLowerCase().includes(q))
     const matchesType = typeFilter === 'all' || v.venue_type === typeFilter
     const matchesUnassigned = !showUnassignedOnly || (v.requires_assignment && Number(v.event_count) > 0 && Number(v.assigned_count) < Number(v.event_count))
-    return matchesSearch && matchesType && matchesUnassigned
+    const matchesStaffing = staffingFilter === 'all'
+      || (staffingFilter === 'on' && v.requires_assignment)
+      || (staffingFilter === 'off' && !v.requires_assignment)
+    return matchesSearch && matchesType && matchesUnassigned && matchesStaffing
   })
+
+  // Live counts for the filter chip labels.
+  const staffingOnCount = venues.filter(v => v.requires_assignment).length
+  const staffingOffCount = venues.filter(v => !v.requires_assignment).length
 
   // Stats
   const totalEvents = venues.reduce((sum, v) => sum + (Number(v.event_count) || 0), 0)
@@ -164,6 +174,36 @@ export default function VenuesPage() {
                 {f.label}
               </button>
             ))}
+            {/* Joe 2026-05-04 8:56 PM: default-staffing toggle filter */}
+            <span className="w-px bg-zinc-200 self-stretch mx-0.5"></span>
+            <button
+              onClick={() => setStaffingFilter(staffingFilter === 'on' ? 'all' : 'on')}
+              title="Show only venues whose default staffing toggle is ON"
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                staffingFilter === 'on'
+                  ? 'bg-[#0A52EF] text-white shadow-sm'
+                  : 'bg-white border border-zinc-200 text-zinc-600 hover:border-zinc-400'
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === 'on' ? 'bg-white' : 'bg-emerald-500'}`}></span>
+              Staffing On
+              <span className={`text-[10px] font-bold ${staffingFilter === 'on' ? 'opacity-80' : 'text-zinc-400'}`}>
+                {staffingOnCount}
+              </span>
+            </button>
+            <button
+              onClick={() => setStaffingFilter(staffingFilter === 'off' ? 'all' : 'off')}
+              title="Show only venues whose default staffing toggle is OFF (support-only)"
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                staffingFilter === 'off'
+                  ? 'bg-zinc-900 text-white shadow-sm'
+                  : 'bg-white border border-zinc-200 text-zinc-600 hover:border-zinc-400'
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${staffingFilter === 'off' ? 'bg-white' : 'bg-zinc-400'}`}></span>
+              Support Only
+              <span className={`text-[10px] font-bold ${staffingFilter === 'off' ? 'opacity-80' : 'text-zinc-400'}`}>
+                {staffingOffCount}
+              </span>
+            </button>
           </div>
 
           {/* Period selector */}
