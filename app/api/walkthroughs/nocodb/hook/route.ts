@@ -3,7 +3,7 @@ import { query } from '@/lib/db'
 import { NocoOps } from '@/lib/nocodb-ops'
 import { Browserless } from '@/lib/browserless'
 import { buildWalkthroughHtml } from '@/lib/walkthrough-pdf'
-import { TABLES } from '@/lib/walkthrough-config'
+import { TABLES, WALK_COLS, ISSUES_VIEWS } from '@/lib/walkthrough-config'
 
 // POST /api/walkthroughs/nocodb/hook?secret=...
 //
@@ -70,8 +70,58 @@ async function processRow(id: number, row: any) {
   const comments = String(r['Comments (log issues above)'] || '').trim()
   const technician = String(r.Technician || '').trim() || 'Field tech'
 
-  const locationsLinked: any[] = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
-  const locationIds = locationsLinked.map((l: any) => Number(l?.Id)).filter(Boolean)
+  let locationsLinked: any[] = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
+  let locationIds = locationsLinked.map((l: any) => Number(l?.Id)).filter(Boolean)
+
+  // 1a. Auto-link the venue's Display Locations to "Locations Visited" if
+  //     the tech didn't pick any (mirrors the Airtable behaviour Nick asked
+  //     for: pick venue → all locations at that facility appear). Filters
+  //     by venue NAME because NocoDB matches Link fields against the
+  //     linked record's display title, not its row id.
+  if (!locationIds.length && venueName && venueName !== 'Unknown venue') {
+    try {
+      const { records: locRows } = await NocoOps.listRecords(TABLES.displayLocations, {
+        where: `(Venue,eq,${venueName})`,
+        fields: 'Id,Name',
+        limit: 200,
+      })
+      const autoLocIds = locRows.map((l: any) => Number(l.Id)).filter(Boolean)
+      if (autoLocIds.length) {
+        await NocoOps.addLinks(TABLES.walkthroughLog, WALK_COLS.locationsVisitedLink, id, autoLocIds)
+        locationIds = autoLocIds
+        locationsLinked = locRows.map((l: any) => ({ Id: Number(l.Id), Name: String(l.Name || '') }))
+      }
+    } catch (e) {
+      console.warn('[walkthroughs/nocodb/hook] auto-link locations failed:', e)
+    }
+  }
+
+  // 1b. If Result = "Open Issue Observed" and the tech hasn't linked any
+  //     Problem Detected entries, auto-link every currently-open issue at
+  //     this venue. Mirrors the Airtable workflow where the issues list
+  //     populates inline. Tech can deselect any in NocoDB after the fact.
+  const problemDetectedLinked: any[] = Array.isArray(r['Problem Detected']) ? r['Problem Detected'] : []
+  if (
+    result === 'Open Issue Observed'
+    && problemDetectedLinked.length === 0
+    && venueName
+    && venueName !== 'Unknown venue'
+  ) {
+    try {
+      const { records: openIssues } = await NocoOps.listRecords(TABLES.issues, {
+        viewId: ISSUES_VIEWS.openIssues,
+        where: `(Venue,eq,${venueName})`,
+        fields: 'Id,Issue ID',
+        limit: 200,
+      })
+      const issueIds = openIssues.map((i: any) => Number(i.Id)).filter(Boolean)
+      if (issueIds.length) {
+        await NocoOps.addLinks(TABLES.walkthroughLog, WALK_COLS.problemDetectedLink, id, issueIds)
+      }
+    } catch (e) {
+      console.warn('[walkthroughs/nocodb/hook] auto-link open issues failed:', e)
+    }
+  }
 
   const dt = r['Log Date Dt'] || r['Log Date'] || new Date().toISOString()
   const when = new Date(dt)
@@ -144,10 +194,13 @@ async function processRow(id: number, row: any) {
         const idToName = new Map<number, string>()
         for (const l of locs) idToName.set(Number((l as any).Id), String((l as any).Name || `Location #${(l as any).Id}`))
 
-        const { records: dRows } = await NocoOps.listRecords(TABLES.displays, {
-          where: `(Display Location,in,${locationIds.join(',')})`,
-          limit: 500,
-        })
+        // NocoDB Link filters match by linked-record title, not id — chain
+        // an `~or` of `(Display Location,eq,<Name>)` over each location.
+        const locNames = Array.from(idToName.values()).filter(Boolean)
+        const dispWhere = locNames.map((n) => `(Display Location,eq,${n})`).join('~or')
+        const { records: dRows } = dispWhere
+          ? await NocoOps.listRecords(TABLES.displays, { where: dispWhere, limit: 500 })
+          : { records: [] as any[] }
         const byLoc = new Map<number, any[]>()
         for (const d of dRows) {
           const did = Number((d as any).Id)
