@@ -68,7 +68,14 @@ async function processRow(id: number, row: any) {
   const result = String(r.Result || '').trim()
   const type = String(r.Type || '').trim() || 'In-Person'
   const comments = String(r['Comments (log issues above)'] || '').trim()
-  const technician = String(r.Technician || '').trim() || 'Field tech'
+  // The form-facing field is "Logged By" (one-tap dropdown) — the legacy
+  // "Technician" LongText column stays in place for the existing 20K rows
+  // and any downstream queries. Webhook bridges the two: whatever the tech
+  // picked from Logged By, copy into Technician if Technician is empty.
+  const loggedBy = String(r['Logged By'] || '').trim()
+  let technician = String(r.Technician || '').trim()
+  if (!technician && loggedBy) technician = loggedBy
+  if (!technician) technician = 'Field tech'
 
   let locationsLinked: any[] = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
   let locationIds = locationsLinked.map((l: any) => Number(l?.Id)).filter(Boolean)
@@ -263,6 +270,12 @@ async function processRow(id: number, row: any) {
     const iso = (r['Log Date Dt'] ? new Date(r['Log Date Dt']) : new Date()).toISOString()
     patch['Log Date'] = iso
     patch['Log Date Dt'] = iso.replace('T', ' ').replace(/\.\d+Z$/, '+00:00')
+    needsPatch = true
+  }
+  // Mirror "Logged By" → legacy "Technician" so existing reports/queries
+  // that read Technician keep working without rewrites.
+  if (loggedBy && !String(r.Technician || '').trim()) {
+    patch['Technician'] = loggedBy
     needsPatch = true
   }
   if (needsPatch) {

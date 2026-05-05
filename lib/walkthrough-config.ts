@@ -28,6 +28,7 @@ export const WALK_COLS = {
   venueLink: 'c6ro61sdnhxirgv',                // LinkToAnotherRecord → Venues
   locationsVisitedLink: 'c345a0hqw1shjae',     // LinkToAnotherRecord → Display Locations
   problemDetectedLink: 'cu9el90bdvci9xj',      // LinkToAnotherRecord → Issues
+  loggedBy: 'c7ndwkca4lqlb6h',                  // SingleSelect — submitter dropdown shown on form
 } as const
 
 export const VENUE_COLS = {
