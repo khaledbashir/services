@@ -9,11 +9,32 @@ import {
   TABLES,
   WALK_COLS,
   VENUE_COLS,
+  ISSUES_VIEWS,
   RESULT_OPTIONS,
   TYPE_OPTIONS,
   type WalkthroughResult,
   type WalkthroughType,
 } from '@/lib/walkthrough-config'
+
+// Resolve a venue id → its display name. Cached per-request via the
+// caller; we look up by Id with the API's eq filter on a Number column.
+async function resolveVenueName(venueId: number): Promise<string | null> {
+  const { records } = await NocoOps.listRecords(TABLES.venues, {
+    where: `(Id,eq,${venueId})`,
+    fields: 'Id,Venue Name',
+    limit: 1,
+  })
+  const name = String((records[0] as any)?.['Venue Name'] || '').trim()
+  return name || null
+}
+
+// NocoDB filters Link fields by the linked record's display title, NOT
+// by row id. This helper builds an `~or`-chained `(Field,eq,Title)` clause
+// from a list of titles so we don't trip over commas inside titles when
+// using the bare `in` operator.
+function orChainEq(field: string, titles: string[]): string {
+  return titles.map((t) => `(${field},eq,${t})`).join('~or')
+}
 
 // GET /api/walkthroughs/nocodb?action=venues
 //     /api/walkthroughs/nocodb?action=locations&venue_id=3
@@ -44,10 +65,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'locations') {
-      const venueId = searchParams.get('venue_id')
+      const venueId = Number(searchParams.get('venue_id'))
       if (!venueId) return NextResponse.json({ error: 'venue_id required' }, { status: 400 })
+      // Filter the Display Locations by Venue NAME — NocoDB matches Link
+      // fields against the linked record's display title, not its row id.
+      const venueName = await resolveVenueName(venueId)
+      if (!venueName) return NextResponse.json({ locations: [] })
       const { records } = await NocoOps.listRecords(TABLES.displayLocations, {
-        where: `(Venue,eq,${venueId})`,
+        where: `(Venue,eq,${venueName})`,
         limit: 200,
       })
       const locations = records
@@ -62,10 +87,23 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'displays') {
-      const locIdsRaw = searchParams.get('location_ids') || ''
-      const locIds = locIdsRaw.split(',').map((s) => s.trim()).filter(Boolean)
-      if (!locIds.length) return NextResponse.json({ displays: [] })
-      const where = `(Display Location,in,${locIds.join(',')})`
+      // Accept location_names (preferred — name-based filter) and fall back
+      // to looking the names up if the caller passed location_ids.
+      const namesParam = searchParams.get('location_names') || ''
+      const idsParam = searchParams.get('location_ids') || ''
+      let names = namesParam.split('|').map((s) => s.trim()).filter(Boolean)
+      if (!names.length && idsParam) {
+        const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean)
+        if (!ids.length) return NextResponse.json({ displays: [] })
+        const { records } = await NocoOps.listRecords(TABLES.displayLocations, {
+          where: `(Id,in,${ids.join(',')})`,
+          fields: 'Id,Name',
+          limit: 200,
+        })
+        names = records.map((r) => String((r as any).Name || '').trim()).filter(Boolean)
+      }
+      if (!names.length) return NextResponse.json({ displays: [] })
+      const where = orChainEq('Display Location', names)
       const { records } = await NocoOps.listRecords(TABLES.displays, { where, limit: 500 })
       const displays = records.map((r) => ({
         id: Number((r as any).Id),
@@ -77,6 +115,36 @@ export async function GET(request: NextRequest) {
           : null,
       }))
       return NextResponse.json({ displays })
+    }
+
+    if (action === 'open-issues') {
+      // Surface currently-open Issues for the selected venue so the tech
+      // can flag which one they observed (mirrors the Airtable Result =
+      // "Open issue Observed" workflow).
+      const venueId = Number(searchParams.get('venue_id'))
+      if (!venueId) return NextResponse.json({ error: 'venue_id required' }, { status: 400 })
+      const venueName = await resolveVenueName(venueId)
+      if (!venueName) return NextResponse.json({ issues: [] })
+      const { records } = await NocoOps.listRecords(TABLES.issues, {
+        viewId: ISSUES_VIEWS.openIssues,
+        where: `(Venue,eq,${venueName})`,
+        limit: 200,
+      })
+      const issues = records.map((r) => {
+        const affected = Array.isArray((r as any)['Affected Displays']) ? (r as any)['Affected Displays'] : []
+        return {
+          id: Number((r as any).Id),
+          label: String((r as any)['Issue ID'] || '').trim() || `Issue #${(r as any).Id}`,
+          status: String((r as any)['Status'] || '').trim(),
+          summary: String((r as any)['Issue Summary'] || '').trim(),
+          assigned_to: String((r as any)['Assign to'] || '').trim() || null,
+          affected_displays: affected.map((d: any) => ({
+            id: Number(d.Id),
+            name: String(d['Display Name'] || `Display #${d.Id}`).trim(),
+          })),
+        }
+      })
+      return NextResponse.json({ issues })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
@@ -117,6 +185,9 @@ export async function POST(request: NextRequest) {
     pixel_outages: boolean
     cleanliness: boolean
   }> = Array.isArray(body.asset_findings) ? body.asset_findings : []
+  const observedIssueIds: number[] = Array.isArray(body.observed_issue_ids)
+    ? body.observed_issue_ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+    : []
 
   if (!venueId) return NextResponse.json({ error: 'venue_id required' }, { status: 400 })
   if (!TYPE_OPTIONS.includes(type)) return NextResponse.json({ error: 'invalid type' }, { status: 400 })
@@ -172,6 +243,15 @@ export async function POST(request: NextRequest) {
     if (locationIds.length) {
       await NocoOps.addLinks(TABLES.walkthroughLog, WALK_COLS.locationsVisitedLink, newRowId, locationIds).catch((e) => {
         console.warn('[walkthroughs/nocodb] locations link failed:', e)
+      })
+    }
+
+    // Step 3b — link any open Issues the tech flagged as observed.
+    // These come from the "Result = Open Issue Observed" picker that the
+    // form shows when an open-issue is selected for the venue.
+    if (observedIssueIds.length) {
+      await NocoOps.addLinks(TABLES.walkthroughLog, WALK_COLS.problemDetectedLink, newRowId, observedIssueIds).catch((e) => {
+        console.warn('[walkthroughs/nocodb] problem-detected link failed:', e)
       })
     }
 

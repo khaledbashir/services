@@ -43,6 +43,23 @@ export const DISPLAY_LOC_COLS = {
   displaysLink: 'c7v82ayvct8fskh',
 } as const
 
+// Issues table — used to surface OPEN issues for a venue when the tech
+// picks Result = "Open Issue Observed" (mirrors the Airtable workflow).
+export const ISSUE_COLS = {
+  issueId: 'c7qgskw2sw7ygvi',           // LongText display label, e.g. "26-1595 [Display EOL]"
+  status: 'cdins3tfd92n82y',            // SingleSelect: Unresolved | In Progress | On Hold | Resolved
+  summary: 'cj0pg7rupec0pvr',           // SingleLineText
+  venue: 'ch3rslziu0fvm1c',             // LongText (free-text venue name string)
+  assignTo: 'cypj89hlg16x5cp',          // LongText
+  affectedDisplaysLink: 'cvpf1614qm5hv11', // Links → Displays
+} as const
+
+// Pre-built "Open Issues" view (excludes Resolved). Use viewId on lookups
+// so we honour whatever criteria the workspace owner set there.
+export const ISSUES_VIEWS = {
+  openIssues: 'vwc54yci44qzvxd0',
+} as const
+
 export const RESULT_OPTIONS = [
   'Open Issue Observed',
   'No Action Required',

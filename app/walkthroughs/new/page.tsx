@@ -7,6 +7,14 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 interface VenueOption { id: number; name: string; abbreviation: string | null }
 interface LocationOption { id: number; name: string; three_letter_code: string | null; location_abbreviation: string | null }
 interface DisplayOption { id: number; name: string; nickName: string | null; type: string | null; location_id: number | null }
+interface OpenIssue {
+  id: number
+  label: string
+  status: string
+  summary: string
+  assigned_to: string | null
+  affected_displays: Array<{ id: number; name: string }>
+}
 
 type Result = 'Open Issue Observed' | 'No Action Required' | 'New Issue Detected'
 type WalkType = 'In-Person' | 'Remote'
@@ -41,6 +49,9 @@ export default function NewWalkthroughPage() {
   const [type, setType] = useState<WalkType>('In-Person')
   const [result, setResult] = useState<Result>('No Action Required')
   const [comments, setComments] = useState('')
+  const [openIssues, setOpenIssues] = useState<OpenIssue[]>([])
+  const [openIssuesLoading, setOpenIssuesLoading] = useState(false)
+  const [observedIssueIds, setObservedIssueIds] = useState<Set<number>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -84,8 +95,16 @@ export default function NewWalkthroughPage() {
   // When selected locations change, fetch all displays under those locations.
   useEffect(() => {
     if (!selectedLocationIds.size) { setDisplays([]); setFindings({}); return }
-    const ids = Array.from(selectedLocationIds).join(',')
-    fetch(`/api/walkthroughs/nocodb?action=displays&location_ids=${ids}`).then((r) => r.ok ? r.json() : null).then((d) => {
+    // Filter by location NAME — NocoDB Link fields filter on the linked
+    // record's display title, not its row id. Names join with `|` to dodge
+    // commas inside any individual location name.
+    const namesParam = locations
+      .filter((l) => selectedLocationIds.has(l.id))
+      .map((l) => l.name)
+      .filter(Boolean)
+      .join('|')
+    if (!namesParam) { setDisplays([]); setFindings({}); return }
+    fetch(`/api/walkthroughs/nocodb?action=displays&location_names=${encodeURIComponent(namesParam)}`).then((r) => r.ok ? r.json() : null).then((d) => {
       const ds: DisplayOption[] = d?.displays || []
       setDisplays(ds)
       // Default-pass every dimension. Tech un-checks any failing dimension —
@@ -106,7 +125,23 @@ export default function NewWalkthroughPage() {
         return next
       })
     })
-  }, [selectedLocationIds])
+  }, [selectedLocationIds, locations])
+
+  // When venue + result combo says "Open Issue Observed", fetch the
+  // currently-open Issues for that venue so the tech can pick which one(s)
+  // they spotted on this walkthrough. Mirrors the Airtable behaviour.
+  useEffect(() => {
+    if (!venueId || result !== 'Open Issue Observed') {
+      setOpenIssues([])
+      setObservedIssueIds(new Set())
+      return
+    }
+    setOpenIssuesLoading(true)
+    fetch(`/api/walkthroughs/nocodb?action=open-issues&venue_id=${venueId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => setOpenIssues(d?.issues || []))
+      .finally(() => setOpenIssuesLoading(false))
+  }, [venueId, result])
 
   const displaysByLocation = useMemo(() => {
     const grouped: Record<number, DisplayOption[]> = {}
@@ -137,6 +172,14 @@ export default function NewWalkthroughPage() {
 
   function toggleLocation(id: number) {
     setSelectedLocationIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleObservedIssue(id: number) {
+    setObservedIssueIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
@@ -191,6 +234,7 @@ export default function NewWalkthroughPage() {
           comments,
           location_ids: Array.from(selectedLocationIds),
           asset_findings: Object.values(findings),
+          observed_issue_ids: Array.from(observedIssueIds),
           attachments,
         }),
       })
@@ -263,6 +307,52 @@ export default function NewWalkthroughPage() {
             </select>
           </div>
         </div>
+
+        {/* Open Issues picker — only renders when Result = "Open Issue Observed".
+            Lets the tech flag which existing open issue(s) they observed,
+            mirroring the Airtable Problem Detected workflow. */}
+        {venueId !== '' && result === 'Open Issue Observed' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-zinc-900">Problem Detected</h3>
+              <p className="text-xs text-zinc-500">
+                {openIssuesLoading ? 'Loading open issues…' : observedIssueIds.size > 0
+                  ? `${observedIssueIds.size} flagged for this walkthrough`
+                  : 'Pick the open issue(s) you observed today'}
+              </p>
+            </div>
+            {!openIssuesLoading && openIssues.length === 0 && (
+              <p className="text-xs text-zinc-400 italic">No open issues on file for this venue. Use comments below to describe what you saw.</p>
+            )}
+            {openIssues.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {openIssues.map((iss) => {
+                  const checked = observedIssueIds.has(iss.id)
+                  const statusColor = iss.status === 'On Hold' ? 'bg-amber-100 text-amber-800'
+                    : iss.status === 'In Progress' ? 'bg-sky-100 text-sky-800'
+                    : 'bg-rose-100 text-rose-800'
+                  return (
+                    <button key={iss.id} type="button" onClick={() => toggleObservedIssue(iss.id)}
+                      className={`text-left border rounded-lg px-3 py-2 transition-colors ${checked ? 'border-[#0A52EF] bg-[#0A52EF]/5 ring-2 ring-[#0A52EF]/30' : 'border-zinc-200 bg-white hover:border-zinc-400'}`}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="text-sm font-semibold text-zinc-900">{iss.label}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColor}`}>{iss.status || '—'}</span>
+                      </div>
+                      {iss.affected_displays.length > 0 && (
+                        <div className="text-[11px] text-zinc-500 mb-1">
+                          {iss.affected_displays.map((d) => d.name).join(', ')}
+                        </div>
+                      )}
+                      {iss.assigned_to && (
+                        <div className="text-[11px] text-zinc-400">Assigned: {iss.assigned_to}</div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Locations checklist — venue-bound, all auto-checked, tech can uncheck */}
         {venueId !== '' && (
