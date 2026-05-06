@@ -189,11 +189,15 @@ export async function GET(request: NextRequest) {
         const rawDate = r['Log Date Dt'] || r['Log Date'] || r['CreatedAt']
         const log_date = rawDate ? String(rawDate).slice(0, 10) : null
         const log_time = r['Log Time'] ? String(r['Log Time']) : null
+        // Empty Log ID → fall back to "#<row id>" so the primary column never
+        // renders a blank cell. Source data has many partially-filled records
+        // (interrupted form submissions) and blanks make the grid look broken.
+        const rawLogId = String(r['Log ID'] || '').trim()
         return {
           id: String(r['Id']),
-          log_id: String(r['Log ID'] || ''),
+          log_id: rawLogId || `#${r['Id']}`,
           venue_id: null,
-          venue_name: String(venueName).trim(),
+          venue_name: String(venueName).trim() || '—',
           technician_name: String(r['Technician'] || r['Logged By'] || '').trim() || null,
           log_date,
           log_time,
