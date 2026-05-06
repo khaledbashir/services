@@ -57,6 +57,13 @@ export interface ColumnConfig<TRow = any> {
 export interface ViewConfig<TRow = any> {
   id: string
   name: string
+  // True if this view was created by the user (vs. shipped in code).
+  // User-created views render with a small ✕ to delete and load their
+  // filter/sort/group state from /api/preferences.
+  user?: boolean
+  // Serialized state (only used for user-created views — code-config views
+  // use the typed `filter`/`sort` props directly).
+  filterRules?: { colId: string; op: string; value: any }[]
   // Only 'grid' is fully implemented in v1. The others render the grid with a
   // "coming soon" notice in the toolbar so we preserve Nick's mental model
   // from Airtable (Today's Walkthroughs / All / Calendar tabs etc).

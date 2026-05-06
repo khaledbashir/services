@@ -17,7 +17,7 @@ import {
   type VisibilityState,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { ColumnConfig, DataGridProps } from './types'
+import type { ColumnConfig, DataGridProps, ViewConfig } from './types'
 import { GridCell } from './cells'
 import { CalendarView } from './CalendarView'
 import { GalleryView } from './GalleryView'
@@ -214,6 +214,9 @@ export function DataGrid<TRow extends { id: string }>({
   const [userHidden, setUserHidden] = useState<Set<string>>(new Set())
   const [columnFilters, setColumnFilters] = useState<Record<string, { op: string; value: any }>>({})
   const [userGroupBy, setUserGroupBy] = useState<string | null>(null)
+  // User-saved views (DB-backed via /api/preferences keyed
+  // datagrid:<persistKey>:userViews). Render alongside the code-config views.
+  const [userViews, setUserViews] = useState<ViewConfig[]>([])
 
   // Hydrate the active view from /api/preferences once on mount, then write
   // back on each user-driven view change. Falls back silently to default if
@@ -246,16 +249,84 @@ export function DataGrid<TRow extends { id: string }>({
   // Keep optimistic row patches in local state so saves render instantly.
   const [overrides, setOverrides] = useState<Record<string, Partial<TRow>>>({})
 
+  // Combined view list: code-config views first, then user-saved views.
+  const allViews = useMemo<ViewConfig[]>(() => [...(views || []), ...userViews], [views, userViews])
   const activeView = useMemo(
-    () => (views && activeViewId ? views.find(v => v.id === activeViewId) || null : null),
-    [views, activeViewId]
+    () => (activeViewId ? allViews.find(v => v.id === activeViewId) || null : null),
+    [allViews, activeViewId]
   )
 
-  // When the active view changes, apply its sort + hidden-column config.
+  // Hydrate user-saved views once on mount (separate from active-view hydration).
+  useEffect(() => {
+    if (!persistKey) return
+    let cancelled = false
+    fetch(`/api/preferences?key=datagrid:${persistKey}:userViews`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d?.value) return
+        try {
+          const parsed = JSON.parse(d.value)
+          if (Array.isArray(parsed)) setUserViews(parsed)
+        } catch {}
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [persistKey])
+
+  const persistUserViews = (next: ViewConfig[]) => {
+    setUserViews(next)
+    if (!persistKey) return
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: `datagrid:${persistKey}:userViews`, value: JSON.stringify(next) }),
+    }).catch(() => {})
+  }
+
+  // When the active view changes, replay its sort / group / filters / hides.
+  // Code-config views use typed `sort` + `groupBy` fields directly; user views
+  // also store filter rules (since they can't supply a runtime filter fn).
   useEffect(() => {
     if (!activeView) return
     if (activeView.sort) setSorting(activeView.sort.map(s => ({ id: s.id, desc: !!s.desc })))
+    else setSorting([])
+    setUserGroupBy(activeView.user ? (activeView.groupBy ?? null) : null)
+    setUserHidden(new Set(activeView.user ? (activeView.hiddenColumns ?? []) : []))
+    if (activeView.user) {
+      const next: Record<string, { op: string; value: any }> = {}
+      for (const r of (activeView.filterRules || [])) next[r.colId] = { op: r.op, value: r.value }
+      setColumnFilters(next)
+    } else {
+      // Switching to a config view clears any in-flight user filter chips so
+      // the user gets a clean slate.
+      setColumnFilters({})
+    }
   }, [activeView])
+
+  const saveCurrentAsView = () => {
+    const name = window.prompt('Name this view:')
+    if (!name) return
+    const filterRules = Object.entries(columnFilters).map(([colId, f]) => ({ colId, op: f.op, value: f.value }))
+    const sort = sorting.map(s => ({ id: s.id, desc: s.desc }))
+    const newView: ViewConfig = {
+      id: `u_${Date.now().toString(36)}`,
+      name,
+      type: 'grid',
+      user: true,
+      filterRules,
+      sort,
+      groupBy: userGroupBy ?? undefined,
+      hiddenColumns: Array.from(userHidden),
+    }
+    persistUserViews([...userViews, newView])
+    setActiveViewId(newView.id)
+  }
+
+  const deleteUserView = (viewId: string) => {
+    const next = userViews.filter(v => v.id !== viewId)
+    persistUserViews(next)
+    if (activeViewId === viewId) setActiveViewId(allViews.find(v => !next.some(u => u.id === v.id))?.id ?? views?.[0]?.id ?? null)
+  }
 
   const columnVisibility = useMemo<VisibilityState>(() => {
     const v: VisibilityState = {}
@@ -418,37 +489,64 @@ export function DataGrid<TRow extends { id: string }>({
 
   return (
     <div className="flex flex-col bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden">
-      {/* View tab strip — Airtable-style. Only renders when views are configured. */}
-      {views && views.length > 0 && (
+      {/* View tab strip — Airtable-style. Renders when any view is available
+          (config or user-saved). */}
+      {(allViews.length > 0 || persistKey) && (
         <div className="flex items-center gap-1 px-2 pt-2 pb-0 border-b border-zinc-100 bg-zinc-50/40 overflow-x-auto">
-          {views.map(v => {
+          {allViews.map(v => {
             const active = v.id === activeViewId
             const supported = !v.type || v.type === 'grid' || v.type === 'calendar' || v.type === 'gallery' || v.type === 'kanban'
             return (
-              <button
+              <div
                 key={v.id}
-                onClick={() => setActiveViewId(v.id)}
                 className={
-                  'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 transition-colors ' +
+                  'group/tab inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 transition-colors ' +
                   (active
                     ? 'border-[#0A52EF] text-[#0A52EF] bg-white'
                     : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-white/60')
                 }
                 title={supported ? v.name : `${v.name} — coming soon`}
               >
-                <span className="text-[11px] leading-none opacity-70">{viewIcon(v.type)}</span>
-                <span>{v.name}</span>
-                {v.locked && (
-                  <svg className="h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-label="Locked">
-                    <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
+                <button onClick={() => setActiveViewId(v.id)} className="inline-flex items-center gap-1.5">
+                  <span className="text-[11px] leading-none opacity-70">{viewIcon(v.type)}</span>
+                  <span>{v.name}</span>
+                  {v.locked && (
+                    <svg className="h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-label="Locked">
+                      <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  )}
+                  {v.user && (
+                    <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">mine</span>
+                  )}
+                  {!supported && (
+                    <span className="ml-1 text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-700">soon</span>
+                  )}
+                </button>
+                {v.user && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (window.confirm(`Delete view "${v.name}"?`)) deleteUserView(v.id)
+                    }}
+                    className="opacity-0 group-hover/tab:opacity-100 ml-0.5 h-4 w-4 inline-flex items-center justify-center rounded text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-opacity"
+                    aria-label="Delete view"
+                  >
+                    ×
+                  </button>
                 )}
-                {!supported && (
-                  <span className="ml-1 text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-700">soon</span>
-                )}
-              </button>
+              </div>
             )
           })}
+          {persistKey && (
+            <button
+              onClick={saveCurrentAsView}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:text-[#0A52EF] hover:bg-white/60 rounded-t-md ml-1"
+              title="Save the current sort, filters, group, and hidden columns as a new view"
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+              Save view
+            </button>
+          )}
         </div>
       )}
 
