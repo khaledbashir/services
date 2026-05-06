@@ -243,6 +243,15 @@ export function DataGrid<TRow extends { id: string }>({
   // User-saved views (DB-backed via /api/preferences keyed
   // datagrid:<persistKey>:userViews). Render alongside the code-config views.
   const [userViews, setUserViews] = useState<ViewConfig[]>([])
+  // Per-user column geometry — width overrides + custom order. Persisted to
+  // /api/preferences keyed datagrid:<persistKey>:cols. Loaded once on mount,
+  // saved (debounced) on mouseup / drop.
+  const [colWidths, setColWidths] = useState<Record<string, number>>({})
+  const [colOrder, setColOrder] = useState<string[]>([])
+  const [resizingCol, setResizingCol] = useState<string | null>(null)
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null)
+  const dragColRef = useRef<string | null>(null)
+  const colsHydratedRef = useRef(false)
 
   // Hydrate the active view from /api/preferences once on mount, then write
   // back on each user-driven view change. Falls back silently to default if
@@ -306,6 +315,35 @@ export function DataGrid<TRow extends { id: string }>({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: `datagrid:${persistKey}:userViews`, value: JSON.stringify(next) }),
+    }).catch(() => {})
+  }
+
+  // Column geometry hydration — read once on mount.
+  useEffect(() => {
+    if (!persistKey || colsHydratedRef.current) return
+    colsHydratedRef.current = true
+    fetch(`/api/preferences?key=datagrid:${persistKey}:cols`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.value) return
+        try {
+          const parsed = JSON.parse(d.value)
+          if (parsed.widths && typeof parsed.widths === 'object') setColWidths(parsed.widths)
+          if (Array.isArray(parsed.order)) setColOrder(parsed.order)
+        } catch {}
+      })
+      .catch(() => {})
+  }, [persistKey])
+
+  const persistColGeometry = (widths: Record<string, number>, order: string[]) => {
+    if (!persistKey) return
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: `datagrid:${persistKey}:cols`,
+        value: JSON.stringify({ widths, order }),
+      }),
     }).catch(() => {})
   }
 
@@ -402,18 +440,34 @@ export function DataGrid<TRow extends { id: string }>({
     return filteredRows.map(r => (overrides[r.id] ? { ...r, ...overrides[r.id] } : r))
   }, [filteredRows, overrides])
 
+  // Apply user column order on top of the source order. Unknown ids in
+  // colOrder are dropped; columns not yet in colOrder append in source order
+  // so newly-added schema fields don't disappear.
+  const orderedColumns = useMemo<ColumnConfig<TRow>[]>(() => {
+    if (!colOrder.length) return columns
+    const byId = new Map(columns.map(c => [c.id, c] as const))
+    const out: ColumnConfig<TRow>[] = []
+    const seen = new Set<string>()
+    for (const id of colOrder) {
+      const c = byId.get(id)
+      if (c) { out.push(c); seen.add(id) }
+    }
+    for (const c of columns) if (!seen.has(c.id)) out.push(c)
+    return out
+  }, [columns, colOrder])
+
   const tableColumns = useMemo<ColumnDef<TRow>[]>(() => {
-    const cols: ColumnDef<TRow>[] = columns.map(c => ({
+    const cols: ColumnDef<TRow>[] = orderedColumns.map(c => ({
       id: c.id,
       accessorFn: (row: any) => (c.format ? c.format(row[c.id], row) : row[c.id]),
       header: c.header,
-      size: c.width || 160,
+      size: colWidths[c.id] || c.width || 160,
       minSize: c.minWidth || 60,
       meta: { config: c },
       enableSorting: c.type !== 'attachment' && c.type !== 'linkedRecord',
     }))
     return cols
-  }, [columns])
+  }, [orderedColumns, colWidths])
 
   const table = useReactTable({
     data: mergedRows,
@@ -727,12 +781,43 @@ export function DataGrid<TRow extends { id: string }>({
               const cfg = (h.column.columnDef.meta as any)?.config as ColumnConfig
               const sort = h.column.getIsSorted()
               const hasFilter = !!columnFilters[cfg.id]
+              const isDragOver = dragOverCol === cfg.id && dragColRef.current && dragColRef.current !== cfg.id
               return (
                 <div
                   key={h.id}
+                  draggable={!cfg.primary}
+                  onDragStart={(e) => {
+                    if (cfg.primary) { e.preventDefault(); return }
+                    dragColRef.current = cfg.id
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', cfg.id)
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragColRef.current || dragColRef.current === cfg.id) return
+                    e.preventDefault()
+                    setDragOverCol(cfg.id)
+                  }}
+                  onDragLeave={() => setDragOverCol(curr => curr === cfg.id ? null : curr)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const src = dragColRef.current
+                    dragColRef.current = null
+                    setDragOverCol(null)
+                    if (!src || src === cfg.id) return
+                    const allIds = orderedColumns.map(c => c.id)
+                    const srcIdx = allIds.indexOf(src)
+                    const dstIdx = allIds.indexOf(cfg.id)
+                    if (srcIdx === -1 || dstIdx === -1) return
+                    allIds.splice(srcIdx, 1)
+                    allIds.splice(dstIdx, 0, src)
+                    setColOrder(allIds)
+                    persistColGeometry(colWidths, allIds)
+                  }}
+                  onDragEnd={() => { dragColRef.current = null; setDragOverCol(null) }}
                   className={
                     'flex items-center px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 border-r border-zinc-200 group/hdr relative ' +
-                    (cfg?.primary ? 'sticky left-14 z-20 bg-zinc-50 ' : '')
+                    (cfg?.primary ? 'sticky left-14 z-20 bg-zinc-50 ' : 'cursor-grab active:cursor-grabbing ') +
+                    (isDragOver ? 'bg-[#0A52EF]/10 ' : '')
                   }
                   style={{ width: h.getSize(), minWidth: h.getSize() }}
                 >
@@ -778,6 +863,33 @@ export function DataGrid<TRow extends { id: string }>({
                       }}
                     />
                   )}
+                  {/* Resize handle — drag to widen/narrow this column */}
+                  <div
+                    role="separator"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const startX = e.clientX
+                      const startW = h.getSize()
+                      setResizingCol(cfg.id)
+                      const onMove = (ev: MouseEvent) => {
+                        const w = Math.max(60, startW + (ev.clientX - startX))
+                        setColWidths(prev => ({ ...prev, [cfg.id]: w }))
+                      }
+                      const onUp = () => {
+                        window.removeEventListener('mousemove', onMove)
+                        window.removeEventListener('mouseup', onUp)
+                        setResizingCol(null)
+                        setColWidths(curr => { persistColGeometry(curr, colOrder); return curr })
+                      }
+                      window.addEventListener('mousemove', onMove)
+                      window.addEventListener('mouseup', onUp)
+                    }}
+                    className={
+                      'absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none ' +
+                      (resizingCol === cfg.id ? 'bg-[#0A52EF]' : 'hover:bg-[#0A52EF]/40')
+                    }
+                  />
                 </div>
               )
             })}
