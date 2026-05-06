@@ -147,11 +147,18 @@ export function Sidebar() {
     return false
   }
 
-  // Per Alexis 5/6 — Designer + Design Contractor have curated section
-  // visibility instead of the full hierarchy:
-  //   Designer: Events & Schedule + Design & Creative only.
-  //   Design Contractor: Design & Creative only (third-party scope).
+  // Per Alexis's 5/6 Slack spec — exact link sets per narrow role.
+  //   Designer: Design Request, CG Designs, Venues, Events, Time Entries,
+  //             Hour Budgets.
+  //   Design Consultant (stored as `design_contractor`): Design Request,
+  //             CG Design only.
   // Everyone else falls back to the standard role-min check.
+  const DESIGNER_ALLOWED_HREFS = new Set([
+    '/designs', '/cg-designs', '/venues', '/venues/map',
+    '/events', '/my-events', '/time-entries', '/hours-budgets',
+  ])
+  const DESIGN_CONSULTANT_ALLOWED_HREFS = new Set(['/designs', '/cg-designs'])
+
   const sectionVisibleForUser = (section: NavSection): boolean => {
     if (isDesignContractor) {
       return section.key === 'design'
@@ -160,6 +167,12 @@ export function Sidebar() {
       return section.key === 'events' || section.key === 'design'
     }
     return roleAllows(section.role)
+  }
+
+  const linkVisibleForUser = (link: NavLink): boolean => {
+    if (isDesignContractor) return DESIGN_CONSULTANT_ALLOWED_HREFS.has(link.href)
+    if (isDesigner) return DESIGNER_ALLOWED_HREFS.has(link.href)
+    return roleAllows(link.role)
   }
 
   const sections: NavSection[] = useMemo(() => [
@@ -350,7 +363,7 @@ export function Sidebar() {
 
         {sections.map(section => {
           if (!sectionVisibleForUser(section)) return null
-          const visibleLinks = section.links.filter(l => roleAllows(l.role))
+          const visibleLinks = section.links.filter(l => linkVisibleForUser(l))
           if (visibleLinks.length === 0) return null
 
           const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))
@@ -429,7 +442,7 @@ export function Sidebar() {
       <nav className="flex-1 py-3 overflow-y-auto flex flex-col items-center gap-1">
         {sections.map(section => {
           if (!sectionVisibleForUser(section)) return null
-          const visibleLinks = section.links.filter(l => roleAllows(l.role))
+          const visibleLinks = section.links.filter(l => linkVisibleForUser(l))
           if (visibleLinks.length === 0) return null
           const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))
           return (

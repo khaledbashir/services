@@ -358,7 +358,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                   <option value="technician">Technician</option>
                   <option value="designer">Designer</option>
-                  <option value="design_contractor">Design Contractor (third-party)</option>
+                  <option value="design_contractor">Design Consultant (third-party)</option>
                   <option value="manager">Manager</option>
                   <option value="tech_support">Tech Support</option>
                   <option value="admin">Admin</option>
@@ -494,7 +494,7 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                   options={[
                     { value: 'technician', label: 'Technician' },
                     { value: 'designer', label: 'Designer' },
-                    { value: 'design_contractor', label: 'Design Contractor' },
+                    { value: 'design_contractor', label: 'Design Consultant' },
                     { value: 'manager', label: 'Manager' },
                     { value: 'tech_support', label: 'Tech Support' },
                     { value: 'admin', label: 'Admin' },
