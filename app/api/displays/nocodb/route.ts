@@ -35,7 +35,9 @@ export async function GET(request: NextRequest) {
           model: String(r['Model'] || '').trim() || null,
           orientation: r['Orientation'] || null,
           resolution: String(r['Resolution'] || '').trim() || null,
-          ownership: r['Ownership'] || null,
+          ownership: Array.isArray(r['Ownership'])
+            ? r['Ownership']
+            : (typeof r['Ownership'] === 'string' && r['Ownership'] ? r['Ownership'].split(',').map((s: string) => s.trim()).filter(Boolean) : null),
           moynihan_phase: r['Moynihan Phase#'] || null,
           screen_number: String(r['Screen Number'] || '').trim() || null,
           serial_number: String(r['Serial #'] || '').trim() || null,

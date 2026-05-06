@@ -16,7 +16,7 @@ interface Display {
   model: string | null
   orientation: string | null
   resolution: string | null
-  ownership: string | null
+  ownership: string[] | null
   moynihan_phase: string | null
   screen_number: string | null
   serial_number: string | null
@@ -81,7 +81,13 @@ const COLUMNS: ColumnConfig<Display>[] = [
   { id: 'lcd_ip_address',    header: 'LCD IP',        type: 'text',         width: 130 },
   { id: 'connected_devices', header: 'Connected',     type: 'text',         width: 200, editable: false },
   { id: 'active_issues',     header: 'Issues',        type: 'number',       width: 80,  editable: false },
-  { id: 'ownership',         header: 'Ownership',     type: 'text',         width: 150 },
+  { id: 'ownership',         header: 'Ownership',     type: 'multiSelect',  width: 180, options: [
+    { value: 'LIRR',   label: 'LIRR',   color: 'sky' },
+    { value: 'Amtrak', label: 'Amtrak', color: 'amber' },
+    { value: 'ESD',    label: 'ESD',    color: 'emerald' },
+    { value: 'MSG',    label: 'MSG',    color: 'violet' },
+    { value: 'MTA',    label: 'MTA',    color: 'rose' },
+  ] },
   { id: 'planned',           header: 'Planned',       type: 'checkbox',     width: 90 },
   { id: 'images',            header: 'Image',         type: 'attachment',   width: 130, editable: false },
   { id: 'notes',             header: 'Notes',         type: 'longText',     width: 240 },

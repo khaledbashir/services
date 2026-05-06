@@ -28,6 +28,7 @@ const TYPE_MAP: Record<string, FieldType> = {
   LastModifiedTime: 'dateTime',
   Checkbox: 'checkbox',
   SingleSelect: 'singleSelect',
+  MultiSelect: 'multiSelect',
   Attachment: 'attachment',
   Links: 'linkedRecord',
   LinkToAnotherRecord: 'linkedRecord',
@@ -119,7 +120,7 @@ export function buildColumnConfig(meta: NocoTableMeta): ColumnConfig<any>[] {
       primary: !!c.pv,
       editable,
     }
-    if (c.uidt === 'SingleSelect' && c.colOptions?.options) {
+    if ((c.uidt === 'SingleSelect' || c.uidt === 'MultiSelect') && c.colOptions?.options) {
       config.options = c.colOptions.options.map((o: any, i: number): SelectOption => ({
         value: o.title,
         label: o.title,
@@ -175,8 +176,13 @@ export function reshapeRecord(raw: Record<string, any>, columns: NocoColumn[]): 
       })
       continue
     }
-    if (c.uidt === 'MultiSelect' && Array.isArray(v)) {
-      out[c.title] = v.join(', ')
+    if (c.uidt === 'MultiSelect') {
+      // NocoDB returns multiselect as either an array of strings OR a
+      // comma-joined string depending on field config. Normalize to an array
+      // for the MultiSelectCell.
+      out[c.title] = Array.isArray(v)
+        ? v
+        : (typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(Boolean) : [])
       continue
     }
     if (c.uidt === 'Date' && typeof v === 'string') {

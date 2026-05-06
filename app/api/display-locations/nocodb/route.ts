@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
         const displaysLink = Array.isArray(r['Displays']) ? r['Displays'] : []
         const photo = Array.isArray(r['Photo']) ? r['Photo'] : null
         const map = Array.isArray(r['Map']) ? r['Map'] : null
-        const installType = Array.isArray(r['Install Type'])
-          ? r['Install Type'].join(', ')
-          : (r['Install Type'] ? String(r['Install Type']) : null)
+        const installType: string[] | null = Array.isArray(r['Install Type'])
+          ? r['Install Type']
+          : (typeof r['Install Type'] === 'string' && r['Install Type'] ? r['Install Type'].split(',').map((s: string) => s.trim()).filter(Boolean) : null)
         return {
           id: String(r['Id']),
           name: String(r['Name'] || '').trim() || `Location #${r['Id']}`,

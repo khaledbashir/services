@@ -193,6 +193,76 @@ function SelectCell({ col, value, onSave }: CellProps) {
   )
 }
 
+function MultiSelectCell({ col, value, onSave }: CellProps) {
+  // Multi-select: value is array of option values. Click → dropdown with
+  // checkboxes; saves the new array on toggle.
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const selected: string[] = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' && value ? value.split(',').map(s => s.trim()).filter(Boolean) : [])
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false) }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [open])
+
+  const toggle = async (v: string) => {
+    const next = selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]
+    try { await onSave(next) } catch {}
+  }
+
+  const pills = selected
+    .map(s => col.options?.find(o => o.value === s) || ({ value: s, label: s, color: 'zinc' } as any))
+  const visible = pills.slice(0, 3)
+  const overflow = pills.length - visible.length
+
+  return (
+    <div ref={wrapRef} className="relative h-full w-full flex items-center px-1.5 gap-1 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => col.editable !== false && setOpen(o => !o)}
+        className="flex items-center gap-1 max-w-full overflow-hidden"
+      >
+        {visible.length === 0 ? (
+          <span className="text-zinc-300 text-[12.5px]">—</span>
+        ) : visible.map(opt => (
+          <span key={opt.value} className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${pillClass(opt.color)}`}>
+            {opt.label}
+          </span>
+        ))}
+        {overflow > 0 && <span className="text-[10px] text-zinc-500 tabular-nums">+{overflow}</span>}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-zinc-200 rounded-lg shadow-lg py-1 min-w-[200px] max-h-64 overflow-y-auto">
+          {col.options?.map(o => {
+            const checked = selected.includes(o.value)
+            return (
+              <button
+                key={o.value}
+                onClick={() => toggle(o.value)}
+                className="w-full text-left px-2 py-1.5 text-sm hover:bg-zinc-50 flex items-center gap-2"
+              >
+                <input
+                  type="checkbox"
+                  readOnly
+                  checked={checked}
+                  className="h-3.5 w-3.5 rounded border-zinc-300 pointer-events-none"
+                />
+                <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${pillClass(o.color)}`}>
+                  {o.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DateCell({ col, value, onSave }: CellProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<string>(value ?? '')
@@ -312,6 +382,8 @@ export function GridCell(props: CellProps) {
       return <NumberCell {...props} />
     case 'singleSelect':
       return <SelectCell {...props} />
+    case 'multiSelect':
+      return <MultiSelectCell {...props} />
     case 'date':
     case 'dateTime':
       return <DateCell {...props} />

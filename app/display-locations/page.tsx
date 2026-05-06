@@ -12,7 +12,7 @@ import { DataGrid, RecordDrawer, type ColumnConfig, type ViewConfig } from '@/co
 interface Loc {
   id: string
   name: string
-  install_type: string | null
+  install_type: string[] | null
   three_letter_code: string | null
   location_abbreviation: string | null
   venue_label: string | null
@@ -28,7 +28,12 @@ interface Loc {
 const COLUMNS: ColumnConfig<Loc>[] = [
   { id: 'name',                  header: 'Name',          type: 'text',     width: 240, primary: true },
   { id: 'venue_label',           header: 'Venue',         type: 'text',     width: 180, editable: false },
-  { id: 'install_type',          header: 'Install type',  type: 'text',     width: 200 },
+  { id: 'install_type',          header: 'Install type',  type: 'multiSelect', width: 220, options: [
+    { value: 'LED Wall',      label: 'LED Wall',      color: 'sky' },
+    { value: 'Matrix LCD',    label: 'Matrix LCD',    color: 'cyan' },
+    { value: 'Touch Kiosk',   label: 'Touch Kiosk',   color: 'violet' },
+    { value: 'LCD Enclosure', label: 'LCD Enclosure', color: 'emerald' },
+  ] },
   { id: 'three_letter_code',     header: 'Code',          type: 'text',     width: 80 },
   { id: 'location_abbreviation', header: 'Abbrev.',       type: 'text',     width: 110 },
   { id: 'displays_count',        header: 'Displays',      type: 'number',   width: 100, editable: false },
