@@ -65,9 +65,28 @@ async function processRow(id: number, row: any) {
   const venueLink = Array.isArray(r.Venue) ? r.Venue[0] : null
   const venueName = venueLink?.['Venue Name'] || r['Venue Name'] || 'Unknown venue'
   const venueAbbr = venueLink?.Abbreviation || r['Three Letter Code'] || ''
-  const result = String(r.Result || '').trim()
+  let result = String(r.Result || '').trim()
   const type = String(r.Type || '').trim() || 'In-Person'
   const comments = String(r['Comments (log issues above)'] || '').trim()
+
+  // 0. Asset checklist — Nick 5/4 spec. Five Checkbox columns on the
+  //    NocoDB form (default true = passed). If ANY is unchecked, the
+  //    walkthrough surfaced a problem; auto-promote Result so the rest of
+  //    the pipeline (auto-ticket, PDF "FAILED" badge) treats it correctly.
+  //    Only promotes when Result was left at default ("No Action Required")
+  //    — so the tech can still explicitly pick "Open Issue Observed" without
+  //    being overridden.
+  const CHECKLIST_COLS = ['Image Quality', 'Ad Rotation', 'Physical Damage', 'Pixel Outages', 'Cleanliness']
+  const failedChecklist: string[] = []
+  for (const k of CHECKLIST_COLS) if (r[k] === false) failedChecklist.push(k)
+  if (failedChecklist.length && (!result || result === 'No Action Required')) {
+    try {
+      await NocoOps.updateRecords(TABLES.walkthroughLog, [{ Id: id, Result: 'New Issue Detected' }])
+      result = 'New Issue Detected'
+    } catch (e) {
+      console.warn('[walkthroughs/nocodb/hook] auto-promote Result failed:', e)
+    }
+  }
   // The form-facing field is "Logged By" (one-tap dropdown) — the legacy
   // "Technician" LongText column stays in place for the existing 20K rows
   // and any downstream queries. Webhook bridges the two: whatever the tech
@@ -163,10 +182,13 @@ async function processRow(id: number, row: any) {
           [technician]
         )
         const createdBy = techLookup.rows[0]?.id || '7fb556c3-5d2d-430a-b3dc-42f58d79be33' // ANC Bot fallback
-        const titleSeed = comments.split('\n')[0] || `Walkthrough finding — ${venueName}`
+        const titleSeed = failedChecklist.length
+          ? `${venueName} — ${failedChecklist.join(' / ')}`
+          : (comments.split('\n')[0] || `Walkthrough finding — ${venueName}`)
         const title = titleSeed.length > 120 ? titleSeed.slice(0, 117) + '…' : titleSeed
         const description = [
           `Auto-generated from walkthrough log entry "${log_id}".`,
+          failedChecklist.length ? `\nFailed checks: ${failedChecklist.join(', ')}` : '',
           comments ? `\nTech notes:\n${comments}` : '',
           `\nReported by: ${technician}`,
           `\nWalkthrough record id: ${id} (NocoDB Walkthrough Log).`,
