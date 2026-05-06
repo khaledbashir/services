@@ -79,6 +79,31 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
 
   useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [params.tableId])
 
+  // ?record=<id> deep link → after rows load, auto-open the drawer for that
+  // record. Useful for sharing a single record's URL or for linked-record
+  // navigation that wants to preselect a row.
+  useEffect(() => {
+    if (loading || !rows.length) return
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const rid = sp.get('record')
+      if (!rid) return
+      const found = rows.find(r => String(r.id) === String(rid))
+      if (found) setDrawerRow(found)
+    } catch {}
+  }, [loading, rows])
+
+  // Push the active record id into the URL while the drawer is open so links
+  // are shareable and back-button closes the drawer.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (drawerRow) url.searchParams.set('record', drawerRow.id)
+      else url.searchParams.delete('record')
+      window.history.replaceState(null, '', url.toString())
+    } catch {}
+  }, [drawerRow])
+
   // Refetch from offset 0 when server filter or sort changes — these always
   // require a fresh page since the source ordering changes.
   useEffect(() => {

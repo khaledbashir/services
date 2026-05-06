@@ -398,6 +398,22 @@ export function DataGrid<TRow extends { id: string }>({
     if (activeViewId === viewId) setActiveViewId(allViews.find(v => !next.some(u => u.id === v.id))?.id ?? views?.[0]?.id ?? null)
   }
 
+  // Overwrite the active user view with current state. Only valid when the
+  // active view is user-created — config views can't be edited from the UI.
+  const updateActiveUserView = () => {
+    if (!activeView?.user || !activeViewId) return
+    const filterRules = Object.entries(columnFilters).map(([colId, f]) => ({ colId, op: f.op, value: f.value }))
+    const sort = sorting.map(s => ({ id: s.id, desc: s.desc }))
+    const next = userViews.map(v => v.id === activeViewId ? {
+      ...v,
+      filterRules,
+      sort,
+      groupBy: userGroupBy ?? undefined,
+      hiddenColumns: Array.from(userHidden),
+    } : v)
+    persistUserViews(next)
+  }
+
   const columnVisibility = useMemo<VisibilityState>(() => {
     const v: VisibilityState = {}
     if (activeView?.hiddenColumns?.length) {
@@ -485,6 +501,12 @@ export function DataGrid<TRow extends { id: string }>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: 'includesString',
+    // Multi-column sort: hold shift and click another column header to add
+    // it as a secondary sort key (Airtable signature). Up to 3 keys keeps
+    // the order indicators readable.
+    enableMultiSort: true,
+    isMultiSortEvent: (e: any) => !!e?.shiftKey,
+    maxMultiSortColCount: 3,
   })
 
   const rowModel = table.getRowModel()
@@ -639,14 +661,26 @@ export function DataGrid<TRow extends { id: string }>({
             )
           })}
           {persistKey && (
-            <button
-              onClick={saveCurrentAsView}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:text-[#0A52EF] hover:bg-white/60 rounded-t-md ml-1"
-              title="Save the current sort, filters, group, and hidden columns as a new view"
-            >
-              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-              Save view
-            </button>
+            <>
+              {activeView?.user && (
+                <button
+                  onClick={updateActiveUserView}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:text-[#0A52EF] hover:bg-white/60 rounded-t-md ml-1"
+                  title="Overwrite the active view with the current sort, filters, group, and hidden columns"
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21V13H7v8M7 3v5h8" /></svg>
+                  Update view
+                </button>
+              )}
+              <button
+                onClick={saveCurrentAsView}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-zinc-500 hover:text-[#0A52EF] hover:bg-white/60 rounded-t-md ml-1"
+                title="Save the current sort, filters, group, and hidden columns as a new view"
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+                Save view
+              </button>
+            </>
           )}
         </div>
       )}
@@ -881,10 +915,14 @@ export function DataGrid<TRow extends { id: string }>({
                     type="button"
                     onClick={h.column.getToggleSortingHandler()}
                     className={'flex-1 flex items-center gap-1 truncate text-left ' + (h.column.getCanSort() ? 'cursor-pointer hover:text-zinc-800' : '')}
+                    title={h.column.getCanSort() ? 'Click to sort. Shift+click to add as secondary sort.' : undefined}
                   >
                     <span className="truncate">{cfg?.header ?? h.id}</span>
                     {sort === 'asc' && <span>↑</span>}
                     {sort === 'desc' && <span>↓</span>}
+                    {sort && sorting.length > 1 && (
+                      <span className="ml-0.5 text-[9px] tabular-nums text-zinc-400">{h.column.getSortIndex() + 1}</span>
+                    )}
                     {hasFilter && <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-[#0A52EF]" title="Filter active" />}
                   </button>
                   <button

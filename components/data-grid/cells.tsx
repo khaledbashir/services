@@ -371,7 +371,7 @@ function LinkedRecordCell({ col, value }: CellProps) {
       return (
         <a
           key={r.id}
-          href={`/noco/${col.linkedTableId}`}
+          href={`/noco/${col.linkedTableId}?record=${encodeURIComponent(r.id)}`}
           onClick={e => e.stopPropagation()}
           className={cls + ' hover:ring-2 hover:ring-[#0A52EF]/40'}
           title={`Open ${r.label} in linked table`}
