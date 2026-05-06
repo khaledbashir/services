@@ -6,15 +6,15 @@
 // Airtable visual language (frozen primary col, pill chips, inline thumbs,
 // 32px row height, hover-row expand button to drawer).
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  flexRender,
   type SortingState,
   type ColumnDef,
+  type VisibilityState,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ColumnConfig, DataGridProps } from './types'
@@ -32,17 +32,40 @@ export function DataGrid<TRow extends { id: string }>({
   onOpenRecord,
   title,
   emptyText = 'No records',
+  views,
 }: DataGridProps<TRow>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [busy, setBusy] = useState(false)
+  const [activeViewId, setActiveViewId] = useState<string | null>(views?.[0]?.id ?? null)
   // Keep optimistic row patches in local state so saves render instantly.
   const [overrides, setOverrides] = useState<Record<string, Partial<TRow>>>({})
 
+  const activeView = useMemo(
+    () => (views && activeViewId ? views.find(v => v.id === activeViewId) || null : null),
+    [views, activeViewId]
+  )
+
+  // When the active view changes, apply its sort + hidden-column config.
+  useEffect(() => {
+    if (!activeView) return
+    if (activeView.sort) setSorting(activeView.sort.map(s => ({ id: s.id, desc: !!s.desc })))
+  }, [activeView])
+
+  const columnVisibility = useMemo<VisibilityState>(() => {
+    if (!activeView?.hiddenColumns?.length) return {}
+    return Object.fromEntries(activeView.hiddenColumns.map(id => [id, false]))
+  }, [activeView])
+
+  const filteredRows = useMemo(() => {
+    if (!activeView?.filter) return rows
+    return rows.filter(activeView.filter)
+  }, [rows, activeView])
+
   const mergedRows = useMemo(() => {
-    if (!Object.keys(overrides).length) return rows
-    return rows.map(r => (overrides[r.id] ? { ...r, ...overrides[r.id] } : r))
-  }, [rows, overrides])
+    if (!Object.keys(overrides).length) return filteredRows
+    return filteredRows.map(r => (overrides[r.id] ? { ...r, ...overrides[r.id] } : r))
+  }, [filteredRows, overrides])
 
   const tableColumns = useMemo<ColumnDef<TRow>[]>(() => {
     const cols: ColumnDef<TRow>[] = columns.map(c => ({
@@ -60,7 +83,7 @@ export function DataGrid<TRow extends { id: string }>({
   const table = useReactTable({
     data: mergedRows,
     columns: tableColumns,
-    state: { sorting, globalFilter },
+    state: { sorting, globalFilter, columnVisibility },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
@@ -105,8 +128,46 @@ export function DataGrid<TRow extends { id: string }>({
 
   const totalWidth = tableColumns.reduce((sum, c: any) => sum + (c.size || 160), 0) + 56 // +56 for the row-handle col
 
+  const viewIcon = (type?: string) => {
+    switch (type) {
+      case 'calendar': return '📅'
+      case 'gallery':  return '🖼️'
+      case 'kanban':   return '🗂️'
+      default:         return '▦'
+    }
+  }
+
   return (
     <div className="flex flex-col bg-white border border-[#E8E8E8] rounded-2xl overflow-hidden">
+      {/* View tab strip — Airtable-style. Only renders when views are configured. */}
+      {views && views.length > 0 && (
+        <div className="flex items-center gap-1 px-2 pt-2 pb-0 border-b border-zinc-100 bg-zinc-50/40 overflow-x-auto">
+          {views.map(v => {
+            const active = v.id === activeViewId
+            const supported = !v.type || v.type === 'grid'
+            return (
+              <button
+                key={v.id}
+                onClick={() => setActiveViewId(v.id)}
+                className={
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 transition-colors ' +
+                  (active
+                    ? 'border-[#0A52EF] text-[#0A52EF] bg-white'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-white/60')
+                }
+                title={supported ? v.name : `${v.name} — coming soon`}
+              >
+                <span className="text-[11px] leading-none opacity-70">{viewIcon(v.type)}</span>
+                <span>{v.name}</span>
+                {!supported && (
+                  <span className="ml-1 text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-700">soon</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Toolbar — matches Airtable's compact toolbar feel */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 bg-zinc-50/60">
         {title && <div className="text-sm font-semibold text-zinc-700 mr-2">{title}</div>}

@@ -51,6 +51,21 @@ export interface ColumnConfig<TRow = any> {
   toPatch?: (value: any) => Record<string, any>
 }
 
+export interface ViewConfig<TRow = any> {
+  id: string
+  name: string
+  // Only 'grid' is fully implemented in v1. The others render the grid with a
+  // "coming soon" notice in the toolbar so we preserve Nick's mental model
+  // from Airtable (Today's Walkthroughs / All / Calendar tabs etc).
+  type?: 'grid' | 'calendar' | 'gallery' | 'kanban'
+  // Predicate run on each row — included if returns true.
+  filter?: (row: TRow) => boolean
+  // Initial sort applied when the view becomes active.
+  sort?: { id: string; desc?: boolean }[]
+  // Column ids hidden in this view.
+  hiddenColumns?: string[]
+}
+
 export interface DataGridProps<TRow extends { id: string }> {
   columns: ColumnConfig<TRow>[]
   rows: TRow[]
@@ -65,6 +80,9 @@ export interface DataGridProps<TRow extends { id: string }> {
   title?: string
   // Empty-state copy
   emptyText?: string
+  // Saved views (Airtable-style tab strip). First view in the array is the
+  // initial active view; if omitted, grid shows a single "Grid" view.
+  views?: ViewConfig<TRow>[]
 }
 
 // Tailwind-mapped pill colors for select options. Mirrors Airtable's option

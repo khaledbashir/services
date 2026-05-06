@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { DataGrid, RecordDrawer, type ColumnConfig } from '@/components/data-grid'
+import { DataGrid, RecordDrawer, type ColumnConfig, type ViewConfig } from '@/components/data-grid'
 
 interface Walk {
   id: string
@@ -29,6 +29,15 @@ const RESULT_OPTIONS = [
   { value: 'problem', label: 'Problem', color: 'rose' },
   { value: 'partial', label: 'Partial', color: 'amber' },
   { value: 'minor', label: 'Minor', color: 'amber' },
+]
+
+// Mirrors Nick's Airtable Walkthrough Log views (anc-service-south base):
+// Today's Walkthroughs / All / Calendar.
+const today = () => new Date().toISOString().slice(0, 10)
+const VIEWS: ViewConfig<Walk>[] = [
+  { id: 'today', name: "Today's Walkthroughs", type: 'grid', filter: r => r.log_date === today(), sort: [{ id: 'log_date', desc: true }] },
+  { id: 'all',   name: 'All',                  type: 'grid', sort: [{ id: 'log_date', desc: true }] },
+  { id: 'cal',   name: 'Calendar',             type: 'calendar' },
 ]
 
 const COLUMNS: ColumnConfig<Walk>[] = [
@@ -96,6 +105,7 @@ export default function WalkthroughsPage() {
           columns={COLUMNS}
           rows={rows}
           loading={loading}
+          views={VIEWS}
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No walkthroughs yet. Click + or use the guided form."

@@ -8,7 +8,7 @@ import { useEffect, useState, FormEvent } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useToast } from '@/components/toast'
 import { useAuth } from '@/lib/useAuth'
-import { DataGrid, RecordDrawer, type ColumnConfig } from '@/components/data-grid'
+import { DataGrid, RecordDrawer, type ColumnConfig, type ViewConfig } from '@/components/data-grid'
 
 interface InventoryItem {
   id: string
@@ -48,6 +48,15 @@ const DISPLAY_TYPE_OPTIONS = [
 const ORIENTATION_OPTIONS = [
   { value: 'LANDSCAPE', label: 'Landscape', color: 'sky' },
   { value: 'PORTRAIT', label: 'Portrait', color: 'cyan' },
+]
+
+// Mirrors Nick's Airtable Inventory Tracking views.
+const VIEWS: ViewConfig<InventoryItem>[] = [
+  { id: 'overview',  name: 'Inventory Overview', type: 'grid' },
+  { id: 'low',       name: 'Below threshold',    type: 'grid', filter: r => (r.quantity ?? 0) <= (r.threshold_low ?? 5) },
+  { id: 'by-make',   name: 'Group by Make',      type: 'grid', sort: [{ id: 'manufacturer' }, { id: 'item_name' }] },
+  { id: 'by-type',   name: 'Group by Type',      type: 'grid', sort: [{ id: 'display_type' }, { id: 'item_name' }] },
+  { id: 'gallery',   name: 'Product Gallery',    type: 'gallery' },
 ]
 
 const COLUMNS: ColumnConfig<InventoryItem>[] = [
@@ -237,6 +246,7 @@ export default function InventoryPage() {
           columns={COLUMNS}
           rows={items}
           loading={loading}
+          views={VIEWS}
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No inventory items yet. Click + Add asset."
