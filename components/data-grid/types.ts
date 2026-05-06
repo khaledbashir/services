@@ -119,6 +119,12 @@ export interface DataGridProps<TRow extends { id: string }> {
   // beyond the loaded page (e.g. across all 20K walkthroughs).
   onFilterChange?: (rules: { colId: string; op: string; value: any }[]) => void
   onSortChange?: (sort: { id: string; desc?: boolean }[]) => void
+  // Bulk select: when true the row handle gets a checkbox; selecting rows
+  // surfaces a bar above the toolbar. Default action is bulk delete via
+  // onBulkDelete; pages can render arbitrary actions via renderBulkActions.
+  enableSelection?: boolean
+  onBulkDelete?: (rowIds: string[]) => Promise<void> | void
+  renderBulkActions?: (selectedRowIds: string[], clearSelection: () => void) => React.ReactNode
 }
 
 // Tailwind-mapped pill colors for select options. Mirrors Airtable's option

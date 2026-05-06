@@ -123,6 +123,28 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     setRows(prev => prev.filter(p => p.id !== rowId))
   }
 
+  const bulkDelete = async (rowIds: string[]) => {
+    // Sequential delete for v1 — keeps the rate at one DELETE/sec which is
+    // well under any sensible NocoDB limit. Errors are tracked but don't
+    // halt the run; surviving rows stay selected for the user to retry.
+    const failed: string[] = []
+    for (const id of rowIds) {
+      try {
+        const r = await fetch(`/api/noco/${params.tableId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        })
+        if (!r.ok) failed.push(id)
+      } catch { failed.push(id) }
+    }
+    setRows(prev => prev.filter(p => !rowIds.includes(p.id) || failed.includes(p.id)))
+    if (failed.length) {
+      // eslint-disable-next-line no-alert
+      alert(`${failed.length} record${failed.length === 1 ? '' : 's'} failed to delete.`)
+    }
+  }
+
   // Auto-derive a sensible default view set: All, plus group-by-status if a
   // singleSelect with a "Status" or "Result" column exists, plus calendar
   // if a date column exists.
@@ -189,6 +211,8 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           onLoadMore={loadMore}
           onFilterChange={setServerFilter}
           onSortChange={setServerSort}
+          enableSelection
+          onBulkDelete={bulkDelete}
           emptyText={loading ? 'Loading…' : 'No records.'}
         />
 

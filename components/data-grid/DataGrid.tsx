@@ -208,6 +208,9 @@ export function DataGrid<TRow extends { id: string }>({
   onLoadMore,
   onFilterChange,
   onSortChange,
+  enableSelection,
+  onBulkDelete,
+  renderBulkActions,
 }: DataGridProps<TRow>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -249,6 +252,9 @@ export function DataGrid<TRow extends { id: string }>({
   const [colWidths, setColWidths] = useState<Record<string, number>>({})
   const [colOrder, setColOrder] = useState<string[]>([])
   const [resizingCol, setResizingCol] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const clearSelection = () => setSelectedIds(new Set())
   const [dragOverCol, setDragOverCol] = useState<string | null>(null)
   const dragColRef = useRef<string | null>(null)
   const colsHydratedRef = useRef(false)
@@ -645,6 +651,39 @@ export function DataGrid<TRow extends { id: string }>({
         </div>
       )}
 
+      {/* Bulk actions bar — shown only when selection > 0 */}
+      {enableSelection && selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-[#0A52EF]/30 bg-[#0A52EF]/5">
+          <span className="text-xs font-medium text-[#0A52EF]">
+            {selectedIds.size} selected
+          </span>
+          {renderBulkActions?.(Array.from(selectedIds), clearSelection)}
+          {onBulkDelete && (
+            <button
+              onClick={async () => {
+                if (!window.confirm(`Delete ${selectedIds.size} record${selectedIds.size === 1 ? '' : 's'}? This can't be undone.`)) return
+                setBulkBusy(true)
+                try {
+                  await onBulkDelete(Array.from(selectedIds))
+                  clearSelection()
+                } finally { setBulkBusy(false) }
+              }}
+              disabled={bulkBusy}
+              className="px-2.5 py-1 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 disabled:opacity-50"
+            >
+              {bulkBusy ? 'Deleting…' : 'Delete'}
+            </button>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={clearSelection}
+            className="px-2 py-1 text-xs text-zinc-600 hover:text-zinc-900 border border-zinc-200 rounded-md"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Toolbar — matches Airtable's compact toolbar feel */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 bg-zinc-50/60">
         {title && <div className="text-sm font-semibold text-zinc-700 mr-2">{title}</div>}
@@ -776,7 +815,24 @@ export function DataGrid<TRow extends { id: string }>({
             className="sticky top-0 z-20 flex bg-zinc-50 border-b border-zinc-200"
             style={{ height: HEADER_HEIGHT }}
           >
-            <div className="sticky left-0 z-30 w-14 flex-shrink-0 bg-zinc-50 border-r border-zinc-200" />
+            <div className="sticky left-0 z-30 w-14 flex-shrink-0 bg-zinc-50 border-r border-zinc-200 flex items-center justify-center">
+              {enableSelection && (() => {
+                const visibleIds = groupedItems.flatMap(it => it.kind === 'row' ? [rowModel.rows[it.rowIndex].original.id] : [])
+                const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id))
+                return (
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedIds(new Set([...selectedIds, ...visibleIds]))
+                      else setSelectedIds(prev => { const n = new Set(prev); for (const id of visibleIds) n.delete(id); return n })
+                    }}
+                    className="h-3.5 w-3.5 rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]/30"
+                    aria-label="Select all visible rows"
+                  />
+                )
+              })()}
+            </div>
             {table.getFlatHeaders().map(h => {
               const cfg = (h.column.columnDef.meta as any)?.config as ColumnConfig
               const sort = h.column.getIsSorted()
@@ -933,8 +989,30 @@ export function DataGrid<TRow extends { id: string }>({
                     className="absolute left-0 flex border-b border-zinc-100 bg-white hover:bg-zinc-50 group"
                     style={{ top: vItem.start, height: ROW_HEIGHT, width: totalWidth }}
                   >
-                    {/* Row handle — Airtable-style, expand on hover */}
-                    <div className="sticky left-0 z-10 w-14 flex-shrink-0 flex items-center justify-center bg-white group-hover:bg-zinc-50 border-r border-zinc-100 text-[10px] text-zinc-400">
+                    {/* Row handle — Airtable-style, expand on hover. Bulk-
+                        select checkbox sits to the left when enableSelection. */}
+                    <div className="sticky left-0 z-10 w-14 flex-shrink-0 flex items-center justify-center gap-1 bg-white group-hover:bg-zinc-50 border-r border-zinc-100 text-[10px] text-zinc-400">
+                      {enableSelection && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(row.original.id)}
+                          onChange={(e) => {
+                            const id = row.original.id
+                            setSelectedIds(prev => {
+                              const n = new Set(prev)
+                              if (e.target.checked) n.add(id)
+                              else n.delete(id)
+                              return n
+                            })
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className={
+                            'h-3.5 w-3.5 rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]/30 ' +
+                            (selectedIds.has(row.original.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity')
+                          }
+                          aria-label="Select row"
+                        />
+                      )}
                       <button
                         onClick={() => onOpenRecord?.(row.original)}
                         title="Expand record"
@@ -944,7 +1022,9 @@ export function DataGrid<TRow extends { id: string }>({
                           <path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4" />
                         </svg>
                       </button>
-                      <span className="opacity-100 group-hover:opacity-0 transition-opacity tabular-nums">{item.rowIndex + 1}</span>
+                      {!enableSelection && (
+                        <span className="opacity-100 group-hover:opacity-0 transition-opacity tabular-nums">{item.rowIndex + 1}</span>
+                      )}
                     </div>
                     {row.getVisibleCells().map(cell => {
                       const cfg = (cell.column.columnDef.meta as any)?.config as ColumnConfig
