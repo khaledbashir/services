@@ -27,11 +27,11 @@ interface MessageRow {
 }
 
 const DEFAULT_SUGGESTIONS = [
-  'Show me events this week',
-  'Open the Prudential Center page',
-  'Create a design request',
-  'What tickets are open?',
-  'List my venues',
+  'Build my Joe demo briefing',
+  'Show urgent open tickets',
+  'Which events need staffing this week?',
+  'Find the venue for Flyers',
+  'Create a ticket from a field note',
 ]
 
 // Strip a <suggestions>[...]</suggestions> block (if present) from the

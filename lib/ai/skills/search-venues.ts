@@ -16,9 +16,14 @@ const skill: Skill = {
   },
   async handler(args) {
     const r = await query(
-      `SELECT v.id, v.name, v.address, v.timezone, v.slack_channel_id, v.venue_type, v.feed_url, v.feed_type
+      `SELECT v.id, v.name, v.address, v.timezone, v.slack_channel_id, v.venue_type, v.feed_url, v.feed_type, v.aliases
        FROM venues v
-       WHERE v.name ILIKE $1 OR COALESCE(v.address,'') ILIKE $1
+       WHERE v.name ILIKE $1
+          OR COALESCE(v.address,'') ILIKE $1
+          OR EXISTS (
+            SELECT 1 FROM unnest(COALESCE(v.aliases, '{}'::text[])) AS alias
+            WHERE alias ILIKE $1
+          )
        ORDER BY v.name LIMIT $2`,
       [`%${args.q}%`, Math.min(Number(args.limit) || 10, 30)]
     )

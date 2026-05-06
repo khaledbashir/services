@@ -19,7 +19,16 @@ const skill: Skill = {
   async handler(args) {
     const conditions: string[] = ['1=1']
     const params: unknown[] = []
-    if (args.venue_name) { params.push(`%${args.venue_name}%`); conditions.push(`v.name ILIKE $${params.length}`) }
+    if (args.venue_name) {
+      params.push(`%${args.venue_name}%`)
+      conditions.push(`(
+        v.name ILIKE $${params.length}
+        OR EXISTS (
+          SELECT 1 FROM unnest(COALESCE(v.aliases, '{}'::text[])) AS alias
+          WHERE alias ILIKE $${params.length}
+        )
+      )`)
+    }
     if (args.league) { params.push(args.league); conditions.push(`e.league = $${params.length}`) }
     if (args.date_from) { params.push(args.date_from); conditions.push(`e.event_date >= $${params.length}`) }
     if (args.date_to) { params.push(args.date_to); conditions.push(`e.event_date <= $${params.length}`) }
