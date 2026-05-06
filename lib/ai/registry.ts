@@ -33,6 +33,7 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/log-maintenance'),
     () => import('@/lib/ai/skills/dashboard-stats'),
     () => import('@/lib/ai/skills/operations-snapshot'),
+    () => import('@/lib/ai/skills/morning-command-center'),
     () => import('@/lib/ai/skills/venue-health-report'),
     () => import('@/lib/ai/skills/staffing-recommendations'),
     () => import('@/lib/ai/skills/client-update-draft'),

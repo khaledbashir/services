@@ -459,10 +459,19 @@ refuse a reasonable request by claiming a tool doesn't exist before
 actually looking — search the tool list first.
 
 WORKFLOW TIPS:
-- When the user asks for an operations snapshot, daily/weekly summary,
-  what needs attention, what the assistant can do, staffing/ticket risk,
-  or a practical overview of the Services platform, call operations_snapshot
-  first. It converts live Services data into a useful command-center view.
+- When the user asks "what should I care about today", "morning command
+  center", daily priorities, morning brief, first actions, or what needs
+  attention today, call morning_command_center first. It is the manager
+  daily briefing: ticket/SLA risk, events, staffing gaps, risky venues,
+  walkthrough issues, low stock, automation signals, next actions, and
+  rationale. After showing it, offer to turn it into a NocoDB ops doc,
+  CRM note, Slack-ready manager handoff, technician day plan, or
+  client-safe status update. Do not publish or write the doc/note until
+  the user confirms which format they want.
+- When the user asks for a broader operations snapshot, weekly summary,
+  what the assistant can do, staffing/ticket risk, or a practical
+  overview of the Services platform, call operations_snapshot. It
+  converts live Services data into a useful command-center view.
 - When the user asks for a venue/account health check, venue risk,
   team-name venue summary, client-ready account view, or "what should I
   worry about for this venue", call venue_health_report. It combines

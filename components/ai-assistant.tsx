@@ -28,6 +28,7 @@ interface MessageRow {
 
 const DEFAULT_SUGGESTIONS = [
   'What needs attention today?',
+  'Open Morning Command Center',
   'Show urgent open tickets',
   'Which events need staffing this week?',
   'Find the venue for Flyers',
@@ -50,6 +51,7 @@ const SUGGESTION_GROUPS = [
     defaultOpen: true,
     suggestions: [
       'What needs attention today?',
+      'Open Morning Command Center',
       'Summarize this week for operations',
       'Show what changed since yesterday',
       'Run venue health for Flyers',
@@ -135,7 +137,8 @@ const SUGGESTION_GROUPS = [
 ]
 
 const PROMPT_EXAMPLES: Record<string, string> = {
-  'What needs attention today?': 'Give me the operations snapshot for today: urgent tickets, staffing gaps, upcoming events, walkthroughs, low stock, and recommended next actions.',
+  'What needs attention today?': 'Open the Morning Command Center. Do a deep daily analysis and tell me what I should care about today: ticket risk, SLA risk, events, staffing gaps, risky venues, walkthrough issues, low stock, automation signals, the first actions to take, and the rationale for why those are the priorities. Then ask if I want it turned into a NocoDB ops doc, CRM note, Slack handoff, technician day plan, or client-safe update.',
+  'Open Morning Command Center': 'Open the Morning Command Center. Do a deep daily analysis and tell me what I should care about today: ticket risk, SLA risk, events, staffing gaps, risky venues, walkthrough issues, low stock, automation signals, the first actions to take, and the rationale for why those are the priorities. Then ask if I want it turned into a NocoDB ops doc, CRM note, Slack handoff, technician day plan, or client-safe update.',
   'Show what changed since yesterday': 'Show what changed since yesterday across tickets, events, staffing, walkthroughs, and urgent issues.',
   'Run venue health for Flyers': 'Run a venue health report for Flyers. Include open tickets, upcoming events, staffing gaps, walkthrough issues, inventory risk, client portal status, and recommended next actions.',
   'Run a venue health report': 'Run a venue health report for this venue. Include score, risks, open tickets, upcoming events, staffing gaps, walkthroughs, inventory, portal status, and recommended next actions.',
