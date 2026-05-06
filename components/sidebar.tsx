@@ -7,6 +7,13 @@ import { ThemeToggle } from './theme-toggle'
 
 type Role = 'admin' | 'tech_support' | 'manager' | 'technician' | 'designer' | 'design_contractor' | 'any'
 
+// Feature flags — flip to true to bring back. Hidden 5/6 per Ahmad
+// ("hide everything walk issues etc that is custom and hide the tab that
+// says voice"). Code paths + routes left intact so /walkthroughs etc still
+// work directly via URL — just removed from nav discoverability.
+const SHOW_OPS_TABLES = false
+const SHOW_VOICE_AGENT_DEMO = false
+
 interface NavLink {
   href: string
   label: string
@@ -177,7 +184,7 @@ export function Sidebar() {
   }
 
   const sections: NavSection[] = useMemo(() => [
-    {
+    ...(SHOW_OPS_TABLES ? [{
       // Native Airtable-style DataGrid pages (live as of 5/6 pivot). UI is
       // hand-rolled (TanStack Table + custom cells + Tailwind) so we own
       // every knob — group-by, view tabs, locked views, inline cell edit,
@@ -186,7 +193,7 @@ export function Sidebar() {
       key: 'ops-tables',
       label: 'Ops Tables',
       icon: <Icon>{IC.tables}</Icon>,
-      role: 'technician',
+      role: 'technician' as Role,
       defaultOpen: true,
       links: [
         { href: '/noco', label: 'All Tables' },
@@ -194,13 +201,13 @@ export function Sidebar() {
         { href: '/issues', label: 'Issues' },
         { href: '/displays', label: 'Displays' },
         { href: '/display-locations', label: 'Display Locations' },
-        { href: '/inventory', label: 'Inventory', role: 'manager' },
+        { href: '/inventory', label: 'Inventory', role: 'manager' as Role },
         { href: '/maintenance', label: 'Maintenance' },
-        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
-        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
-        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
-      ],
-    },
+        { href: '/rma', label: 'RMA Tracker', role: 'manager' as Role },
+        { href: '/parts', label: 'Parts Catalog', role: 'manager' as Role },
+        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' as Role },
+      ] as NavLink[],
+    } as NavSection] : []),
     {
       key: 'events',
       label: 'Events & Schedule',
@@ -274,7 +281,7 @@ export function Sidebar() {
       links: [
         { href: '/clients', label: 'Clients' },
         { href: '/portals', label: 'Client Portals' },
-        { href: '/voice-agent-demo', label: 'Voice Agent Demo' },
+        ...(SHOW_VOICE_AGENT_DEMO ? [{ href: '/voice-agent-demo', label: 'Voice Agent Demo' }] : []),
       ],
     },
     {

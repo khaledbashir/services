@@ -7,6 +7,10 @@ import { AiUiDriver } from './ai-ui-driver'
 import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
+// Feature flags — flip to true to bring the surface back. Hidden 5/6 per
+// Ahmad ("hide the ai on the side for it to be easily be back later").
+const SHOW_AI_ASSISTANT = false
+
 interface DashboardLayoutProps {
   children: React.ReactNode
   // When true, render children edge-to-edge with no padding, no max-width
@@ -53,8 +57,8 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
           </div>
         )}
       </div>
-      <AiAssistant />
-      <AiUiDriver />
+      {SHOW_AI_ASSISTANT && <AiAssistant />}
+      {SHOW_AI_ASSISTANT && <AiUiDriver />}
       {/* Mirror --ai-panel-width into --ai-panel-shrink only above the sm
           breakpoint so mobile keeps overlay behavior (the panel fills the
           screen, content underneath doesn't matter). */}
