@@ -20,6 +20,7 @@ interface NavSection {
   icon: ReactNode
   role?: Role       // minimum role to see the whole section
   links: NavLink[]
+  defaultOpen?: boolean // expand on first visit (overridden once the user toggles)
 }
 
 // --- icons ---
@@ -141,6 +142,26 @@ export function Sidebar() {
 
   const sections: NavSection[] = useMemo(() => [
     {
+      // Native Airtable-style DataGrid pages (live as of 5/6 pivot). UI is
+      // hand-rolled (TanStack Table + custom cells + Tailwind) so we own
+      // every knob — group-by, view tabs, locked views, inline cell edit,
+      // calendar/gallery/kanban views, drag-and-drop. Pinned to the top of
+      // nav and default-open so it's the most prominent section.
+      key: 'ops-tables',
+      label: 'Ops Tables',
+      icon: <Icon>{IC.tables}</Icon>,
+      role: 'technician',
+      defaultOpen: true,
+      links: [
+        { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/inventory', label: 'Inventory', role: 'manager' },
+        { href: '/maintenance', label: 'Maintenance' },
+        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
+        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
+        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
+      ],
+    },
+    {
       key: 'events',
       label: 'Events & Schedule',
       icon: <Icon>{IC.operations}</Icon>,
@@ -178,24 +199,6 @@ export function Sidebar() {
         { href: '/gallery', label: 'Visual Gallery' },
         { href: '/time-entries', label: 'Time Entries' },
         { href: '/hours-budgets', label: 'Hours Budgets', role: 'manager' },
-      ],
-    },
-    {
-      // Native Airtable-style DataGrid pages (live as of 5/6 pivot). These
-      // share the same backend tables but the UI is hand-rolled (TanStack
-      // Table + custom cells + Tailwind), so we own every knob — group-by,
-      // view tabs, locked views, inline cell edit.
-      key: 'ops-tables',
-      label: 'Ops Tables',
-      icon: <Icon>{IC.tables}</Icon>,
-      role: 'technician',
-      links: [
-        { href: '/walkthroughs', label: 'Walkthroughs' },
-        { href: '/inventory', label: 'Inventory', role: 'manager' },
-        { href: '/maintenance', label: 'Maintenance' },
-        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
-        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
-        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
       ],
     },
     {
@@ -312,7 +315,7 @@ export function Sidebar() {
           if (visibleLinks.length === 0) return null
 
           const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))
-          const isOpen = openSections[section.key] ?? containsActive
+          const isOpen = openSections[section.key] ?? (section.defaultOpen || containsActive)
 
           return (
             <div key={section.key} className="pt-2">
