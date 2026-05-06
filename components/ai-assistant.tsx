@@ -388,6 +388,23 @@ function normalizeMarkdownTables(text: string): string {
   return out.join('\n')
 }
 
+function humanizeToolName(name?: string): string {
+  if (!name) return 'assistant'
+  if (name.startsWith('ui_')) return `UI ${name.slice(3).replace(/_/g, ' ')}`
+  return name.replace(/_/g, ' ')
+}
+
+function activityLabel(steps?: ThoughtStep[]): string {
+  const last = steps?.[steps.length - 1]
+  if (!last) return 'Reading the page and deciding the next action'
+  if (last.kind === 'error') return 'Hit an error and preparing a useful explanation'
+  if (last.kind === 'tool_call' && !last.result) return `Running ${humanizeToolName(last.name)}`
+  if (last.kind === 'tool_call' && last.result) return `Reviewing ${humanizeToolName(last.name)} results`
+  if (last.kind === 'tool_result') return `Reviewing ${humanizeToolName(last.name)} results`
+  if (last.kind === 'text') return 'Writing the answer'
+  return 'Working through the request'
+}
+
 export function AiAssistant() {
   const router = useRouter()
   const pathname = usePathname()
@@ -878,7 +895,7 @@ export function AiAssistant() {
                                 className="text-left block w-full group"
                               >
                                 <div className="text-[10px] text-zinc-400 font-semibold uppercase tracking-[0.14em]">
-                                  {running ? 'Running' : 'Ran tool'}
+                                  {running ? 'Running action' : 'Completed action'}
                                 </div>
                                 <div className="text-xs text-zinc-700 font-mono group-hover:text-[#0A52EF] flex items-center gap-1">
                                   <span>{step.name}</span>
@@ -973,13 +990,16 @@ export function AiAssistant() {
                       )}
                       </>
                     ) : m.pending ? (
-                      <div className="rounded-2xl rounded-tl-md bg-zinc-50 border border-zinc-200/60 text-zinc-400 px-4 py-3 text-sm flex items-center gap-2 dark:bg-[var(--anc-surface-muted)] dark:border-[var(--anc-border)]">
+                      <div className="rounded-2xl rounded-tl-md bg-zinc-50 border border-zinc-200/60 text-zinc-500 px-4 py-3 text-sm flex items-start gap-3 dark:bg-[var(--anc-surface-muted)] dark:border-[var(--anc-border)]">
                         <span className="inline-flex gap-0.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '0ms'}}></span>
                           <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '150ms'}}></span>
                           <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 animate-bounce" style={{animationDelay: '300ms'}}></span>
                         </span>
-                        <span className="italic">Thinking…</span>
+                        <span>
+                          <span className="block font-medium text-zinc-700 dark:text-zinc-200">{activityLabel(m.steps)}</span>
+                          <span className="mt-0.5 block text-xs text-zinc-400">Actions and tool details appear above as they run.</span>
+                        </span>
                       </div>
                     ) : null}
                   </div>
