@@ -521,15 +521,6 @@ export function AiAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Reset conversation on page navigation so the AI has fresh context
-  // Reset conversation on page navigation so the AI has fresh context
-  useEffect(() => {
-    if (open) {
-      newChat()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
-
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
