@@ -156,6 +156,7 @@ export function Sidebar() {
         { href: '/walkthroughs', label: 'Walkthroughs' },
         { href: '/issues', label: 'Issues' },
         { href: '/displays', label: 'Displays' },
+        { href: '/display-locations', label: 'Display Locations' },
         { href: '/inventory', label: 'Inventory', role: 'manager' },
         { href: '/maintenance', label: 'Maintenance' },
         { href: '/rma', label: 'RMA Tracker', role: 'manager' },
