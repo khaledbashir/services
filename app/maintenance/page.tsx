@@ -66,7 +66,7 @@ const VIEWS: ViewConfig<Log>[] = [
   { id: 'by-stat',  name: 'Group by Status',type: 'grid', groupBy: 'status', sort: [{ id: 'scheduled_date', desc: true }] },
   { id: 'by-type',  name: 'Group by Type',  type: 'grid', groupBy: 'maintenance_type', sort: [{ id: 'scheduled_date', desc: true }] },
   { id: 'completed',name: 'Completed',      type: 'grid', filter: r => r.status === 'completed', sort: [{ id: 'completed_date', desc: true }] },
-  { id: 'kanban',   name: 'Kanban',         type: 'kanban' },
+  { id: 'kanban',   name: 'Kanban',         type: 'kanban', groupBy: 'status' },
   { id: 'cal',      name: 'Calendar',       type: 'calendar', dateField: 'scheduled_date' },
 ]
 

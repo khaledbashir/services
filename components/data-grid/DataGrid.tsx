@@ -21,6 +21,7 @@ import type { ColumnConfig, DataGridProps } from './types'
 import { GridCell } from './cells'
 import { CalendarView } from './CalendarView'
 import { GalleryView } from './GalleryView'
+import { KanbanView } from './KanbanView'
 
 const ROW_HEIGHT = 32
 const HEADER_HEIGHT = 36
@@ -187,7 +188,7 @@ export function DataGrid<TRow extends { id: string }>({
         <div className="flex items-center gap-1 px-2 pt-2 pb-0 border-b border-zinc-100 bg-zinc-50/40 overflow-x-auto">
           {views.map(v => {
             const active = v.id === activeViewId
-            const supported = !v.type || v.type === 'grid' || v.type === 'calendar' || v.type === 'gallery'
+            const supported = !v.type || v.type === 'grid' || v.type === 'calendar' || v.type === 'gallery' || v.type === 'kanban'
             return (
               <button
                 key={v.id}
@@ -269,7 +270,25 @@ export function DataGrid<TRow extends { id: string }>({
           columns={columns}
           onOpenRecord={onOpenRecord}
         />
-      ) : (
+      ) : activeView?.type === 'kanban' ? (() => {
+        const groupKey = activeView.groupBy || columns.find(c => c.type === 'singleSelect')?.id
+        if (!groupKey) {
+          return (
+            <div className="px-5 py-16 text-center text-sm text-zinc-400">
+              Kanban view needs a singleSelect column. Add `groupBy` to this view, or include a column with type `singleSelect`.
+            </div>
+          )
+        }
+        return (
+          <KanbanView
+            rows={mergedRows}
+            columns={columns}
+            groupBy={groupKey}
+            onUpdateCell={onUpdateCell}
+            onOpenRecord={onOpenRecord}
+          />
+        )
+      })() : (
       <>
       {/* Grid surface */}
       <div ref={scrollRef} className="overflow-auto" style={{ height: 'calc(100vh - 220px)', minHeight: 400 }}>
