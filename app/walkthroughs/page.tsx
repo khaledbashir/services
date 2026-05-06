@@ -1,8 +1,9 @@
 'use client'
 
-// Walkthroughs list — first surface on the new DataGrid engine. Replaces the
-// bespoke filter/table from the prior version. Schema mirrors Nick's Airtable
-// Walkthrough Log workflow (venue, technician, date, locations, result).
+// Walkthroughs list — backed by NocoDB (Joe/Nick canonical 5/4). Reads
+// from /api/walkthroughs/nocodb?action=list which returns Nick's actual
+// 20K+ records. Schema mirrors NocoDB column titles 1:1 so inline edits
+// PATCH straight back to NocoDB.
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,78 +12,95 @@ import { DataGrid, RecordDrawer, type ColumnConfig, type ViewConfig } from '@/co
 
 interface Walk {
   id: string
+  log_id: string
   venue_id: string | null
   venue_name: string
   technician_name: string | null
-  log_date: string
+  log_date: string | null
   log_time: string | null
+  type: string | null
+  result: string | null
   locations_visited: string | null
   issues_found: string | null
-  result: string
-  in_person: boolean
-  notes: string | null
+  comments: string | null
+  three_letter_code: string | null
+  created_at: string | null
 }
 
-const RESULT_OPTIONS = [
-  { value: 'good', label: 'Good', color: 'emerald' },
-  { value: 'problem_detected', label: 'Problem detected', color: 'rose' },
-  { value: 'problem', label: 'Problem', color: 'rose' },
-  { value: 'partial', label: 'Partial', color: 'amber' },
-  { value: 'minor', label: 'Minor', color: 'amber' },
+const TYPE_OPTIONS = [
+  { value: 'In-Person', label: 'In-Person', color: 'sky' },
+  { value: 'Remote',    label: 'Remote',    color: 'violet' },
 ]
 
-// Mirrors Nick's Airtable Walkthrough Log views (anc-service-south base):
-// Today's Walkthroughs / All / Calendar.
+// Mirrors NocoDB Walkthrough Log enum exactly (Nick parity spec).
+const RESULT_OPTIONS = [
+  { value: 'Open Issue Observed',   label: 'Open Issue Observed',   color: 'amber' },
+  { value: 'No Action Required',    label: 'No Action Required',    color: 'emerald' },
+  { value: 'New Issue Detected',    label: 'New Issue Detected',    color: 'rose' },
+]
+
+// Today's-Walkthroughs view filter — rolls forward daily per Nick 5/4.
 const today = () => new Date().toISOString().slice(0, 10)
+
 const VIEWS: ViewConfig<Walk>[] = [
   { id: 'today',     name: "Today's Walkthroughs", type: 'grid', filter: r => r.log_date === today(), sort: [{ id: 'log_date', desc: true }], locked: true },
   { id: 'all',       name: 'All',                  type: 'grid', sort: [{ id: 'log_date', desc: true }] },
   { id: 'by-venue',  name: 'Group by Venue',       type: 'grid', groupBy: 'venue_name', sort: [{ id: 'log_date', desc: true }] },
   { id: 'by-result', name: 'Group by Result',      type: 'grid', groupBy: 'result',     sort: [{ id: 'log_date', desc: true }] },
+  { id: 'by-tech',   name: 'Group by Technician',  type: 'grid', groupBy: 'technician_name', sort: [{ id: 'log_date', desc: true }] },
   { id: 'cal',       name: 'Calendar',             type: 'calendar', dateField: 'log_date' },
 ]
 
 const COLUMNS: ColumnConfig<Walk>[] = [
-  { id: 'venue_name', header: 'Venue', type: 'text', width: 220, primary: true, editable: false },
-  { id: 'log_date', header: 'Date', type: 'date', width: 130 },
-  { id: 'technician_name', header: 'Technician', type: 'text', width: 180 },
-  { id: 'result', header: 'Result', type: 'singleSelect', width: 170, options: RESULT_OPTIONS },
-  { id: 'in_person', header: 'In person', type: 'checkbox', width: 90 },
-  { id: 'locations_visited', header: 'Locations', type: 'text', width: 280 },
-  { id: 'issues_found', header: 'Issues found', type: 'longText', width: 280 },
-  { id: 'notes', header: 'Notes', type: 'longText', width: 240 },
+  { id: 'log_id',             header: 'Log ID',     type: 'text',         width: 130, primary: true, editable: false },
+  { id: 'log_date',           header: 'Date',       type: 'date',         width: 120 },
+  { id: 'venue_name',         header: 'Venue',      type: 'text',         width: 180, editable: false },
+  { id: 'technician_name',    header: 'Technician', type: 'text',         width: 160, editable: false },
+  { id: 'type',               header: 'Type',       type: 'singleSelect', width: 130, options: TYPE_OPTIONS },
+  { id: 'result',             header: 'Result',     type: 'singleSelect', width: 200, options: RESULT_OPTIONS },
+  { id: 'locations_visited',  header: 'Locations',  type: 'text',         width: 280, editable: false },
+  { id: 'issues_found',       header: 'Issues',     type: 'text',         width: 260, editable: false },
+  { id: 'comments',           header: 'Comments',   type: 'longText',     width: 320 },
+  { id: 'three_letter_code',  header: 'Code',       type: 'text',         width: 80,  editable: false },
 ]
+
+// Map DataGrid column ids → NocoDB column titles (what PATCH expects).
+const NOCO_FIELD_NAME: Record<string, string> = {
+  type: 'Type',
+  result: 'Result',
+  comments: 'Comments (log issues above)',
+}
 
 export default function WalkthroughsPage() {
   const router = useRouter()
   const [rows, setRows] = useState<Walk[]>([])
+  const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [drawerRow, setDrawerRow] = useState<Walk | null>(null)
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch('/api/walkthroughs')
-    if (r.ok) setRows((await r.json()).walkthroughs || [])
+    const r = await fetch('/api/walkthroughs/nocodb?action=list&limit=500')
+    if (r.ok) {
+      const d = await r.json()
+      setRows(d.walkthroughs || [])
+      setTotal(typeof d.total === 'number' ? d.total : null)
+    }
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
   const updateCell = async (rowId: string, columnId: string, value: any) => {
-    const r = await fetch(`/api/walkthroughs/${rowId}`, {
+    const fieldName = NOCO_FIELD_NAME[columnId]
+    if (!fieldName) throw new Error(`Field '${columnId}' is not editable from the grid`)
+    const r = await fetch('/api/walkthroughs/nocodb', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [columnId]: value }),
+      body: JSON.stringify({ id: rowId, fields: { [fieldName]: value } }),
     })
     if (!r.ok) throw new Error('save failed')
-    // Mirror in local rows so the next render sees the saved value.
     setRows(prev => prev.map(p => (p.id === rowId ? { ...p, [columnId]: value } : p)))
-  }
-
-  const deleteRow = async (rowId: string) => {
-    const r = await fetch(`/api/walkthroughs/${rowId}`, { method: 'DELETE' })
-    if (!r.ok) throw new Error('delete failed')
-    setRows(prev => prev.filter(p => p.id !== rowId))
   }
 
   return (
@@ -91,12 +109,14 @@ export default function WalkthroughsPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Walkthrough Log</h1>
-            <p className="mt-1 text-sm text-zinc-500">Technician site visits — Airtable-style grid. Click a cell to edit, expand a row for full record.</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Live from NocoDB — {rows.length}{total != null && total !== rows.length ? ` of ${total.toLocaleString()}` : ''} most-recent records. Double-click a cell to edit Type / Result / Comments.
+            </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => router.push('/walkthroughs/new')}
-              className="px-4 py-2 bg-[#0A52EF] text-white rounded-md text-sm font-medium hover:bg-[#0840C0] inline-flex items-center gap-1.5"
+              className="px-4 py-2 bg-[#0A52EF] text-white rounded-md text-sm font-medium hover:bg-[#0840C0]"
             >
               + Guided new walkthrough
             </button>
@@ -111,7 +131,7 @@ export default function WalkthroughsPage() {
           persistKey="walkthroughs"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
-          emptyText="No walkthroughs yet. Click + or use the guided form."
+          emptyText="No walkthroughs match this view."
         />
 
         <RecordDrawer<Walk>
@@ -120,8 +140,7 @@ export default function WalkthroughsPage() {
           columns={COLUMNS}
           onClose={() => setDrawerRow(null)}
           onUpdate={updateCell}
-          onDelete={deleteRow}
-          title={r => `${r.venue_name || 'Walkthrough'} — ${r.log_date || ''}`}
+          title={r => `${r.log_id || 'Walkthrough'}${r.venue_name ? ' · ' + r.venue_name : ''}`}
         />
       </div>
     </DashboardLayout>

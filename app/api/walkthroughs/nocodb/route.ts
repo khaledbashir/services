@@ -147,10 +147,76 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ issues })
     }
 
+    if (action === 'list') {
+      // List walkthrough records — what /walkthroughs page reads. Joe/Nick's
+      // canonical Walkthrough Log lives in NocoDB (5/4 lock); this is the
+      // authoritative source. Default to the 500 most-recent so the grid
+      // loads fast even though the table has 20K+ rows.
+      const limit = Math.min(Number(searchParams.get('limit') || 500), 1000)
+      const { records, pageInfo } = await NocoOps.listRecords(TABLES.walkthroughLog, {
+        sort: '-CreatedAt',
+        limit,
+      })
+      const walkthroughs = records.map((r: any) => {
+        const venueLink = Array.isArray(r['Venue']) ? r['Venue'] : []
+        const venueName = venueLink[0]?.['Venue Name'] || venueLink[0]?.['name'] || ''
+        const locsLink = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
+        const locationsLabel = locsLink.map((l: any) => l['Name'] || l['name']).filter(Boolean).join(', ')
+        const probLink = Array.isArray(r['Problem Detected']) ? r['Problem Detected'] : []
+        const issuesLabel = probLink.map((i: any) => i['Issue ID'] || i['name']).filter(Boolean).join(', ')
+        // Prefer the typed datetime; fall back to text-typed Log Date; final
+        // fallback to CreatedAt so the Calendar view always has a date.
+        const rawDate = r['Log Date Dt'] || r['Log Date'] || r['CreatedAt']
+        const log_date = rawDate ? String(rawDate).slice(0, 10) : null
+        const log_time = r['Log Time'] ? String(r['Log Time']) : null
+        return {
+          id: String(r['Id']),
+          log_id: String(r['Log ID'] || ''),
+          venue_id: null,
+          venue_name: String(venueName).trim(),
+          technician_name: String(r['Technician'] || r['Logged By'] || '').trim() || null,
+          log_date,
+          log_time,
+          type: r['Type'] || null,
+          result: r['Result'] || null,
+          locations_visited: locationsLabel || null,
+          issues_found: issuesLabel || null,
+          comments: r['Comments (log issues above)'] || null,
+          three_letter_code: r['Three Letter Code'] || null,
+          created_at: r['CreatedAt'] || null,
+        }
+      })
+      return NextResponse.json({ walkthroughs, total: pageInfo?.totalRows || walkthroughs.length })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err) {
     console.error('[walkthroughs/nocodb GET]', err)
     return NextResponse.json({ error: 'NocoDB lookup failed' }, { status: 502 })
+  }
+}
+
+// PATCH /api/walkthroughs/nocodb
+//
+// Body: { id: string|number, fields: Record<string, any> }
+// Updates one Walkthrough Log row in NocoDB. Field names are NocoDB column
+// titles (e.g. "Result", "Type", "Comments (log issues above)").
+export async function PATCH(request: NextRequest) {
+  const user = await getAuthUser(request)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!NocoOps.configured()) return NextResponse.json({ error: 'NocoDB not configured' }, { status: 500 })
+
+  const body = await request.json()
+  const { id, fields } = body || {}
+  if (id == null) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (!fields || typeof fields !== 'object') return NextResponse.json({ error: 'fields object required' }, { status: 400 })
+
+  try {
+    const result = await NocoOps.updateRecords(TABLES.walkthroughLog, [{ Id: Number(id), ...fields }])
+    return NextResponse.json({ ok: true, result })
+  } catch (err) {
+    console.error('[walkthroughs/nocodb PATCH]', err)
+    return NextResponse.json({ error: 'NocoDB update failed' }, { status: 502 })
   }
 }
 
