@@ -43,47 +43,130 @@ const DEFAULT_SUGGESTIONS = [
 
 const SUGGESTION_GROUPS = [
   {
-    title: 'Today',
+    title: 'Overview',
+    defaultOpen: true,
     suggestions: [
       'What needs attention today?',
       'Summarize this week for operations',
-      'Which events need staffing this week?',
-      'Show urgent open tickets',
+      'Show what changed since yesterday',
+      'Show what the assistant can do here',
+      'Give me a manager handoff summary',
     ],
   },
   {
-    title: 'Find',
+    title: 'Tickets',
+    defaultOpen: false,
+    suggestions: [
+      'Show urgent open tickets',
+      'Show tickets by venue',
+      'Create a ticket from a field note',
+      'Draft a client update for an open ticket',
+      'Find tickets waiting on parts',
+      'Show overdue ticket follow-ups',
+    ],
+  },
+  {
+    title: 'Events',
+    defaultOpen: false,
+    suggestions: [
+      'Which events need staffing this week?',
+      'Show today\'s event schedule',
+      'Find a technician for an event',
+      'Show unassigned events in the next 48 hours',
+      'Summarize game-day readiness',
+      'Open the events page',
+    ],
+  },
+  {
+    title: 'Venues',
+    defaultOpen: false,
     suggestions: [
       'Find the venue for Flyers',
+      'Find the venue for Sixers',
       'Show venues with service issues',
-      'Find a technician for an event',
-      'Open the tickets page',
+      'Show venues that need attention this week',
+      'Open the venues page',
+      'Show client portal status by venue',
     ],
   },
   {
-    title: 'Create',
+    title: 'Walkthroughs',
+    defaultOpen: false,
     suggestions: [
-      'Create a ticket from a field note',
       'Log a walkthrough note',
-      'Draft a client update for an open ticket',
-      'Show what the assistant can do here',
+      'Show recent walkthroughs',
+      'Find walkthroughs with new issues',
+      'Summarize walkthrough activity this week',
+      'Create a ticket from a walkthrough issue',
+      'Open the walkthroughs page',
+    ],
+  },
+  {
+    title: 'Parts',
+    defaultOpen: false,
+    suggestions: [
+      'Show low stock items',
+      'Show parts needed for open tickets',
+      'Find inventory issues by venue',
+      'Create a parts follow-up note',
+      'Open the inventory page',
+    ],
+  },
+  {
+    title: 'Navigate',
+    defaultOpen: false,
+    suggestions: [
+      'Open the tickets page',
+      'Open the operations workspace',
+      'Open the staffing schedule',
+      'Open reports',
+      'Open settings',
+      'Highlight what I should click next',
     ],
   },
 ]
 
 const PROMPT_EXAMPLES: Record<string, string> = {
   'What needs attention today?': 'Give me the operations snapshot for today: urgent tickets, staffing gaps, upcoming events, walkthroughs, low stock, and recommended next actions.',
+  'Show what changed since yesterday': 'Show what changed since yesterday across tickets, events, staffing, walkthroughs, and urgent issues.',
+  'Give me a manager handoff summary': 'Give me a manager handoff summary with priorities, risks, links, and next actions.',
   'Show urgent open tickets': 'Show urgent open tickets, group them by venue, and tell me what should be handled first.',
+  'Show tickets by venue': 'Show open tickets grouped by venue and highlight any venue with urgent issues.',
   'Which events need staffing this week?': 'Which events this week still need staffing? Include venue, date, and the best next action.',
+  'Show today\'s event schedule': 'Show today\'s event schedule with venue, time, staffing status, and any open issues.',
+  'Show unassigned events in the next 48 hours': 'Show events in the next 48 hours that do not have staff assigned yet. Suggest who should review them, but do not assign anyone.',
+  'Summarize game-day readiness': 'Summarize game-day readiness: events, assigned staff, open tickets, venue issues, and anything that needs attention before doors.',
   'Find the venue for Flyers': 'Find the venue for Flyers and show the venue profile if there is a match.',
+  'Find the venue for Sixers': 'Find the venue for Sixers and show the venue profile if there is a match.',
   'Create a ticket from a field note': 'Create a ticket from this field note: display intermittently cuts to black during playback. Ask me for the venue if you cannot infer it.',
   'Summarize this week for operations': 'Summarize this week for operations: events, staffing coverage, open tickets, walkthroughs, and risks.',
   'Show venues with service issues': 'Show venues with open service issues and highlight anything urgent.',
+  'Show venues that need attention this week': 'Show venues that need attention this week based on events, open tickets, walkthroughs, and staffing risk.',
+  'Show client portal status by venue': 'Show client portal status by venue and call out anything missing or stale.',
   'Find a technician for an event': 'Find available technicians for an event this week and suggest the best fit without assigning anyone yet.',
   'Draft a client update for an open ticket': 'Draft a short client-safe update for the most important open ticket. Do not expose internal notes.',
+  'Find tickets waiting on parts': 'Find open tickets that appear to be waiting on parts or inventory and summarize the next action.',
+  'Show overdue ticket follow-ups': 'Show tickets that need follow-up based on age, priority, or SLA risk.',
   'Log a walkthrough note': 'Log a walkthrough note. Ask me for the venue and result, then structure it cleanly.',
+  'Show recent walkthroughs': 'Show recent walkthroughs from the last 7 days with venue, result, and any issue patterns.',
+  'Find walkthroughs with new issues': 'Find recent walkthroughs where the result indicates a new issue or follow-up is needed.',
+  'Summarize walkthrough activity this week': 'Summarize walkthrough activity this week by venue, result, and follow-up risk.',
+  'Create a ticket from a walkthrough issue': 'Create a high-priority ticket from a walkthrough issue. Ask for the venue and issue details first.',
+  'Show low stock items': 'Show low stock inventory items and explain which ones could affect open tickets or upcoming events.',
+  'Show parts needed for open tickets': 'Show parts or inventory needs connected to open service tickets.',
+  'Find inventory issues by venue': 'Find inventory or asset issues by venue and summarize the venues that need follow-up.',
+  'Create a parts follow-up note': 'Create a concise internal parts follow-up note for the most important inventory risk.',
   'Show what the assistant can do here': 'Show what you can do in this dashboard. Focus on useful operations actions, not generic AI features.',
   'Open the tickets page': 'Open the tickets page and highlight the most important place to start.',
+  'Open the events page': 'Open the events page and highlight events that need staffing or attention.',
+  'Open the venues page': 'Open the venues page and highlight where to search for team names or venue aliases.',
+  'Open the walkthroughs page': 'Open the walkthroughs page and highlight where to review recent walkthroughs.',
+  'Open the inventory page': 'Open the inventory page and highlight low stock or follow-up areas.',
+  'Open the operations workspace': 'Open the operations workspace and show me where to start.',
+  'Open the staffing schedule': 'Open the schedule or staffing view and highlight upcoming coverage gaps.',
+  'Open reports': 'Open reports and highlight the most useful operations report.',
+  'Open settings': 'Open settings and highlight service or assistant-related controls.',
+  'Highlight what I should click next': 'Based on the current page, highlight the next useful thing to click.',
 }
 
 // Strip a <suggestions>[...]</suggestions> block (if present) from the
@@ -327,6 +410,9 @@ export function AiAssistant() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
+  const [expandedPromptGroups, setExpandedPromptGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SUGGESTION_GROUPS.map(group => [group.title, !!group.defaultOpen]))
+  )
   const [width, setWidth] = useState<number>(DEFAULT_WIDTH)
   const [resizing, setResizing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -457,8 +543,10 @@ export function AiAssistant() {
     })
   }
 
-  const send = async () => {
-    const text = input.trim()
+  const promptText = (label: string) => PROMPT_EXAMPLES[label] || label
+
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || sending) return
     setSending(true)
     setInput('')
@@ -602,7 +690,12 @@ export function AiAssistant() {
     }
   }
 
+  const sendPrompt = (label: string) => {
+    void send(promptText(label))
+  }
+
   const toggleStep = (key: string) => setExpandedSteps(prev => ({ ...prev, [key]: !prev[key] }))
+  const togglePromptGroup = (key: string) => setExpandedPromptGroups(prev => ({ ...prev, [key]: !prev[key] }))
 
   const skillsByCategory: Record<string, Skill[]> = {}
   for (const s of skills) (skillsByCategory[s.category] ||= []).push(s)
@@ -712,7 +805,7 @@ export function AiAssistant() {
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-0">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="flex min-h-full flex-col items-center px-4 py-8 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0A52EF] to-[#6C3FE8] flex items-center justify-center mb-4 shadow-lg shadow-[#0A52EF]/20">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
@@ -728,19 +821,35 @@ export function AiAssistant() {
                     </div>
                   </div>
                 )}
-                <div className="w-full max-w-[21rem] space-y-4 text-left">
+                <div className="w-full max-w-[22rem] space-y-2 text-left">
                   {SUGGESTION_GROUPS.map(group => (
-                    <div key={group.title}>
-                      <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{group.title}</div>
-                      <div className="grid grid-cols-1 gap-2">
+                    <div key={group.title} className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)]">
+                      <button
+                        type="button"
+                        onClick={() => togglePromptGroup(group.title)}
+                        className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left hover:bg-zinc-50 dark:hover:bg-white/5"
+                      >
+                        <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-zinc-600 dark:text-zinc-300">{group.title}</span>
+                        <span className="flex items-center gap-2 text-[11px] text-zinc-400">
+                          {group.suggestions.length}
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 transition-transform ${expandedPromptGroups[group.title] ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </span>
+                      </button>
+                      {expandedPromptGroups[group.title] && (
+                      <div className="grid grid-cols-1 gap-1.5 border-t border-zinc-200 p-2 dark:border-[var(--anc-border)]">
                         {group.suggestions.map((s, i) => (
                           <button key={`${group.title}-${i}`}
-                            onClick={() => { setInput(PROMPT_EXAMPLES[s] || s); setTimeout(() => inputRef.current?.focus(), 30) }}
-                            className="text-left text-[13px] px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:border-[#0A52EF]/40 hover:bg-[#0A52EF]/[0.04] hover:text-[#0A52EF] transition-all duration-150 group dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:text-zinc-200 dark:hover:bg-[#0A52EF]/10">
+                            type="button"
+                            disabled={sending}
+                            onClick={() => sendPrompt(s)}
+                            className="text-left text-[13px] px-3 py-2 rounded-lg text-zinc-700 hover:bg-[#0A52EF]/[0.06] hover:text-[#0A52EF] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 group dark:text-zinc-200 dark:hover:bg-[#0A52EF]/10">
                             <span className="font-medium group-hover:text-[#0A52EF]">{s}</span>
                           </button>
                         ))}
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -853,8 +962,10 @@ export function AiAssistant() {
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {m.suggestions.map((s, si) => (
                             <button key={si}
-                              onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
-                              className="text-[12px] px-3 py-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:border-[#0A52EF]/50 hover:bg-[#0A52EF]/[0.06] hover:text-[#0A52EF] transition-all duration-150 font-medium dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:text-zinc-300 dark:hover:bg-[#0A52EF]/10">
+                              type="button"
+                              disabled={sending}
+                              onClick={() => sendPrompt(s)}
+                              className="text-[12px] px-3 py-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:border-[#0A52EF]/50 hover:bg-[#0A52EF]/[0.06] hover:text-[#0A52EF] disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 font-medium dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:text-zinc-300 dark:hover:bg-[#0A52EF]/10">
                               {s}
                             </button>
                           ))}
@@ -883,7 +994,7 @@ export function AiAssistant() {
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
                 placeholder="Ask anything…"
                 rows={1}
                 className="flex-1 resize-none rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 focus:border-[#0A52EF]/40 max-h-32 placeholder:text-zinc-400 dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface)] dark:text-zinc-100 dark:placeholder:text-zinc-500"
@@ -893,7 +1004,7 @@ export function AiAssistant() {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
                 </button>
               ) : (
-                <button onClick={send} disabled={!input.trim()}
+                <button onClick={() => { void send() }} disabled={!input.trim()}
                   className="rounded-xl bg-[#0A52EF] text-white px-4 py-2.5 text-sm font-semibold hover:bg-[#0840C0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm shadow-[#0A52EF]/10">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A28.962 28.962 0 0112 2.288c2.996 0 5.82.698 8.269 1.838L18 12m-6 0l-3 3m3-3l3 3M12 22a8 8 0 100-16 8 8 0 000 16z" /></svg>
                 </button>
