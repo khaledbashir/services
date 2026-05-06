@@ -153,6 +153,7 @@ export function Sidebar() {
       role: 'technician',
       defaultOpen: true,
       links: [
+        { href: '/noco', label: 'All Tables' },
         { href: '/walkthroughs', label: 'Walkthroughs' },
         { href: '/issues', label: 'Issues' },
         { href: '/displays', label: 'Displays' },
