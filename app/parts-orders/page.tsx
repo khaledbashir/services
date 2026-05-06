@@ -107,6 +107,7 @@ export default function PartsOrdersPage() {
           rows={rows}
           loading={loading}
           views={VIEWS}
+          persistKey="parts-orders"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No parts orders yet."

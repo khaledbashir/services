@@ -135,6 +135,7 @@ export default function PartsPage() {
           rows={rows}
           loading={loading}
           views={VIEWS}
+          persistKey="parts"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No parts yet. Click + Add Part."

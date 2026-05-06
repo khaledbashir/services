@@ -168,6 +168,7 @@ export default function RmaPage() {
           rows={rows}
           loading={loading}
           views={VIEWS}
+          persistKey="rma"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No RMAs yet. Click + New RMA."

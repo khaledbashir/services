@@ -249,6 +249,7 @@ export default function InventoryPage() {
           rows={items}
           loading={loading}
           views={VIEWS}
+          persistKey="inventory"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No inventory items yet. Click + Add asset."

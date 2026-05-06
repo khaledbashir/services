@@ -108,6 +108,7 @@ export default function WalkthroughsPage() {
           rows={rows}
           loading={loading}
           views={VIEWS}
+          persistKey="walkthroughs"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No walkthroughs yet. Click + or use the guided form."

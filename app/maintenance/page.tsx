@@ -125,6 +125,7 @@ export default function MaintenancePage() {
           rows={rows}
           loading={loading}
           views={VIEWS}
+          persistKey="maintenance"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText="No maintenance logs yet."

@@ -94,6 +94,10 @@ export interface DataGridProps<TRow extends { id: string }> {
   // Saved views (Airtable-style tab strip). First view in the array is the
   // initial active view; if omitted, grid shows a single "Grid" view.
   views?: ViewConfig<TRow>[]
+  // Stable identifier for this grid instance — when set, DataGrid persists
+  // the active view tab per-user via /api/preferences. Use a short slug like
+  // "walkthroughs" or "inventory". Without this, view choice is in-session.
+  persistKey?: string
 }
 
 // Tailwind-mapped pill colors for select options. Mirrors Airtable's option

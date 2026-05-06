@@ -36,11 +36,41 @@ export function DataGrid<TRow extends { id: string }>({
   title,
   emptyText = 'No records',
   views,
+  persistKey,
 }: DataGridProps<TRow>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [busy, setBusy] = useState(false)
-  const [activeViewId, setActiveViewId] = useState<string | null>(views?.[0]?.id ?? null)
+  const [activeViewId, setActiveViewIdRaw] = useState<string | null>(views?.[0]?.id ?? null)
+
+  // Hydrate the active view from /api/preferences once on mount, then write
+  // back on each user-driven view change. Falls back silently to default if
+  // the user has never picked one. No localStorage — DB-backed per memory rule.
+  useEffect(() => {
+    if (!persistKey || !views?.length) return
+    let cancelled = false
+    fetch(`/api/preferences?key=datagrid:${persistKey}:view`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled) return
+        const stored = d?.value
+        if (stored && views.some(v => v.id === stored)) setActiveViewIdRaw(stored)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistKey])
+
+  const setActiveViewId = (id: string | null) => {
+    setActiveViewIdRaw(id)
+    if (persistKey && id) {
+      fetch('/api/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: `datagrid:${persistKey}:view`, value: id }),
+      }).catch(() => {})
+    }
+  }
   // Keep optimistic row patches in local state so saves render instantly.
   const [overrides, setOverrides] = useState<Record<string, Partial<TRow>>>({})
 
