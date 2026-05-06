@@ -71,6 +71,10 @@ export interface ViewConfig<TRow = any> {
   // Lock the view — UI hint that filters/sort/columns can't be changed by
   // non-admins. Surfaces a lock icon on the tab. Per Nick 5/4.
   locked?: boolean
+  // Date column id used for calendar view layout. Required when type is
+  // 'calendar'. The grid auto-falls-back to the first column with type
+  // date/dateTime if this is omitted.
+  dateField?: string
 }
 
 export interface DataGridProps<TRow extends { id: string }> {

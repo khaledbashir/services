@@ -67,7 +67,7 @@ const VIEWS: ViewConfig<Log>[] = [
   { id: 'by-type',  name: 'Group by Type',  type: 'grid', groupBy: 'maintenance_type', sort: [{ id: 'scheduled_date', desc: true }] },
   { id: 'completed',name: 'Completed',      type: 'grid', filter: r => r.status === 'completed', sort: [{ id: 'completed_date', desc: true }] },
   { id: 'kanban',   name: 'Kanban',         type: 'kanban' },
-  { id: 'cal',      name: 'Calendar',       type: 'calendar' },
+  { id: 'cal',      name: 'Calendar',       type: 'calendar', dateField: 'scheduled_date' },
 ]
 
 export default function MaintenancePage() {

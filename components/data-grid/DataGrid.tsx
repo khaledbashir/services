@@ -19,6 +19,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ColumnConfig, DataGridProps } from './types'
 import { GridCell } from './cells'
+import { CalendarView } from './CalendarView'
 
 const ROW_HEIGHT = 32
 const HEADER_HEIGHT = 36
@@ -185,7 +186,7 @@ export function DataGrid<TRow extends { id: string }>({
         <div className="flex items-center gap-1 px-2 pt-2 pb-0 border-b border-zinc-100 bg-zinc-50/40 overflow-x-auto">
           {views.map(v => {
             const active = v.id === activeViewId
-            const supported = !v.type || v.type === 'grid'
+            const supported = !v.type || v.type === 'grid' || v.type === 'calendar'
             return (
               <button
                 key={v.id}
@@ -242,6 +243,27 @@ export function DataGrid<TRow extends { id: string }>({
         )}
       </div>
 
+      {/* Calendar view — replaces grid body entirely when active. View tabs
+          and toolbar above stay in place. */}
+      {activeView?.type === 'calendar' ? (() => {
+        const dateField = activeView.dateField || columns.find(c => c.type === 'date' || c.type === 'dateTime')?.id
+        if (!dateField) {
+          return (
+            <div className="px-5 py-16 text-center text-sm text-zinc-400">
+              Calendar view needs a date column. Add `dateField` to this view, or include a column with type `date` / `dateTime`.
+            </div>
+          )
+        }
+        return (
+          <CalendarView
+            rows={mergedRows}
+            columns={columns}
+            dateField={dateField}
+            onOpenRecord={onOpenRecord}
+          />
+        )
+      })() : (
+      <>
       {/* Grid surface */}
       <div ref={scrollRef} className="overflow-auto" style={{ height: 'calc(100vh - 220px)', minHeight: 400 }}>
         <div style={{ width: totalWidth, position: 'relative' }}>
@@ -366,6 +388,8 @@ export function DataGrid<TRow extends { id: string }>({
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

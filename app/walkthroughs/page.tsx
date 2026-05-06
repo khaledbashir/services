@@ -39,7 +39,7 @@ const VIEWS: ViewConfig<Walk>[] = [
   { id: 'all',       name: 'All',                  type: 'grid', sort: [{ id: 'log_date', desc: true }] },
   { id: 'by-venue',  name: 'Group by Venue',       type: 'grid', groupBy: 'venue_name', sort: [{ id: 'log_date', desc: true }] },
   { id: 'by-result', name: 'Group by Result',      type: 'grid', groupBy: 'result',     sort: [{ id: 'log_date', desc: true }] },
-  { id: 'cal',       name: 'Calendar',             type: 'calendar' },
+  { id: 'cal',       name: 'Calendar',             type: 'calendar', dateField: 'log_date' },
 ]
 
 const COLUMNS: ColumnConfig<Walk>[] = [
