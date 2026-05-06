@@ -27,6 +27,9 @@ interface TimeEntry {
   budget_id: string | null
   designer_id: string | null
   designer_name: string | null
+  design_request_id: string | null
+  design_request_title: string | null
+  design_request_tricode: string | null
   entry_date: string
   hours: number
   description: string | null
@@ -211,6 +214,17 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
           </div>
         </div>
 
+        {/* Edit budget — Alexis 5/6: "Where can I assign the hour budgets
+            per client and contract dates?" Inline editor for contract dates,
+            total, client name. PATCH /api/hours-budgets/[id] writes through. */}
+        <details className="border border-zinc-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-zinc-900 select-none">Edit budget · contract dates · total hours</summary>
+          <BudgetEditor
+            budget={budget}
+            onSaved={fetchData}
+          />
+        </details>
+
         <div className="flex gap-3 justify-end items-center">
              {isAdmin && (
                 <>
@@ -249,6 +263,52 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
               )}
             </div>
 
+            {/* Per-request breakdown (Alexis 5/6 — "how many entries per
+                job"). Aggregates the same time-entries list grouped by the
+                linked design request. Untracked time (no design_request_id)
+                rolls up under "Unlinked entries". */}
+            {entries.length > 0 && (() => {
+              const byJob = new Map<string, { title: string; tricode: string | null; count: number; hours: number; href: string | null }>()
+              for (const e of entries) {
+                const key = e.design_request_id || '__unlinked__'
+                const cur = byJob.get(key)
+                const title = e.design_request_title || (key === '__unlinked__' ? 'Unlinked entries' : 'Untitled request')
+                if (cur) { cur.count++; cur.hours += Number(e.hours) || 0 }
+                else byJob.set(key, {
+                  title, tricode: e.design_request_tricode || null,
+                  count: 1, hours: Number(e.hours) || 0,
+                  href: e.design_request_id ? `/designs/${e.design_request_id}` : null,
+                })
+              }
+              const groups = Array.from(byJob.values()).sort((a, b) => b.hours - a.hours)
+              return (
+                <div className="border border-zinc-200 bg-white p-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-zinc-900">Per request</h2>
+                    <span className="text-xs text-zinc-400">{groups.length} requests · {entries.length} entries</span>
+                  </div>
+                  <div className="mt-4 divide-y divide-zinc-100">
+                    {groups.map((g, i) => (
+                      <div key={i} className="flex items-center justify-between py-2 gap-3">
+                        <div className="min-w-0 flex-1">
+                          {g.href ? (
+                            <a href={g.href} className="text-sm font-medium text-zinc-900 hover:text-[#0A52EF] hover:underline truncate block">{g.title}</a>
+                          ) : (
+                            <span className="text-sm font-medium text-zinc-500 truncate block">{g.title}</span>
+                          )}
+                          {g.tricode && <span className="text-[10px] font-mono text-zinc-400">{g.tricode}</span>}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-sm font-semibold text-zinc-900 tabular-nums">{g.hours.toFixed(1)} hrs</div>
+                          <div className="text-[10px] text-zinc-500 tabular-nums">{g.count} {g.count === 1 ? 'entry' : 'entries'}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="border border-zinc-200 bg-white p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-900">Time Entries</h2>
@@ -263,15 +323,30 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
                 {entries.map((entry) => (
                   <div key={entry.id} className="border border-zinc-200 bg-zinc-50 p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <h3 className="text-sm font-medium text-zinc-900">{entry.designer_name || 'Unassigned designer'}</h3>
                         <p className="mt-1 text-xs text-zinc-400">{entry.entry_date}</p>
                       </div>
-                      <span className="rounded-full bg-zinc-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      <span className="rounded-full bg-zinc-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white flex-shrink-0">
                         {Number(entry.hours).toFixed(2)} hrs
                       </span>
                     </div>
-                    <p className="mt-3 text-sm text-zinc-600">{entry.description || 'No description'}</p>
+                    {/* Linked design request — Alexis 5/6: "can you add what
+                        the request is" on the time-entry card. */}
+                    {entry.design_request_id && (
+                      <a
+                        href={`/designs/${entry.design_request_id}`}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#0A52EF] hover:underline"
+                        title="Open the design request this time was logged against"
+                      >
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 3h7v7M10 14 21 3M21 14v7H3V3h7" /></svg>
+                        <span className="truncate">
+                          {entry.design_request_title || 'Open request'}
+                          {entry.design_request_tricode ? ` · ${entry.design_request_tricode}` : ''}
+                        </span>
+                      </a>
+                    )}
+                    <p className="mt-2 text-sm text-zinc-600">{entry.description || 'No description'}</p>
                   </div>
                 ))}
               </div>
@@ -347,5 +422,87 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+function BudgetEditor({ budget, onSaved }: { budget: BudgetDetail; onSaved: () => void }) {
+  const [draft, setDraft] = useState({
+    client_name: budget.client_name || '',
+    contract_start: budget.contract_start || '',
+    contract_end: budget.contract_end || '',
+    total_hours: budget.total_hours == null ? '' : String(budget.total_hours),
+    league: budget.league || '',
+    season: budget.season || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/hours-budgets/${budget.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_name: draft.client_name.trim() || null,
+          contract_start: draft.contract_start || null,
+          contract_end: draft.contract_end || null,
+          total_hours: draft.total_hours.trim() === '' ? 0 : Number(draft.total_hours),
+          league: draft.league.trim() || null,
+          season: draft.season.trim() || null,
+        }),
+      })
+      if (res.ok) {
+        setSavedFlash(true)
+        await onSaved()
+        setTimeout(() => setSavedFlash(false), 1600)
+      }
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+      <Field label="Client">
+        <input value={draft.client_name} onChange={e => setDraft(p => ({ ...p, client_name: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Contract Start">
+        <input type="date" value={draft.contract_start} onChange={e => setDraft(p => ({ ...p, contract_start: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Contract End">
+        <input type="date" value={draft.contract_end} onChange={e => setDraft(p => ({ ...p, contract_end: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Total Hours (blank = Unlimited)">
+        <input type="number" step="0.01" value={draft.total_hours} placeholder="Unlimited"
+          onChange={e => setDraft(p => ({ ...p, total_hours: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="League">
+        <input value={draft.league} onChange={e => setDraft(p => ({ ...p, league: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Season">
+        <input value={draft.season} onChange={e => setDraft(p => ({ ...p, season: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <div className="md:col-span-2 lg:col-span-3 flex items-center justify-end gap-2 pt-1">
+        {savedFlash && <span className="text-emerald-600 text-[11px]">Saved.</span>}
+        <button onClick={save} disabled={saving}
+          className="px-3 py-1.5 bg-zinc-900 text-white rounded text-xs font-medium disabled:opacity-50 hover:bg-zinc-800">
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{label}</label>
+      {children}
+    </div>
   )
 }

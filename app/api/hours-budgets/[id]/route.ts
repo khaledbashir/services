@@ -56,12 +56,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     budget.total_hours = budget.total_hours == null ? 0 : Number(budget.total_hours)
     budget.hours_spent = Number(budget.hours_spent || 0)
 
+    // Pull the linked design request title so each time-entry card shows
+     // what the time was logged AGAINST (Alexis 5/6 — "can you add what
+    // the request is").
     const entries = await query(
       `SELECT te.id, te.budget_id, te.designer_id, s.full_name as designer_name,
               te.design_request_id, te.entry_date::text as entry_date, te.hours, te.description,
-              te.created_at
+              te.created_at,
+              dr.job_title as design_request_title,
+              dr.tricode as design_request_tricode
        FROM designer_time_entries te
        LEFT JOIN staff s ON s.id = te.designer_id
+       LEFT JOIN design_requests dr ON dr.id = te.design_request_id
        WHERE te.budget_id = $1
        ORDER BY te.entry_date DESC, te.created_at DESC`,
       [params.id]

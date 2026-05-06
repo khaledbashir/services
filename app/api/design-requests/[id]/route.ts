@@ -75,12 +75,14 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
             v.name as venue_name,
             d.full_name as designer_name,
             ec.full_name as enterprise_contact_name,
-            ic.category as internal_category
+            ic.category as internal_category,
+            prio.priority as priority
      FROM design_requests dr
      LEFT JOIN venues v ON dr.venue_id = v.id
      LEFT JOIN staff d ON dr.designer_id = d.id
      LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
      LEFT JOIN design_request_internal_categories ic ON ic.design_request_id = dr.id::text
+     LEFT JOIN design_request_priorities prio ON prio.design_request_id = dr.id::text
      WHERE dr.id = $1 ${vf.clause}`,
     params,
   )
@@ -99,6 +101,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           [id],
         )
         return r.rows[0]?.category || null
+      } catch {
+        return null
+      }
+    }
+    // Same — priority lives in our side table, Twenty doesn't know it.
+    const lookupPriority = async (id: string): Promise<string | null> => {
+      try {
+        const r = await query(
+          `SELECT priority FROM design_request_priorities WHERE design_request_id = $1`,
+          [id],
+        )
+        return r.rows[0]?.priority || null
       } catch {
         return null
       }
@@ -160,6 +174,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           created_at: d.createdAt,
           updated_at: d.updatedAt,
           internal_category: await lookupInternalCategory(d.id),
+          priority: await lookupPriority(d.id),
         },
       })
     }

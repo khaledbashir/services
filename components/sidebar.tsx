@@ -154,7 +154,8 @@ export function Sidebar() {
   //             CG Design only.
   // Everyone else falls back to the standard role-min check.
   const DESIGNER_ALLOWED_HREFS = new Set([
-    '/designs', '/cg-designs', '/venues', '/venues/map',
+    '/designs', '/cg-designs', '/reports/designs-by-client',
+    '/venues', '/venues/map',
     '/events', '/my-events', '/time-entries', '/hours-budgets',
   ])
   const DESIGN_CONSULTANT_ALLOWED_HREFS = new Set(['/designs', '/cg-designs'])
@@ -233,6 +234,7 @@ export function Sidebar() {
       links: [
         { href: '/designs', label: 'Design Requests' },
         { href: '/cg-designs', label: 'CG Designs' },
+        { href: '/reports/designs-by-client', label: 'Requests by Client' },
         { href: '/content-schedules', label: 'Content Schedule' },
         { href: '/print-requests', label: 'Print Requests', role: 'manager' },
         { href: '/gallery', label: 'Visual Gallery' },
