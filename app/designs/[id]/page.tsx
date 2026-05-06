@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { DesignProofUpload } from '@/components/design-proof-upload'
+import { CommentThread } from '@/components/comment-thread'
 
 import { INTERNAL_CATEGORIES, labelForCategory } from '@/lib/design-internal-category'
 
@@ -82,6 +83,14 @@ function formatRelative(s: string | null | undefined): string {
 export default function DesignRequestDetailPage({ params }: { params: { id: string } }) {
   const [dr, setDr] = useState<DesignRequestDetail | null>(null)
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => {
+    try {
+      setCurrentUserId(localStorage.getItem('userId'))
+      setIsAdmin(localStorage.getItem('userRole') === 'admin')
+    } catch {}
+  }, [])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
@@ -569,6 +578,16 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 <div className="text-zinc-900">{formatRelative(dr.updated_at)}</div>
               </div>
             </div>
+
+            {/* Comment thread (Alexis 5/6 — distinct from notes, newest at
+                top, @-mentions). Lives in the aside so designers can talk
+                about the request while keeping the stage flow on the left. */}
+            <CommentThread
+              baseUrl={`/api/design-requests/${dr.id}/comments`}
+              staff={staffList}
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+            />
           </aside>
         </div>
       </div>
