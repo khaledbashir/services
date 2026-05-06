@@ -713,6 +713,18 @@ export function AiAssistant() {
     }
   }
 
+  useEffect(() => {
+    const onPrompt = (event: Event) => {
+      const prompt = (event as CustomEvent<{ prompt?: string }>).detail?.prompt?.trim()
+      if (!prompt) return
+      setOpen(true)
+      setTimeout(() => { void send(prompt) }, 80)
+    }
+
+    window.addEventListener('anc:ai-send-prompt', onPrompt)
+    return () => window.removeEventListener('anc:ai-send-prompt', onPrompt)
+  }, [send])
+
   const sendPrompt = (label: string) => {
     void send(promptText(label))
   }
