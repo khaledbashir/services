@@ -48,6 +48,9 @@ const IC = {
   voice: (
     <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-14 0M12 18v3m-4 0h8M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3z" />
   ),
+  tables: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4V4zm0 6h16M10 4v16M16 4v16" />
+  ),
 }
 
 function Icon({ children, className = 'h-4 w-4' }: { children: ReactNode; className?: string }) {
@@ -178,20 +181,33 @@ export function Sidebar() {
       ],
     },
     {
+      // Native Airtable-style DataGrid pages (live as of 5/6 pivot). These
+      // share the same backend tables but the UI is hand-rolled (TanStack
+      // Table + custom cells + Tailwind), so we own every knob — group-by,
+      // view tabs, locked views, inline cell edit.
+      key: 'ops-tables',
+      label: 'Ops Tables',
+      icon: <Icon>{IC.tables}</Icon>,
+      role: 'technician',
+      links: [
+        { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/inventory', label: 'Inventory', role: 'manager' },
+        { href: '/maintenance', label: 'Maintenance' },
+        { href: '/rma', label: 'RMA Tracker', role: 'manager' },
+        { href: '/parts', label: 'Parts Catalog', role: 'manager' },
+        { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
+      ],
+    },
+    {
+      // The NocoDB-backed "Operations Workspace" embed (ops.ancsports.net)
+      // stays available alongside the native tables for now per Ahmad 5/6 —
+      // both accordions show, each in its own section.
       key: 'field-ops',
       label: 'Field Ops',
       icon: <Icon>{IC.service}</Icon>,
       role: 'technician',
       links: [
         { href: '/operations', label: 'Operations Workspace' },
-        // Hidden 2026-05-01 — Baserow at ops.ancsports.net replaces Nick's field-ops modules.
-        // Routes still exist; uncomment any line to restore. Stadium Prep stays since it's a different workflow.
-        // { href: '/inventory', label: 'Inventory' },
-        // { href: '/maintenance', label: 'Maintenance' },
-        // { href: '/walkthroughs', label: 'Walkthroughs' },
-        // { href: '/rma', label: 'RMA Tracker', role: 'manager' },
-        // { href: '/parts-orders', label: 'Parts Orders', role: 'manager' },
-        // { href: '/parts', label: 'Parts Catalog', role: 'manager' },
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
       ],
     },
