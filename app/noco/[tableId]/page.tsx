@@ -5,7 +5,7 @@
 // records reshaped via the same util. Inline cell edits PATCH back through
 // the generic /api/noco/[tableId] endpoint.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DataGrid, RecordDrawer, type ColumnConfig, type ViewConfig } from '@/components/data-grid'
@@ -172,8 +172,10 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
 
   // Auto-derive a sensible default view set: All, plus group-by-status if a
   // singleSelect with a "Status" or "Result" column exists, plus calendar
-  // if a date column exists.
-  const VIEWS: ViewConfig<any>[] = [
+  // if a date column exists. MUST be memoized — DataGrid useEffects depend
+  // on activeView identity; a fresh array each render causes an infinite
+  // re-render loop (React error #185).
+  const VIEWS = useMemo<ViewConfig<any>[]>(() => [
     { id: 'all', name: 'All', type: 'grid' },
     ...columns
       .filter(c => c.type === 'singleSelect' && /^(status|result|state|priority|type|stage)$/i.test(c.id.replace(/\s+/g, '')))
@@ -198,7 +200,7 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           groupBy: columns.find(c => c.type === 'singleSelect')!.id,
         }]
       : []),
-  ]
+  ], [columns])
 
   return (
     <DashboardLayout>
