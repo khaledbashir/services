@@ -206,6 +206,8 @@ export function DataGrid<TRow extends { id: string }>({
   hasMore,
   loadingMore,
   onLoadMore,
+  onFilterChange,
+  onSortChange,
 }: DataGridProps<TRow>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -215,8 +217,29 @@ export function DataGrid<TRow extends { id: string }>({
   // (in addition to view-config-driven hides), and per-column filter rules.
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
   const [userHidden, setUserHidden] = useState<Set<string>>(new Set())
-  const [columnFilters, setColumnFilters] = useState<Record<string, { op: string; value: any }>>({})
+  const [columnFilters, setColumnFiltersRaw] = useState<Record<string, { op: string; value: any }>>({})
   const [userGroupBy, setUserGroupBy] = useState<string | null>(null)
+
+  // Fire onSortChange whenever the user-driven sort state changes, so pages
+  // can refetch with server-side sort.
+  useEffect(() => {
+    if (!onSortChange) return
+    onSortChange(sorting.map(s => ({ id: s.id, desc: !!s.desc })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(sorting)])
+
+  // Wrap the filter setter so we can fire onFilterChange — pages use this to
+  // re-fetch from the source when filters cross the loaded page boundary.
+  const setColumnFilters: typeof setColumnFiltersRaw = (v) => {
+    setColumnFiltersRaw(prev => {
+      const next = typeof v === 'function' ? (v as (p: Record<string, { op: string; value: any }>) => Record<string, { op: string; value: any }>)(prev) : v
+      if (onFilterChange) {
+        const rules = Object.entries(next).map(([colId, f]) => ({ colId, op: f.op, value: f.value }))
+        onFilterChange(rules)
+      }
+      return next
+    })
+  }
   // User-saved views (DB-backed via /api/preferences keyed
   // datagrid:<persistKey>:userViews). Render alongside the code-config views.
   const [userViews, setUserViews] = useState<ViewConfig[]>([])

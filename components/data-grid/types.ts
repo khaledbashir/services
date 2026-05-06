@@ -114,6 +114,11 @@ export interface DataGridProps<TRow extends { id: string }> {
   hasMore?: boolean
   loadingMore?: boolean
   onLoadMore?: () => Promise<void> | void
+  // Server-side filter/sort hooks — fired whenever the user changes column
+  // filters or sort. Pages can re-fetch from the source so filtering scales
+  // beyond the loaded page (e.g. across all 20K walkthroughs).
+  onFilterChange?: (rules: { colId: string; op: string; value: any }[]) => void
+  onSortChange?: (sort: { id: string; desc?: boolean }[]) => void
 }
 
 // Tailwind-mapped pill colors for select options. Mirrors Airtable's option

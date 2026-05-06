@@ -21,6 +21,18 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
   const [error, setError] = useState<string | null>(null)
   const [drawerRow, setDrawerRow] = useState<any | null>(null)
   const PAGE_SIZE = 500
+  const [serverFilter, setServerFilter] = useState<{ colId: string; op: string; value: any }[]>([])
+  const [serverSort, setServerSort] = useState<{ id: string; desc?: boolean }[]>([])
+
+  const buildListUrl = (offset: number) => {
+    const qs = new URLSearchParams()
+    qs.set('action', 'list')
+    qs.set('limit', String(PAGE_SIZE))
+    qs.set('offset', String(offset))
+    if (serverFilter.length) qs.set('filter', JSON.stringify(serverFilter))
+    if (serverSort.length)   qs.set('sort', JSON.stringify(serverSort))
+    return `/api/noco/${params.tableId}?${qs.toString()}`
+  }
 
   const load = async () => {
     setLoading(true)
@@ -28,7 +40,7 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     try {
       const [schemaRes, listRes] = await Promise.all([
         fetch(`/api/noco/${params.tableId}?action=schema`),
-        fetch(`/api/noco/${params.tableId}?action=list&limit=${PAGE_SIZE}&offset=0`),
+        fetch(buildListUrl(0)),
       ])
       if (!schemaRes.ok) throw new Error('schema fetch failed')
       if (!listRes.ok) throw new Error('list fetch failed')
@@ -49,18 +61,16 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     if (loadingMore) return
     setLoadingMore(true)
     try {
-      const r = await fetch(`/api/noco/${params.tableId}?action=list&limit=${PAGE_SIZE}&offset=${rows.length}`)
+      const r = await fetch(buildListUrl(rows.length))
       if (!r.ok) throw new Error('load more failed')
       const d = await r.json()
       const next = d.items || []
-      // Defensive de-dup on id in case the source overlaps.
       setRows(prev => {
         const seen = new Set(prev.map((p: any) => p.id))
         return [...prev, ...next.filter((n: any) => !seen.has(n.id))]
       })
       if (typeof d.total === 'number') setTotal(d.total)
     } catch (e) {
-      // Silent — the next scroll will retry. Don't spam alerts.
       console.error('[noco loadMore]', e)
     } finally {
       setLoadingMore(false)
@@ -68,6 +78,15 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
   }
 
   useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [params.tableId])
+
+  // Refetch from offset 0 when server filter or sort changes — these always
+  // require a fresh page since the source ordering changes.
+  useEffect(() => {
+    if (loading) return
+    setRows([])
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(serverFilter), JSON.stringify(serverSort)])
 
   const updateCell = async (rowId: string, columnId: string, value: any) => {
     // The generic page sends NocoDB column titles directly (column ids ARE
@@ -168,6 +187,8 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           hasMore={total != null && rows.length < total}
           loadingMore={loadingMore}
           onLoadMore={loadMore}
+          onFilterChange={setServerFilter}
+          onSortChange={setServerSort}
           emptyText={loading ? 'Loading…' : 'No records.'}
         />
 

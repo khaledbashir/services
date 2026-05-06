@@ -154,10 +154,28 @@ export async function GET(request: NextRequest) {
       // grid pages further via offset.
       const limit = Math.min(Number(searchParams.get('limit') || 500), 1000)
       const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
+      let where = ''
+      let sort = '-CreatedAt'
+      const rawFilter = searchParams.get('filter')
+      const rawSort = searchParams.get('sort')
+      if (rawFilter) {
+        try {
+          const { filterRulesToNocoWhere } = await import('@/lib/nocodb-schema')
+          where = filterRulesToNocoWhere(JSON.parse(rawFilter))
+        } catch {}
+      }
+      if (rawSort) {
+        try {
+          const { sortingToNocoSort } = await import('@/lib/nocodb-schema')
+          const s = sortingToNocoSort(JSON.parse(rawSort))
+          if (s) sort = s
+        } catch {}
+      }
       const { records, pageInfo } = await NocoOps.listRecords(TABLES.walkthroughLog, {
-        sort: '-CreatedAt',
+        sort,
         limit,
         offset,
+        where: where || undefined,
       })
       const walkthroughs = records.map((r: any) => {
         const venueLink = Array.isArray(r['Venue']) ? r['Venue'] : []

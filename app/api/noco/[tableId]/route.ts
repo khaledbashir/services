@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/rbac'
 import { NocoOps } from '@/lib/nocodb-ops'
-import { buildColumnConfig, reshapeRecord, type NocoColumn } from '@/lib/nocodb-schema'
+import { buildColumnConfig, reshapeRecord, filterRulesToNocoWhere, sortingToNocoSort, type NocoColumn } from '@/lib/nocodb-schema'
 
 // GET  /api/noco/<tableId>?action=schema
 //      /api/noco/<tableId>?action=list&limit=500
@@ -30,11 +30,27 @@ export async function GET(request: NextRequest, { params }: { params: { tableId:
     if (action === 'list') {
       const limit = Math.min(Number(searchParams.get('limit') || 500), 1000)
       const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
+      // Filter + sort coming from the grid. `filter` is JSON-encoded array of
+      // FilterRule, `sort` is the SortingState array. Both optional.
+      let where = ''
+      let sort = '-CreatedAt'
+      const rawFilter = searchParams.get('filter')
+      const rawSort = searchParams.get('sort')
+      if (rawFilter) {
+        try { where = filterRulesToNocoWhere(JSON.parse(rawFilter)) } catch {}
+      }
+      if (rawSort) {
+        try {
+          const userSort = sortingToNocoSort(JSON.parse(rawSort))
+          if (userSort) sort = userSort
+        } catch {}
+      }
       const meta = await NocoOps.getTable(params.tableId) as { id: string; title: string; columns: NocoColumn[] }
       const { records, pageInfo } = await NocoOps.listRecords(params.tableId, {
-        sort: '-CreatedAt',
+        sort,
         limit,
         offset,
+        where: where || undefined,
       })
       const items = records.map(r => reshapeRecord(r as any, meta.columns))
       return NextResponse.json({

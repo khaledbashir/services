@@ -199,3 +199,46 @@ export function reshapeRecord(raw: Record<string, any>, columns: NocoColumn[]): 
   }
   return out
 }
+
+// Translate the DataGrid's per-column filter rules (the same shape we store
+// for user-saved views) into NocoDB v2 `where` filter syntax. Multiple rules
+// are AND-chained. Empty input → empty string (no filter).
+//
+// Supported ops mirror the DataGrid ColumnHeaderMenu options. NocoDB date ops
+// use `isWithin` semantics — for v1 we use `eq`/`gt`/`lt` against the raw
+// value, which works for ISO dates and datetimes.
+export function filterRulesToNocoWhere(rules: { colId: string; op: string; value: any }[]): string {
+  if (!rules || rules.length === 0) return ''
+  const clauses: string[] = []
+  for (const { colId, op, value } of rules) {
+    // NocoDB column references in `where` use the column TITLE — and any
+    // commas in the title would break the parser. Skip rules pointing at
+    // titles we can't safely encode.
+    if (colId.includes(',') || colId.includes('(') || colId.includes(')')) continue
+    const v = value == null ? '' : String(value).replace(/[(),]/g, ' ').trim()
+    switch (op) {
+      case 'contains':   clauses.push(`(${colId},like,%${v}%)`); break
+      case 'eq':         clauses.push(`(${colId},eq,${v})`); break
+      case 'neq':        clauses.push(`~not(${colId},eq,${v})`); break
+      case 'empty':      clauses.push(`(${colId},blank)`); break
+      case 'notempty':   clauses.push(`(${colId},notblank)`); break
+      case 'gt':         clauses.push(`(${colId},gt,${v})`); break
+      case 'gte':        clauses.push(`(${colId},gte,${v})`); break
+      case 'lt':         clauses.push(`(${colId},lt,${v})`); break
+      case 'lte':        clauses.push(`(${colId},lte,${v})`); break
+      case 'is':         clauses.push(`(${colId},eq,${v})`); break
+      case 'before':     clauses.push(`(${colId},lt,${v})`); break
+      case 'after':      clauses.push(`(${colId},gt,${v})`); break
+      case 'checked':    clauses.push(`(${colId},checked)`); break
+      case 'notchecked': clauses.push(`(${colId},notchecked)`); break
+    }
+  }
+  return clauses.join('~and')
+}
+
+// Translate sorting state into NocoDB sort syntax: comma-separated column
+// titles prefixed with `-` for descending. Empty → falls back to caller default.
+export function sortingToNocoSort(sorting: { id: string; desc?: boolean }[]): string {
+  if (!sorting || sorting.length === 0) return ''
+  return sorting.map(s => (s.desc ? '-' : '') + s.id).join(',')
+}

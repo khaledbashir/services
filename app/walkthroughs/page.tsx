@@ -73,6 +73,17 @@ const NOCO_FIELD_NAME: Record<string, string> = {
 
 const PAGE_SIZE = 500
 
+// NocoDB column titles for our local Walk fields — server-side filter passes
+// these to the API which forwards to NocoDB's where clause.
+const NOCO_COL_FOR_FIELD: Record<string, string> = {
+  log_id: 'Log ID',
+  log_date: 'Log Date Dt',
+  type: 'Type',
+  result: 'Result',
+  comments: 'Comments (log issues above)',
+  three_letter_code: 'Three Letter Code',
+}
+
 export default function WalkthroughsPage() {
   const router = useRouter()
   const [rows, setRows] = useState<Walk[]>([])
@@ -80,10 +91,33 @@ export default function WalkthroughsPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [drawerRow, setDrawerRow] = useState<Walk | null>(null)
+  const [serverFilter, setServerFilter] = useState<{ colId: string; op: string; value: any }[]>([])
+  const [serverSort, setServerSort] = useState<{ id: string; desc?: boolean }[]>([])
+
+  // Translate the grid's local column ids → NocoDB column titles for the
+  // server-side filter. Drops any rule we don't have a NocoDB mapping for so
+  // the filter stays in-memory only for those.
+  const buildServerFilter = () => serverFilter
+    .filter(r => NOCO_COL_FOR_FIELD[r.colId])
+    .map(r => ({ colId: NOCO_COL_FOR_FIELD[r.colId], op: r.op, value: r.value }))
+  const buildServerSort = () => serverSort
+    .filter(s => NOCO_COL_FOR_FIELD[s.id])
+    .map(s => ({ id: NOCO_COL_FOR_FIELD[s.id], desc: s.desc }))
+
+  const buildUrl = (offset: number) => {
+    const qs = new URLSearchParams()
+    qs.set('action', 'list')
+    qs.set('limit', String(PAGE_SIZE))
+    qs.set('offset', String(offset))
+    const f = buildServerFilter(); const s = buildServerSort()
+    if (f.length) qs.set('filter', JSON.stringify(f))
+    if (s.length) qs.set('sort', JSON.stringify(s))
+    return `/api/walkthroughs/nocodb?${qs.toString()}`
+  }
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch(`/api/walkthroughs/nocodb?action=list&limit=${PAGE_SIZE}&offset=0`)
+    const r = await fetch(buildUrl(0))
     if (r.ok) {
       const d = await r.json()
       setRows(d.walkthroughs || [])
@@ -96,7 +130,7 @@ export default function WalkthroughsPage() {
     if (loadingMore) return
     setLoadingMore(true)
     try {
-      const r = await fetch(`/api/walkthroughs/nocodb?action=list&limit=${PAGE_SIZE}&offset=${rows.length}`)
+      const r = await fetch(buildUrl(rows.length))
       if (!r.ok) throw new Error('load more failed')
       const d = await r.json()
       const next = d.walkthroughs || []
@@ -110,6 +144,13 @@ export default function WalkthroughsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (loading) return
+    setRows([])
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(serverFilter), JSON.stringify(serverSort)])
 
   const updateCell = async (rowId: string, columnId: string, value: any) => {
     const fieldName = NOCO_FIELD_NAME[columnId]
@@ -154,6 +195,8 @@ export default function WalkthroughsPage() {
           hasMore={total != null && rows.length < total}
           loadingMore={loadingMore}
           onLoadMore={loadMore}
+          onFilterChange={setServerFilter}
+          onSortChange={setServerSort}
           emptyText="No walkthroughs match this view."
         />
 
