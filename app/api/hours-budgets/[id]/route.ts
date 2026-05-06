@@ -50,6 +50,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!budget) {
       return NextResponse.json({ error: 'Hours budget not found' }, { status: 404 })
     }
+    // Coerce nullable numerics so the page never has to defend against null
+    // — `total_hours = NULL` in the DB used to crash `.toFixed`. Null is
+    // intentional now: per Alexis 5/6, no total = unlimited budget.
+    budget.total_hours = budget.total_hours == null ? 0 : Number(budget.total_hours)
+    budget.hours_spent = Number(budget.hours_spent || 0)
 
     const entries = await query(
       `SELECT te.id, te.budget_id, te.designer_id, s.full_name as designer_name,

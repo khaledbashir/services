@@ -76,16 +76,19 @@ export default function HoursBudgetsPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!formData.client_name.trim() || !formData.total_hours.trim()) return
+    if (!formData.client_name.trim()) return
     setSubmitting(true)
     try {
       const res = await fetch('/api/hours-budgets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // Empty Total Hours = Unlimited budget (per Alexis 5/6) — pass 0 so
+        // the API stores a null/0 total and the detail page renders "Unlimited"
+        // with no progress bar / percentage / remaining-hours line.
         body: JSON.stringify({
           ...formData,
           venue_id: formData.venue_id || null,
-          total_hours: Number(formData.total_hours),
+          total_hours: formData.total_hours.trim() ? Number(formData.total_hours) : 0,
           contract_start: formData.contract_start || null,
           contract_end: formData.contract_end || null,
         }),
@@ -209,14 +212,14 @@ export default function HoursBudgetsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Total Hours *</label>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Total Hours <span className="font-normal text-zinc-400">(leave blank for Unlimited)</span></label>
                 <input
                   type="number"
                   step="0.01"
                   value={formData.total_hours}
                   onChange={(e) => setFormData((prev) => ({ ...prev, total_hours: e.target.value }))}
+                  placeholder="Unlimited"
                   className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-                  required
                 />
               </div>
               <div>
@@ -276,7 +279,10 @@ export default function HoursBudgetsPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((budget) => {
-            const progress = budget.total_hours > 0 ? budget.hours_spent / budget.total_hours : 0
+            const total = Number(budget.total_hours || 0)
+            const spent = Number(budget.hours_spent || 0)
+            const isUnlimited = total <= 0
+            const progress = isUnlimited ? 0 : spent / total
             const tone = progressTone(progress)
             return (
               <Link
@@ -286,24 +292,32 @@ export default function HoursBudgetsPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center">{budget.client_name}<AlertBadge budgetId={budget.id} progress={progress} /></h2>
+                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center">{budget.client_name}{!isUnlimited && <AlertBadge budgetId={budget.id} progress={progress} />}</h2>
                     <p className="mt-1 text-xs text-zinc-500">
                       {budget.venue_name || 'No venue linked'}
                       {budget.league ? ` · ${budget.league}` : ''}
                       {budget.season ? ` · ${budget.season}` : ''}
                     </p>
                   </div>
-                  <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${progressLabel(progress)}`}>
-                    {Math.round(progress * 100)}%
-                  </span>
+                  {isUnlimited ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      Unlimited
+                    </span>
+                  ) : (
+                    <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${progressLabel(progress)}`}>
+                      {Math.round(progress * 100)}%
+                    </span>
+                  )}
                 </div>
                 <div className="mt-4">
-                  <div className="h-2 rounded-full bg-zinc-100">
-                    <div className={`h-2 rounded-full ${tone}`} style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
-                  </div>
+                  {!isUnlimited && (
+                    <div className="h-2 rounded-full bg-zinc-100">
+                      <div className={`h-2 rounded-full ${tone}`} style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-                    <span>{Number(budget.hours_spent || 0).toFixed(1)} spent</span>
-                    <span>{Number(budget.total_hours || 0).toFixed(1)} total</span>
+                    <span>{spent.toFixed(1)} spent</span>
+                    <span>{isUnlimited ? '∞ unlimited' : `${total.toFixed(1)} total`}</span>
                   </div>
                 </div>
                 <div className="mt-4 space-y-1 text-xs text-zinc-500">

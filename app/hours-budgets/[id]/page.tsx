@@ -175,6 +175,12 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
 
   const progress = Math.min(100, Math.max(0, utilization * 100))
   const tone = utilization >= 0.75 ? 'bg-red-500' : utilization >= 0.5 ? 'bg-orange-500' : 'bg-emerald-500'
+  // Defensive coercion + Unlimited support per Alexis 5/6: a budget with no
+  // total (NULL or 0 total_hours) is treated as unlimited — render only
+  // hours-spent, hide percentage / progress bar / remaining-hours line.
+  const totalHours = Number(budget.total_hours || 0)
+  const hoursSpent = Number(budget.hours_spent || 0)
+  const isUnlimited = !totalHours
 
   return (
     <DashboardLayout>
@@ -219,21 +225,28 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
             <div className="border border-zinc-200 bg-white p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-900">Budget Utilization</h2>
-                <span className="text-xs text-zinc-500">{budget.hours_spent.toFixed(1)} / {budget.total_hours.toFixed(1)} hrs</span>
-              </div>
-              <div className="mt-4 h-3 rounded-full bg-zinc-100">
-                <div className={`h-3 rounded-full ${tone}`} style={{ width: `${progress}%` }} />
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                <span>{Math.round(progress)}% used</span>
-                <span>
-                  {budget.total_hours <= 0
-                    ? 'Budget cap not set'
-                    : budget.total_hours > budget.hours_spent
-                      ? `${(budget.total_hours - budget.hours_spent).toFixed(1)} hrs remaining`
-                      : 'Budget exceeded'}
+                <span className="text-xs text-zinc-500">
+                  {isUnlimited
+                    ? <>{hoursSpent.toFixed(1)} hrs · <span className="font-medium text-emerald-700">Unlimited</span></>
+                    : <>{hoursSpent.toFixed(1)} / {totalHours.toFixed(1)} hrs</>
+                  }
                 </span>
               </div>
+              {!isUnlimited && (
+                <>
+                  <div className="mt-4 h-3 rounded-full bg-zinc-100">
+                    <div className={`h-3 rounded-full ${tone}`} style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                    <span>{Math.round(progress)}% used</span>
+                    <span>
+                      {totalHours > hoursSpent
+                        ? `${(totalHours - hoursSpent).toFixed(1)} hrs remaining`
+                        : 'Budget exceeded'}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="border border-zinc-200 bg-white p-6">
@@ -325,8 +338,8 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">Budget Details</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Total Hours</span><span className="text-zinc-900">{budget.total_hours}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-zinc-500">Spent</span><span className="text-zinc-900">{budget.hours_spent.toFixed(2)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-zinc-500">Remaining</span><span className="text-zinc-900">{Math.max(0, budget.total_hours - budget.hours_spent).toFixed(2)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-zinc-500">Spent</span><span className="text-zinc-900">{hoursSpent.toFixed(2)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-zinc-500">Remaining</span><span className="text-zinc-900">{isUnlimited ? '∞' : Math.max(0, totalHours - hoursSpent).toFixed(2)}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Notes</span><span className="max-w-[16rem] text-right text-zinc-900">{budget.notes || '—'}</span></div>
               </div>
             </div>
