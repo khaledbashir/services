@@ -27,12 +27,64 @@ interface MessageRow {
 }
 
 const DEFAULT_SUGGESTIONS = [
-  'Build my Joe demo briefing',
+  'What needs attention today?',
   'Show urgent open tickets',
   'Which events need staffing this week?',
   'Find the venue for Flyers',
   'Create a ticket from a field note',
+  'Summarize this week for operations',
+  'Show venues with service issues',
+  'Find a technician for an event',
+  'Draft a client update for an open ticket',
+  'Log a walkthrough note',
+  'Show what the assistant can do here',
+  'Open the tickets page',
 ]
+
+const SUGGESTION_GROUPS = [
+  {
+    title: 'Today',
+    suggestions: [
+      'What needs attention today?',
+      'Summarize this week for operations',
+      'Which events need staffing this week?',
+      'Show urgent open tickets',
+    ],
+  },
+  {
+    title: 'Find',
+    suggestions: [
+      'Find the venue for Flyers',
+      'Show venues with service issues',
+      'Find a technician for an event',
+      'Open the tickets page',
+    ],
+  },
+  {
+    title: 'Create',
+    suggestions: [
+      'Create a ticket from a field note',
+      'Log a walkthrough note',
+      'Draft a client update for an open ticket',
+      'Show what the assistant can do here',
+    ],
+  },
+]
+
+const PROMPT_EXAMPLES: Record<string, string> = {
+  'What needs attention today?': 'Give me the operations snapshot for today: urgent tickets, staffing gaps, upcoming events, walkthroughs, low stock, and recommended next actions.',
+  'Show urgent open tickets': 'Show urgent open tickets, group them by venue, and tell me what should be handled first.',
+  'Which events need staffing this week?': 'Which events this week still need staffing? Include venue, date, and the best next action.',
+  'Find the venue for Flyers': 'Find the venue for Flyers and show the venue profile if there is a match.',
+  'Create a ticket from a field note': 'Create a ticket from this field note: display intermittently cuts to black during playback. Ask me for the venue if you cannot infer it.',
+  'Summarize this week for operations': 'Summarize this week for operations: events, staffing coverage, open tickets, walkthroughs, and risks.',
+  'Show venues with service issues': 'Show venues with open service issues and highlight anything urgent.',
+  'Find a technician for an event': 'Find available technicians for an event this week and suggest the best fit without assigning anyone yet.',
+  'Draft a client update for an open ticket': 'Draft a short client-safe update for the most important open ticket. Do not expose internal notes.',
+  'Log a walkthrough note': 'Log a walkthrough note. Ask me for the venue and result, then structure it cleanly.',
+  'Show what the assistant can do here': 'Show what you can do in this dashboard. Focus on useful operations actions, not generic AI features.',
+  'Open the tickets page': 'Open the tickets page and highlight the most important place to start.',
+}
 
 // Strip a <suggestions>[...]</suggestions> block (if present) from the
 // assistant text and return both. The agent emits suggestions inline so
@@ -667,7 +719,7 @@ export function AiAssistant() {
                   </svg>
                 </div>
                 <div className="text-zinc-800 font-semibold text-base mb-1 dark:text-zinc-100">ANC Assistant</div>
-                <div className="text-zinc-400 text-sm mb-6">Ask, search, or make anything happen.</div>
+                <div className="text-zinc-400 text-sm mb-5">Ask for live ops help, search records, or take action.</div>
                 {providers.length === 0 && (
                   <div className="w-full max-w-xs mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-left">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 mb-0.5">Not configured</div>
@@ -676,13 +728,20 @@ export function AiAssistant() {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-1 gap-2 w-full max-w-xs">
-                  {DEFAULT_SUGGESTIONS.map((s, i) => (
-                    <button key={i}
-                      onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 30) }}
-                      className="text-left text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:border-[#0A52EF]/40 hover:bg-[#0A52EF]/[0.04] hover:text-[#0A52EF] transition-all duration-150 group dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:text-zinc-200 dark:hover:bg-[#0A52EF]/10">
-                      <span className="font-medium group-hover:text-[#0A52EF]">{s}</span>
-                    </button>
+                <div className="w-full max-w-[21rem] space-y-4 text-left">
+                  {SUGGESTION_GROUPS.map(group => (
+                    <div key={group.title}>
+                      <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{group.title}</div>
+                      <div className="grid grid-cols-1 gap-2">
+                        {group.suggestions.map((s, i) => (
+                          <button key={`${group.title}-${i}`}
+                            onClick={() => { setInput(PROMPT_EXAMPLES[s] || s); setTimeout(() => inputRef.current?.focus(), 30) }}
+                            className="text-left text-[13px] px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:border-[#0A52EF]/40 hover:bg-[#0A52EF]/[0.04] hover:text-[#0A52EF] transition-all duration-150 group dark:border-[var(--anc-border)] dark:bg-[var(--anc-surface-muted)] dark:text-zinc-200 dark:hover:bg-[#0A52EF]/10">
+                            <span className="font-medium group-hover:text-[#0A52EF]">{s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

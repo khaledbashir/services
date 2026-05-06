@@ -21,10 +21,17 @@ function eventLine(row: Record<string, unknown>): string {
   return `- ${summary}${venue}${when ? ` - ${when}` : ''} - [open](/events/${row.id})`
 }
 
+function walkthroughLine(row: Record<string, unknown>): string {
+  const venue = row.venue_name ? ` at ${row.venue_name}` : ''
+  const result = row.result ? ` - ${row.result}` : ''
+  const date = row.log_date ? ` (${row.log_date})` : ''
+  return `- Walkthrough${venue}${result}${date}`
+}
+
 const skill: Skill = {
-  name: 'demo_briefing',
-  description: 'Build a Joe-ready live demo briefing for the Services side AI: real ops metrics, strongest demo flows, and current risk points.',
-  category: 'System',
+  name: 'operations_snapshot',
+  description: 'Build a live operations snapshot with tickets, events, staffing, walkthroughs, inventory, assistant usage, and suggested next actions.',
+  category: 'Service Ops',
   icon: 'AI',
   role: 'technician',
   parameters: {
@@ -32,12 +39,12 @@ const skill: Skill = {
     properties: {
       focus: {
         type: 'string',
-        description: 'Optional focus area: joe, ai, tickets, operations, client_portal, upsell',
+        description: 'Optional focus area: today, week, tickets, staffing, venues, walkthroughs, inventory, assistant',
       },
     },
   },
   async handler(args) {
-    const [stats, urgentTickets, unassignedEvents, recentWalkthroughs] = await Promise.all([
+    const [stats, urgentTickets, unassignedEvents, recentWalkthroughs, venueIssues] = await Promise.all([
       query(
         `SELECT
           (SELECT COUNT(*) FROM venues WHERE COALESCE(is_active,true)=true) AS active_venues,
@@ -80,11 +87,21 @@ const skill: Skill = {
          LIMIT 5`
       ),
       query(
-        `SELECT wl.id, wl.result, wl.log_date, v.name AS venue_name
+        `SELECT wl.id, wl.result, TO_CHAR(wl.log_date,'YYYY-MM-DD') AS log_date, v.name AS venue_name
          FROM walkthrough_logs wl
          LEFT JOIN venues v ON v.id = wl.venue_id
          WHERE wl.log_date >= CURRENT_DATE - INTERVAL '7 days'
          ORDER BY wl.log_date DESC
+         LIMIT 5`
+      ),
+      query(
+        `SELECT v.id, v.name, COUNT(t.id)::int AS open_ticket_count,
+                COUNT(*) FILTER (WHERE t.priority IN ('high','critical'))::int AS urgent_ticket_count
+         FROM venues v
+         JOIN tickets t ON t.venue_id = v.id
+         WHERE t.status NOT IN ('closed','resolved')
+         GROUP BY v.id, v.name
+         ORDER BY urgent_ticket_count DESC, open_ticket_count DESC, v.name ASC
          LIMIT 5`
       ),
     ])
@@ -96,37 +113,60 @@ const skill: Skill = {
     const automatedTickets = Number(s.automated_tickets_last_7_days || 0)
     const ticketsLast7 = Number(s.tickets_last_7_days || 0)
     const automationShare = pct(automatedTickets, ticketsLast7)
-    const focus = typeof args.focus === 'string' ? args.focus : 'joe'
+    const focus = typeof args.focus === 'string' && args.focus.trim() ? args.focus.trim() : 'today'
 
     const lines = [
-      `Demo briefing for ${focus}`,
+      `## Operations Snapshot`,
+      `Focus: ${focus}`,
       '',
-      `Live proof: ${s.active_venues} active venues, ${s.active_technicians} active technicians, ${s.events_today} events today, ${s.events_this_week} events this week.`,
-      `Ops pressure: ${coverage}% weekly staffing coverage, ${s.open_tickets} open tickets, ${s.urgent_open_tickets} urgent, ${s.low_stock_items} low-stock items.`,
-      `AI/automation signal: ${s.ai_users_last_7_days} staff used the assistant in the last 7 days, ${s.ai_tool_runs_last_7_days} tool runs, ${automationShare}% of tickets this week came from automated sources.`,
+      `**Live picture:** ${s.active_venues} active venues, ${s.active_technicians} active technicians, ${s.events_today} events today, ${s.events_this_week} events this week.`,
+      `**Needs attention:** ${s.open_tickets} open tickets, ${s.urgent_open_tickets} urgent, ${unassigned} unassigned events this week, ${s.low_stock_items} low-stock items.`,
+      `**Coverage:** ${coverage}% of this week's events have staffing assigned.`,
+      `**Activity:** ${s.walkthroughs_last_7_days} walkthroughs, ${s.workflow_users_last_7_days} workflow users, ${s.ai_users_last_7_days} assistant users, ${s.ai_tool_runs_last_7_days} assistant tool runs in the last 7 days.`,
+      `**Automation:** ${automationShare}% of tickets created in the last 7 days came from portal, email, phone, or voicemail sources.`,
       '',
-      'Best demo path:',
-      '1. Open the side AI and ask for this briefing.',
-      '2. Ask "show urgent open tickets" and click directly into one ticket.',
-      '3. Ask "what games are this week that still need staffing" to show live ops risk.',
-      '4. Ask "find the venue for Flyers" to show team alias search.',
-      '5. Create a realistic ticket from a spoken or typed field note and show the Slack-ready ticket card.',
-      '',
-      'Strongest upsell angle:',
-      'The AI is not a chat toy. It reads live ops data, resolves venue/team language, creates structured tickets, drives the dashboard UI, and gives Joe a control layer over staffing, service issues, walkthroughs, and client-visible proof.',
+      '## Good Starting Points',
+      '- Ask for urgent tickets and open one directly.',
+      '- Ask which events still need staffing before assignments are changed.',
+      '- Search by team name, venue name, city, or alias.',
+      '- Turn a field note into a structured service ticket.',
+      '- Draft a client-safe update without exposing internal comments.',
+      '- Ask the assistant to open a page, highlight a row, or fill a form.',
     ]
 
     if (urgentTickets.rows.length > 0) {
-      lines.push('', 'Open items worth showing:', ...urgentTickets.rows.map(ticketLine))
+      lines.push('', '## Open Tickets', ...urgentTickets.rows.map(ticketLine))
     }
 
     if (unassignedEvents.rows.length > 0) {
-      lines.push('', 'Staffing risk this week:', ...unassignedEvents.rows.map(eventLine))
+      lines.push('', '## Staffing To Review', ...unassignedEvents.rows.map(eventLine))
+    }
+
+    if (venueIssues.rows.length > 0) {
+      lines.push(
+        '',
+        '## Venues With Open Issues',
+        ...venueIssues.rows.map(row => {
+          const urgent = Number(row.urgent_ticket_count || 0)
+          const urgentText = urgent > 0 ? `, ${urgent} urgent` : ''
+          return `- ${row.name}: ${row.open_ticket_count} open tickets${urgentText} - [open](/venues/${row.id})`
+        })
+      )
     }
 
     if (recentWalkthroughs.rows.length > 0) {
-      lines.push('', `Walkthrough activity: ${recentWalkthroughs.rows.length} recent rows available for Nick-style ops proof.`)
+      lines.push('', '## Recent Walkthroughs', ...recentWalkthroughs.rows.map(walkthroughLine))
     }
+
+    lines.push(
+      '',
+      '## Try Next',
+      '- "Show urgent tickets by venue."',
+      '- "Which events this week need staffing?"',
+      '- "Find the venue for Flyers."',
+      '- "Create a ticket from this field note: display cuts to black during playback."',
+      '- "Draft a client update for the highest priority ticket."'
+    )
 
     return {
       metrics: {
@@ -137,6 +177,7 @@ const skill: Skill = {
       urgent_tickets: urgentTickets.rows,
       unassigned_events: unassignedEvents.rows,
       recent_walkthroughs: recentWalkthroughs.rows,
+      venue_issues: venueIssues.rows,
       text_summary: lines.join('\n'),
     }
   },
