@@ -107,7 +107,7 @@ async function loadSkills(): Promise<Skill[]> {
   return skills
 }
 
-const ROLE_RANK: Record<string, number> = { any: 0, technician: 1, manager: 2, admin: 3 }
+const ROLE_RANK: Record<string, number> = { any: 0, technician: 1, manager: 2, tech_support: 3, admin: 4 }
 
 function roleAllows(userRole: AgentRole, minimum?: AgentRole | 'any'): boolean {
   if (!minimum || minimum === 'any') return true
