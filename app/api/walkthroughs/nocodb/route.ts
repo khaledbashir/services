@@ -147,6 +147,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ issues })
     }
 
+    if (action === 'logged-by-options') {
+      // Pull the singleSelect options from the NocoDB Walkthrough Log meta
+      // for the "Logged By" column. Cached at NocoDB's edge — fast.
+      const meta = await NocoOps.getTable(TABLES.walkthroughLog) as { columns: any[] }
+      const col = meta.columns.find(c => c.id === WALK_COLS.loggedBy)
+      const options = (col?.colOptions?.options || []).map((o: any) => o.title).filter(Boolean)
+      return NextResponse.json({ options })
+    }
+
     if (action === 'list') {
       // List walkthrough records — what /walkthroughs page reads. Joe/Nick's
       // canonical Walkthrough Log lives in NocoDB (5/4 lock); this is the
@@ -263,6 +272,11 @@ export async function POST(request: NextRequest) {
   const type = String(body.type || '') as WalkthroughType
   const result = String(body.result || '') as WalkthroughResult
   const comments = String(body.comments || '').trim()
+  // Submitter dropdown (Nick Slack 5/4) — explicit "who is logging this"
+  // tag, separate from the auth-detected Technician. Validated against
+  // NocoDB's Logged By option list before write so we don't poison the
+  // singleSelect with garbage.
+  const loggedBy = String(body.logged_by || '').trim() || null
   const locationIds: number[] = Array.isArray(body.location_ids)
     ? body.location_ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n))
     : []
@@ -310,7 +324,7 @@ export async function POST(request: NextRequest) {
     ].filter(Boolean).join('\n').trim()
 
     // Step 1 — create the Walkthrough Log row.
-    const created = await NocoOps.createRecords(TABLES.walkthroughLog, [{
+    const newRow: Record<string, any> = {
       'Log ID': logId,
       'Technician': user.fullName || user.email,
       'Log Date': isoDate,
@@ -320,7 +334,9 @@ export async function POST(request: NextRequest) {
       'Result': result,
       'Comments (log issues above)': composedComments,
       'Three Letter Code': venueAbbr,
-    }])
+    }
+    if (loggedBy) newRow['Logged By'] = loggedBy
+    const created = await NocoOps.createRecords(TABLES.walkthroughLog, [newRow])
     const newRowId = Number((created[0] as any)?.Id)
     if (!newRowId) throw new Error('NocoDB did not return an Id for the new walkthrough')
 

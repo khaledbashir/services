@@ -40,6 +40,8 @@ const DIMENSIONS: Array<{ key: keyof Omit<AssetFinding, 'display_id' | 'display_
 export default function NewWalkthroughPage() {
   const router = useRouter()
   const [techName, setTechName] = useState<string>('')
+  const [loggedByOptions, setLoggedByOptions] = useState<string[]>([])
+  const [loggedBy, setLoggedBy] = useState<string>('')
   const [venues, setVenues] = useState<VenueOption[]>([])
   const [venueId, setVenueId] = useState<number | ''>('')
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -70,12 +72,23 @@ export default function NewWalkthroughPage() {
     }
   }, [])
 
-  // Load venues on mount.
+  // Load venues + Logged By dropdown options on mount.
   useEffect(() => {
     fetch('/api/walkthroughs/nocodb?action=venues').then((r) => r.ok ? r.json() : null).then((d) => {
       if (d?.venues) setVenues(d.venues)
     })
+    fetch('/api/walkthroughs/nocodb?action=logged-by-options').then((r) => r.ok ? r.json() : null).then((d) => {
+      if (Array.isArray(d?.options)) setLoggedByOptions(d.options)
+    })
   }, [])
+
+  // Auto-default the submitter to whichever option matches the current
+  // tech's name — saves a click for the tech logging their own walkthrough.
+  useEffect(() => {
+    if (!techName || !loggedByOptions.length || loggedBy) return
+    const match = loggedByOptions.find(o => o.toLowerCase() === techName.trim().toLowerCase())
+    if (match) setLoggedBy(match)
+  }, [techName, loggedByOptions, loggedBy])
 
   // When venue changes, fetch its Display Locations and auto-check them all.
   useEffect(() => {
@@ -232,6 +245,7 @@ export default function NewWalkthroughPage() {
           type,
           result,
           comments,
+          logged_by: loggedBy || undefined,
           location_ids: Array.from(selectedLocationIds),
           asset_findings: Object.values(findings),
           observed_issue_ids: Array.from(observedIssueIds),
@@ -278,6 +292,23 @@ export default function NewWalkthroughPage() {
             <div className="font-medium text-zinc-900 mt-0.5">{new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</div>
           </div>
         </div>
+
+        {/* Submitter dropdown — Nick's "who is logging this" tag (Slack 5/4).
+            Defaults to whoever's logged in if their name matches a NocoDB
+            option; tech can override to log on behalf of someone else. */}
+        {loggedByOptions.length > 0 && (
+          <div className="rounded-2xl border border-[#E8E8E8] bg-zinc-50 p-3">
+            <label className="text-xs font-semibold text-zinc-600 block mb-1.5">Who is logging this walkthrough?</label>
+            <select
+              value={loggedBy}
+              onChange={(e) => setLoggedBy(e.target.value)}
+              className="w-full px-3 py-2 border border-zinc-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            >
+              <option value="">— Pick submitter —</option>
+              {loggedByOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Venue + Type + Result */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
