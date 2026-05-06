@@ -29,6 +29,7 @@ interface DesignRequest {
   created_date: string
   is_rando?: boolean
   internal_category?: string | null
+  priority?: string | null
 }
 
 interface Venue {
@@ -368,6 +369,14 @@ export default function DesignsPage() {
       return matchesSearch && matchesStatus && matchesDesigner && matchesRando && matchesVenue && matchesInternal
     })
   }, [designRequests, search, statusFilter, designerFilter, randoFilter, currentUserId, selectedVenueId, selectedLeague, venueById, venueByLowerName, internalFilter])
+
+  // High-priority sinks to the top regardless of any other sort the user
+  // applied (Alexis 5/6: "designers should know what to work on first").
+  const sortedFiltered = useMemo(() => {
+    const high = filtered.filter(r => r.priority === 'high')
+    const rest = filtered.filter(r => r.priority !== 'high')
+    return [...high, ...rest]
+  }, [filtered])
 
   // Bucketed venue tree for the left rail. We include only venues that have
   // at least one design request OR are likely to get one (i.e. all of them
@@ -959,7 +968,7 @@ export default function DesignsPage() {
         </div>
 
         <KanbanBoard
-          items={filtered}
+          items={sortedFiltered}
           columns={statusColumns as KanbanColumn[]}
           statusOf={(item) => item.status}
           keyOf={(item) => item.id}
@@ -989,10 +998,13 @@ export default function DesignsPage() {
             return (
               <div className="relative">
                 <Link href={`/designs/${item.id}`} className="block space-y-3">
-                {/* Header: title + tricode pill */}
+                {/* Header: title + tricode pill (priority bell precedes title) */}
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug line-clamp-2 pr-7">
-                    {item.job_title}
+                  <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug line-clamp-2 pr-7 flex items-start gap-1.5">
+                    {item.priority === 'high' && (
+                      <span title="High priority" className="inline-flex items-center justify-center h-[18px] w-[18px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex-shrink-0 mt-0.5">!</span>
+                    )}
+                    <span>{item.job_title}</span>
                   </h3>
                   {item.tricode && (
                     <span className="flex-shrink-0 font-mono text-[10px] font-semibold text-zinc-600 bg-zinc-100 ring-1 ring-zinc-200 px-1.5 py-0.5 rounded tracking-wider">

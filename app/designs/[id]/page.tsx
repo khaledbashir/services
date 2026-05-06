@@ -17,6 +17,7 @@ interface DesignRequestDetail {
   job_title: string
   tricode: string | null
   internal_category?: string | null
+  priority?: string | null
   ftp_proof_link: string | null
   ftp_final_link: string | null
   final_file_name: string | null
@@ -169,6 +170,19 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     }
   }
 
+  const setPriority = async (next: 'high' | null) => {
+    try {
+      const res = await fetch(`/api/design-requests/${params.id}/priority`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: next }),
+      })
+      if (res.ok) await fetchData()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const saveAsTemplate = async () => {
     const suggested = dr ? `${dr.company_name || dr.venue_name || dr.job_title} template` : ''
     const name = window.prompt('Save this request as a template — what should we call it?', suggested)
@@ -245,6 +259,12 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             <div className="min-w-0">
               <h1 className="text-2xl font-semibold text-zinc-900 truncate">{dr.job_title}</h1>
               <div className="flex items-center gap-2 mt-1 text-sm text-zinc-500 flex-wrap">
+                {dr.priority === 'high' && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 ring-1 ring-rose-200 px-1.5 py-0.5 rounded">
+                    <span className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-rose-500 text-white text-[9px] font-bold">!</span>
+                    High priority
+                  </span>
+                )}
                 <span className="font-medium text-zinc-700">{dr.company_name || dr.venue_name || 'No client'}</span>
                 {dr.tricode && <><span className="text-zinc-300">·</span><span className="text-xs font-mono bg-zinc-100 px-1.5 py-0.5 rounded">{dr.tricode}</span></>}
                 {dr.due_date && <><span className="text-zinc-300">·</span><span>Due {formatDate(dr.due_date)}</span></>}
@@ -257,21 +277,41 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   </>
                 )}
               </div>
-              <div className="mt-2">
-                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mr-2">
-                  Internal tag
-                </label>
-                <select
-                  value={dr.internal_category || ''}
-                  onChange={(e) => setInternalCategory(e.target.value || null)}
-                  className="text-xs rounded ring-1 ring-zinc-200 px-2 py-1 bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
-                  title="Tag this as non-billable internal work for hours tracking"
-                >
-                  <option value="">Client work (default)</option>
-                  {INTERNAL_CATEGORIES.map((c) => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <div>
+                  <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mr-2">
+                    Internal tag
+                  </label>
+                  <select
+                    value={dr.internal_category || ''}
+                    onChange={(e) => setInternalCategory(e.target.value || null)}
+                    className="text-xs rounded ring-1 ring-zinc-200 px-2 py-1 bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+                    title="Tag this as non-billable internal work for hours tracking"
+                  >
+                    <option value="">Client work (default)</option>
+                    {INTERNAL_CATEGORIES.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mr-2">
+                    Priority
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPriority(dr.priority === 'high' ? null : 'high')}
+                    className={
+                      'text-xs rounded px-2 py-1 ring-1 transition-colors ' +
+                      (dr.priority === 'high'
+                        ? 'bg-rose-500 text-white ring-rose-500 hover:bg-rose-600'
+                        : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-50')
+                    }
+                    title="Mark high priority — bumps this request to the top of the designer's list"
+                  >
+                    {dr.priority === 'high' ? '! High priority' : 'Set high priority'}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
