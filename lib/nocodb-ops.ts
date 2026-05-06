@@ -141,7 +141,10 @@ export const NocoOps = {
     if (opts.sort) qs.set('sort', opts.sort)
     if (opts.fields) qs.set('fields', opts.fields)
     if (opts.viewId) qs.set('viewId', opts.viewId)
-    qs.set('limit', String(Math.min(opts.limit ?? 50, 200)))
+    // NocoDB v2 caps a single request at ~1000 rows. Defaults to 50 if the
+    // caller doesn't say. Was previously clamped to 200 (legacy from the
+    // walkthrough form's dropdown loaders); the DataGrid pages need 500+.
+    qs.set('limit', String(Math.min(opts.limit ?? 50, 1000)))
     if (opts.offset != null) qs.set('offset', String(opts.offset))
     const r = await noco<{ list: Record<string, unknown>[]; pageInfo: any }>(
       `/api/v2/tables/${tableId}/records?${qs.toString()}`
