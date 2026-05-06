@@ -49,6 +49,40 @@ export async function GET(request: NextRequest, { params }: { params: { tableId:
   }
 }
 
+export async function POST(request: NextRequest, { params }: { params: { tableId: string } }) {
+  const user = await getAuthUser(request)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!NocoOps.configured()) return NextResponse.json({ error: 'NocoDB not configured' }, { status: 500 })
+
+  // Body is the field map for the new row. Empty body OK — creates a blank
+  // row that the caller (the DataGrid Add-row button) immediately opens in
+  // the drawer for editing.
+  let fields: Record<string, unknown> = {}
+  try {
+    const text = await request.text()
+    if (text) fields = JSON.parse(text) || {}
+  } catch {}
+
+  try {
+    const created = await NocoOps.createRecords(params.tableId, [fields])
+    const newId = created[0]?.Id
+    if (newId == null) return NextResponse.json({ error: 'create returned no id' }, { status: 502 })
+    // Re-fetch the row so the caller gets the reshaped record back (with
+    // CreatedAt, default values, etc).
+    const meta = await NocoOps.getTable(params.tableId) as { columns: any[] }
+    const { records } = await NocoOps.listRecords(params.tableId, {
+      where: `(Id,eq,${newId})`,
+      limit: 1,
+    })
+    const { reshapeRecord } = await import('@/lib/nocodb-schema')
+    const row = records[0] ? reshapeRecord(records[0] as any, meta.columns) : { id: String(newId) }
+    return NextResponse.json({ ok: true, row })
+  } catch (err) {
+    console.error('[noco/[tableId] POST]', err)
+    return NextResponse.json({ error: 'NocoDB create failed' }, { status: 502 })
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: { tableId: string } }) {
   const user = await getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

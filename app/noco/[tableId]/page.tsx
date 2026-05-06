@@ -57,6 +57,19 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     setRows(prev => prev.map(p => (p.id === rowId ? { ...p, [columnId]: value } : p)))
   }
 
+  const addRow = async () => {
+    const r = await fetch(`/api/noco/${params.tableId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    if (!r.ok) throw new Error('create failed')
+    const d = await r.json()
+    const created = d.row || { id: String(Date.now()) }
+    setRows(prev => [created, ...prev])
+    return created
+  }
+
   // Auto-derive a sensible default view set: All, plus group-by-status if a
   // singleSelect with a "Status" or "Result" column exists, plus calendar
   // if a date column exists.
@@ -116,6 +129,7 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           views={VIEWS}
           persistKey={`noco:${params.tableId}`}
           onUpdateCell={updateCell}
+          onAddRow={addRow}
           onOpenRecord={r => setDrawerRow(r)}
           emptyText={loading ? 'Loading…' : 'No records.'}
         />
