@@ -64,6 +64,13 @@ export interface ViewConfig<TRow = any> {
   sort?: { id: string; desc?: boolean }[]
   // Column ids hidden in this view.
   hiddenColumns?: string[]
+  // Group rows by this column id. Renders a sticky group header above each
+  // bucket (Airtable signature). Collapsible. Honors `sort` *within* the
+  // group; the group order itself follows the column's natural ordering.
+  groupBy?: string
+  // Lock the view — UI hint that filters/sort/columns can't be changed by
+  // non-admins. Surfaces a lock icon on the tab. Per Nick 5/4.
+  locked?: boolean
 }
 
 export interface DataGridProps<TRow extends { id: string }> {

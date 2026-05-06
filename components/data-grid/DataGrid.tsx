@@ -94,8 +94,49 @@ export function DataGrid<TRow extends { id: string }>({
 
   const rowModel = table.getRowModel()
   const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  // Group-by: build a flat virtualization list of header / data / spacer items.
+  // When groupBy is unset we treat every row as its own (un-grouped) item, so
+  // the rest of the render code stays uniform.
+  type FlatItem =
+    | { kind: 'header'; key: string; label: string; count: number; collapsed: boolean }
+    | { kind: 'row'; key: string; rowIndex: number; groupKey: string | null }
+
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  const groupedItems = useMemo<FlatItem[]>(() => {
+    const groupColId = activeView?.groupBy
+    if (!groupColId) {
+      return rowModel.rows.map((_, idx) => ({ kind: 'row', key: `r-${idx}`, rowIndex: idx, groupKey: null } as FlatItem))
+    }
+    const groupCol = columns.find(c => c.id === groupColId)
+    const buckets = new Map<string, number[]>()
+    rowModel.rows.forEach((row, idx) => {
+      const raw = (row.original as any)[groupColId]
+      const key = raw == null || raw === '' ? '__empty__' : String(raw)
+      if (!buckets.has(key)) buckets.set(key, [])
+      buckets.get(key)!.push(idx)
+    })
+    const out: FlatItem[] = []
+    Array.from(buckets.entries()).forEach(([key, idxs]) => {
+      const label = key === '__empty__' ? `(no ${groupCol?.header || groupColId})` : (
+        // If grouping by a singleSelect, render the option label instead of raw value.
+        groupCol?.type === 'singleSelect'
+          ? (groupCol.options?.find(o => o.value === key)?.label || key)
+          : key
+      )
+      const collapsed = collapsedGroups.has(key)
+      out.push({ kind: 'header', key, label, count: idxs.length, collapsed })
+      if (!collapsed) for (const ri of idxs) out.push({ kind: 'row', key: `r-${ri}`, rowIndex: ri, groupKey: key })
+    })
+    return out
+  }, [rowModel.rows, activeView, columns, collapsedGroups])
+
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+
   const virtualizer = useVirtualizer({
-    count: rowModel.rows.length,
+    count: groupedItems.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
@@ -159,6 +200,11 @@ export function DataGrid<TRow extends { id: string }>({
               >
                 <span className="text-[11px] leading-none opacity-70">{viewIcon(v.type)}</span>
                 <span>{v.name}</span>
+                {v.locked && (
+                  <svg className="h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-label="Locked">
+                    <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                )}
                 {!supported && (
                   <span className="ml-1 text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-700">soon</span>
                 )}
@@ -234,13 +280,36 @@ export function DataGrid<TRow extends { id: string }>({
             <div className="px-5 py-16 text-center text-sm text-zinc-400">{emptyText}</div>
           ) : (
             <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-              {virtualizer.getVirtualItems().map(vRow => {
-                const row = rowModel.rows[vRow.index]
+              {virtualizer.getVirtualItems().map(vItem => {
+                const item = groupedItems[vItem.index]
+
+                if (item.kind === 'header') {
+                  return (
+                    <div
+                      key={`g-${item.key}`}
+                      className="absolute left-0 flex items-center bg-zinc-50/95 border-b border-zinc-200 cursor-pointer select-none hover:bg-zinc-100"
+                      style={{ top: vItem.start, height: ROW_HEIGHT, width: totalWidth }}
+                      onClick={() => toggleGroup(item.key)}
+                    >
+                      <div className="sticky left-0 z-10 w-14 flex-shrink-0 flex items-center justify-center bg-zinc-50/95">
+                        <svg className={'h-3 w-3 text-zinc-500 transition-transform ' + (item.collapsed ? '-rotate-90' : '')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </div>
+                      <div className="sticky left-14 z-10 px-2 flex items-center gap-2 bg-zinc-50/95">
+                        <span className="text-[12px] font-semibold text-zinc-700 truncate">{item.label}</span>
+                        <span className="text-[11px] text-zinc-400 tabular-nums">{item.count}</span>
+                      </div>
+                    </div>
+                  )
+                }
+
+                const row = rowModel.rows[item.rowIndex]
                 return (
                   <div
                     key={row.id}
                     className="absolute left-0 flex border-b border-zinc-100 bg-white hover:bg-zinc-50 group"
-                    style={{ top: vRow.start, height: ROW_HEIGHT, width: totalWidth }}
+                    style={{ top: vItem.start, height: ROW_HEIGHT, width: totalWidth }}
                   >
                     {/* Row handle — Airtable-style, expand on hover */}
                     <div className="sticky left-0 z-10 w-14 flex-shrink-0 flex items-center justify-center bg-white group-hover:bg-zinc-50 border-r border-zinc-100 text-[10px] text-zinc-400">
@@ -253,7 +322,7 @@ export function DataGrid<TRow extends { id: string }>({
                           <path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4" />
                         </svg>
                       </button>
-                      <span className="opacity-100 group-hover:opacity-0 transition-opacity tabular-nums">{vRow.index + 1}</span>
+                      <span className="opacity-100 group-hover:opacity-0 transition-opacity tabular-nums">{item.rowIndex + 1}</span>
                     </div>
                     {row.getVisibleCells().map(cell => {
                       const cfg = (cell.column.columnDef.meta as any)?.config as ColumnConfig

@@ -35,9 +35,11 @@ const RESULT_OPTIONS = [
 // Today's Walkthroughs / All / Calendar.
 const today = () => new Date().toISOString().slice(0, 10)
 const VIEWS: ViewConfig<Walk>[] = [
-  { id: 'today', name: "Today's Walkthroughs", type: 'grid', filter: r => r.log_date === today(), sort: [{ id: 'log_date', desc: true }] },
-  { id: 'all',   name: 'All',                  type: 'grid', sort: [{ id: 'log_date', desc: true }] },
-  { id: 'cal',   name: 'Calendar',             type: 'calendar' },
+  { id: 'today',     name: "Today's Walkthroughs", type: 'grid', filter: r => r.log_date === today(), sort: [{ id: 'log_date', desc: true }], locked: true },
+  { id: 'all',       name: 'All',                  type: 'grid', sort: [{ id: 'log_date', desc: true }] },
+  { id: 'by-venue',  name: 'Group by Venue',       type: 'grid', groupBy: 'venue_name', sort: [{ id: 'log_date', desc: true }] },
+  { id: 'by-result', name: 'Group by Result',      type: 'grid', groupBy: 'result',     sort: [{ id: 'log_date', desc: true }] },
+  { id: 'cal',       name: 'Calendar',             type: 'calendar' },
 ]
 
 const COLUMNS: ColumnConfig<Walk>[] = [

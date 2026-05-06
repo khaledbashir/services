@@ -50,12 +50,14 @@ const ORIENTATION_OPTIONS = [
   { value: 'PORTRAIT', label: 'Portrait', color: 'cyan' },
 ]
 
-// Mirrors Nick's Airtable Inventory Tracking views.
+// Mirrors Nick's Airtable Inventory Tracking views — group-by replicated
+// natively (Nick uses these daily).
 const VIEWS: ViewConfig<InventoryItem>[] = [
   { id: 'overview',  name: 'Inventory Overview', type: 'grid' },
   { id: 'low',       name: 'Below threshold',    type: 'grid', filter: r => (r.quantity ?? 0) <= (r.threshold_low ?? 5) },
-  { id: 'by-make',   name: 'Group by Make',      type: 'grid', sort: [{ id: 'manufacturer' }, { id: 'item_name' }] },
-  { id: 'by-type',   name: 'Group by Type',      type: 'grid', sort: [{ id: 'display_type' }, { id: 'item_name' }] },
+  { id: 'by-venue',  name: 'Group by Venue',     type: 'grid', groupBy: 'venue_name', sort: [{ id: 'item_name' }] },
+  { id: 'by-make',   name: 'Group by Make',      type: 'grid', groupBy: 'manufacturer', sort: [{ id: 'item_name' }] },
+  { id: 'by-type',   name: 'Group by Type',      type: 'grid', groupBy: 'display_type', sort: [{ id: 'item_name' }] },
   { id: 'gallery',   name: 'Product Gallery',    type: 'gallery' },
 ]
 
