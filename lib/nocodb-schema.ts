@@ -127,6 +127,12 @@ export function buildColumnConfig(meta: NocoTableMeta): ColumnConfig<any>[] {
         color: hueFor(o.color, i),
       }))
     }
+    if ((c.uidt === 'Links' || c.uidt === 'LinkToAnotherRecord') && c.colOptions) {
+      const refTable = c.colOptions.fk_related_model_id
+        || c.colOptions.fk_target_table_id
+        || c.colOptions.related_table_id
+      if (refTable) config.linkedTableId = String(refTable)
+    }
     return config
   })
 }

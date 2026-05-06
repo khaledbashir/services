@@ -49,6 +49,9 @@ export interface ColumnConfig<TRow = any> {
   resolveLink?: (q: string) => Promise<LinkedRef[]>
   // Coerce cell value for PATCH body. Default: { [id]: value }.
   toPatch?: (value: any) => Record<string, any>
+  // For linkedRecord columns: NocoDB table id of the related table. When set,
+  // bubble clicks navigate to /noco/<linkedTableId>.
+  linkedTableId?: string
 }
 
 export interface ViewConfig<TRow = any> {

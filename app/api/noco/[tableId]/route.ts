@@ -83,6 +83,24 @@ export async function POST(request: NextRequest, { params }: { params: { tableId
   }
 }
 
+export async function DELETE(request: NextRequest, { params }: { params: { tableId: string } }) {
+  const user = await getAuthUser(request)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!NocoOps.configured()) return NextResponse.json({ error: 'NocoDB not configured' }, { status: 500 })
+
+  const body = await request.json().catch(() => ({}))
+  const id = body?.id
+  if (id == null) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  try {
+    await NocoOps.deleteRecords(params.tableId, [Number(id)])
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[noco/[tableId] DELETE]', err)
+    return NextResponse.json({ error: 'NocoDB delete failed' }, { status: 502 })
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: { tableId: string } }) {
   const user = await getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

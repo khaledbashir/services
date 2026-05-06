@@ -70,6 +70,16 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     return created
   }
 
+  const deleteRow = async (rowId: string) => {
+    const r = await fetch(`/api/noco/${params.tableId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: rowId }),
+    })
+    if (!r.ok) throw new Error('delete failed')
+    setRows(prev => prev.filter(p => p.id !== rowId))
+  }
+
   // Auto-derive a sensible default view set: All, plus group-by-status if a
   // singleSelect with a "Status" or "Result" column exists, plus calendar
   // if a date column exists.
@@ -140,6 +150,7 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           columns={columns}
           onClose={() => setDrawerRow(null)}
           onUpdate={updateCell}
+          onDelete={deleteRow}
           title={r => {
             const primary = columns.find(c => c.primary)
             return (primary && r[primary.id]) ? String(r[primary.id]) : tableTitle

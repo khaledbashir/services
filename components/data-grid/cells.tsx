@@ -350,24 +350,41 @@ function AttachmentCell({ value }: CellProps) {
   )
 }
 
-function LinkedRecordCell({ value }: CellProps) {
+function LinkedRecordCell({ col, value }: CellProps) {
   const arr: LinkedRef[] = Array.isArray(value) ? value : value ? [value] : []
   if (!arr.length) return <div className={CELL_CLASS + ' text-zinc-300'}>—</div>
+  // When the column knows its target table, bubbles become anchors that
+  // navigate to that table's grid. Stops the row-click from also opening
+  // the host record's drawer.
+  const renderBubble = (r: LinkedRef) => {
+    const cls = `inline-flex items-center gap-1 max-w-[140px] truncate rounded-md border px-1.5 py-0.5 text-[11.5px] ${pillClass(r.hue)}`
+    const inner = (
+      <>
+        {r.thumbnail && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={r.thumbnail} alt="" className="h-3.5 w-3.5 rounded object-cover flex-shrink-0" />
+        )}
+        <span className="truncate">{r.label}</span>
+      </>
+    )
+    if (col.linkedTableId) {
+      return (
+        <a
+          key={r.id}
+          href={`/noco/${col.linkedTableId}`}
+          onClick={e => e.stopPropagation()}
+          className={cls + ' hover:ring-2 hover:ring-[#0A52EF]/40'}
+          title={`Open ${r.label} in linked table`}
+        >
+          {inner}
+        </a>
+      )
+    }
+    return <span key={r.id} className={cls} title={r.label}>{inner}</span>
+  }
   return (
     <div className="h-full w-full px-1.5 flex items-center gap-1 overflow-hidden">
-      {arr.slice(0, 3).map(r => (
-        <span
-          key={r.id}
-          className={`inline-flex items-center gap-1 max-w-[140px] truncate rounded-md border px-1.5 py-0.5 text-[11.5px] ${pillClass(r.hue)}`}
-          title={r.label}
-        >
-          {r.thumbnail && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={r.thumbnail} alt="" className="h-3.5 w-3.5 rounded object-cover flex-shrink-0" />
-          )}
-          <span className="truncate">{r.label}</span>
-        </span>
-      ))}
+      {arr.slice(0, 3).map(renderBubble)}
       {arr.length > 3 && <span className="text-[10px] text-zinc-500">+{arr.length - 3}</span>}
     </div>
   )
