@@ -26,6 +26,172 @@ import { KanbanView } from './KanbanView'
 const ROW_HEIGHT = 32
 const HEADER_HEIGHT = 36
 
+interface ColumnHeaderMenuProps {
+  column: ColumnConfig
+  onClose: () => void
+  onSortAsc: () => void
+  onSortDesc: () => void
+  onClearSort: () => void
+  onGroupBy: () => void
+  onClearGroupBy: () => void
+  groupActive: boolean
+  onHide: () => void
+  currentFilter: { op: string; value: any } | null
+  onSetFilter: (f: { op: string; value: any } | null) => void
+}
+
+function ColumnHeaderMenu({
+  column, onClose, onSortAsc, onSortDesc, onClearSort,
+  onGroupBy, onClearGroupBy, groupActive, onHide,
+  currentFilter, onSetFilter,
+}: ColumnHeaderMenuProps) {
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const [op, setOp] = useState(currentFilter?.op || defaultOpFor(column.type))
+  const [value, setValue] = useState<any>(currentFilter?.value ?? '')
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) onClose() }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [onClose])
+
+  const operators = operatorsFor(column.type)
+  const needsValue = !['empty', 'notempty', 'checked', 'notchecked'].includes(op)
+  const apply = () => {
+    if (!needsValue) onSetFilter({ op, value: null })
+    else if (value === '' || value == null) onSetFilter(null)
+    else onSetFilter({ op, value })
+    onClose()
+  }
+  const isNumeric = column.type === 'number'
+  const isDate = column.type === 'date' || column.type === 'dateTime'
+
+  return (
+    <div
+      ref={wrapRef}
+      className="absolute top-full right-0 mt-1 z-50 bg-white border border-zinc-200 rounded-lg shadow-xl py-1 min-w-[260px]"
+      onClick={e => e.stopPropagation()}
+    >
+      <MenuButton onClick={onSortAsc} icon="↑">Sort {isNumeric || isDate ? 'ascending' : 'A → Z'}</MenuButton>
+      <MenuButton onClick={onSortDesc} icon="↓">Sort {isNumeric || isDate ? 'descending' : 'Z → A'}</MenuButton>
+      <MenuButton onClick={onClearSort}>Clear sort</MenuButton>
+      <Divider />
+      {groupActive ? (
+        <MenuButton onClick={onClearGroupBy}>Ungroup</MenuButton>
+      ) : (
+        <MenuButton onClick={onGroupBy}>Group by this field</MenuButton>
+      )}
+      <MenuButton onClick={onHide}>Hide field</MenuButton>
+      {operators.length > 0 && (
+        <>
+          <Divider />
+          <div className="px-3 py-2 space-y-1.5">
+            <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-500 font-semibold">Filter</div>
+            <div className="flex gap-1.5">
+              <select
+                value={op}
+                onChange={e => setOp(e.target.value)}
+                className="flex-1 px-2 py-1 border border-zinc-200 rounded text-[11.5px] bg-white"
+              >
+                {operators.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+              </select>
+            </div>
+            {needsValue && (
+              column.type === 'singleSelect' && column.options ? (
+                <select
+                  value={value ?? ''}
+                  onChange={e => setValue(e.target.value)}
+                  className="w-full px-2 py-1 border border-zinc-200 rounded text-[11.5px] bg-white"
+                >
+                  <option value="">—</option>
+                  {column.options.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                </select>
+              ) : (
+                <input
+                  type={isDate ? 'date' : isNumeric ? 'number' : 'text'}
+                  value={value ?? ''}
+                  onChange={e => setValue(e.target.value)}
+                  placeholder="value"
+                  className="w-full px-2 py-1 border border-zinc-200 rounded text-[11.5px]"
+                />
+              )
+            )}
+            <div className="flex gap-1.5 pt-1">
+              <button onClick={apply} className="flex-1 px-2 py-1 bg-[#0A52EF] text-white rounded text-[11px] font-medium hover:bg-[#0840C0]">
+                Apply
+              </button>
+              {currentFilter && (
+                <button onClick={() => { onSetFilter(null); onClose() }} className="px-2 py-1 border border-zinc-200 rounded text-[11px] text-zinc-600 hover:bg-zinc-50">
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function MenuButton({ onClick, icon, children }: { onClick: () => void; icon?: string; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className="w-full text-left px-3 py-1.5 text-[12.5px] hover:bg-zinc-50 flex items-center gap-2">
+      {icon && <span className="text-[10px] text-zinc-400 w-3 inline-block">{icon}</span>}
+      <span>{children}</span>
+    </button>
+  )
+}
+
+function Divider() {
+  return <div className="my-1 border-t border-zinc-100" />
+}
+
+function defaultOpFor(type: string): string {
+  if (type === 'number') return 'eq'
+  if (type === 'date' || type === 'dateTime') return 'is'
+  if (type === 'checkbox') return 'checked'
+  if (type === 'singleSelect') return 'eq'
+  return 'contains'
+}
+
+function operatorsFor(type: string): { value: string; label: string }[] {
+  switch (type) {
+    case 'number':
+      return [
+        { value: 'eq', label: '=' }, { value: 'neq', label: '≠' },
+        { value: 'gt', label: '>' }, { value: 'gte', label: '≥' },
+        { value: 'lt', label: '<' }, { value: 'lte', label: '≤' },
+        { value: 'empty', label: 'is empty' }, { value: 'notempty', label: 'is not empty' },
+      ]
+    case 'date':
+    case 'dateTime':
+      return [
+        { value: 'is', label: 'is' },
+        { value: 'before', label: 'before' },
+        { value: 'after', label: 'after' },
+        { value: 'empty', label: 'is empty' }, { value: 'notempty', label: 'is not empty' },
+      ]
+    case 'checkbox':
+      return [
+        { value: 'checked', label: 'is checked' }, { value: 'notchecked', label: 'is not checked' },
+      ]
+    case 'singleSelect':
+      return [
+        { value: 'eq', label: 'is' }, { value: 'neq', label: 'is not' },
+        { value: 'empty', label: 'is empty' }, { value: 'notempty', label: 'is not empty' },
+      ]
+    case 'attachment':
+    case 'linkedRecord':
+      return []
+    default:
+      return [
+        { value: 'contains', label: 'contains' },
+        { value: 'eq', label: 'is' }, { value: 'neq', label: 'is not' },
+        { value: 'empty', label: 'is empty' }, { value: 'notempty', label: 'is not empty' },
+      ]
+  }
+}
+
 export function DataGrid<TRow extends { id: string }>({
   columns,
   rows,
@@ -42,6 +208,12 @@ export function DataGrid<TRow extends { id: string }>({
   const [globalFilter, setGlobalFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [activeViewId, setActiveViewIdRaw] = useState<string | null>(views?.[0]?.id ?? null)
+  // Per-column user-driven controls: header menu open state, hidden columns
+  // (in addition to view-config-driven hides), and per-column filter rules.
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
+  const [userHidden, setUserHidden] = useState<Set<string>>(new Set())
+  const [columnFilters, setColumnFilters] = useState<Record<string, { op: string; value: any }>>({})
+  const [userGroupBy, setUserGroupBy] = useState<string | null>(null)
 
   // Hydrate the active view from /api/preferences once on mount, then write
   // back on each user-driven view change. Falls back silently to default if
@@ -86,14 +258,47 @@ export function DataGrid<TRow extends { id: string }>({
   }, [activeView])
 
   const columnVisibility = useMemo<VisibilityState>(() => {
-    if (!activeView?.hiddenColumns?.length) return {}
-    return Object.fromEntries(activeView.hiddenColumns.map(id => [id, false]))
-  }, [activeView])
+    const v: VisibilityState = {}
+    if (activeView?.hiddenColumns?.length) {
+      for (const id of activeView.hiddenColumns) v[id] = false
+    }
+    for (const id of userHidden) v[id] = false
+    return v
+  }, [activeView, userHidden])
+
+  // Apply per-column user filters on top of the active view's filter. Each
+  // entry in columnFilters maps column id → { op, value }. Type-aware operators.
+  const matchesColFilter = (row: any, colId: string, op: string, val: any): boolean => {
+    const raw = row[colId]
+    switch (op) {
+      case 'contains':    return raw != null && String(raw).toLowerCase().includes(String(val).toLowerCase())
+      case 'eq':          return raw == val || (Array.isArray(raw) ? raw.includes(val) : String(raw ?? '') === String(val ?? ''))
+      case 'neq':         return !(raw == val || (Array.isArray(raw) ? raw.includes(val) : String(raw ?? '') === String(val ?? '')))
+      case 'empty':       return raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0)
+      case 'notempty':    return !(raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0))
+      case 'gt':          return raw != null && Number(raw) > Number(val)
+      case 'lt':          return raw != null && Number(raw) < Number(val)
+      case 'gte':         return raw != null && Number(raw) >= Number(val)
+      case 'lte':         return raw != null && Number(raw) <= Number(val)
+      case 'before':      return raw != null && String(raw).slice(0, 10) < String(val)
+      case 'after':       return raw != null && String(raw).slice(0, 10) > String(val)
+      case 'is':          return raw != null && String(raw).slice(0, 10) === String(val)
+      case 'checked':     return !!raw
+      case 'notchecked':  return !raw
+      default:            return true
+    }
+  }
 
   const filteredRows = useMemo(() => {
-    if (!activeView?.filter) return rows
-    return rows.filter(activeView.filter)
-  }, [rows, activeView])
+    let out = rows
+    if (activeView?.filter) out = out.filter(activeView.filter)
+    const filterEntries = Object.entries(columnFilters)
+    if (filterEntries.length > 0) {
+      out = out.filter(r => filterEntries.every(([colId, f]) => matchesColFilter(r, colId, f.op, f.value)))
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, activeView, columnFilters])
 
   const mergedRows = useMemo(() => {
     if (!Object.keys(overrides).length) return filteredRows
@@ -138,7 +343,7 @@ export function DataGrid<TRow extends { id: string }>({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const groupedItems = useMemo<FlatItem[]>(() => {
-    const groupColId = activeView?.groupBy
+    const groupColId = userGroupBy ?? activeView?.groupBy
     if (!groupColId) {
       return rowModel.rows.map((_, idx) => ({ kind: 'row', key: `r-${idx}`, rowIndex: idx, groupKey: null } as FlatItem))
     }
@@ -163,7 +368,7 @@ export function DataGrid<TRow extends { id: string }>({
       if (!collapsed) for (const ri of idxs) out.push({ kind: 'row', key: `r-${ri}`, rowIndex: ri, groupKey: key })
     })
     return out
-  }, [rowModel.rows, activeView, columns, collapsedGroups])
+  }, [rowModel.rows, activeView, columns, collapsedGroups, userGroupBy])
 
   const toggleGroup = (key: string) =>
     setCollapsedGroups(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -262,6 +467,15 @@ export function DataGrid<TRow extends { id: string }>({
           </svg>
         </div>
         <div className="flex-1" />
+        {userHidden.size > 0 && (
+          <button
+            onClick={() => setUserHidden(new Set())}
+            className="px-2 py-1 text-[11px] text-zinc-500 hover:text-zinc-800 border border-zinc-200 rounded-md"
+            title="Restore hidden columns"
+          >
+            Show {userHidden.size} hidden
+          </button>
+        )}
         <span className="text-[11px] text-zinc-500 tabular-nums">{rowModel.rows.length} {rowModel.rows.length === 1 ? 'record' : 'records'}</span>
         {onAddRow && (
           <button
@@ -274,6 +488,47 @@ export function DataGrid<TRow extends { id: string }>({
           </button>
         )}
       </div>
+
+      {/* Active filter chips — render below the toolbar when any column
+          filter is set. Click ✕ to remove. */}
+      {Object.keys(columnFilters).length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-zinc-200 bg-zinc-50/40">
+          <span className="text-[10px] uppercase tracking-[0.1em] font-semibold text-zinc-500 mr-1">Filters</span>
+          {Object.entries(columnFilters).map(([colId, f]) => {
+            const col = columns.find(c => c.id === colId)
+            if (!col) return null
+            const opLabel = (operatorsFor(col.type).find(o => o.value === f.op)?.label) || f.op
+            const valueLabel = ['empty', 'notempty', 'checked', 'notchecked'].includes(f.op)
+              ? ''
+              : (col.type === 'singleSelect'
+                  ? (col.options?.find(o => o.value === f.value)?.label ?? String(f.value))
+                  : String(f.value))
+            return (
+              <span
+                key={colId}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white border border-[#0A52EF]/30 rounded-md text-[11px]"
+              >
+                <span className="font-medium text-zinc-800">{col.header}</span>
+                <span className="text-zinc-500">{opLabel}</span>
+                {valueLabel && <span className="font-medium text-[#0A52EF]">{valueLabel}</span>}
+                <button
+                  onClick={() => setColumnFilters(prev => { const n = { ...prev }; delete n[colId]; return n })}
+                  className="text-zinc-400 hover:text-rose-600"
+                  aria-label="Clear filter"
+                >
+                  ×
+                </button>
+              </span>
+            )
+          })}
+          <button
+            onClick={() => setColumnFilters({})}
+            className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-800 underline"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Non-grid view types replace the grid body entirely; toolbar + tabs
           stay in place. */}
@@ -332,20 +587,58 @@ export function DataGrid<TRow extends { id: string }>({
             {table.getFlatHeaders().map(h => {
               const cfg = (h.column.columnDef.meta as any)?.config as ColumnConfig
               const sort = h.column.getIsSorted()
+              const hasFilter = !!columnFilters[cfg.id]
               return (
                 <div
                   key={h.id}
                   className={
-                    'flex items-center px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 border-r border-zinc-200 ' +
-                    (cfg?.primary ? 'sticky left-14 z-20 bg-zinc-50 ' : '') +
-                    (h.column.getCanSort() ? 'cursor-pointer select-none hover:text-zinc-800' : '')
+                    'flex items-center px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 border-r border-zinc-200 group/hdr relative ' +
+                    (cfg?.primary ? 'sticky left-14 z-20 bg-zinc-50 ' : '')
                   }
                   style={{ width: h.getSize(), minWidth: h.getSize() }}
-                  onClick={h.column.getToggleSortingHandler()}
                 >
-                  <span className="truncate">{cfg?.header ?? h.id}</span>
-                  {sort === 'asc' && <span className="ml-1">↑</span>}
-                  {sort === 'desc' && <span className="ml-1">↓</span>}
+                  <button
+                    type="button"
+                    onClick={h.column.getToggleSortingHandler()}
+                    className={'flex-1 flex items-center gap-1 truncate text-left ' + (h.column.getCanSort() ? 'cursor-pointer hover:text-zinc-800' : '')}
+                  >
+                    <span className="truncate">{cfg?.header ?? h.id}</span>
+                    {sort === 'asc' && <span>↑</span>}
+                    {sort === 'desc' && <span>↓</span>}
+                    {hasFilter && <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-[#0A52EF]" title="Filter active" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setMenuOpenFor(prev => prev === cfg.id ? null : cfg.id) }}
+                    className="opacity-0 group-hover/hdr:opacity-100 ml-1 h-5 w-5 inline-flex items-center justify-center rounded text-zinc-500 hover:bg-zinc-200 transition-opacity"
+                    title="Column menu"
+                  >
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" />
+                    </svg>
+                  </button>
+                  {menuOpenFor === cfg.id && (
+                    <ColumnHeaderMenu
+                      column={cfg}
+                      onClose={() => setMenuOpenFor(null)}
+                      onSortAsc={() => { setSorting([{ id: cfg.id, desc: false }]); setMenuOpenFor(null) }}
+                      onSortDesc={() => { setSorting([{ id: cfg.id, desc: true }]); setMenuOpenFor(null) }}
+                      onClearSort={() => { setSorting([]); setMenuOpenFor(null) }}
+                      onGroupBy={() => { setUserGroupBy(cfg.id); setMenuOpenFor(null) }}
+                      onClearGroupBy={() => { setUserGroupBy(null); setMenuOpenFor(null) }}
+                      groupActive={(userGroupBy ?? activeView?.groupBy) === cfg.id}
+                      onHide={() => { setUserHidden(s => new Set(s).add(cfg.id)); setMenuOpenFor(null) }}
+                      currentFilter={columnFilters[cfg.id] || null}
+                      onSetFilter={(f) => {
+                        setColumnFilters(prev => {
+                          const n = { ...prev }
+                          if (f == null) delete n[cfg.id]
+                          else n[cfg.id] = f
+                          return n
+                        })
+                      }}
+                    />
+                  )}
                 </div>
               )
             })}
