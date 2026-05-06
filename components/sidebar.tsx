@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo, ReactNode } from 'react'
 import { ThemeToggle } from './theme-toggle'
 
-type Role = 'admin' | 'tech_support' | 'manager' | 'technician' | 'any'
+type Role = 'admin' | 'tech_support' | 'manager' | 'technician' | 'designer' | 'design_contractor' | 'any'
 
 interface NavLink {
   href: string
@@ -130,14 +130,36 @@ export function Sidebar() {
   const isTechSupport = userRole === 'tech_support' || isAdmin
   const isManager = userRole === 'manager' || isTechSupport
   const isTechnician = userRole === 'technician'
+  const isDesigner = userRole === 'designer'
+  const isDesignContractor = userRole === 'design_contractor'
 
   const roleAllows = (min?: Role): boolean => {
     if (!min || min === 'any') return true
     if (min === 'admin') return isAdmin
     if (min === 'tech_support') return isTechSupport
     if (min === 'manager') return isManager
-    if (min === 'technician') return isManager || isTechnician
+    // Designer + Design Contractor count as technicians for endpoints that
+    // require 'technician' (read-only design data). Section-level visibility
+    // is gated below — they don't see Support, Field Ops, External, Admin.
+    if (min === 'technician') return isManager || isTechnician || isDesigner || isDesignContractor
+    if (min === 'designer') return isDesigner || isManager
+    if (min === 'design_contractor') return isDesignContractor
     return false
+  }
+
+  // Per Alexis 5/6 — Designer + Design Contractor have curated section
+  // visibility instead of the full hierarchy:
+  //   Designer: Events & Schedule + Design & Creative only.
+  //   Design Contractor: Design & Creative only (third-party scope).
+  // Everyone else falls back to the standard role-min check.
+  const sectionVisibleForUser = (section: NavSection): boolean => {
+    if (isDesignContractor) {
+      return section.key === 'design'
+    }
+    if (isDesigner) {
+      return section.key === 'events' || section.key === 'design'
+    }
+    return roleAllows(section.role)
   }
 
   const sections: NavSection[] = useMemo(() => [
@@ -252,7 +274,7 @@ export function Sidebar() {
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
       ],
     },
-  ], [userRole, isTechnician, isAdmin, isTechSupport])
+  ], [userRole, isTechnician, isAdmin, isTechSupport, isDesigner, isDesignContractor])
 
   const isLinkActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + '/') || pathname === href
@@ -287,7 +309,8 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex-1 p-3 overflow-y-auto space-y-0.5">
-        {/* Top-level: Dashboard / My Events */}
+        {/* Top-level link — manager+ → Dashboard, designer/contractor →
+            Design Requests (their primary surface), technician → My Events. */}
         {isManager ? (
           <Link
             href="/dashboard"
@@ -299,6 +322,18 @@ export function Sidebar() {
           >
             <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l9-9 9 9M5 10v10h14V10" /></Icon>
             Dashboard
+          </Link>
+        ) : (isDesigner || isDesignContractor) ? (
+          <Link
+            href="/designs"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${
+              isLinkActive('/designs')
+                ? 'bg-[#0A52EF]/15 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Icon className="h-4 w-4 opacity-70">{IC.creative}</Icon>
+            My Design Queue
           </Link>
         ) : (
           <Link
@@ -314,7 +349,7 @@ export function Sidebar() {
         )}
 
         {sections.map(section => {
-          if (!roleAllows(section.role)) return null
+          if (!sectionVisibleForUser(section)) return null
           const visibleLinks = section.links.filter(l => roleAllows(l.role))
           if (visibleLinks.length === 0) return null
 
@@ -393,7 +428,7 @@ export function Sidebar() {
       </Link>
       <nav className="flex-1 py-3 overflow-y-auto flex flex-col items-center gap-1">
         {sections.map(section => {
-          if (!roleAllows(section.role)) return null
+          if (!sectionVisibleForUser(section)) return null
           const visibleLinks = section.links.filter(l => roleAllows(l.role))
           if (visibleLinks.length === 0) return null
           const containsActive = visibleLinks.some(l => isLinkActive(l.href, l.exact))

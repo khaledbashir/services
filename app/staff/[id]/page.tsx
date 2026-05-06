@@ -357,6 +357,8 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 <select value={editData.role} onChange={e => setEditData({ ...editData, role: e.target.value })}
                   className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none">
                   <option value="technician">Technician</option>
+                  <option value="designer">Designer</option>
+                  <option value="design_contractor">Design Contractor (third-party)</option>
                   <option value="manager">Manager</option>
                   <option value="tech_support">Tech Support</option>
                   <option value="admin">Admin</option>
@@ -489,7 +491,14 @@ export default function StaffDetailPage({ params }: { params: { id: string } }) 
                 <InlineEdit
                   value={staff.role}
                   type="select"
-                  options={[{ value: 'technician', label: 'Technician' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }]}
+                  options={[
+                    { value: 'technician', label: 'Technician' },
+                    { value: 'designer', label: 'Designer' },
+                    { value: 'design_contractor', label: 'Design Contractor' },
+                    { value: 'manager', label: 'Manager' },
+                    { value: 'tech_support', label: 'Tech Support' },
+                    { value: 'admin', label: 'Admin' },
+                  ]}
                   onSave={v => updateStaffField('role', v)}
                   displayClassName={`px-2.5 py-0.5 rounded-full text-xs font-medium ${rc.bg} ${rc.text}`}
                 />

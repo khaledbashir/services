@@ -52,7 +52,12 @@ function LoginForm() {
         })
       }
 
-      const defaultPath = data.user?.role === 'technician' ? '/my-events' : '/dashboard'
+      // Per role: designer + design_contractor → /designs (their queue),
+      // technician → /my-events, everyone else → /dashboard.
+      const role = data.user?.role
+      const defaultPath = (role === 'designer' || role === 'design_contractor')
+        ? '/designs'
+        : role === 'technician' ? '/my-events' : '/dashboard'
       router.push(redirectParam || defaultPath)
     } catch (err) {
       setError('An error occurred')
