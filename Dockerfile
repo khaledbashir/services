@@ -12,6 +12,7 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
 # Copy app source
+ARG SOURCE_CACHE_BUST=2026-05-06-ai-panel-navigation
 COPY . .
 
 # Build Next.js app
