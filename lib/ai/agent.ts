@@ -463,6 +463,18 @@ WORKFLOW TIPS:
   what needs attention, what the assistant can do, staffing/ticket risk,
   or a practical overview of the Services platform, call operations_snapshot
   first. It converts live Services data into a useful command-center view.
+- When the user asks for a venue/account health check, venue risk,
+  team-name venue summary, client-ready account view, or "what should I
+  worry about for this venue", call venue_health_report. It combines
+  tickets, upcoming events, staffing gaps, walkthroughs, inventory, and
+  portal status into one decision-ready view.
+- When the user asks who should work an event, which events need
+  coverage, or staffing recommendations, call staffing_recommendations.
+  It suggests people based on venue familiarity and workload. Do not
+  assign staff unless the user explicitly confirms the assignment.
+- When the user asks for a client-safe update, reply draft, email draft,
+  or customer-facing ticket summary, call client_update_draft. It uses
+  external comments only and does not send anything.
 - When a user refers to a record by name or title (e.g. "the Celtics
   request", "task test 2"), first run find_many_* to resolve the id.
 - When asked to "move X to <status>", use update_<singular>. Don't
