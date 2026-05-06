@@ -71,22 +71,42 @@ const NOCO_FIELD_NAME: Record<string, string> = {
   comments: 'Comments (log issues above)',
 }
 
+const PAGE_SIZE = 500
+
 export default function WalkthroughsPage() {
   const router = useRouter()
   const [rows, setRows] = useState<Walk[]>([])
   const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [drawerRow, setDrawerRow] = useState<Walk | null>(null)
 
   const load = async () => {
     setLoading(true)
-    const r = await fetch('/api/walkthroughs/nocodb?action=list&limit=500')
+    const r = await fetch(`/api/walkthroughs/nocodb?action=list&limit=${PAGE_SIZE}&offset=0`)
     if (r.ok) {
       const d = await r.json()
       setRows(d.walkthroughs || [])
       setTotal(typeof d.total === 'number' ? d.total : null)
     }
     setLoading(false)
+  }
+
+  const loadMore = async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    try {
+      const r = await fetch(`/api/walkthroughs/nocodb?action=list&limit=${PAGE_SIZE}&offset=${rows.length}`)
+      if (!r.ok) throw new Error('load more failed')
+      const d = await r.json()
+      const next = d.walkthroughs || []
+      setRows(prev => {
+        const seen = new Set(prev.map(p => p.id))
+        return [...prev, ...next.filter((n: Walk) => !seen.has(n.id))]
+      })
+      if (typeof d.total === 'number') setTotal(d.total)
+    } catch (e) { console.error('[walkthroughs loadMore]', e) }
+    finally { setLoadingMore(false) }
   }
 
   useEffect(() => { load() }, [])
@@ -131,6 +151,9 @@ export default function WalkthroughsPage() {
           persistKey="walkthroughs"
           onUpdateCell={updateCell}
           onOpenRecord={r => setDrawerRow(r)}
+          hasMore={total != null && rows.length < total}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
           emptyText="No walkthroughs match this view."
         />
 

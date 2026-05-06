@@ -150,12 +150,14 @@ export async function GET(request: NextRequest) {
     if (action === 'list') {
       // List walkthrough records — what /walkthroughs page reads. Joe/Nick's
       // canonical Walkthrough Log lives in NocoDB (5/4 lock); this is the
-      // authoritative source. Default to the 500 most-recent so the grid
-      // loads fast even though the table has 20K+ rows.
+      // authoritative source. Default to 500 / page; infinite scroll on the
+      // grid pages further via offset.
       const limit = Math.min(Number(searchParams.get('limit') || 500), 1000)
+      const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
       const { records, pageInfo } = await NocoOps.listRecords(TABLES.walkthroughLog, {
         sort: '-CreatedAt',
         limit,
+        offset,
       })
       const walkthroughs = records.map((r: any) => {
         const venueLink = Array.isArray(r['Venue']) ? r['Venue'] : []

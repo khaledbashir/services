@@ -108,6 +108,12 @@ export interface DataGridProps<TRow extends { id: string }> {
   // the active view tab per-user via /api/preferences. Use a short slug like
   // "walkthroughs" or "inventory". Without this, view choice is in-session.
   persistKey?: string
+  // Pagination — when `hasMore` is true the grid auto-fetches the next page
+  // as the user scrolls within ~10 rows of the bottom. The page is
+  // responsible for appending to its `rows` array and updating hasMore.
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?: () => Promise<void> | void
 }
 
 // Tailwind-mapped pill colors for select options. Mirrors Airtable's option

@@ -203,6 +203,9 @@ export function DataGrid<TRow extends { id: string }>({
   emptyText = 'No records',
   views,
   persistKey,
+  hasMore,
+  loadingMore,
+  onLoadMore,
 }: DataGridProps<TRow>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -450,6 +453,21 @@ export function DataGrid<TRow extends { id: string }>({
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
   })
+
+  // Infinite scroll: when the last virtualized item is within ~10 rows of the
+  // end, fetch the next page. Guarded by hasMore + loadingMore so we never
+  // call onLoadMore concurrently or after exhausting the source.
+  useEffect(() => {
+    if (!onLoadMore || !hasMore || loadingMore) return
+    const items = virtualizer.getVirtualItems()
+    const last = items[items.length - 1]
+    if (!last) return
+    if (last.index >= groupedItems.length - 10) {
+      const r = onLoadMore()
+      if (r && typeof (r as any).then === 'function') (r as Promise<void>).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualizer.getVirtualItems(), hasMore, loadingMore, groupedItems.length])
 
   const handleSave = async (rowId: string, columnId: string, value: any) => {
     const col = columns.find(c => c.id === columnId)!
@@ -832,6 +850,29 @@ export function DataGrid<TRow extends { id: string }>({
               </span>
               <span>{busy ? 'Adding…' : 'Add record'}</span>
             </button>
+          )}
+
+          {/* Pagination indicator — visible whenever there's more to load.
+              Auto-fetches on scroll-near-bottom; this just gives feedback. */}
+          {hasMore && !loading && (
+            <div
+              className="flex items-center justify-center w-full px-2 py-2 text-[11px] text-zinc-500 border-b border-zinc-100"
+              style={{ width: totalWidth }}
+            >
+              {loadingMore ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.22-8.56" /></svg>
+                  Loading more…
+                </span>
+              ) : (
+                <button
+                  onClick={() => { const r = onLoadMore?.(); if (r && typeof (r as any).then === 'function') (r as Promise<void>).catch(() => {}) }}
+                  className="text-zinc-500 hover:text-[#0A52EF]"
+                >
+                  Scroll for more — or click to load now
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -17,8 +17,10 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
   const [rows, setRows] = useState<any[]>([])
   const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [drawerRow, setDrawerRow] = useState<any | null>(null)
+  const PAGE_SIZE = 500
 
   const load = async () => {
     setLoading(true)
@@ -26,7 +28,7 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
     try {
       const [schemaRes, listRes] = await Promise.all([
         fetch(`/api/noco/${params.tableId}?action=schema`),
-        fetch(`/api/noco/${params.tableId}?action=list&limit=500`),
+        fetch(`/api/noco/${params.tableId}?action=list&limit=${PAGE_SIZE}&offset=0`),
       ])
       if (!schemaRes.ok) throw new Error('schema fetch failed')
       if (!listRes.ok) throw new Error('list fetch failed')
@@ -40,6 +42,28 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMore = async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    try {
+      const r = await fetch(`/api/noco/${params.tableId}?action=list&limit=${PAGE_SIZE}&offset=${rows.length}`)
+      if (!r.ok) throw new Error('load more failed')
+      const d = await r.json()
+      const next = d.items || []
+      // Defensive de-dup on id in case the source overlaps.
+      setRows(prev => {
+        const seen = new Set(prev.map((p: any) => p.id))
+        return [...prev, ...next.filter((n: any) => !seen.has(n.id))]
+      })
+      if (typeof d.total === 'number') setTotal(d.total)
+    } catch (e) {
+      // Silent — the next scroll will retry. Don't spam alerts.
+      console.error('[noco loadMore]', e)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -141,6 +165,9 @@ export default function GenericNocoTablePage({ params }: { params: { tableId: st
           onUpdateCell={updateCell}
           onAddRow={addRow}
           onOpenRecord={r => setDrawerRow(r)}
+          hasMore={total != null && rows.length < total}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
           emptyText={loading ? 'Loading…' : 'No records.'}
         />
 

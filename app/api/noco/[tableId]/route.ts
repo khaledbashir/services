@@ -29,10 +29,12 @@ export async function GET(request: NextRequest, { params }: { params: { tableId:
 
     if (action === 'list') {
       const limit = Math.min(Number(searchParams.get('limit') || 500), 1000)
+      const offset = Math.max(Number(searchParams.get('offset') || 0), 0)
       const meta = await NocoOps.getTable(params.tableId) as { id: string; title: string; columns: NocoColumn[] }
       const { records, pageInfo } = await NocoOps.listRecords(params.tableId, {
         sort: '-CreatedAt',
         limit,
+        offset,
       })
       const items = records.map(r => reshapeRecord(r as any, meta.columns))
       return NextResponse.json({
