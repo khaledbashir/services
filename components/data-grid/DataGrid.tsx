@@ -20,6 +20,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ColumnConfig, DataGridProps } from './types'
 import { GridCell } from './cells'
 import { CalendarView } from './CalendarView'
+import { GalleryView } from './GalleryView'
 
 const ROW_HEIGHT = 32
 const HEADER_HEIGHT = 36
@@ -186,7 +187,7 @@ export function DataGrid<TRow extends { id: string }>({
         <div className="flex items-center gap-1 px-2 pt-2 pb-0 border-b border-zinc-100 bg-zinc-50/40 overflow-x-auto">
           {views.map(v => {
             const active = v.id === activeViewId
-            const supported = !v.type || v.type === 'grid' || v.type === 'calendar'
+            const supported = !v.type || v.type === 'grid' || v.type === 'calendar' || v.type === 'gallery'
             return (
               <button
                 key={v.id}
@@ -243,8 +244,8 @@ export function DataGrid<TRow extends { id: string }>({
         )}
       </div>
 
-      {/* Calendar view — replaces grid body entirely when active. View tabs
-          and toolbar above stay in place. */}
+      {/* Non-grid view types replace the grid body entirely; toolbar + tabs
+          stay in place. */}
       {activeView?.type === 'calendar' ? (() => {
         const dateField = activeView.dateField || columns.find(c => c.type === 'date' || c.type === 'dateTime')?.id
         if (!dateField) {
@@ -262,7 +263,13 @@ export function DataGrid<TRow extends { id: string }>({
             onOpenRecord={onOpenRecord}
           />
         )
-      })() : (
+      })() : activeView?.type === 'gallery' ? (
+        <GalleryView
+          rows={mergedRows}
+          columns={columns}
+          onOpenRecord={onOpenRecord}
+        />
+      ) : (
       <>
       {/* Grid surface */}
       <div ref={scrollRef} className="overflow-auto" style={{ height: 'calc(100vh - 220px)', minHeight: 400 }}>
