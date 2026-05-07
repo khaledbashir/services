@@ -1,7 +1,14 @@
-import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES } from '@/lib/transparency-data'
+import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES, GRAY_AREA_CLAUSES } from '@/lib/transparency-data'
 import WarrantyCountdown from './WarrantyCountdown'
 import CoverageStrip from './CoverageStrip'
 import TransparencyTabs from './TransparencyTabs'
+import StoryHero from './StoryHero'
+import Burndown from './Burndown'
+import ActivityTicker from './ActivityTicker'
+import PlatformBreakdown from './PlatformBreakdown'
+import PrintButton from './PrintButton'
+import GrayAreas from './GrayAreas'
+import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   paid:     { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500',         label: 'Paid' },
@@ -33,23 +40,37 @@ export default async function TransparencyDashboard() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       <div className="max-w-5xl mx-auto px-5 pt-7 pb-12">
 
-        <header className="flex items-center justify-between gap-4 mb-7 flex-wrap">
+        <header className="flex items-center justify-between gap-4 mb-6 flex-wrap">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-8 w-auto dark:hidden" />
+            <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-9 w-auto dark:hidden" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-8 w-auto hidden dark:block" />
-            <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">Service Transparency</span>
+            <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-9 w-auto hidden dark:block" />
+            <div className="border-l border-zinc-300 dark:border-zinc-700 pl-3">
+              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.2em] font-semibold leading-none">
+                Service
+              </div>
+              <div className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
+                Transparency
+              </div>
+            </div>
           </div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Updated {fmtTime(data.generated_at)} · auto-refreshes every minute
+          <div className="flex items-center gap-3" data-no-print="true">
+            <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              live · {fmtTime(data.generated_at)}
+            </span>
+            <PrintButton />
           </div>
         </header>
 
-        <h1 className="text-2xl font-bold tracking-tight mb-1">Platform Support &amp; Maintenance</h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-1">Platform Support &amp; Maintenance</h1>
         <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-6">
           Live status of ANC&apos;s monthly service contract — credit used, warranty in force, and what&apos;s covered.
         </p>
+
+        {/* Hero — auto-narrated month story */}
+        <StoryHero story={data.story} />
 
         {/* Coverage strip — three buckets at a glance, sticky on scroll */}
         <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-zinc-50/85 dark:bg-zinc-950/85 backdrop-blur-md border-b border-zinc-200/50 dark:border-zinc-800/50">
@@ -92,6 +113,12 @@ export default async function TransparencyDashboard() {
               <span>0 hrs</span>
               <span>{meter.cap_hours} hrs cap</span>
             </div>
+
+            <Burndown
+              days={data.coverage.burndown_days}
+              cap={meter.cap_hours}
+              daysInMonth={data.story.days_total}
+            />
           </section>
 
           <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
@@ -186,7 +213,28 @@ export default async function TransparencyDashboard() {
           </section>
         </div>
 
-        {/* Row 3: tabbed views — Overview / Kanban / List / By stakeholder */}
+        {/* Row 3: live activity + per-platform breakdown */}
+        <div className="grid gap-4 md:grid-cols-2 mb-4">
+          <ActivityTicker events={data.activity} />
+          <PlatformBreakdown platforms={data.platforms} />
+        </div>
+
+        {/* Gray Areas — the honest middle */}
+        <div className="mb-4">
+          <GrayAreas
+            clauses={GRAY_AREA_CLAUSES}
+            liveItems={data.triaged_requests
+              .filter((r) => r.classification === 'MIXED' && r.status !== 'shipped' && r.status !== 'cancelled')
+              .map((r) => ({
+                id: r.id,
+                summary: r.summary,
+                requester: r.requester,
+                status: r.status,
+              }))}
+          />
+        </div>
+
+        {/* Row 4: tabbed views — Overview / Kanban / List / By stakeholder */}
         <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
 
         <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-10">

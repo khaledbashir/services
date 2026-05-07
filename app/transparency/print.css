@@ -1,0 +1,46 @@
+@media print {
+  /* Hide tabs, drag handles, footer ornaments */
+  [data-no-print="true"],
+  button[draggable="true"]:not([data-allow-print]) {
+    display: none !important;
+  }
+
+  /* Force light background for print */
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Ensure dashboard fits on letter / A4 */
+  .max-w-5xl {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Drop shadows + transitions */
+  * {
+    box-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* Sticky → static */
+  .sticky {
+    position: static !important;
+  }
+
+  /* Backgrounds → minimal */
+  [class*="bg-zinc-"], [class*="bg-blue-"], [class*="bg-emerald-"], [class*="bg-amber-"], [class*="bg-rose-"], [class*="bg-purple-"] {
+    background: white !important;
+  }
+
+  /* Borders → light gray */
+  [class*="border-"] {
+    border-color: #ddd !important;
+  }
+
+  /* Page-break sensitivity */
+  section, .rounded-xl, .rounded-2xl {
+    page-break-inside: avoid;
+  }
+}

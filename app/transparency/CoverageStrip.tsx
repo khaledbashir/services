@@ -8,6 +8,9 @@ interface CoverageProps {
     change_order_open_usd: number
     change_order_shipped_count: number
     change_order_shipped_usd: number
+    prev_service_contract_hours: number
+    prev_warranty_active_count: number
+    prev_change_order_total_usd: number
   }
 }
 
@@ -20,12 +23,46 @@ function fmtUSD(n: number): string {
   return '$' + Math.round(n).toLocaleString('en-US')
 }
 
+function delta(current: number, prev: number, suffix = ''): { arrow: string; tone: string; text: string } | null {
+  if (prev === 0 && current === 0) return null
+  if (prev === 0) {
+    return { arrow: '▲', tone: 'text-emerald-600 dark:text-emerald-400', text: `new${suffix}` }
+  }
+  const diff = current - prev
+  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: `same as last month` }
+  const pct = Math.round((Math.abs(diff) / prev) * 100)
+  const arrow = diff > 0 ? '▲' : '▼'
+  const tone = diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+  return { arrow, tone, text: `${pct}%${suffix}` }
+}
+
+function deltaHours(current: number, prev: number) {
+  if (prev === 0 && current === 0) return null
+  const diff = current - prev
+  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: 'same' }
+  const arrow = diff > 0 ? '▲' : '▼'
+  const tone = diff > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+  return { arrow, tone, text: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}h vs last month` }
+}
+
+function deltaUsd(current: number, prev: number) {
+  if (prev === 0 && current === 0) return null
+  const diff = current - prev
+  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: 'same' }
+  const arrow = diff > 0 ? '▲' : '▼'
+  const tone = diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+  return { arrow, tone, text: `${diff > 0 ? '+' : ''}${fmtUSD(Math.abs(diff))} vs last month` }
+}
+
 export default function CoverageStrip({ coverage }: CoverageProps) {
   const c = coverage
   const totalCO = c.change_order_open_usd + c.change_order_shipped_usd
+  const dHrs = deltaHours(c.service_contract_hours_used, c.prev_service_contract_hours)
+  const dWar = delta(c.warranty_active_count, c.prev_warranty_active_count, ' vs last month')
+  const dCo = deltaUsd(totalCO, c.prev_change_order_total_usd)
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       {/* Service Contract */}
       <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30 p-4">
         <div className="flex items-center justify-between mb-2">
@@ -40,8 +77,16 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             / {c.service_contract_cap} hrs
           </span>
         </div>
-        <div className="text-xs text-blue-700/80 dark:text-blue-300/80 mt-1">
-          retainer-covered fixes deducted
+        <div className="flex items-center gap-2 text-xs text-blue-700/80 dark:text-blue-300/80 mt-1">
+          <span>retainer-covered fixes</span>
+          {dHrs ? (
+            <>
+              <span className="text-blue-300 dark:text-blue-700">·</span>
+              <span className={`font-mono tabular-nums ${dHrs.tone}`}>
+                {dHrs.arrow} {dHrs.text}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -59,8 +104,16 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             {c.warranty_active_count === 1 ? 'fix' : 'fixes'}
           </span>
         </div>
-        <div className="text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1">
-          {fmtHrs(c.warranty_hours_protected)} hrs of work re-fix-free
+        <div className="flex items-center gap-2 text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+          <span>{fmtHrs(c.warranty_hours_protected)}h re-fix-free</span>
+          {dWar ? (
+            <>
+              <span className="text-emerald-300 dark:text-emerald-700">·</span>
+              <span className={`font-mono tabular-nums ${dWar.tone}`}>
+                {dWar.arrow} {dWar.text}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -79,8 +132,18 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             {c.change_order_open_count + c.change_order_shipped_count === 1 ? ' item' : ' items'}
           </span>
         </div>
-        <div className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-1">
-          {c.change_order_open_count} open · {c.change_order_shipped_count} shipped this month
+        <div className="flex items-center gap-2 text-xs text-amber-700/80 dark:text-amber-300/80 mt-1">
+          <span>
+            {c.change_order_open_count} open · {c.change_order_shipped_count} shipped
+          </span>
+          {dCo ? (
+            <>
+              <span className="text-amber-300 dark:text-amber-700">·</span>
+              <span className={`font-mono tabular-nums ${dCo.tone}`}>
+                {dCo.arrow} {dCo.text}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
