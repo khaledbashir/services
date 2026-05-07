@@ -64,12 +64,12 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       {/* Service Contract */}
-      <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30 p-4">
+      <div className="rounded-xl border border-blue-200 dark:border-blue-800/60 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-950/20 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
             Service Contract
           </span>
-          <span className="text-[10px] text-blue-600/70 dark:text-blue-400/70">this month</span>
+          <span className="text-[10px] text-blue-500 dark:text-blue-400/60">this month</span>
         </div>
         <div className="text-2xl font-bold tabular-nums text-blue-900 dark:text-blue-100">
           {fmtHrs(c.service_contract_hours_used)}
@@ -77,7 +77,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             / {c.service_contract_cap} hrs
           </span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-blue-700/80 dark:text-blue-300/80 mt-1">
+        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 mt-1">
           <span>retainer-covered fixes</span>
           {dHrs ? (
             <>
@@ -88,15 +88,22 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             </>
           ) : null}
         </div>
+        {/* Mini progress bar */}
+        <div className="h-1.5 rounded-full bg-blue-200 dark:bg-blue-900 mt-2.5 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-blue-500 dark:bg-blue-400 transition-[width] duration-700"
+            style={{ width: `${Math.min((c.service_contract_hours_used / c.service_contract_cap) * 100, 100)}%` }}
+          />
+        </div>
       </div>
 
       {/* Warranty */}
-      <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/30 p-4">
+      <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-emerald-950/20 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
             Warranty Active
           </span>
-          <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">30-day clock</span>
+          <span className="text-[10px] text-emerald-500 dark:text-emerald-400/60">30-day clock</span>
         </div>
         <div className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
           {c.warranty_active_count}
@@ -104,7 +111,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             {c.warranty_active_count === 1 ? 'fix' : 'fixes'}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+        <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
           <span>{fmtHrs(c.warranty_hours_protected)}h re-fix-free</span>
           {dWar ? (
             <>
@@ -118,12 +125,12 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
       </div>
 
       {/* Change Orders */}
-      <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/30 p-4">
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-950/20 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
             Change Orders
           </span>
-          <span className="text-[10px] text-amber-600/70 dark:text-amber-400/70">separate quotes</span>
+          <span className="text-[10px] text-amber-500 dark:text-amber-400/60">separate quotes</span>
         </div>
         <div className="text-2xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
           {fmtUSD(totalCO)}
@@ -132,7 +139,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             {c.change_order_open_count + c.change_order_shipped_count === 1 ? ' item' : ' items'}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-amber-700/80 dark:text-amber-300/80 mt-1">
+        <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 mt-1">
           <span>
             {c.change_order_open_count} open · {c.change_order_shipped_count} shipped
           </span>

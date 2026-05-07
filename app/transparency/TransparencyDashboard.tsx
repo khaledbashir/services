@@ -28,9 +28,26 @@ function fmtTime(iso: string): string {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
+function PaymentBadge({ payment }: { payment: { status: string; amount: number | null; invoice_number: string | null } }) {
+  const tone = PAYMENT_TONE[payment.status] || PAYMENT_TONE.pending
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${tone.bg} ${tone.text} shadow-sm`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+      {tone.label}
+      {payment.amount != null ? ` · $${payment.amount.toLocaleString('en-US')}` : ''}
+      {payment.invoice_number ? ` · ${payment.invoice_number}` : ''}
+    </div>
+  )
+}
+
 export default async function TransparencyDashboard() {
   const data = await getDashboardData()
   const meter = data.meter
+
+  const meterColor =
+    meter.pct_used >= 100 ? 'rose'
+    : meter.pct_used >= 75 ? 'amber'
+    : 'emerald'
 
   const meterGradient =
     meter.pct_used >= 100 ? 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)'
@@ -38,20 +55,20 @@ export default async function TransparencyDashboard() {
     : 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-5xl mx-auto px-5 pt-7 pb-12">
+    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-100">
+      <div className="max-w-5xl mx-auto px-5 pt-8 pb-16">
 
-        <header className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <header className="flex items-center justify-between gap-4 mb-8 flex-wrap">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-9 w-auto dark:hidden" />
+            <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-10 w-auto dark:hidden" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-9 w-auto hidden dark:block" />
+            <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-10 w-auto hidden dark:block" />
             <div className="border-l border-zinc-300 dark:border-zinc-700 pl-3">
               <div className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.2em] font-semibold leading-none">
                 Service
               </div>
-              <div className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
+              <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
                 Transparency
               </div>
             </div>
@@ -66,7 +83,7 @@ export default async function TransparencyDashboard() {
         </header>
 
         <h1 className="text-3xl font-bold tracking-tight mb-1">Platform Support &amp; Maintenance</h1>
-        <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-6">
+        <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-8">
           Live status of ANC&apos;s monthly service contract — credit used, warranty in force, and what&apos;s covered.
         </p>
 
@@ -74,48 +91,40 @@ export default async function TransparencyDashboard() {
         <StoryHero story={data.story} />
 
         {/* Coverage strip — three buckets at a glance, sticky on scroll */}
-        <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-zinc-50/85 dark:bg-zinc-950/85 backdrop-blur-md border-b border-zinc-200/50 dark:border-zinc-800/50">
+        <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200/70 dark:border-zinc-800/70 shadow-sm">
           <CoverageStrip coverage={data.coverage} />
         </div>
 
         {/* "How these numbers are calculated" — collapsible audit trail */}
-        <div className="mt-3 mb-4">
+        <div className="mt-4 mb-6">
           <MetricsExplainer />
         </div>
 
-        {/* Row 1: credit meter + warranty list */}
+        {/* Row 1: credit meter + payment status */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
 
-          <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-3 mb-3">
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between gap-3 mb-4">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 Service Credit · {meter.month}
               </h2>
-              {(() => {
-                const tone = PAYMENT_TONE[data.payment.status] || PAYMENT_TONE.pending
-                return (
-                  <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${tone.bg} ${tone.text}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-                    {tone.label}
-                  </div>
-                )
-              })()}
+              <PaymentBadge payment={data.payment} />
             </div>
             <div className="text-4xl font-bold tracking-tight tabular-nums leading-tight">
               {meter.hours_used.toFixed(1)}
               <span className="text-base font-medium text-zinc-500 dark:text-zinc-400 ml-1">/ {meter.cap_hours} hrs used</span>
             </div>
-            <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
               {meter.hours_remaining.toFixed(1)} hrs remaining this month ·{' '}
-              {meter.overage_hours > 0 ? `${meter.overage_hours.toFixed(1)} hrs overage at $90/hr` : 'No overage'}
+              {meter.overage_hours > 0 ? <span className="text-rose-600 dark:text-rose-400 font-medium">{meter.overage_hours.toFixed(1)} hrs overage at $90/hr</span> : 'No overage'}
             </div>
-            <div className="h-2.5 rounded-full bg-zinc-100 dark:bg-zinc-800 mt-4 overflow-hidden">
+            <div className="h-3 rounded-full bg-zinc-100 dark:bg-zinc-800 mt-5 overflow-hidden">
               <div
-                className="h-full rounded-full transition-[width] duration-500"
-                style={{ width: `${meter.pct_used}%`, background: meterGradient }}
+                className="h-full rounded-full transition-[width] duration-700 ease-out"
+                style={{ width: `${Math.min(meter.pct_used, 100)}%`, background: meterGradient }}
               />
             </div>
-            <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-500 mt-2">
+            <div className="flex justify-between text-xs text-zinc-400 dark:text-zinc-500 mt-1.5">
               <span>0 hrs</span>
               <span>{meter.cap_hours} hrs cap</span>
             </div>
@@ -127,28 +136,100 @@ export default async function TransparencyDashboard() {
             />
           </section>
 
-          <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
-              Warranty · 30-day clock per shipped fix
+          {/* Payment + Contract summary card */}
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-4">
+              Contract Summary
             </h2>
-            {data.warranty_items.length === 0 ? (
-              <div className="text-zinc-400 dark:text-zinc-500 text-sm italic py-3">
-                No fixes shipped in the last 30 days. The warranty clock starts on each new ship.
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Monthly retainer</span>
+                <span className="text-sm font-semibold tabular-nums">$1,500</span>
               </div>
-            ) : (
-              <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {data.warranty_items.map((w) => (
-                  <div key={w.id} className="flex items-start justify-between gap-4 py-3.5">
-                    <div className="min-w-0">
-                      <div className="text-sm leading-snug truncate">{w.summary}</div>
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                        Shipped {fmtDate(w.shipped_at)} · expires {fmtDate(w.warranty_expires)}
-                        {w.repo ? ` · ${w.repo}` : ''}
+              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Hours included</span>
+                <span className="text-sm font-semibold tabular-nums">{meter.cap_hours} hrs</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Overage rate</span>
+                <span className="text-sm font-semibold tabular-nums">$90/hr</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Warranty window</span>
+                <span className="text-sm font-semibold tabular-nums">30 days per fix</span>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Hours used today</span>
+                <span className={`text-sm font-semibold tabular-nums ${meterColor === 'rose' ? 'text-rose-600 dark:text-rose-400' : meterColor === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {meter.hours_used.toFixed(1)} / {meter.cap_hours}
+                </span>
+              </div>
+            </div>
+
+            {/* Month-over-month trend */}
+            {data.coverage.prev_service_contract_hours > 0 && (
+              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-2">
+                  <span className="uppercase tracking-wider font-semibold">vs last month</span>
+                  <span>same-day comparison</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  {(() => {
+                    const hoursDiff = data.coverage.service_contract_hours_used - data.coverage.prev_service_contract_hours
+                    const warrantyDiff = data.coverage.warranty_active_count - data.coverage.prev_warranty_active_count
+                    const coDiff = (data.coverage.change_order_open_usd + data.coverage.change_order_shipped_usd) - data.coverage.prev_change_order_total_usd
+                    return (
+                      <>
+                        <div>
+                          <div className={`text-sm font-bold tabular-nums ${hoursDiff > 0 ? 'text-amber-600 dark:text-amber-400' : hoursDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                            {hoursDiff > 0 ? '+' : ''}{hoursDiff.toFixed(1)}h
+                          </div>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">contract hours</div>
+                        </div>
+                        <div>
+                          <div className={`text-sm font-bold tabular-nums ${warrantyDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : warrantyDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                            {warrantyDiff > 0 ? '+' : ''}{warrantyDiff}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">warranty fixes</div>
+                        </div>
+                        <div>
+                          <div className={`text-sm font-bold tabular-nums ${coDiff > 0 ? 'text-amber-600 dark:text-amber-400' : coDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                            {coDiff > 0 ? '+' : ''}{coDiff >= 1000 ? '$' + (coDiff / 1000).toFixed(1) + 'k' : '$' + Math.round(Math.abs(coDiff)).toLocaleString('en-US')}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">CO value</div>
+                        </div>
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Active warranties mini-list */}
+            {data.warranty_items.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    Active warranties
+                  </span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                    30-day clock per shipped fix
+                  </span>
+                </div>
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {data.warranty_items.map((w) => (
+                    <div key={w.id} className="flex items-start justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-sm leading-snug truncate">{w.summary}</div>
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                          {fmtDate(w.shipped_at)}{w.repo ? ` · ${w.repo}` : ''}
+                        </div>
                       </div>
+                      <WarrantyCountdown shippedAt={w.shipped_at} expiresAt={w.warranty_expires} />
                     </div>
-                    <WarrantyCountdown shippedAt={w.shipped_at} expiresAt={w.warranty_expires} />
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </section>
@@ -157,18 +238,18 @@ export default async function TransparencyDashboard() {
         {/* Row 2: covered/not-covered + recently shipped */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
 
-          <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
               What&apos;s covered each month
             </h2>
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {COVERED_CLAUSES.map((c) => (
                 <div key={c.title} className="flex gap-3 py-2.5">
-                  <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 inline-flex items-center justify-center text-[11px] font-bold mt-0.5">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 inline-flex items-center justify-center text-xs font-bold mt-0.5">
                     ✓
                   </span>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">{c.title}</div>
+                    <div className="text-sm font-medium">{c.title}</div>
                     <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{c.detail}</div>
                   </div>
                 </div>
@@ -183,11 +264,11 @@ export default async function TransparencyDashboard() {
               <div className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
                 {NOT_COVERED_CLAUSES.map((c) => (
                   <div key={c.title} className="flex gap-3 py-2.5">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-[11px] font-bold mt-0.5">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-xs font-bold mt-0.5">
                       −
                     </span>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold">{c.title}</div>
+                      <div className="text-sm font-medium">{c.title}</div>
                       <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{c.detail}</div>
                     </div>
                   </div>
@@ -196,8 +277,8 @@ export default async function TransparencyDashboard() {
             </details>
           </section>
 
-          <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
+          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
               Shipped this month
             </h2>
             {data.recently_shipped.length === 0 ? (
@@ -243,7 +324,7 @@ export default async function TransparencyDashboard() {
         {/* Row 4: tabbed views — Overview / Kanban / List / By stakeholder */}
         <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
 
-        <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-10">
+        <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-12">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day warranty on shipped work · $90/hr overage<br />
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>

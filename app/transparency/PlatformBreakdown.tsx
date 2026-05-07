@@ -29,9 +29,9 @@ function fmtUSD(n: number): string {
 export default function PlatformBreakdown({ platforms }: Props) {
   if (!platforms.length) return null
   return (
-    <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm">
+    <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           By platform
         </h2>
         <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
@@ -44,23 +44,23 @@ export default function PlatformBreakdown({ platforms }: Props) {
           return (
             <div
               key={p.platform}
-              className="rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-950/40 p-3"
+              className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-gradient-to-br from-zinc-50 to-white dark:from-zinc-900/60 dark:to-zinc-900/30 p-3.5 hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors"
             >
-              <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                 {meta.label}
               </div>
               {meta.tagline ? (
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mb-2 leading-tight">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mb-2.5 leading-tight">
                   {meta.tagline}
                 </div>
               ) : null}
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-lg font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
+              <div className="flex items-baseline gap-2 mt-1.5">
+                <span className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
                   {p.hours_used.toFixed(1)}
                 </span>
                 <span className="text-[10px] text-zinc-500 dark:text-zinc-400">hrs this month</span>
               </div>
-              <div className="flex items-center gap-3 text-[10px] text-zinc-500 dark:text-zinc-400 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-3 text-[10px] text-zinc-500 dark:text-zinc-400 mt-2 flex-wrap">
                 <span>
                   <strong className="text-zinc-700 dark:text-zinc-300">{p.fixes_shipped}</strong> shipped
                 </span>
