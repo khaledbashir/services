@@ -1,18 +1,8 @@
-import { notFound } from 'next/navigation'
-import TransparencyDashboard from '../TransparencyDashboard'
-import { verifyTransparencyToken } from '@/lib/transparency-token'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
-export default async function TokenizedTransparencyPage({
-  params,
-}: {
-  params: Promise<{ token: string }>
-}) {
-  const { token } = await params
-  const payload = verifyTransparencyToken(token)
-  if (!payload) notFound()
-
-  return <TransparencyDashboard />
+// Old tokenized URLs redirect to the canonical /transparency. The token gate
+// is no longer used — the page is public-but-noindex (same model as
+// Atlassian/NetSuite entitlement pages).
+export default function TokenizedTransparencyRedirect() {
+  redirect('/transparency')
 }

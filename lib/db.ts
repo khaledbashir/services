@@ -520,6 +520,18 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_repo_area ON service_requests(repo, area)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_received ON service_requests(received_at DESC)`)
 
+    // Service-contract payment ledger — one row per month, drives the
+    // "paid / pending / overdue" indicator on the public transparency page.
+    await client.query(`CREATE TABLE IF NOT EXISTS service_payments (
+      month TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'pending',
+      amount NUMERIC(10,2),
+      paid_at TIMESTAMPTZ,
+      invoice_number TEXT,
+      notes TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
