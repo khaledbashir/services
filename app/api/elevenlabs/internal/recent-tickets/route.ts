@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { query as dbQuery } from '@/lib/db'
 import { authorizeVoiceCall, cleanQuery } from '@/lib/elevenlabs-internal-auth'

@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { syncEventsToTwenty, syncTicketsToTwenty, syncTechniciansToTwenty } from '@/lib/twenty-sync'

@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { twentyClient, type TwentyCompany, type TwentyVenue } from '@/lib/twenty-client'
 import { query as dbQuery } from '@/lib/db'

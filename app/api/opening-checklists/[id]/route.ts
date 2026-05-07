@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { OpeningChecklist, isTwentyBackedEnabled } from '@/lib/twenty-ops'

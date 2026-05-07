@@ -1,3 +1,5 @@
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { NocoOps } from '@/lib/nocodb-ops'
 import { proseMirrorToHTML, wrapPrintHTML } from '@/lib/prosemirror-to-html'

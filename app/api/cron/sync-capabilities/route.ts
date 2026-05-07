@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextResponse } from 'next/server'
 import { readdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'

@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeVoiceCall, cleanQuery, compactDate, moneyLabel } from '@/lib/elevenlabs-internal-auth'
 import { twentyClient } from '@/lib/twenty-client'

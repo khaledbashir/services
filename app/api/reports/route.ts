@@ -1,3 +1,5 @@
+export const revalidate = 0
+
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
