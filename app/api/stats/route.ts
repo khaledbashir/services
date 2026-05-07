@@ -3,6 +3,9 @@ import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
