@@ -1,8 +1,7 @@
 import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES } from '@/lib/transparency-data'
 import WarrantyCountdown from './WarrantyCountdown'
-import RequestTimeline from './RequestTimeline'
 import CoverageStrip from './CoverageStrip'
-import ChangeOrderQueue from './ChangeOrderQueue'
+import TransparencyTabs from './TransparencyTabs'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   paid:     { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500',         label: 'Paid' },
@@ -25,10 +24,10 @@ export default async function TransparencyDashboard() {
   const data = await getDashboardData()
   const meter = data.meter
 
-  const meterFillColor =
-    meter.pct_used >= 100 ? '#ef4444'
-    : meter.pct_used >= 75 ? '#f59e0b'
-    : '#10b981'
+  const meterGradient =
+    meter.pct_used >= 100 ? 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)'
+    : meter.pct_used >= 75 ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
+    : 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
@@ -52,8 +51,10 @@ export default async function TransparencyDashboard() {
           Live status of ANC&apos;s monthly service contract — credit used, warranty in force, and what&apos;s covered.
         </p>
 
-        {/* Coverage strip — three buckets at a glance */}
-        <CoverageStrip coverage={data.coverage} />
+        {/* Coverage strip — three buckets at a glance, sticky on scroll */}
+        <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-zinc-50/85 dark:bg-zinc-950/85 backdrop-blur-md border-b border-zinc-200/50 dark:border-zinc-800/50">
+          <CoverageStrip coverage={data.coverage} />
+        </div>
 
         {/* Row 1: credit meter + warranty list */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
@@ -84,7 +85,7 @@ export default async function TransparencyDashboard() {
             <div className="h-2.5 rounded-full bg-zinc-100 dark:bg-zinc-800 mt-4 overflow-hidden">
               <div
                 className="h-full rounded-full transition-[width] duration-500"
-                style={{ width: `${meter.pct_used}%`, background: meterFillColor }}
+                style={{ width: `${meter.pct_used}%`, background: meterGradient }}
               />
             </div>
             <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-500 mt-2">
@@ -185,32 +186,8 @@ export default async function TransparencyDashboard() {
           </section>
         </div>
 
-        {/* Row 3: change-order queue (separate billing column) */}
-        <div className="mb-4">
-          <ChangeOrderQueue
-            items={data.change_order_queue.map((r) => ({
-              id: r.id,
-              received_at: r.received_at,
-              requester: r.requester,
-              summary: r.summary,
-              classification: r.classification,
-              status: r.status,
-              estimated_hours: r.estimated_hours,
-              estimated_usd: r.estimated_usd,
-            }))}
-          />
-        </div>
-
-        {/* Row 4: request timeline */}
-        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Request timeline
-            </h2>
-            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">click any row for the why</span>
-          </div>
-          <RequestTimeline requests={data.triaged_requests} />
-        </section>
+        {/* Row 3: tabbed views — Overview / Kanban / List / By stakeholder */}
+        <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
 
         <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-10">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day warranty on shipped work · $90/hr overage<br />
