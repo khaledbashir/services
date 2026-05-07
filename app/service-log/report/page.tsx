@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 interface ServiceRequest {
@@ -43,6 +45,14 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function ServiceReportPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 20, color: '#9ca3af' }}>Loading report…</div>}>
+      <ServiceReportPageInner />
+    </Suspense>
+  )
+}
+
+function ServiceReportPageInner() {
   const params = useSearchParams()
   const month = params?.get('month') || new Date().toISOString().slice(0, 7)
   const [requests, setRequests] = useState<ServiceRequest[]>([])
