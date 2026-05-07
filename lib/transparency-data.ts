@@ -32,10 +32,36 @@ export interface RecentlyShipped {
   repo: string | null
 }
 
+export interface TriagedRequest {
+  id: string
+  received_at: string
+  requester: string | null
+  summary: string
+  classification: 'FIX' | 'NEW' | 'MIXED'
+  status: string
+  retainer_covered: boolean
+  estimated_hours: number | null
+  estimate_basis: string | null
+  estimated_usd: number | null
+  market_breakdown: any | null   // full chain when present (NEW/MIXED only)
+  shipped_at: string | null
+  actual_hours: number | null
+}
+
+export interface PaymentStatus {
+  month: string
+  status: 'paid' | 'pending' | 'overdue' | 'invoiced'
+  amount: number | null
+  paid_at: string | null
+  invoice_number: string | null
+}
+
 export interface DashboardData {
   meter: CreditMeter
   warranty_items: WarrantyItem[]
   recently_shipped: RecentlyShipped[]
+  triaged_requests: TriagedRequest[]
+  payment: PaymentStatus
   generated_at: string
 }
 
@@ -121,6 +147,55 @@ export async function getDashboardData(): Promise<DashboardData> {
     repo: (r.repo as string) || null,
   }))
 
+  // Recent triaged requests (last 60 days, capped) — feeds the timeline
+  // panel on the dashboard with click-to-expand justification.
+  const triagedRes = await query(
+    `SELECT id, received_at, requester, summary, classification, status,
+            retainer_covered, estimated_hours, estimate_basis, estimated_usd,
+            market_breakdown, shipped_at, actual_hours
+       FROM service_requests
+      WHERE received_at >= NOW() - INTERVAL '60 days'
+      ORDER BY received_at DESC
+      LIMIT 25`
+  ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
+
+  const triaged_requests: TriagedRequest[] = triagedRes.rows.map((r) => ({
+    id: String(r.id),
+    received_at: new Date(r.received_at as string).toISOString(),
+    requester: (r.requester as string) || null,
+    summary: String(r.summary || ''),
+    classification: r.classification as 'FIX' | 'NEW' | 'MIXED',
+    status: String(r.status || 'open'),
+    retainer_covered: Boolean(r.retainer_covered),
+    estimated_hours: r.estimated_hours == null ? null : Number(r.estimated_hours),
+    estimate_basis: (r.estimate_basis as string) || null,
+    estimated_usd: r.estimated_usd == null ? null : Number(r.estimated_usd),
+    market_breakdown: r.market_breakdown || null,
+    shipped_at: r.shipped_at ? new Date(r.shipped_at as string).toISOString() : null,
+    actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
+  }))
+
+  // Payment status for the current month — derived from service_payments
+  // ledger; defaults to 'pending' if no row exists yet.
+  const month = new Date().toISOString().slice(0, 7)
+  const payRes = await query(
+    `SELECT month, status, amount, paid_at, invoice_number
+       FROM service_payments
+      WHERE month = $1
+      LIMIT 1`,
+    [month]
+  ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
+
+  const payment: PaymentStatus = payRes.rows.length > 0
+    ? {
+        month: String(payRes.rows[0].month),
+        status: payRes.rows[0].status as 'paid' | 'pending' | 'overdue' | 'invoiced',
+        amount: payRes.rows[0].amount == null ? null : Number(payRes.rows[0].amount),
+        paid_at: payRes.rows[0].paid_at ? new Date(payRes.rows[0].paid_at as string).toISOString() : null,
+        invoice_number: (payRes.rows[0].invoice_number as string) || null,
+      }
+    : { month, status: 'pending', amount: null, paid_at: null, invoice_number: null }
+
   return {
     meter: {
       month: meter.month,
@@ -133,6 +208,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     warranty_items,
     recently_shipped,
+    triaged_requests,
+    payment,
     generated_at: new Date().toISOString(),
   }
 }

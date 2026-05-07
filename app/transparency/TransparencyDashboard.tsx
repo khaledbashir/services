@@ -1,5 +1,13 @@
 import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES } from '@/lib/transparency-data'
 import WarrantyCountdown from './WarrantyCountdown'
+import RequestTimeline from './RequestTimeline'
+
+const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  paid:     { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500',         label: 'Paid' },
+  invoiced: { bg: 'bg-blue-50 dark:bg-blue-950',       text: 'text-blue-700 dark:text-blue-300',       dot: 'bg-blue-500',            label: 'Invoiced' },
+  pending:  { bg: 'bg-amber-50 dark:bg-amber-950',     text: 'text-amber-700 dark:text-amber-300',     dot: 'bg-amber-500',           label: 'Pending' },
+  overdue:  { bg: 'bg-rose-50 dark:bg-rose-950',       text: 'text-rose-700 dark:text-rose-300',       dot: 'bg-rose-500 animate-pulse', label: 'Overdue' },
+}
 
 function fmtDate(iso: string): string {
   const d = new Date(iso)
@@ -46,9 +54,20 @@ export default async function TransparencyDashboard() {
         <div className="grid gap-4 md:grid-cols-2 mb-4">
 
           <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
-              Service Credit · {meter.month}
-            </h2>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Service Credit · {meter.month}
+              </h2>
+              {(() => {
+                const tone = PAYMENT_TONE[data.payment.status] || PAYMENT_TONE.pending
+                return (
+                  <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${tone.bg} ${tone.text}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+                    {tone.label}
+                  </div>
+                )
+              })()}
+            </div>
             <div className="text-4xl font-bold tracking-tight tabular-nums leading-tight">
               {meter.hours_used.toFixed(1)}
               <span className="text-base font-medium text-zinc-500 dark:text-zinc-400 ml-1">/ {meter.cap_hours} hrs used</span>
@@ -161,9 +180,20 @@ export default async function TransparencyDashboard() {
           </section>
         </div>
 
+        {/* Row 3: request timeline */}
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              Request timeline
+            </h2>
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">click any row for the why</span>
+          </div>
+          <RequestTimeline requests={data.triaged_requests} />
+        </section>
+
         <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-10">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day warranty on shipped work · $90/hr overage<br />
-          Operated by Ahmad Basheer
+          Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
       </div>
     </div>

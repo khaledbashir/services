@@ -532,6 +532,13 @@ async function runMigrations() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
 
+    // Market-grounded change-order breakdown for NEW asks. Stores the full
+    // chain: US market median → outsourcing efficiency → contract rate →
+    // friendly-partner cushion → final $ amount. Surfaced on the public
+    // transparency dashboard so any number can defend itself when clicked.
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS market_breakdown JSONB`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS estimated_usd NUMERIC(10,2)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

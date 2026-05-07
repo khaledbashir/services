@@ -14,6 +14,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { query } from '@/lib/db'
+import { estimate as marketEstimate, classifyWorkType } from '@/lib/market-rate'
 
 export type Classification = 'FIX' | 'NEW' | 'MIXED'
 export type ConfidenceBucket = 'HIGH' | 'MEDIUM' | 'LOW'
@@ -438,18 +439,34 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
   const est = await estimate(cls.classification, area.repo, area.area, area.keywords)
   const summary = summarize(text)
 
+  // For NEW / MIXED classifications, also produce a market-grounded
+  // breakdown (US median → outsourcing → contract rate → friendly cushion).
+  // FIX work is retainer-covered so no $ quote is generated.
+  let marketBreakdown: ReturnType<typeof marketEstimate> | null = null
+  let estimatedUSD: number | null = null
+  let estimatedHoursForStorage: number | null = est.hours_point
+  if (!retainer_covered) {
+    const wt = classifyWorkType(text)
+    marketBreakdown = marketEstimate(wt.workType, wt.scope)
+    estimatedUSD = marketBreakdown.finalUSD
+    // Prefer the market-grounded hours over priors-based when we have it,
+    // since the market chain reflects scope+efficiency rather than just
+    // historical cycle-time.
+    estimatedHoursForStorage = marketBreakdown.finalHours
+  }
+
   const r = await query(
     `INSERT INTO service_requests
        (source, source_url, requester, raw_text, summary,
         classification, classification_confidence, classification_basis,
         repo, area, keywords,
         estimated_hours, estimate_basis, retainer_covered,
-        status, created_by)
+        status, created_by, market_breakdown, estimated_usd)
      VALUES ($1, $2, $3, $4, $5,
              $6, $7, $8,
              $9, $10, $11,
              $12, $13, $14,
-             'open', $15)
+             'open', $15, $16, $17)
      RETURNING id, received_at`,
     [
       input.source || 'manual',
@@ -463,10 +480,12 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
       area.repo,
       area.area,
       area.keywords,
-      est.hours_point,
+      estimatedHoursForStorage,
       est.basis,
       retainer_covered,
       input.created_by || null,
+      marketBreakdown ? JSON.stringify(marketBreakdown) : null,
+      estimatedUSD,
     ],
   )
   const row = r.rows[0]
