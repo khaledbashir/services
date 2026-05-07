@@ -78,7 +78,7 @@ export default function RequestTimeline({ requests }: Props) {
     <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
       {requests.map((r) => {
         const isOpen = openId === r.id
-        const hours = r.estimated_hours
+        const hours = r.status === 'shipped' && r.actual_hours != null ? r.actual_hours : r.estimated_hours
         const usd = r.estimated_usd
         const breakdown = r.market_breakdown
 

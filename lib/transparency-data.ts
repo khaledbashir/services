@@ -155,6 +155,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             market_breakdown, shipped_at, actual_hours
        FROM service_requests
       WHERE received_at >= NOW() - INTERVAL '60 days'
+        AND status <> 'cancelled'
       ORDER BY received_at DESC
       LIMIT 25`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
