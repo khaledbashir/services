@@ -42,6 +42,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Pull today's events (ET) + venue + assigned techs + workflow state.
+    // Joe 2026-05-07: only flag "unassigned" when the event actually needs
+    // staffing — resolve event-override > venue-default the same way the
+    // events page does (events.requires_staffing ?? venues.requires_assignment).
     const r = await query(
       `SELECT e.id, e.summary, e.workflow_status,
               CASE WHEN TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH24:MI') = '00:00'
@@ -51,6 +54,8 @@ export async function GET(request: NextRequest) {
                    THEN 'TBD'
                    ELSE TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') END as end_et,
               v.name as venue_name,
+              COALESCE(v.requires_assignment, true) as venue_requires_assignment,
+              e.requires_staffing as event_requires_staffing,
               COALESCE(string_agg(DISTINCT s.full_name, ', ') FILTER (WHERE s.full_name IS NOT NULL), '') as techs,
               COUNT(DISTINCT ea.staff_id) FILTER (WHERE ea.staff_id IS NOT NULL) as assigned_count,
               BOOL_OR(ws.type = 'check_in') as has_check_in,
@@ -62,7 +67,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN staff s ON s.id = ea.staff_id
        LEFT JOIN workflow_submissions ws ON ws.event_id = e.id
        WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
-       GROUP BY e.id, v.name
+       GROUP BY e.id, v.name, v.requires_assignment
        ORDER BY e.start_time ASC`
     )
 
@@ -86,9 +91,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: true, window, events_posted: 0, channels: channels.length, delivered })
     }
 
+    // Resolve per-event staffing requirement once. Event override beats
+    // venue default; null/undefined override falls through to venue.
+    const needsStaffing = (e: any): boolean => {
+      if (e.event_requires_staffing === true) return true
+      if (e.event_requires_staffing === false) return false
+      return e.venue_requires_assignment !== false
+    }
+
     // Summary counters for the header pill row — "at a glance" for Joe.
-    const assignedCount = events.filter((e: any) => (e.assigned_count || 0) > 0).length
-    const unassignedCount = events.length - assignedCount
+    // Only events that need staffing count toward staffed/unassigned. Events
+    // at warranty-only venues (no staff required) are tallied separately.
+    const needsList = events.filter((e: any) => needsStaffing(e))
+    const warrantyCount = events.length - needsList.length
+    const assignedCount = needsList.filter((e: any) => (e.assigned_count || 0) > 0).length
+    const unassignedCount = needsList.length - assignedCount
     const checkedInCount = events.filter((e: any) => e.has_check_in).length
     const gameReadyCount = events.filter((e: any) => e.has_game_ready).length
     const postGameCount = events.filter((e: any) => e.has_post_game).length
@@ -106,13 +123,21 @@ export async function GET(request: NextRequest) {
       return h * 60 + parseInt(m[2], 10)
     }
 
-    // Morning: unassigned risk first, then by start time. Evening: sort
+    // Morning: needs-staffing-and-unassigned first, then needs-staffing-and-staffed,
+    // then warranty-only events at the bottom (Joe 2026-05-07). Evening: sort
     // missing-post-game first so leadership sees the close-out gap instantly.
+    const morningBucket = (e: any): number => {
+      const needs = needsStaffing(e)
+      const assigned = (e.assigned_count || 0) > 0
+      if (needs && !assigned) return 0   // needs staff, none assigned
+      if (needs && assigned) return 1    // needs staff, has staff
+      return 2                            // warranty-only, no staffing required
+    }
     const sorted = [...events].sort((a: any, b: any) => {
       if (window === 'morning') {
-        const au = (a.assigned_count || 0) === 0 ? 0 : 1
-        const bu = (b.assigned_count || 0) === 0 ? 0 : 1
-        if (au !== bu) return au - bu
+        const ab = morningBucket(a)
+        const bb = morningBucket(b)
+        if (ab !== bb) return ab - bb
       } else {
         const ap = a.has_post_game ? 1 : 0
         const bp = b.has_post_game ? 1 : 0
@@ -129,8 +154,11 @@ export async function GET(request: NextRequest) {
       ? [
           unassignedCount > 0
             ? `:red_circle: *${unassignedCount} unassigned*`
-            : ':white_check_mark: *all staffed*',
+            : needsList.length > 0
+              ? ':white_check_mark: *all staffed*'
+              : ':white_check_mark: *no staffing required*',
           `:busts_in_silhouette: ${assignedCount} staffed`,
+          ...(warrantyCount > 0 ? [`:shield: ${warrantyCount} warranty-only`] : []),
         ]
       : [
           `:white_check_mark: ${checkedInCount}/${events.length} checked in`,
@@ -149,7 +177,14 @@ export async function GET(request: NextRequest) {
       if (!e.has_check_in) missing.push('check-in')
       if (!e.has_game_ready) missing.push('game-ready')
       if (window === 'evening' && !e.has_post_game) missing.push('post-game')
-      const techs = e.techs ? `_${e.techs}_` : e.assigned_count > 0 ? `${e.assigned_count} assigned` : ':red_circle: *unassigned*'
+      const needs = needsStaffing(e)
+      const techs = e.techs
+        ? `_${e.techs}_`
+        : e.assigned_count > 0
+          ? `${e.assigned_count} assigned`
+          : needs
+            ? ':red_circle: *unassigned*'
+            : ':shield: _warranty only — no staffing required_'
       const time = `${e.start_et}${e.end_et ? ` → ${e.end_et}` : ''}`
       const eventLink = e.id ? `<${baseUrl}/workflow/${e.id}|open>` : ''
       const eventLabel = eventLink ? `${e.summary} · ${eventLink}` : e.summary

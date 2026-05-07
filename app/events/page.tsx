@@ -143,14 +143,34 @@ function EventsPageInner() {
   })
   const router = useRouter()
 
+  // Joe 2026-05-07: rank events that NEED assignment first, ones that don't
+  // (warranty-only venues / explicit no-staff override) at the bottom. Ties
+  // broken by start time so the day still reads chronologically inside groups.
+  const staffingPriority = (e: Event): number => {
+    const needs = e.event_requires_staffing === true
+      ? true
+      : e.event_requires_staffing === false
+        ? false
+        : e.venue_requires_assignment !== false
+    const assigned = (Number((e as any).assigned_count) || 0) > 0
+    if (needs && !assigned) return 0   // needs staff, none assigned
+    if (needs && assigned) return 1    // needs staff, has staff
+    return 2                            // warranty-only / no staffing required
+  }
+
+  const sortByStaffingThenTime = (list: Event[]): Event[] =>
+    [...list].sort((a, b) => {
+      const pa = staffingPriority(a)
+      const pb = staffingPriority(b)
+      if (pa !== pb) return pa - pb
+      return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    })
+
   const refreshEvents = async () => {
     const res = await fetch(`/api/events?filter=${filter}`)
     if (res.ok) {
       const data = await res.json()
-      const sorted = (data.events || []).sort((a: Event, b: Event) => {
-        return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-      })
-      setEvents(sorted)
+      setEvents(sortByStaffingThenTime(data.events || []))
     }
 
     if (view === 'calendar') {
@@ -709,8 +729,13 @@ function EventsPageInner() {
                       || (e.league || '').toLowerCase().includes(q)
                       || ((e as any).assigned_techs || '').toLowerCase().includes(q)
                   }).sort((a, b) => {
-                    // Within a day, always order by actual start time so the
-                    // calendar reads top-to-bottom earliest-to-latest.
+                    // Within a day: needs-staffing-and-unassigned first, then
+                    // staffed, then warranty-only at the bottom (Joe 5/7).
+                    // Tie-breaker is start time so each bucket reads
+                    // top-to-bottom earliest-to-latest.
+                    const pa = staffingPriority(a)
+                    const pb = staffingPriority(b)
+                    if (pa !== pb) return pa - pb
                     const ta = a.start_time ? new Date(a.start_time).getTime() : 0
                     const tb = b.start_time ? new Date(b.start_time).getTime() : 0
                     return ta - tb
