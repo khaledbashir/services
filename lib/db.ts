@@ -483,6 +483,43 @@ async function runMigrations() {
       )
       ON CONFLICT (id) DO NOTHING
     `)
+
+    // Service-contract triage + tracking. Every Slack/email/etc. request
+    // lands here so the team has a real-time ledger of fix vs. new, real
+    // estimated hours from past similar work, and an actual_hours close-out
+    // when shipped. Replaces guesswork with a tracked dataset.
+    await client.query(`CREATE TABLE IF NOT EXISTS service_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      source TEXT NOT NULL DEFAULT 'manual',
+      source_url TEXT,
+      requester TEXT,
+      raw_text TEXT NOT NULL,
+      summary TEXT,
+      classification TEXT NOT NULL,
+      classification_confidence INT,
+      classification_basis TEXT,
+      repo TEXT,
+      area TEXT,
+      keywords TEXT[],
+      estimated_hours NUMERIC(6,2),
+      estimate_basis TEXT,
+      retainer_covered BOOLEAN NOT NULL DEFAULT false,
+      status TEXT NOT NULL DEFAULT 'open',
+      started_at TIMESTAMPTZ,
+      shipped_at TIMESTAMPTZ,
+      actual_hours NUMERIC(6,2),
+      shipped_commit_sha TEXT,
+      notes TEXT,
+      created_by UUID,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_status ON service_requests(status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_classification ON service_requests(classification)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_repo_area ON service_requests(repo, area)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_received ON service_requests(received_at DESC)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

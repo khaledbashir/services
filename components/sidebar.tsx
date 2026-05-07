@@ -281,6 +281,7 @@ export function Sidebar() {
       links: [
         { href: '/clients', label: 'Clients' },
         { href: '/portals', label: 'Client Portals' },
+        { href: '/service-log', label: 'Service Log', role: 'manager' },
         ...(SHOW_VOICE_AGENT_DEMO ? [{ href: '/voice-agent-demo', label: 'Voice Agent Demo' }] : []),
       ],
     },

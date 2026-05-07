@@ -51,6 +51,7 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/ops-table-schema'),
     () => import('@/lib/ai/skills/ops-list-documents'),
     () => import('@/lib/ai/skills/ops-write-document'),
+    () => import('@/lib/ai/skills/triage-request'),
   ]
   for (const load of staticImports) {
     try {
@@ -83,6 +84,17 @@ async function loadSkills(): Promise<Skill[]> {
     }
   } catch (err) {
     console.warn('[ai/registry] failed to load auto-CRUD skills:', err instanceof Error ? err.message : err)
+  }
+
+  // Service-contract triage helpers (start/ship/quote/meter/list) ride
+  // alongside the main triage skill in triage-request.ts.
+  try {
+    const { skills: triageSkills } = await import('@/lib/ai/skills/triage-request')
+    for (const s of triageSkills as Skill[]) {
+      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
+    }
+  } catch (err) {
+    console.warn('[ai/registry] failed to load triage skills:', err instanceof Error ? err.message : err)
   }
 
   // Fallback fs scan for files that aren't in the static map yet (dev mode).
