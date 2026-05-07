@@ -46,6 +46,19 @@ export interface TriagedRequest {
   market_breakdown: any | null   // full chain when present (NEW/MIXED only)
   shipped_at: string | null
   actual_hours: number | null
+  shipped_commit_sha: string | null
+  repo: string | null
+}
+
+export interface CoverageStrip {
+  service_contract_hours_used: number    // FIX retainer-covered, shipped this month, sum(actual_hours)
+  service_contract_cap: number            // RETAINER_CAP_HOURS
+  warranty_active_count: number           // FIX shipped within 30d
+  warranty_hours_protected: number        // sum(actual_hours) on those 30d-window FIX ships
+  change_order_open_count: number         // NEW + MIXED with status in (open, in_progress, quoted)
+  change_order_open_usd: number           // sum(estimated_usd) on those open COs
+  change_order_shipped_count: number      // NEW + MIXED shipped this month
+  change_order_shipped_usd: number        // sum(estimated_usd) on those (closed COs this month)
 }
 
 export interface PaymentStatus {
@@ -58,9 +71,11 @@ export interface PaymentStatus {
 
 export interface DashboardData {
   meter: CreditMeter
+  coverage: CoverageStrip
   warranty_items: WarrantyItem[]
   recently_shipped: RecentlyShipped[]
   triaged_requests: TriagedRequest[]
+  change_order_queue: TriagedRequest[]
   payment: PaymentStatus
   generated_at: string
 }
@@ -152,7 +167,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   const triagedRes = await query(
     `SELECT id, received_at, requester, summary, classification, status,
             retainer_covered, estimated_hours, estimate_basis, estimated_usd,
-            market_breakdown, shipped_at, actual_hours
+            market_breakdown, shipped_at, actual_hours,
+            shipped_commit_sha, repo
        FROM service_requests
       WHERE received_at >= NOW() - INTERVAL '60 days'
         AND status <> 'cancelled'
@@ -174,7 +190,75 @@ export async function getDashboardData(): Promise<DashboardData> {
     market_breakdown: r.market_breakdown || null,
     shipped_at: r.shipped_at ? new Date(r.shipped_at as string).toISOString() : null,
     actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
+    shipped_commit_sha: (r.shipped_commit_sha as string) || null,
+    repo: (r.repo as string) || null,
   }))
+
+  // Coverage-strip aggregates — three numbers above the meter.
+  const coverageRes = await query(
+    `SELECT
+       COALESCE(SUM(actual_hours) FILTER (
+         WHERE classification = 'FIX'
+           AND retainer_covered = true
+           AND status = 'shipped'
+           AND shipped_at IS NOT NULL
+           AND shipped_at >= DATE_TRUNC('month', NOW())
+       ), 0)::numeric AS service_contract_hours_used,
+       COUNT(*) FILTER (
+         WHERE classification = 'FIX'
+           AND status = 'shipped'
+           AND shipped_at IS NOT NULL
+           AND shipped_at >= NOW() - INTERVAL '30 days'
+       )::int AS warranty_active_count,
+       COALESCE(SUM(actual_hours) FILTER (
+         WHERE classification = 'FIX'
+           AND status = 'shipped'
+           AND shipped_at IS NOT NULL
+           AND shipped_at >= NOW() - INTERVAL '30 days'
+       ), 0)::numeric AS warranty_hours_protected,
+       COUNT(*) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status IN ('open', 'in_progress', 'quoted')
+       )::int AS change_order_open_count,
+       COALESCE(SUM(estimated_usd) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status IN ('open', 'in_progress', 'quoted')
+       ), 0)::numeric AS change_order_open_usd,
+       COUNT(*) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status = 'shipped'
+           AND shipped_at IS NOT NULL
+           AND shipped_at >= DATE_TRUNC('month', NOW())
+       )::int AS change_order_shipped_count,
+       COALESCE(SUM(estimated_usd) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status = 'shipped'
+           AND shipped_at IS NOT NULL
+           AND shipped_at >= DATE_TRUNC('month', NOW())
+       ), 0)::numeric AS change_order_shipped_usd
+     FROM service_requests`
+  ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
+
+  const coverageRow = coverageRes.rows[0] || {}
+  const coverage: CoverageStrip = {
+    service_contract_hours_used: Number(coverageRow.service_contract_hours_used) || 0,
+    service_contract_cap: cap,
+    warranty_active_count: Number(coverageRow.warranty_active_count) || 0,
+    warranty_hours_protected: Number(coverageRow.warranty_hours_protected) || 0,
+    change_order_open_count: Number(coverageRow.change_order_open_count) || 0,
+    change_order_open_usd: Number(coverageRow.change_order_open_usd) || 0,
+    change_order_shipped_count: Number(coverageRow.change_order_shipped_count) || 0,
+    change_order_shipped_usd: Number(coverageRow.change_order_shipped_usd) || 0,
+  }
+
+  // Open change-order queue — separate billing column from the timeline.
+  const change_order_queue: TriagedRequest[] = triaged_requests
+    .filter(
+      (r) =>
+        (r.classification === 'NEW' || r.classification === 'MIXED') &&
+        ['open', 'in_progress', 'quoted'].includes(r.status)
+    )
+    .sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime())
 
   // Payment status for the current month — derived from service_payments
   // ledger; defaults to 'pending' if no row exists yet.
@@ -207,9 +291,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       hours_remaining: remaining,
       pct_used: pct,
     },
+    coverage,
     warranty_items,
     recently_shipped,
     triaged_requests,
+    change_order_queue,
     payment,
     generated_at: new Date().toISOString(),
   }

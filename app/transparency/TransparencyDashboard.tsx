@@ -1,6 +1,8 @@
 import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES } from '@/lib/transparency-data'
 import WarrantyCountdown from './WarrantyCountdown'
 import RequestTimeline from './RequestTimeline'
+import CoverageStrip from './CoverageStrip'
+import ChangeOrderQueue from './ChangeOrderQueue'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   paid:     { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500',         label: 'Paid' },
@@ -49,6 +51,9 @@ export default async function TransparencyDashboard() {
         <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-6">
           Live status of ANC&apos;s monthly service contract — credit used, warranty in force, and what&apos;s covered.
         </p>
+
+        {/* Coverage strip — three buckets at a glance */}
+        <CoverageStrip coverage={data.coverage} />
 
         {/* Row 1: credit meter + warranty list */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
@@ -180,7 +185,23 @@ export default async function TransparencyDashboard() {
           </section>
         </div>
 
-        {/* Row 3: request timeline */}
+        {/* Row 3: change-order queue (separate billing column) */}
+        <div className="mb-4">
+          <ChangeOrderQueue
+            items={data.change_order_queue.map((r) => ({
+              id: r.id,
+              received_at: r.received_at,
+              requester: r.requester,
+              summary: r.summary,
+              classification: r.classification,
+              status: r.status,
+              estimated_hours: r.estimated_hours,
+              estimated_usd: r.estimated_usd,
+            }))}
+          />
+        </div>
+
+        {/* Row 4: request timeline */}
         <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm mb-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">

@@ -34,6 +34,28 @@ interface TriagedRequest {
   market_breakdown: MarketBreakdown | null
   shipped_at: string | null
   actual_hours: number | null
+  shipped_commit_sha: string | null
+  repo: string | null
+}
+
+const REPO_TO_GITHUB: Record<string, string> = {
+  'anc-services': 'khaledbashir/services',
+  'rag2': 'khaledbashir/rag2',
+  'twenty-crm': 'twentyhq/twenty',
+  'anc-kb': 'bashhh89/anc-kb',
+  'crmdocs': 'bashhh89/crmdocs',
+  'openclaw': 'khaledbashir/openclaw',
+}
+
+function commitUrl(repo: string | null, sha: string | null): string | null {
+  if (!repo || !sha) return null
+  const slug = REPO_TO_GITHUB[repo]
+  if (!slug) return null
+  return `https://github.com/${slug}/commit/${sha}`
+}
+
+function daysSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
 }
 
 interface Props {
@@ -49,10 +71,27 @@ function fmtUSD(n: number): string {
   return '$' + n.toLocaleString('en-US')
 }
 
-const CLASSIFICATION_TONE: Record<string, string> = {
-  FIX:   'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900',
-  NEW:   'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-900',
-  MIXED: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900',
+// Coverage badge — what billing bucket this row lands in
+const COVERAGE_TONE = {
+  service_contract: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900',
+  change_order:     'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900',
+  warranty:         'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900',
+}
+
+function coverageLabel(r: TriagedRequest): { kind: 'service_contract' | 'change_order'; label: string } {
+  if (r.classification === 'NEW' || r.classification === 'MIXED' || !r.retainer_covered) {
+    return { kind: 'change_order', label: 'CHANGE ORDER' }
+  }
+  return { kind: 'service_contract', label: 'SERVICE CONTRACT' }
+}
+
+function warrantyDaysLeft(r: TriagedRequest): number | null {
+  if (r.status !== 'shipped' || !r.shipped_at) return null
+  if (r.classification !== 'FIX') return null
+  const shipped = new Date(r.shipped_at).getTime()
+  const expires = shipped + 30 * 86_400_000
+  const days = Math.ceil((expires - Date.now()) / 86_400_000)
+  return days > 0 ? days : null
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -95,15 +134,45 @@ export default function RequestTimeline({ requests }: Props) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${CLASSIFICATION_TONE[r.classification] || ''}`}>
-                    {r.classification}
-                  </span>
+                  {(() => {
+                    const cov = coverageLabel(r)
+                    return (
+                      <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${COVERAGE_TONE[cov.kind]}`}>
+                        {cov.label}
+                      </span>
+                    )
+                  })()}
+                  {(() => {
+                    const wd = warrantyDaysLeft(r)
+                    if (wd == null) return null
+                    return (
+                      <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${COVERAGE_TONE.warranty}`}>
+                        WARRANTY · {wd}d
+                      </span>
+                    )
+                  })()}
                   <span className={`inline-block text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_TONE[r.status] || ''}`}>
                     {r.status.replace('_', ' ')}
                   </span>
                   {r.requester ? (
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">from {r.requester}</span>
                   ) : null}
+                  {(() => {
+                    const url = commitUrl(r.repo, r.shipped_commit_sha)
+                    if (!url) return null
+                    return (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline tabular-nums"
+                        title={`View commit on GitHub · ${r.shipped_commit_sha?.slice(0, 7)}`}
+                      >
+                        ↗ {r.shipped_commit_sha?.slice(0, 7)}
+                      </a>
+                    )
+                  })()}
                 </div>
                 <div className="text-sm mt-1 leading-snug">{r.summary}</div>
               </div>
