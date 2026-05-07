@@ -38,16 +38,19 @@ export interface TriagedRequest {
   requester: string | null
   summary: string
   classification: 'FIX' | 'NEW' | 'MIXED'
+  classification_confidence: number | null   // 0..10
+  classification_basis: string | null         // why FIX vs NEW vs MIXED
   status: string
   retainer_covered: boolean
   estimated_hours: number | null
-  estimate_basis: string | null
+  estimate_basis: string | null               // how the hours estimate was derived
   estimated_usd: number | null
-  market_breakdown: any | null   // full chain when present (NEW/MIXED only)
+  market_breakdown: any | null                // full chain when present (NEW/MIXED only)
   shipped_at: string | null
   actual_hours: number | null
   shipped_commit_sha: string | null
   repo: string | null
+  area: string | null
 }
 
 export interface CoverageStrip {
@@ -244,9 +247,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   // panel on the dashboard with click-to-expand justification.
   const triagedRes = await query(
     `SELECT id, received_at, requester, summary, classification, status,
+            classification_confidence, classification_basis,
             retainer_covered, estimated_hours, estimate_basis, estimated_usd,
             market_breakdown, shipped_at, actual_hours,
-            shipped_commit_sha, repo
+            shipped_commit_sha, repo, area
        FROM service_requests
       WHERE received_at >= NOW() - INTERVAL '60 days'
         AND status <> 'cancelled'
@@ -260,6 +264,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     requester: (r.requester as string) || null,
     summary: String(r.summary || ''),
     classification: r.classification as 'FIX' | 'NEW' | 'MIXED',
+    classification_confidence: r.classification_confidence == null ? null : Number(r.classification_confidence),
+    classification_basis: (r.classification_basis as string) || null,
     status: String(r.status || 'open'),
     retainer_covered: Boolean(r.retainer_covered),
     estimated_hours: r.estimated_hours == null ? null : Number(r.estimated_hours),
@@ -270,6 +276,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
     shipped_commit_sha: (r.shipped_commit_sha as string) || null,
     repo: (r.repo as string) || null,
+    area: (r.area as string) || null,
   }))
 
   // Coverage-strip aggregates — three numbers above the meter.

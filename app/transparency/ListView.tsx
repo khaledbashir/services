@@ -8,6 +8,7 @@ interface TriagedRequest {
   requester: string | null
   summary: string
   classification: 'FIX' | 'NEW' | 'MIXED'
+  classification_confidence: number | null
   status: string
   retainer_covered: boolean
   estimated_hours: number | null

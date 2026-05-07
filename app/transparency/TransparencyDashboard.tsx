@@ -8,6 +8,7 @@ import ActivityTicker from './ActivityTicker'
 import PlatformBreakdown from './PlatformBreakdown'
 import PrintButton from './PrintButton'
 import GrayAreas from './GrayAreas'
+import MetricsExplainer from './MetricsExplainer'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -75,6 +76,11 @@ export default async function TransparencyDashboard() {
         {/* Coverage strip — three buckets at a glance, sticky on scroll */}
         <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-zinc-50/85 dark:bg-zinc-950/85 backdrop-blur-md border-b border-zinc-200/50 dark:border-zinc-800/50">
           <CoverageStrip coverage={data.coverage} />
+        </div>
+
+        {/* "How these numbers are calculated" — collapsible audit trail */}
+        <div className="mt-3 mb-4">
+          <MetricsExplainer />
         </div>
 
         {/* Row 1: credit meter + warranty list */}

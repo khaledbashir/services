@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Rationale from './Rationale'
 
 interface BreakdownStep {
   label: string
@@ -26,6 +27,8 @@ interface TriagedRequest {
   requester: string | null
   summary: string
   classification: 'FIX' | 'NEW' | 'MIXED'
+  classification_confidence: number | null
+  classification_basis: string | null
   status: string
   retainer_covered: boolean
   estimated_hours: number | null
@@ -36,6 +39,7 @@ interface TriagedRequest {
   actual_hours: number | null
   shipped_commit_sha: string | null
   repo: string | null
+  area: string | null
 }
 
 const REPO_TO_GITHUB: Record<string, string> = {
@@ -175,6 +179,20 @@ export default function RequestTimeline({ requests }: Props) {
                   })()}
                 </div>
                 <div className="text-sm mt-1 leading-snug">{r.summary}</div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Rationale
+                    classification={r.classification}
+                    confidence={r.classification_confidence}
+                    classification_basis={r.classification_basis}
+                    estimate_basis={r.estimate_basis}
+                    retainer_covered={r.retainer_covered}
+                    area={r.area}
+                    repo={r.repo}
+                    estimated_hours={r.estimated_hours}
+                    actual_hours={r.actual_hours}
+                    status={r.status}
+                  />
+                </div>
               </div>
               <div className="flex-shrink-0 text-right">
                 {hours != null ? (
