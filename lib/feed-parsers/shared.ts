@@ -96,14 +96,19 @@ export function inferLeague(name: string): string | null {
   const includesAny = (terms: string[]) =>
     terms.some((term) => lower.includes(term) || compact.includes(term.replace(/\s+/g, '')))
 
+  // Full MLB coverage — one missing club (e.g. the Nationals) means iCal-imported
+  // games drop out of league filters and the "events for X" widgets show stale.
   if (includesAny([
     'red sox', 'yankees', 'blue jays', 'orioles', 'rays', 'brewers', 'dodgers', 'giants',
     'mets', 'phillies', 'braves', 'mariners', 'padres', 'cubs', 'cardinals',
+    'nationals', 'marlins', 'pirates', 'reds', 'rockies', 'diamondbacks', 'astros',
+    'texas rangers', 'angels', 'athletics', 'twins', 'white sox', 'guardians', 'tigers', 'royals',
   ])) return 'MLB'
 
   if (includesAny([
     'devils', 'flyers', 'rangers', 'bruins', 'islanders', 'penguins', 'capitals',
     'kraken', 'canucks', 'sharks', 'la kings', 'los angeles kings', 'ducks', 'golden knights',
+    'canadiens', 'maple leafs',
   ])) return 'NHL'
 
   if (includesAny([
