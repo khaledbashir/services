@@ -366,7 +366,7 @@ export default function VenuesPage() {
                             : 'text-red-700'
                     return (
                       <tr key={venue.id}
-                        onClick={() => venue.is_active && router.push(`/venues/${venue.id}`)}
+                        onClick={() => venue.is_active && window.open(`/venues/${venue.id}`, '_blank', 'noopener,noreferrer')}
                         className={`${venue.is_active ? 'hover:bg-zinc-50 cursor-pointer' : 'opacity-60'} transition-colors`}>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -449,7 +449,7 @@ export default function VenuesPage() {
               return (
                 <div key={venue.id}
                   className={`bg-white rounded-xl border transition-all overflow-hidden ${venue.is_active ? 'border-zinc-200 hover:border-zinc-300 hover:shadow-md cursor-pointer group' : 'border-zinc-200 opacity-60'}`}
-                  onClick={() => venue.is_active && router.push(`/venues/${venue.id}`)}>
+                  onClick={() => venue.is_active && window.open(`/venues/${venue.id}`, '_blank', 'noopener,noreferrer')}>
                   {/* Health strip */}
                   <div className={`h-1 ${venue.is_active ? healthColors[health] : 'bg-zinc-300'}`}></div>
                   <div className="p-4">
