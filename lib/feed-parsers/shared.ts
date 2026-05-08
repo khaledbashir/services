@@ -92,9 +92,27 @@ export function normalizeClock(value: string | null | undefined): string | null 
 
 export function inferLeague(name: string): string | null {
   const lower = name.toLowerCase()
-  if (lower.includes('red sox') || lower.includes('yankees') || lower.includes('blue jays') || lower.includes('orioles') || lower.includes('rays') || lower.includes('brewers')) return 'MLB'
-  if (lower.includes('devils') || lower.includes('flyers') || lower.includes('rangers') || lower.includes('bruins')) return 'NHL'
-  if (lower.includes('celtics') || lower.includes('knicks') || lower.includes('nets')) return 'NBA'
+  // MLB — full 30-team coverage, since one missing club (e.g. the Nationals)
+  // means iCal-imported games drop out of league filters and the Joe-tier
+  // "events for X" widgets show stale-looking results.
+  if (
+    lower.includes('red sox') || lower.includes('yankees') || lower.includes('blue jays') ||
+    lower.includes('orioles') || lower.includes('rays') || lower.includes('brewers') ||
+    lower.includes('nationals') || lower.includes('phillies') || lower.includes('mets') ||
+    lower.includes('marlins') || lower.includes('braves') || lower.includes('cubs') ||
+    lower.includes('cardinals') || lower.includes('pirates') || lower.includes('reds') ||
+    lower.includes('dodgers') || lower.includes('giants') || lower.includes('padres') ||
+    lower.includes('rockies') || lower.includes('diamondbacks') || lower.includes('astros') ||
+    lower.includes('rangers') && lower.includes('texas') || lower.includes('angels') ||
+    lower.includes('athletics') || lower.includes('mariners') || lower.includes('twins') ||
+    lower.includes('white sox') || lower.includes('guardians') || lower.includes('tigers') ||
+    lower.includes('royals')
+  ) return 'MLB'
+  if (lower.includes('devils') || lower.includes('flyers') || lower.includes('bruins') ||
+      lower.includes('penguins') || lower.includes('capitals') || lower.includes('islanders') ||
+      lower.includes('canadiens') || lower.includes('maple leafs')) return 'NHL'
+  if (lower.includes('celtics') || lower.includes('knicks') || lower.includes('nets') ||
+      lower.includes('76ers') || lower.includes('wizards') || lower.includes('heat')) return 'NBA'
   return null
 }
 

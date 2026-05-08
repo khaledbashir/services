@@ -197,9 +197,15 @@ export async function PATCH(
     let feedChanged = false
     let normalizedFeedUrl: string | null = null
     if (body.feed_url !== undefined) {
-      // Strip any whitespace the user accidentally pasted inside the URL.
+      // Strip whitespace and normalize calendar-subscription schemes so the
+      // stored URL is also openable from a browser / cron / curl. Apple's
+      // "Subscribe to Calendar" copies a webcal:// URL, but fetch() can't
+      // open that scheme — store the https:// equivalent.
       normalizedFeedUrl = typeof body.feed_url === 'string' && body.feed_url.trim()
-        ? body.feed_url.trim().replace(/\s+/g, '')
+        ? body.feed_url.trim()
+            .replace(/\s+/g, '')
+            .replace(/^webcal:\/\//i, 'https://')
+            .replace(/^webcals:\/\//i, 'https://')
         : null
       await query(`UPDATE venues SET feed_url = $1 WHERE id = $2`, [normalizedFeedUrl, venueId])
       feedChanged = feedChanged || !!normalizedFeedUrl
