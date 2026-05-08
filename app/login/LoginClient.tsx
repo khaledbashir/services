@@ -13,6 +13,7 @@ function safeRedirectPath(raw: string | null): string | null {
 // useSearchParams triggers a CSR bailout during prerender in Next 14 unless
 // wrapped in a Suspense boundary, so the form lives in a child component.
 function LoginForm() {
+  const microsoftSsoEnabled = process.env.NEXT_PUBLIC_MICROSOFT_SSO_ENABLED === 'true'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -20,6 +21,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectParam = safeRedirectPath(searchParams?.get('redirect') || null)
+  const microsoftError = searchParams?.get('error') || ''
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -84,6 +86,35 @@ function LoginForm() {
         <div className="mb-6 rounded border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
           {error}
         </div>
+      )}
+
+      {microsoftError && !error && (
+        <div className="mb-6 rounded border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Microsoft sign-in could not finish. Use the password fallback or ask an admin to confirm your staff email.
+        </div>
+      )}
+
+      {microsoftSsoEnabled && (
+        <>
+          <a
+            href={`/api/auth/microsoft?redirect=${encodeURIComponent(redirectParam || '/dashboard')}`}
+            className="mb-5 flex h-12 w-full items-center justify-center gap-3 rounded border border-white/10 bg-white text-sm font-semibold text-zinc-950 transition hover:bg-zinc-100 focus:outline-none focus:ring-4 focus:ring-[#0A52EF]/30"
+          >
+            <span className="grid h-5 w-5 grid-cols-2 gap-0.5" aria-hidden="true">
+              <span className="bg-[#f25022]" />
+              <span className="bg-[#7fba00]" />
+              <span className="bg-[#00a4ef]" />
+              <span className="bg-[#ffb900]" />
+            </span>
+            Sign in with Microsoft
+          </a>
+
+          <div className="mb-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">Fallback</span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+        </>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">

@@ -326,12 +326,24 @@ export function Sidebar() {
 
   const sidebarContent = (
     <>
-      <Link href="/dashboard" className="block p-6 border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+      <Link href="/hub" className="block p-6 border-b border-white/5 hover:bg-white/[0.03] transition-colors">
         <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7" />
         <p className="text-zinc-500 text-[11px] mt-1.5 font-medium tracking-wider uppercase">Services</p>
       </Link>
 
       <nav className="flex-1 p-3 overflow-y-auto space-y-0.5">
+        <Link
+          href="/hub"
+          className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${
+            isLinkActive('/hub', true)
+              ? 'bg-[#0A52EF]/15 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Icon className="h-4 w-4 opacity-70"><path strokeLinecap="round" strokeLinejoin="round" d="M4 5h7v7H4V5zm9 0h7v7h-7V5zM4 14h7v5H4v-5zm9 0h7v5h-7v-5z" /></Icon>
+          ANC Hub
+        </Link>
+
         {/* Top-level link — manager+ → Dashboard, designer/contractor →
             Design Requests (their primary surface), technician → My Events. */}
         {isManager ? (
@@ -446,7 +458,7 @@ export function Sidebar() {
   // the full sidebar (and auto-open that section).
   const collapsedRail = (
     <>
-      <Link href="/dashboard" className="block py-4 border-b border-white/5 hover:bg-white/[0.03] transition-colors flex justify-center">
+      <Link href="/hub" className="block py-4 border-b border-white/5 hover:bg-white/[0.03] transition-colors flex justify-center">
         <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-6 w-auto" />
       </Link>
       <nav className="flex-1 py-3 overflow-y-auto flex flex-col items-center gap-1">
