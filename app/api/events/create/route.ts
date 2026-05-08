@@ -74,12 +74,24 @@ export async function POST(request: NextRequest) {
     const venueName = venueRes.rows[0]?.name || 'Unknown'
     const venueChannel = venueRes.rows[0]?.slack_channel_id
     const staffCount = staff_ids?.length || 0
-    const slackSent = await notifyOps(
-      ':calendar:',
-      `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`,
-      { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` },
-      venueChannel
+
+    // Gate the "*New event created:*" Slack ping behind an app_settings flag
+    // and default it OFF. Joe 2026-05-08: a manager seeding a fresh venue
+    // (Prudential) was spamming #ops with one ping per event, so the default
+    // is silent. Flip `notify_on_event_create=true` in app_settings to turn
+    // it back on once we have a smarter batched/per-channel toggle.
+    const notifySetting = await query(
+      `SELECT value FROM app_settings WHERE key = 'notify_on_event_create'`
     )
+    const notifyEnabled = (notifySetting.rows[0]?.value || 'false').toLowerCase() === 'true'
+    const slackSent = notifyEnabled
+      ? await notifyOps(
+          ':calendar:',
+          `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`,
+          { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` },
+          venueChannel
+        )
+      : false
 
     // --- CRM SYNC: push new event to Twenty ---
     ;(async () => {

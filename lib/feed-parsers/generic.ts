@@ -1,4 +1,4 @@
-import { dedupeFeedEvents, fetchFeedText } from '@/lib/feed-parsers/shared'
+import { classifyHomeAway, dedupeFeedEvents, fetchFeedText } from '@/lib/feed-parsers/shared'
 import type { FeedEvent, ParseFeedParams } from '@/lib/feed-parsers/types'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
@@ -72,6 +72,17 @@ ${sourceText.slice(0, 24000)}`
   return dedupeFeedEvents(
     parsed
       .filter((event) => event?.name && event?.date)
+      // Defensive away-game filter: AI extractors sometimes return team
+      // road-trip games as if they happened at this venue, especially for
+      // team schedule pages. Drop them when the name + venue overlap
+      // unambiguously says the venue's team is on the road.
+      .filter((event) => {
+        const teams = Array.isArray(event.teams) && event.teams.length === 2
+          ? event.teams.map((t) => String(t || '')).filter(Boolean)
+          : []
+        if (event.eventType !== 'game' || teams.length !== 2) return true
+        return classifyHomeAway(params.venueName, event.name, teams) !== 'away'
+      })
       .map((event) => ({
         ...event,
         source: event.source || 'other',

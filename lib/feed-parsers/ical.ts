@@ -1,4 +1,4 @@
-import { dedupeFeedEvents, inferLeague } from '@/lib/feed-parsers/shared'
+import { classifyHomeAway, dedupeFeedEvents, inferLeague } from '@/lib/feed-parsers/shared'
 import type { FeedEvent, ParseFeedParams } from '@/lib/feed-parsers/types'
 
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -89,15 +89,46 @@ export async function parseIcalFeed(params: ParseFeedParams): Promise<FeedEvent[
   const rawText = await res.text()
   const text = unfoldIcs(rawText)
 
+  // Token-overlap test against the iCal LOCATION field: this is the strongest
+  // signal we have for "did this game happen at our venue or somewhere else?".
+  // ECAL/team-calendar feeds set LOCATION to the actual game venue per event,
+  // so `LOCATION:loanDepot park` on a Nats game = Nats are road, drop it.
+  const venueTokenSet = new Set(
+    params.venueName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+      .filter((w) => w && !['park','stadium','arena','center','centre','field','ballpark','the','of','at','and','court','house'].includes(w))
+  )
+  const locationMatchesVenue = (location: string | null): boolean | null => {
+    if (!location) return null
+    const locTokens = new Set(location.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean))
+    if (venueTokenSet.size === 0) return null
+    let overlap = 0
+    for (const t of venueTokenSet) if (locTokens.has(t)) overlap++
+    if (overlap === 0) return false
+    if (overlap === venueTokenSet.size) return true
+    return overlap / venueTokenSet.size >= 0.5 ? true : false
+  }
+
   const events: FeedEvent[] = []
   for (const block of text.split('BEGIN:VEVENT').slice(1)) {
     const summaryRaw = readField(block, 'SUMMARY')
     const start = parseIcsDate(readField(block, 'DTSTART'))
+    const location = readField(block, 'LOCATION')
     if (!summaryRaw || !start) continue
 
     const name = cleanSummary(summaryRaw)
     if (!name) continue
     const { teams, isGame } = extractTeams(name)
+
+    if (isGame) {
+      // First try LOCATION (ICS-native, works for any venue/team combo).
+      const locVerdict = locationMatchesVenue(location)
+      if (locVerdict === false) continue
+      // If LOCATION was missing or ambiguous, fall back to summary-token
+      // matching (works when the venue name shares a word with the home team —
+      // "Nationals Park" + "Washington Nationals", "Yankee Stadium" + "Yankees").
+      if (locVerdict === null && classifyHomeAway(params.venueName, name, teams) === 'away') continue
+    }
+
     const lower = name.toLowerCase()
     const eventType: FeedEvent['eventType'] = isGame
       ? 'game'

@@ -122,6 +122,75 @@ export function inferLeague(name: string): string | null {
   return null
 }
 
+// Words that show up in venue names everywhere — they don't disambiguate
+// "Nationals Park" from "Yankee Stadium". Strip them before token-matching
+// against team names.
+const VENUE_GENERIC_WORDS = new Set([
+  'park', 'stadium', 'arena', 'center', 'centre', 'field', 'ballpark',
+  'grounds', 'complex', 'pavilion', 'coliseum', 'court', 'house',
+  'the', 'of', 'at', 'and',
+])
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function distinctVenueTokens(venueName: string): Set<string> {
+  return new Set(tokenize(venueName).filter((word) => !VENUE_GENERIC_WORDS.has(word)))
+}
+
+/**
+ * Best-effort home/away classifier for a parsed game summary. Returns:
+ *   - 'home'    → the venue's primary team is hosting
+ *   - 'away'    → the venue's primary team is on the road (drop the event)
+ *   - 'unknown' → can't tell from name overlap; default to keeping the event
+ *
+ * Heuristic: tokenize the venue name (minus generic words like "Park"), then
+ * tokenize each team. The team that shares a distinctive word with the venue
+ * IS the venue's team. Combine that with the matchup separator to decide
+ * home vs away — `@` and `at` put the away team first; `vs.` and `vs` put
+ * the home team first by convention on team-owned schedule pages.
+ */
+export function classifyHomeAway(
+  venueName: string,
+  summary: string,
+  teams: string[]
+): 'home' | 'away' | 'unknown' {
+  if (!venueName || !summary || teams.length !== 2) return 'unknown'
+  const venueTokens = distinctVenueTokens(venueName)
+  if (venueTokens.size === 0) return 'unknown'
+
+  const teamMatches = (team: string) => {
+    const tokens = new Set(tokenize(team).filter((w) => !VENUE_GENERIC_WORDS.has(w)))
+    let overlap = 0
+    for (const t of tokens) if (venueTokens.has(t)) overlap++
+    return overlap
+  }
+  const left = teamMatches(teams[0])
+  const right = teamMatches(teams[1])
+  if (left === 0 && right === 0) return 'unknown'
+
+  // The team with the stronger venue-name overlap is the venue's team.
+  const venueTeamSlot: 'left' | 'right' = right >= left ? 'right' : 'left'
+
+  // Determine which slot is home from the matchup separator. Test ` @ ` /
+  // ` at ` first because they're unambiguous (away first). For `vs.` / `vs`
+  // we default to "first team is home" — true on team-owned schedule pages
+  // and on the MLB Stats API output we already produce.
+  let homeSlot: 'left' | 'right'
+  if (/\s+@\s+/.test(summary) || /\s+at\s+/i.test(summary)) {
+    homeSlot = 'right'
+  } else {
+    homeSlot = 'left'
+  }
+
+  return venueTeamSlot === homeSlot ? 'home' : 'away'
+}
+
 // Ticketmaster keeps "(If Necessary)" and "(TBA)" markers on playoff games
 // even after the series is decided, e.g. "Raptors at Cavaliers Rd 1 Hm Gm 3
 // (If Necessary)" stays tagged after Game 2 makes the game necessary. The

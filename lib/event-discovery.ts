@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { extractStateFromAddress } from '@/lib/geocode'
+import { classifyHomeAway } from '@/lib/feed-parsers/shared'
 import { parseVenueFeed, type FeedType } from '@/lib/feed-parsers'
 import { buildAutomationSelect, getVenueAutomationInfo, withComputedAutomation } from '@/lib/venue-automation'
 import { combineLocalToUtc } from '@/lib/timezone'
@@ -777,6 +778,26 @@ const PLACEHOLDER_PATTERN = /(vs\.?\s*tbd|tbd\s*vs|tbd\s*at\s+|date:?\s*tbd|play
 function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): DiscoveryCandidate | null {
   if (!raw.summary || !raw.event_date || !/^\d{4}-\d{2}-\d{2}$/.test(raw.event_date)) return null
   if (PLACEHOLDER_PATTERN.test(raw.summary)) return null
+
+  // Defensive away-game guard. The AI prompt asks for home games only, but
+  // models still return road trips occasionally — and once they make it past
+  // here they end up labeled `league_schedule` and stored against the venue.
+  // Use the explicit home_team/away_team fields when present, otherwise
+  // fall back to summary-based classification.
+  if (raw.event_type === 'game') {
+    if (raw.home_team && raw.away_team) {
+      const verdict = classifyHomeAway(venue.name, `${raw.away_team} at ${raw.home_team}`, [raw.away_team, raw.home_team])
+      if (verdict === 'away') return null
+    } else {
+      const summary = raw.summary
+      const splitMatch = summary.match(/^(.+?)\s+(?:vs\.?|@|at)\s+(.+)$/i)
+      if (splitMatch) {
+        const verdict = classifyHomeAway(venue.name, summary, [splitMatch[1].trim(), splitMatch[2].trim()])
+        if (verdict === 'away') return null
+      }
+    }
+  }
+
   const sourceKind = raw.source_kind || sourceKindFromUrl(raw.source_url || null, venue.name)
   const sourceUrl = raw.source_url || null
   const sourceDomain = sourceDomainFromUrl(sourceUrl)
