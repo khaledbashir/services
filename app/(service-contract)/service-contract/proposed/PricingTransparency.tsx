@@ -91,7 +91,7 @@ export default function PricingTransparency({ breakdown, workType, fetchComparab
       <div className="space-y-2 mb-4">
         {steps.map((step, i) => (
           <div key={i} className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#0A52EF] text-white text-[10px] font-bold flex items-center justify-center">
               {i + 1}
             </div>
             <div className="flex-1 min-w-0">

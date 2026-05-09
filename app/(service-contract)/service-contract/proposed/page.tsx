@@ -24,7 +24,7 @@ interface ProposedCO {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  draft:       'bg-zinc-100 text-zinc-600 border-zinc-200',
+  draft:       'bg-gray-100 text-gray-600 border-gray-200',
   available:   'bg-blue-50 text-blue-700 border-blue-200',
   pitched:     'bg-purple-50 text-purple-700 border-purple-200',
   in_progress: 'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -84,9 +84,6 @@ export default function ProposedCOsPage() {
 
   const bundles = visible.filter(i => i.category === 'bundle')
   const individuals = visible.filter(i => i.category === 'individual')
-
-  const realCount = items.filter(i => !i.is_placeholder).length
-  const placeholderCount = items.filter(i => i.is_placeholder).length
 
   const save = async () => {
     if (!drawer) return
@@ -153,7 +150,7 @@ export default function ProposedCOsPage() {
         </div>
         <button
           onClick={() => setDrawer({ mode: 'new', data: { ...EMPTY_DRAFT } })}
-          className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap"
+          className="px-3 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] whitespace-nowrap"
         >
           + Add an idea (manual)
         </button>
@@ -162,17 +159,6 @@ export default function ProposedCOsPage() {
       {/* AI scope generator — top of page, the hero */}
       <ScopeItHero onCreated={refresh} />
 
-
-      {placeholderCount > 0 && (
-        <div className="mb-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/60 px-4 py-3">
-          <p className="text-xs text-amber-900 dark:text-amber-200">
-            <strong>{placeholderCount} placeholder cards</strong> — replace these with real bundles + features as ideas come up.
-            Click <strong>+ New idea</strong> to add one, or click any placeholder card to edit it in place.
-            {realCount > 0 && <span className="ml-1 opacity-70">({realCount} real card{realCount === 1 ? '' : 's'} so far.)</span>}
-          </p>
-        </div>
-      )}
-
       <div className="flex gap-2 mb-4 text-xs">
         {(['all', 'bundle', 'individual'] as const).map(f => (
           <button
@@ -180,8 +166,8 @@ export default function ProposedCOsPage() {
             onClick={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-md border ${
               filter === f
-                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
-                : 'border-gray-300 text-gray-700 dark:text-gray-300 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800'
+                ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                : 'border-gray-300 text-gray-700 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
             {f === 'all' ? 'All' : f === 'bundle' ? 'Bundles' : 'Individual features'}
@@ -226,7 +212,7 @@ export default function ProposedCOsPage() {
       )}
 
       {!loading && visible.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 p-12 text-center">
+        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
           <div className="text-3xl mb-3">💡</div>
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">No proposed COs yet</p>
           <p className="text-xs text-gray-500 max-w-sm mx-auto">
@@ -263,7 +249,7 @@ function Card({
       className={`rounded-xl border p-4 transition-all ${
         isPlaceholder
           ? 'border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/20'
-          : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm hover:shadow-md'
+          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm hover:shadow-md'
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -326,16 +312,16 @@ function Card({
         </div>
       )}
 
-      <div className="flex gap-1.5 pt-2 border-t border-gray-100 dark:border-zinc-800">
+      <div className="flex gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-800">
         <Link
           href={`/service-contract/proposed/${item.id}`}
-          className="flex-1 px-2 py-1.5 text-[11px] text-center bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-md hover:opacity-90"
+          className="flex-1 px-2 py-1.5 text-[11px] text-center bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-md hover:opacity-90"
         >
           View details →
         </Link>
         <button
           onClick={onEdit}
-          className="px-2 py-1.5 text-[11px] border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
+          className="px-2 py-1.5 text-[11px] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
         >
           Edit
         </button>
@@ -437,7 +423,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder='e.g. "I want a way to see all the shipped venues for the season in one place, with a filter by region and a way to email any of them at once."'
             rows={3}
-            className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-zinc-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
           <div className="flex items-center justify-between mt-3">
             <div className="text-[11px] text-blue-700 dark:text-blue-400">
@@ -446,7 +432,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             <button
               onClick={generate}
               disabled={busy || !description.trim()}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 font-medium"
+              className="px-4 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50 font-medium"
             >
               {busy ? 'Scoping…' : 'Scope it →'}
             </button>
@@ -455,11 +441,11 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
         </div>
       ) : (
         <div>
-          <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 p-4">
+          <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-900 p-4">
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-zinc-100 text-zinc-600">
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-gray-100 text-gray-600">
                     AI draft
                   </span>
                   {draft.category === 'bundle' && (
@@ -502,12 +488,12 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 value={refining}
                 onChange={(e) => setRefining(e.target.value)}
                 placeholder='e.g. "Make it cheaper", "add region filtering", "drop the email part"'
-                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-zinc-900 rounded-md text-sm"
+                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm"
               />
               <button
                 onClick={refine}
                 disabled={busy || !refining.trim()}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50"
               >
                 {busy ? '…' : 'Refine'}
               </button>
@@ -521,7 +507,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             <div className="flex gap-2">
               <Link
                 href={`/service-contract/proposed/${draft.id}`}
-                className="px-3 py-2 text-sm bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-md hover:opacity-90"
+                className="px-3 py-2 text-sm bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-md hover:opacity-90"
               >
                 Open detail →
               </Link>
@@ -555,10 +541,10 @@ function Drawer({
     <div className="fixed inset-0 z-50 flex items-stretch justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative w-full max-w-lg bg-white dark:bg-zinc-900 shadow-xl overflow-y-auto"
+        className="relative w-full max-w-lg bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 p-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-wide text-gray-500">
               {drawer.mode === 'new' ? 'New' : 'Edit'} proposed CO
@@ -576,7 +562,7 @@ function Drawer({
               value={d.name || ''}
               onChange={e => onChange({ name: e.target.value })}
               placeholder="e.g. Slack-to-CRM auto-triage"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             />
           </Field>
 
@@ -588,8 +574,8 @@ function Drawer({
                   onClick={() => onChange({ category: c })}
                   className={`flex-1 px-3 py-2 text-sm rounded-md border ${
                     d.category === c
-                      ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900'
-                      : 'border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300'
+                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900'
+                      : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'
                   }`}
                 >
                   {c === 'individual' ? 'Individual feature' : 'Bundle (multi-feature)'}
@@ -602,7 +588,7 @@ function Drawer({
             <select
               value={d.target_project || ''}
               onChange={e => onChange({ target_project: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             >
               {PROJECT_OPTIONS.map(opt => (
                 <option key={opt.key} value={opt.key}>{opt.label}</option>
@@ -616,7 +602,7 @@ function Drawer({
               onChange={e => onChange({ pitch: e.target.value })}
               rows={2}
               placeholder="e.g. Every Slack request gets auto-routed into the right project pipeline before it can be missed."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             />
           </Field>
 
@@ -632,7 +618,7 @@ function Drawer({
                     onChange({ bullets: next })
                   }}
                   placeholder={`Bullet ${i + 1}`}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
                 />
               ))}
               <button
@@ -651,7 +637,7 @@ function Drawer({
                 value={d.price_usd ?? ''}
                 onChange={e => onChange({ price_usd: e.target.value ? Number(e.target.value) : null })}
                 placeholder="2500"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm tabular-nums"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm tabular-nums"
               />
             </Field>
             <Field label="Timeline">
@@ -659,7 +645,7 @@ function Drawer({
                 value={d.timeline_label || ''}
                 onChange={e => onChange({ timeline_label: e.target.value })}
                 placeholder="e.g. 2 weeks"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
               />
             </Field>
           </div>
@@ -670,7 +656,7 @@ function Drawer({
               onChange={e => onChange({ benefit: e.target.value })}
               rows={2}
               placeholder="e.g. No more requests slipping through Slack threads — every ask hits the right board within a minute."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             />
           </Field>
 
@@ -678,7 +664,7 @@ function Drawer({
             <select
               value={d.status || 'available'}
               onChange={e => onChange({ status: e.target.value as ProposedCO['status'] })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             >
               <option value="draft">Draft (not ready to pitch)</option>
               <option value="available">Available (ready to pitch)</option>
@@ -694,7 +680,7 @@ function Drawer({
               onChange={e => onChange({ notes: e.target.value })}
               rows={2}
               placeholder="Anything you want to remember about this card."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-md text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
             />
           </Field>
 
@@ -707,17 +693,17 @@ function Drawer({
             <span>Mark as placeholder (visually indicates "fill me in later")</span>
           </label>
 
-          <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-zinc-800 sticky bottom-0 bg-white dark:bg-zinc-900 -mx-4 px-4 py-3">
+          <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-800 sticky bottom-0 bg-white dark:bg-gray-900 -mx-4 px-4 py-3">
             <button
               onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Cancel
             </button>
             <button
               onClick={onSave}
               disabled={!d.name?.trim()}
-              className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 px-3 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50"
             >
               Save
             </button>

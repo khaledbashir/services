@@ -230,12 +230,12 @@ export default function ProposedCODetailPage() {
                 value={refining}
                 onChange={(e) => setRefining(e.target.value)}
                 placeholder='e.g. "Cut the scope to just the dashboard part", "make it 2 weeks tighter", "add a Slack alert"'
-                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-zinc-900 rounded-md text-sm"
+                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm"
               />
               <button
                 onClick={refine}
                 disabled={refineBusy || !refining.trim()}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                className="px-3 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50 whitespace-nowrap"
               >
                 {refineBusy ? '…' : 'Refine →'}
               </button>
@@ -246,7 +246,7 @@ export default function ProposedCODetailPage() {
           {item.notes && (
             <section className="mb-8">
               <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2">Internal notes</h2>
-              <pre className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap font-mono p-3 rounded bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800">{item.notes}</pre>
+              <pre className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap font-mono p-3 rounded bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800">{item.notes}</pre>
             </section>
           )}
 
@@ -258,7 +258,7 @@ export default function ProposedCODetailPage() {
                   <Link
                     key={r.id}
                     href={`/service-contract/proposed/${r.id}`}
-                    className="block rounded-lg border border-gray-200 dark:border-zinc-700 p-3 hover:shadow-md hover:border-gray-300 dark:hover:border-zinc-600 transition-shadow"
+                    className="block rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-shadow"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <StatusBadge status={r.status} small />
@@ -275,7 +275,7 @@ export default function ProposedCODetailPage() {
 
         {/* Right column — buy box */}
         <aside className="lg:sticky lg:top-6 self-start">
-          <div className="rounded-2xl border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 shadow-sm">
+          <div className="rounded-2xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 shadow-sm">
             <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Estimate</div>
             <div className="text-4xl font-bold tabular-nums text-gray-900 dark:text-gray-100 leading-none">
               {fmtUSD(item.price_usd)}
@@ -309,6 +309,17 @@ export default function ProposedCODetailPage() {
                 </Link>
               )}
 
+              {!item.is_placeholder && (
+                <a
+                  href={`/api/proposed-cos/${item.id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-center px-4 py-2.5 text-sm font-semibold border-2 border-[#1b3a5f] text-[#1b3a5f] dark:border-blue-300 dark:text-blue-300 rounded-md hover:bg-[#1b3a5f] hover:text-white dark:hover:bg-blue-300 dark:hover:text-gray-900"
+                >
+                  ↓ Download CO PDF
+                </a>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 {item.status === 'draft' && (
                   <button
@@ -328,20 +339,20 @@ export default function ProposedCODetailPage() {
                 )}
                 <Link
                   href="/service-contract/proposed"
-                  className="px-3 py-2 text-xs text-center border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
+                  className="px-3 py-2 text-xs text-center border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   ← Catalog
                 </Link>
               </div>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-zinc-800">
+            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
               <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">What you get</div>
               <ul className="space-y-1.5 text-[11px] text-gray-600 dark:text-gray-400">
-                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>Fixed-price quote — no hourly variance</span></li>
-                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>30-day post-delivery warranty included</span></li>
                 <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>One number, one delivery, one invoice</span></li>
-                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>Promoted to change-orders kanban with one click</span></li>
+                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>30-day post-delivery warranty included</span></li>
+                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>14-day quote validity from the CO PDF date</span></li>
+                <li className="flex gap-1.5"><span className="text-emerald-600">✓</span><span>Approval by written reply locks it in</span></li>
               </ul>
             </div>
           </div>
@@ -364,7 +375,7 @@ export default function ProposedCODetailPage() {
 
 function StatusBadge({ status, small }: { status: string; small?: boolean }) {
   const tones: Record<string, string> = {
-    draft:       'bg-zinc-100 text-zinc-700 border-zinc-300',
+    draft:       'bg-gray-100 text-gray-700 border-gray-300',
     available:   'bg-blue-100 text-blue-800 border-blue-300',
     pitched:     'bg-purple-100 text-purple-800 border-purple-300',
     in_progress: 'bg-indigo-100 text-indigo-800 border-indigo-300',
