@@ -304,7 +304,7 @@ export async function getDashboardData(): Promise<DashboardData> {
            AND shipped_at >= NOW() - INTERVAL '30 days'
        )::int AS warranty_active_count,
        COALESCE(
-         SUM(GREATEST(0, EXTRACT(EPOCH FROM (shipped_at + INTERVAL '30 days' - NOW())) / 86400)) FILTER (
+         MAX(GREATEST(0, EXTRACT(EPOCH FROM (shipped_at + INTERVAL '30 days' - NOW())) / 86400)) FILTER (
            WHERE classification = 'FIX'
              AND retainer_covered = true
              AND source <> 'auto-push'

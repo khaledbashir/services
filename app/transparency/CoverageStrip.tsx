@@ -113,7 +113,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-          <span>{Math.round(c.warranty_days_remaining_total)} days of coverage remaining</span>
+          <span>up to {Math.round(c.warranty_days_remaining_total)} days of coverage remaining</span>
           {dWar ? (
             <>
               <span className="text-emerald-300 dark:text-emerald-700">·</span>
@@ -124,7 +124,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           ) : null}
         </div>
         <div className="text-[10px] text-emerald-500 dark:text-emerald-400/70 mt-0.5">
-          Each fix carries a free 30-day re-fix promise. This is days-of-protection across all active fixes — not retainer hours.
+          Each fix carries a free 30-day re-fix promise. The number above is days until the newest fix&apos;s warranty expires.
         </div>
       </div>
 

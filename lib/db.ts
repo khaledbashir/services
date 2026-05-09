@@ -547,6 +547,12 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10,2)`)
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS quote_amount NUMERIC(10,2)`)
 
+    // Multi-project board: each request belongs to one logical project so the
+    // kanban can group work into per-project pipelines (proposal-engine,
+    // service-dashboard, crm, kb, anything-llm, mirror-mode, internal).
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS project TEXT`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_project ON service_requests(project)`)
+
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.
     await client.query(`CREATE TABLE IF NOT EXISTS retainer_alerts (

@@ -455,18 +455,20 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
     estimatedHoursForStorage = marketBreakdown.finalHours
   }
 
+  const project = deriveProject({ repo: area.repo, area: area.area, source: input.source || 'manual', text })
+
   const r = await query(
     `INSERT INTO service_requests
        (source, source_url, requester, raw_text, summary,
         classification, classification_confidence, classification_basis,
         repo, area, keywords,
         estimated_hours, estimate_basis, retainer_covered,
-        status, created_by, market_breakdown, estimated_usd)
+        status, created_by, market_breakdown, estimated_usd, project)
      VALUES ($1, $2, $3, $4, $5,
              $6, $7, $8,
              $9, $10, $11,
              $12, $13, $14,
-             'open', $15, $16, $17)
+             'open', $15, $16, $17, $18)
      RETURNING id, received_at`,
     [
       input.source || 'manual',
@@ -486,6 +488,7 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
       input.created_by || null,
       marketBreakdown ? JSON.stringify(marketBreakdown) : null,
       estimatedUSD,
+      project,
     ],
   )
   const row = r.rows[0]
@@ -512,6 +515,29 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
     next_action,
     stakeholder_message,
   }
+}
+
+// Map a request to one of the project boards rendered on /service-log.
+// Stable contract — see PROJECTS in app/service-log/change-orders/page.tsx and
+// the Phase 1 multi-project kanban memo.
+export function deriveProject(args: {
+  repo?: string | null
+  area?: string | null
+  source?: string | null
+  text?: string | null
+}): string {
+  const repo = (args.repo || '').toLowerCase()
+  const area = (args.area || '').toLowerCase()
+  const source = (args.source || '').toLowerCase()
+  const text = (args.text || '').toLowerCase()
+  if (source === 'auto-push') return 'internal'
+  if (area === 'crm' || area === 'crm-views' || area === 'crm-skills' || area === 'crm-reports' || repo === 'twenty-crm') return 'crm'
+  if (repo === 'anc-kb' || area === 'docs') return 'kb'
+  if (area === 'mirror-mode' || (repo === 'rag2' && /\bmirror\b/.test(text))) return 'mirror-mode'
+  if (area === 'proposal-engine' || area === 'product-catalog' || area === 'copilot' || repo === 'rag2') return 'proposal-engine'
+  if (area.includes('anything') || area.includes('llm')) return 'anything-llm'
+  if (repo === 'anc-services') return 'service-dashboard'
+  return 'service-dashboard'
 }
 
 // Mark a request as in-progress (sets started_at now if not already set).

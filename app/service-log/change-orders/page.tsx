@@ -13,6 +13,7 @@ interface ChangeOrder {
   classification: 'FIX' | 'NEW' | 'MIXED'
   repo: string | null
   area: string | null
+  project: string | null
   estimated_hours: number | null
   estimated_usd: number | null
   quote_amount: number | null
@@ -26,6 +27,17 @@ interface ChangeOrder {
   actual_hours: number | null
   notes: string | null
 }
+
+const PROJECTS: { key: string; label: string; tone: string }[] = [
+  { key: 'all',               label: 'All stakeholder',  tone: 'border-zinc-300 text-zinc-700 bg-white' },
+  { key: 'service-dashboard', label: 'Service Dashboard',tone: 'border-blue-300 text-blue-800 bg-blue-50' },
+  { key: 'proposal-engine',   label: 'Proposal Engine',  tone: 'border-purple-300 text-purple-800 bg-purple-50' },
+  { key: 'crm',               label: 'CRM',              tone: 'border-emerald-300 text-emerald-800 bg-emerald-50' },
+  { key: 'kb',                label: 'Knowledge Base',   tone: 'border-amber-300 text-amber-800 bg-amber-50' },
+  { key: 'mirror-mode',       label: 'Mirror Mode',      tone: 'border-rose-300 text-rose-800 bg-rose-50' },
+  { key: 'anything-llm',      label: 'AI Assistant',     tone: 'border-indigo-300 text-indigo-800 bg-indigo-50' },
+  { key: 'internal',          label: 'Internal · my workflow', tone: 'border-slate-300 text-slate-700 bg-slate-50' },
+]
 
 type Stage = 'open' | 'quoted' | 'approved' | 'in_progress' | 'shipped' | 'paid' | 'cancelled'
 
@@ -63,15 +75,43 @@ export default function ChangeOrdersKanbanPage() {
   const [loading, setLoading] = useState(true)
   const [showCancelled, setShowCancelled] = useState(false)
   const [openCard, setOpenCard] = useState<ChangeOrder | null>(null)
+  const [activeProject, setActiveProject] = useState<string>('all')
+  const [projectCounts, setProjectCounts] = useState<Record<string, number>>({})
 
   const refresh = async () => {
     setLoading(true)
-    const r = await fetch('/api/service-triage?retainer=false&limit=200').then(r => r.json())
-    setOrders(r.requests || [])
+    // Internal board includes auto-push rows (Ahmad's own work). All other
+    // tabs only show stakeholder COs (retainer=false excludes auto-push by
+    // default).
+    const params = new URLSearchParams({ limit: '300' })
+    if (activeProject === 'internal') {
+      params.set('project', 'internal')
+    } else if (activeProject === 'all') {
+      params.set('retainer', 'false')
+    } else {
+      params.set('retainer', 'false')
+      params.set('project', activeProject)
+    }
+    const [boardRes, countsRes] = await Promise.all([
+      fetch(`/api/service-triage?${params.toString()}`).then(r => r.json()),
+      fetch('/api/service-triage?limit=500').then(r => r.json()),
+    ])
+    setOrders(boardRes.requests || [])
+    const counts: Record<string, number> = { all: 0 }
+    for (const row of (countsRes.requests || []) as ChangeOrder[]) {
+      const p = row.project || 'service-dashboard'
+      const stage = row.status
+      const isStakeholder = row.source !== 'auto-push'
+      const isActive = stage !== 'cancelled' && stage !== 'paid'
+      if (!isActive) continue
+      if (p !== 'internal' && isStakeholder) counts.all = (counts.all || 0) + 1
+      counts[p] = (counts[p] || 0) + 1
+    }
+    setProjectCounts(counts)
     setLoading(false)
   }
 
-  useEffect(() => { refresh() }, [])
+  useEffect(() => { refresh() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeProject])
 
   const byStage = useMemo(() => {
     const map: Record<Stage, ChangeOrder[]> = {
@@ -138,6 +178,8 @@ export default function ChangeOrdersKanbanPage() {
     }
   }
 
+  const isInternal = activeProject === 'internal'
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-[1600px] mx-auto">
@@ -146,12 +188,15 @@ export default function ChangeOrdersKanbanPage() {
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
               <Link href="/service-log" className="hover:underline">Service Log</Link>
               <span>›</span>
-              <span>Change Orders</span>
+              <span>Project boards</span>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">Change Orders</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {isInternal ? 'Internal · my workflow' : 'Change Orders'}
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
-              NEW work outside the 12-hr/month retainer. Each one needs a separate quote.
-              Drag work through the stages — Requested → Quoted → Approved → In Progress → Shipped → Paid.
+              {isInternal
+                ? "Ahmad's own pushes captured automatically by the pre-push ledger. These are workflow improvements, not stakeholder asks — they don't count against the 12-hr retainer or show up on the stakeholder boards."
+                : 'NEW work outside the 12-hr/month retainer. Each one needs a separate quote. Drag work through the stages — Requested → Quoted → Approved → In Progress → Shipped → Paid.'}
             </p>
           </div>
           <Link
@@ -160,6 +205,34 @@ export default function ChangeOrdersKanbanPage() {
           >
             ← Back to transparency
           </Link>
+        </div>
+
+        {/* Project tabs */}
+        <div className="flex flex-wrap gap-2 mb-4 border-b border-gray-200 pb-2">
+          {PROJECTS.map(p => {
+            const count = projectCounts[p.key] || 0
+            const active = activeProject === p.key
+            const hidden = !active && count === 0 && p.key !== 'all'
+            if (hidden) return null
+            return (
+              <button
+                key={p.key}
+                onClick={() => setActiveProject(p.key)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                  active
+                    ? p.tone + ' shadow-sm'
+                    : 'border-transparent text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {p.label}
+                {count > 0 && (
+                  <span className={`ml-1.5 inline-block px-1.5 rounded-full text-[10px] tabular-nums ${active ? 'bg-white/60' : 'bg-gray-200 text-gray-700'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">

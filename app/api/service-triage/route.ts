@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
   const month = url.searchParams.get('month') // YYYY-MM
   const classification = url.searchParams.get('classification')
   const retainer = url.searchParams.get('retainer') // 'true' | 'false'
+  const project = url.searchParams.get('project') // 'service-dashboard' | 'proposal-engine' | etc.
   const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10)))
 
   const where: string[] = []
@@ -61,13 +62,17 @@ export async function GET(request: NextRequest) {
   }
   if (retainer === 'true' || retainer === 'false') {
     where.push(`retainer_covered = ${retainer === 'true' ? 'true' : 'false'}`)
-    // When the caller asks for the change-orders pool (retainer=false), exclude
-    // Ahmad's own pre-push ledger rows — those are internal workflow, not
-    // stakeholder change orders. Phase 1 multi-board kanban will show them on
-    // a dedicated "Internal" board.
-    if (retainer === 'false') {
+    // When the caller asks for the change-orders pool (retainer=false) WITHOUT
+    // an explicit project filter, exclude Ahmad's own pre-push ledger rows —
+    // those are internal workflow, not stakeholder change orders. They live on
+    // the Internal project board which is opted-in via project=internal.
+    if (retainer === 'false' && project !== 'internal') {
       where.push(`source <> 'auto-push'`)
     }
+  }
+  if (project) {
+    params.push(project)
+    where.push(`project = $${params.length}`)
   }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     params.push(month + '-01')
