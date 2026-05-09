@@ -586,6 +586,12 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proposed_cos_status ON proposed_change_orders(status)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proposed_cos_sort ON proposed_change_orders(sort_order, created_at DESC)`)
+    // Pricing transparency: keep the full 4-step market-rate chain + the
+    // workType + scope band so the detail page can show how the price was
+    // computed (and stakeholders can audit it).
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS market_breakdown JSONB`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS work_type TEXT`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS scope_band TEXT`)
 
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.

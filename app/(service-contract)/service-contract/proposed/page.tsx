@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 
 interface ProposedCO {
@@ -144,18 +145,21 @@ export default function ProposedCOsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Proposed Change Orders</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Catalog of CO ideas ready to pitch. Each card carries a baked-in price + timeline + benefit, so
-            stakeholders see a real proposal — not a guess. Promote a card to push it onto the change-orders
-            kanban as a quoted CO.
+            Browse the catalog or describe a new idea — AI drafts a real proposal with price, timeline, and benefit
+            in front of you. Promote any card to push it onto the change-orders kanban as a quoted CO.
           </p>
         </div>
         <button
           onClick={() => setDrawer({ mode: 'new', data: { ...EMPTY_DRAFT } })}
           className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap"
         >
-          + New idea
+          + New idea (manual)
         </button>
       </div>
+
+      {/* AI scope generator — top of page, the hero */}
+      <ScopeItHero onCreated={refresh} />
+
 
       {placeholderCount > 0 && (
         <div className="mb-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/60 px-4 py-3">
@@ -321,9 +325,15 @@ function Card({
       )}
 
       <div className="flex gap-1.5 pt-2 border-t border-gray-100 dark:border-zinc-800">
+        <Link
+          href={`/service-contract/proposed/${item.id}`}
+          className="flex-1 px-2 py-1.5 text-[11px] text-center bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-md hover:opacity-90"
+        >
+          View details →
+        </Link>
         <button
           onClick={onEdit}
-          className="flex-1 px-2 py-1.5 text-[11px] border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
+          className="px-2 py-1.5 text-[11px] border border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
         >
           Edit
         </button>
@@ -331,9 +341,9 @@ function Card({
           <button
             onClick={onPromote}
             disabled={saving}
-            className="flex-1 px-2 py-1.5 text-[11px] bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+            className="px-2 py-1.5 text-[11px] bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
           >
-            {saving ? '...' : 'Promote → CO'}
+            {saving ? '...' : 'Promote'}
           </button>
         )}
         <button
@@ -344,6 +354,187 @@ function Card({
         </button>
       </div>
     </div>
+  )
+}
+
+function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
+  const [description, setDescription] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [draft, setDraft] = useState<ProposedCO | null>(null)
+  const [refining, setRefining] = useState('')
+
+  const generate = async () => {
+    if (!description.trim()) return
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/proposed-cos/scope-it', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      })
+      if (!res.ok) {
+        const t = await res.json().catch(() => ({}))
+        setError(t?.error || 'Scoping failed')
+        return
+      }
+      const data = await res.json()
+      setDraft(data.draft)
+      await onCreated()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const refine = async () => {
+    if (!refining.trim() || !draft) return
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/proposed-cos/scope-it', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: refining, refine_from: draft.id }),
+      })
+      if (!res.ok) {
+        const t = await res.json().catch(() => ({}))
+        setError(t?.error || 'Refinement failed')
+        return
+      }
+      const data = await res.json()
+      setDraft(data.draft)
+      setRefining('')
+      await onCreated()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reset = () => {
+    setDraft(null)
+    setDescription('')
+    setRefining('')
+    setError(null)
+  }
+
+  return (
+    <section className="rounded-2xl border-2 border-blue-200 dark:border-blue-800/60 bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100/40 dark:from-blue-950/30 dark:via-indigo-950/30 dark:to-blue-950/20 p-6 shadow-sm mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl">✨</span>
+        <div>
+          <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe an idea — AI scopes it</h2>
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            Type what you want in plain English. AI returns a real proposal card with price, timeline, and benefit. Iterate until it fits, then promote.
+          </p>
+        </div>
+      </div>
+
+      {!draft ? (
+        <div>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder='e.g. "I want a way to see all the shipped venues for the season in one place, with a filter by region and a way to email any of them at once."'
+            rows={3}
+            className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-zinc-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-[11px] text-blue-700 dark:text-blue-400">
+              Pricing is grounded in our market-rate model — AI can&apos;t underprice.
+            </div>
+            <button
+              onClick={generate}
+              disabled={busy || !description.trim()}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 font-medium"
+            >
+              {busy ? 'Scoping…' : 'Scope it →'}
+            </button>
+          </div>
+          {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
+        </div>
+      ) : (
+        <div>
+          <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 p-4">
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-zinc-100 text-zinc-600">
+                    AI draft
+                  </span>
+                  {draft.category === 'bundle' && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-purple-100 text-purple-800">
+                      bundle
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{draft.name}</h3>
+              </div>
+              <div className="flex flex-col items-end flex-shrink-0">
+                <div className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                  {fmtUSD(draft.price_usd) || '—'}
+                </div>
+                {draft.timeline_label && <div className="text-[10px] text-gray-500">{draft.timeline_label}</div>}
+              </div>
+            </div>
+            {draft.pitch && <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">{draft.pitch}</p>}
+            {draft.bullets.length > 0 && (
+              <ul className="space-y-1 mb-3">
+                {draft.bullets.map((b, i) => (
+                  <li key={i} className="text-[12px] text-gray-600 dark:text-gray-400 flex gap-2">
+                    <span className="text-gray-400">·</span>
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {draft.benefit && (
+              <div className="text-xs px-2 py-1.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300">
+                <strong>Benefit:</strong> {draft.benefit}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <div className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">Iterate (optional)</div>
+            <div className="flex gap-2">
+              <input
+                value={refining}
+                onChange={(e) => setRefining(e.target.value)}
+                placeholder='e.g. "Make it cheaper", "add region filtering", "drop the email part"'
+                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-zinc-900 rounded-md text-sm"
+              />
+              <button
+                onClick={refine}
+                disabled={busy || !refining.trim()}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {busy ? '…' : 'Refine'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200 dark:border-blue-800/60">
+            <div className="text-[11px] text-blue-700 dark:text-blue-400">
+              Saved as <strong>draft</strong> in the catalog below — flip to <strong>available</strong> when you&apos;re ready to pitch.
+            </div>
+            <div className="flex gap-2">
+              <Link
+                href={`/service-contract/proposed/${draft.id}`}
+                className="px-3 py-2 text-sm bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-md hover:opacity-90"
+              >
+                Open detail →
+              </Link>
+              <button
+                onClick={reset}
+                className="px-3 py-2 text-sm border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300 rounded-md hover:bg-blue-100/50 dark:hover:bg-blue-950/40"
+              >
+                Start over
+              </button>
+            </div>
+          </div>
+          {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
+        </div>
+      )}
+    </section>
   )
 }
 
