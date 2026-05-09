@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanSlackPrompt, markSlackEventProcessed, resolveSlackCaller, runSlackAssistantTurn, verifySlackSignature } from '@/lib/slack-assistant'
 import { sendSlackMessage } from '@/lib/slack'
+import { handleSlackReactionAdded, captureDirectMessageToInbox } from '@/lib/slack-inbox'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -80,6 +81,26 @@ export async function POST(request: NextRequest) {
   if (!accepted) return NextResponse.json({ ok: true })
 
   const botUserId = typeof body.authorizations?.[0]?.user_id === 'string' ? body.authorizations[0].user_id : undefined
+
+  // Inbox capture pipeline runs in parallel with the assistant. Fire-and-forget
+  // so a Slack hiccup never blocks the Slack 3-second ack window.
+  if (body.event?.type === 'reaction_added') {
+    void handleSlackReactionAdded(body.event).catch((err) => {
+      console.error('Slack inbox reaction capture failed:', err)
+    })
+  } else if (
+    body.event?.type === 'message' &&
+    body.event?.channel_type === 'im' &&
+    !body.event?.subtype &&
+    !body.event?.bot_id &&
+    !(typeof body.event?.text === 'string' && botUserId && body.event.text.includes(`<@${botUserId}>`))
+  ) {
+    // Non-@-mention DM to the bot — capture to inbox (doesn't reply).
+    void captureDirectMessageToInbox(body.event).catch((err) => {
+      console.error('Slack inbox DM capture failed:', err)
+    })
+  }
+
   if (shouldHandleEvent(body.event, botUserId)) {
     void processSlackEvent(body.event, botUserId).catch((err) => {
       console.error('Slack assistant event failed:', err)

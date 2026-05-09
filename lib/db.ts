@@ -553,6 +553,13 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS project TEXT`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_project ON service_requests(project)`)
 
+    // Inbox: AI-captured candidate requests (Slack reactions, DMs to the bot,
+    // etc.) land here with inbox=true and don't count anywhere until Ahmad
+    // approves them. Approval flips inbox=false and routes to the right
+    // project board; reject moves them to status='cancelled'.
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS inbox BOOLEAN NOT NULL DEFAULT false`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_inbox ON service_requests(inbox) WHERE inbox = true`)
+
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.
     await client.query(`CREATE TABLE IF NOT EXISTS retainer_alerts (

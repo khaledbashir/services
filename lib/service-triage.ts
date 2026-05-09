@@ -25,6 +25,7 @@ export interface TriageInput {
   source_url?: string
   requester?: string
   created_by?: string             // staff UUID
+  inbox?: boolean                 // captured-but-unapproved candidate; doesn't count anywhere until approved
 }
 
 export interface TriageOutput {
@@ -463,12 +464,12 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
         classification, classification_confidence, classification_basis,
         repo, area, keywords,
         estimated_hours, estimate_basis, retainer_covered,
-        status, created_by, market_breakdown, estimated_usd, project)
+        status, created_by, market_breakdown, estimated_usd, project, inbox)
      VALUES ($1, $2, $3, $4, $5,
              $6, $7, $8,
              $9, $10, $11,
              $12, $13, $14,
-             'open', $15, $16, $17, $18)
+             'open', $15, $16, $17, $18, $19)
      RETURNING id, received_at`,
     [
       input.source || 'manual',
@@ -489,6 +490,7 @@ export async function triage(input: TriageInput): Promise<TriageOutput> {
       marketBreakdown ? JSON.stringify(marketBreakdown) : null,
       estimatedUSD,
       project,
+      Boolean(input.inbox),
     ],
   )
   const row = r.rows[0]

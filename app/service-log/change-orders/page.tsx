@@ -8,8 +8,10 @@ interface ChangeOrder {
   id: string
   received_at: string
   source: string
+  source_url?: string | null
   requester: string | null
   summary: string
+  raw_text?: string | null
   classification: 'FIX' | 'NEW' | 'MIXED'
   repo: string | null
   area: string | null
@@ -26,9 +28,11 @@ interface ChangeOrder {
   paid_at: string | null
   actual_hours: number | null
   notes: string | null
+  inbox?: boolean
 }
 
 const PROJECTS: { key: string; label: string; tone: string }[] = [
+  { key: 'inbox',             label: 'Inbox · captured', tone: 'border-orange-400 text-orange-900 bg-orange-50' },
   { key: 'all',               label: 'All stakeholder',  tone: 'border-zinc-300 text-zinc-700 bg-white' },
   { key: 'service-dashboard', label: 'Service Dashboard',tone: 'border-blue-300 text-blue-800 bg-blue-50' },
   { key: 'proposal-engine',   label: 'Proposal Engine',  tone: 'border-purple-300 text-purple-800 bg-purple-50' },
@@ -80,11 +84,15 @@ export default function ChangeOrdersKanbanPage() {
 
   const refresh = async () => {
     setLoading(true)
-    // Internal board includes auto-push rows (Ahmad's own work). All other
-    // tabs only show stakeholder COs (retainer=false excludes auto-push by
-    // default).
+    // Per-tab data fetch:
+    //   inbox     -> only inbox=true rows
+    //   internal  -> project=internal (Ahmad's auto-push rows; inbox=false default)
+    //   all       -> stakeholder COs across all projects
+    //   <project> -> stakeholder COs filtered to one project
     const params = new URLSearchParams({ limit: '300' })
-    if (activeProject === 'internal') {
+    if (activeProject === 'inbox') {
+      params.set('inbox', 'true')
+    } else if (activeProject === 'internal') {
       params.set('project', 'internal')
     } else if (activeProject === 'all') {
       params.set('retainer', 'false')
@@ -92,17 +100,22 @@ export default function ChangeOrdersKanbanPage() {
       params.set('retainer', 'false')
       params.set('project', activeProject)
     }
+    // Counts pulled across the whole table (inbox=any so we get inbox count too)
     const [boardRes, countsRes] = await Promise.all([
       fetch(`/api/service-triage?${params.toString()}`).then(r => r.json()),
-      fetch('/api/service-triage?limit=500').then(r => r.json()),
+      fetch('/api/service-triage?limit=500&inbox=any').then(r => r.json()),
     ])
     setOrders(boardRes.requests || [])
-    const counts: Record<string, number> = { all: 0 }
+    const counts: Record<string, number> = { all: 0, inbox: 0 }
     for (const row of (countsRes.requests || []) as ChangeOrder[]) {
       const p = row.project || 'service-dashboard'
       const stage = row.status
       const isStakeholder = row.source !== 'auto-push'
       const isActive = stage !== 'cancelled' && stage !== 'paid'
+      if (row.inbox) {
+        counts.inbox = (counts.inbox || 0) + 1
+        continue
+      }
       if (!isActive) continue
       if (p !== 'internal' && isStakeholder) counts.all = (counts.all || 0) + 1
       counts[p] = (counts[p] || 0) + 1
@@ -179,6 +192,7 @@ export default function ChangeOrdersKanbanPage() {
   }
 
   const isInternal = activeProject === 'internal'
+  const isInbox = activeProject === 'inbox'
 
   return (
     <DashboardLayout>
@@ -191,10 +205,12 @@ export default function ChangeOrdersKanbanPage() {
               <span>Project boards</span>
             </div>
             <h1 className="text-2xl font-semibold text-gray-900">
-              {isInternal ? 'Internal · my workflow' : 'Change Orders'}
+              {isInbox ? 'Inbox · captured candidates' : isInternal ? 'Internal · my workflow' : 'Change Orders'}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              {isInternal
+              {isInbox
+                ? 'Slack messages captured by reaction (📥) or DM to the bot. Approve to route to the right project board, reject to archive.'
+                : isInternal
                 ? "Ahmad's own pushes captured automatically by the pre-push ledger. These are workflow improvements, not stakeholder asks — they don't count against the 12-hr retainer or show up on the stakeholder boards."
                 : 'NEW work outside the 12-hr/month retainer. Each one needs a separate quote. Drag work through the stages — Requested → Quoted → Approved → In Progress → Shipped → Paid.'}
             </p>
@@ -258,6 +274,14 @@ export default function ChangeOrdersKanbanPage() {
           </div>
         </div>
 
+        {isInbox ? (
+          <InboxTab
+            orders={orders}
+            onApprove={async (id) => { await act(id, 'inbox_approve'); setOpenCard(null) }}
+            onReject={async (id) => { await act(id, 'inbox_reject'); setOpenCard(null) }}
+            onOpen={(o) => setOpenCard(o)}
+          />
+        ) : (
         <div className="overflow-x-auto pb-4">
           <div className="grid grid-cols-6 gap-3 min-w-[1320px]">
             {COLUMNS.map(col => {
@@ -314,8 +338,9 @@ export default function ChangeOrdersKanbanPage() {
             })}
           </div>
         </div>
+        )}
 
-        {byStage.cancelled.length > 0 && (
+        {!isInbox && byStage.cancelled.length > 0 && (
           <div className="mt-6">
             <button
               onClick={() => setShowCancelled(s => !s)}
@@ -373,6 +398,93 @@ export default function ChangeOrdersKanbanPage() {
         )}
       </div>
     </DashboardLayout>
+  )
+}
+
+function InboxTab({
+  orders, onApprove, onReject, onOpen,
+}: {
+  orders: ChangeOrder[]
+  onApprove: (id: string) => Promise<void>
+  onReject: (id: string) => Promise<void>
+  onOpen: (o: ChangeOrder) => void
+}) {
+  if (orders.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 p-12 text-center">
+        <div className="text-3xl mb-3">📥</div>
+        <div className="text-sm font-semibold text-gray-900 mb-1">Inbox is empty</div>
+        <div className="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+          Captured candidates land here from two sources:<br />
+          (1) react with a 📥 (or any of: tray, bookmark, raised_hand, eyes, memo) to a Slack message the bot can see;<br />
+          (2) DM the bot directly. Approve to route to the right project board.
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {orders.map(o => {
+        const usd = o.quote_amount || o.estimated_usd
+        return (
+          <div key={o.id} className="rounded-lg border border-orange-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+            <div className="p-4 flex items-start gap-3">
+              <button
+                onClick={() => onOpen(o)}
+                className="flex-1 min-w-0 text-left"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${CLASSIFICATION_TONE[o.classification]}`}>
+                    {o.classification}
+                  </span>
+                  <span className="text-xs text-gray-500 capitalize">{o.source}</span>
+                  <span className="text-xs text-gray-400">·</span>
+                  <span className="text-xs text-gray-500">{fmtDate(o.received_at)}</span>
+                  <span className="text-xs text-gray-400">·</span>
+                  <span className="text-xs font-medium text-gray-700">{o.requester || 'unknown'}</span>
+                  {o.project && (
+                    <>
+                      <span className="text-xs text-gray-400">·</span>
+                      <span className="text-xs text-gray-700 capitalize">{o.project.replace('-', ' ')}</span>
+                    </>
+                  )}
+                </div>
+                <div className="text-sm text-gray-900 line-clamp-3 leading-snug">{o.summary}</div>
+                <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-500">
+                  {o.estimated_hours !== null && <span>est. {o.estimated_hours}h</span>}
+                  {usd && <span className="tabular-nums">{fmtUSD(usd)}</span>}
+                  {o.source_url && (
+                    <a
+                      href={o.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-blue-600 hover:underline"
+                    >
+                      View on Slack →
+                    </a>
+                  )}
+                </div>
+              </button>
+              <div className="flex flex-col gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => onApprove(o.id)}
+                  className="px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-md hover:bg-emerald-700 whitespace-nowrap"
+                >
+                  Approve →
+                </button>
+                <button
+                  onClick={() => onReject(o.id)}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 whitespace-nowrap"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

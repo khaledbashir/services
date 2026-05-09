@@ -67,6 +67,15 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
       case 'revert_stage':
         await revertStage(id)
         break
+      case 'inbox_approve':
+        // Promote a captured candidate to a real request — it now appears on
+        // boards, counts toward retainer math (if FIX), and runs alerts.
+        await query(`UPDATE service_requests SET inbox = false, updated_at = NOW() WHERE id = $1`, [id])
+        break
+      case 'inbox_reject':
+        // Cancel without ever surfacing on a board.
+        await query(`UPDATE service_requests SET inbox = false, status = 'cancelled', updated_at = NOW() WHERE id = $1`, [id])
+        break
       case 'reclassify': {
         const cls = String(body.classification || '').toUpperCase()
         if (!['FIX', 'NEW', 'MIXED'].includes(cls)) {

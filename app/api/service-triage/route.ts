@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
   const classification = url.searchParams.get('classification')
   const retainer = url.searchParams.get('retainer') // 'true' | 'false'
   const project = url.searchParams.get('project') // 'service-dashboard' | 'proposal-engine' | etc.
+  const inbox = url.searchParams.get('inbox') // 'true' | 'false' | null (default: exclude inbox rows)
   const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10)))
 
   const where: string[] = []
@@ -74,6 +75,13 @@ export async function GET(request: NextRequest) {
     params.push(project)
     where.push(`project = $${params.length}`)
   }
+  // Inbox is hidden by default — captured candidates don't pollute boards
+  // until approved. Pass inbox=true for the Inbox tab, inbox=any to disable.
+  if (inbox === 'true') {
+    where.push(`inbox = true`)
+  } else if (inbox !== 'any') {
+    where.push(`inbox = false`)
+  }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     params.push(month + '-01')
     where.push(`received_at >= $${params.length}::date AND received_at < ($${params.length}::date + INTERVAL '1 month')`)
@@ -83,7 +91,8 @@ export async function GET(request: NextRequest) {
                       repo, area, keywords,
                       estimated_hours, estimate_basis, estimated_usd, retainer_covered,
                       status, started_at, approved_at, shipped_at, paid_at,
-                      actual_hours, quote_amount, paid_amount, shipped_commit_sha, notes
+                      actual_hours, quote_amount, paid_amount, shipped_commit_sha, notes,
+                      project, inbox
                FROM service_requests
                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
                ORDER BY received_at DESC
