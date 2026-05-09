@@ -12,7 +12,7 @@ import PrintButton from './PrintButton'
 import GrayAreas from './GrayAreas'
 import MetricsExplainer from './MetricsExplainer'
 import PaymentCTAs from './PaymentCTAs'
-import SectionNav from './SectionNav'
+import SectionNav, { SectionNavMobile } from './SectionNav'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -68,7 +68,7 @@ export default async function TransparencyDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-5xl mx-auto px-5 pt-8 pb-16">
+      <div className="max-w-7xl mx-auto px-5 pt-8 pb-16">
 
         <header className="flex items-center justify-between gap-4 mb-8 flex-wrap">
           <div className="flex items-center gap-3">
@@ -100,16 +100,21 @@ export default async function TransparencyDashboard() {
           Pulled live from the operating systems ANC runs on, never typed in by hand.
         </p>
 
+        {/* Two-column layout: dedicated sidebar nav + main content */}
+        <div className="grid lg:grid-cols-[200px_1fr] gap-8">
+          <SectionNav />
+          <div className="min-w-0">
+
+        {/* Mobile-only horizontal section nav (lg:hidden inside the component) */}
+        <SectionNavMobile />
+
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
 
         {/* Coverage strip — three buckets at a glance, sticky on scroll */}
-        <div id="overview" className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200/70 dark:border-zinc-800/70 shadow-sm">
+        <div id="overview" className="rounded-xl mb-4">
           <CoverageStrip coverage={data.coverage} />
         </div>
-
-        {/* Section nav — sticky chips just under the coverage strip */}
-        <SectionNav />
 
         {/* "How these numbers are calculated" — collapsible audit trail */}
         <div className="mt-4 mb-6">
@@ -373,6 +378,9 @@ export default async function TransparencyDashboard() {
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
+
+          </div>
+        </div>
       </div>
     </div>
   )
