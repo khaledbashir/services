@@ -12,6 +12,7 @@ import PrintButton from './PrintButton'
 import GrayAreas from './GrayAreas'
 import MetricsExplainer from './MetricsExplainer'
 import PaymentCTAs from './PaymentCTAs'
+import SectionNav from './SectionNav'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -93,18 +94,22 @@ export default async function TransparencyDashboard() {
           </div>
         </header>
 
-        <h1 className="text-3xl font-bold tracking-tight mb-1">Platform Support &amp; Maintenance</h1>
-        <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-8">
-          Live status of ANC&apos;s monthly service contract — credit used, warranty in force, and what&apos;s covered.
+        <h1 className="text-3xl font-bold tracking-tight mb-1">Live service-contract transparency</h1>
+        <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-8 max-w-2xl">
+          Every hour, every fix, every change order, every dollar — visible in real time.
+          Pulled live from the operating systems ANC runs on, never typed in by hand.
         </p>
 
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
 
         {/* Coverage strip — three buckets at a glance, sticky on scroll */}
-        <div className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200/70 dark:border-zinc-800/70 shadow-sm">
+        <div id="overview" className="sticky top-0 z-10 -mx-5 px-5 py-3 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200/70 dark:border-zinc-800/70 shadow-sm">
           <CoverageStrip coverage={data.coverage} />
         </div>
+
+        {/* Section nav — sticky chips just under the coverage strip */}
+        <SectionNav />
 
         {/* "How these numbers are calculated" — collapsible audit trail */}
         <div className="mt-4 mb-6">
@@ -112,14 +117,16 @@ export default async function TransparencyDashboard() {
         </div>
 
         {/* Pay / top-up CTAs — visible above the fold so stakeholders can act */}
-        <PaymentCTAs
-          pendingUrl={payoneer.pending}
-          topupUrl={payoneer.topup}
-          rate={payoneer.rate}
-          hoursRemaining={meter.hours_remaining}
-          pctUsed={meter.pct_used}
-          hasPendingChangeOrder={hasPendingChangeOrder}
-        />
+        <div id="pay" className="scroll-mt-32">
+          <PaymentCTAs
+            pendingUrl={payoneer.pending}
+            topupUrl={payoneer.topup}
+            rate={payoneer.rate}
+            hoursRemaining={meter.hours_remaining}
+            pctUsed={meter.pct_used}
+            hasPendingChangeOrder={hasPendingChangeOrder}
+          />
+        </div>
 
         {/* Row 1: credit meter + payment status */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
@@ -256,75 +263,37 @@ export default async function TransparencyDashboard() {
           </section>
         </div>
 
-        {/* Row 2: covered/not-covered + recently shipped */}
-        <div className="grid gap-4 md:grid-cols-2 mb-4">
-
-          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-              What&apos;s covered each month
-            </h2>
+        {/* Row 2: shipped this month — full width since coverage clauses moved to a collapsed section below */}
+        <section id="shipped" className="scroll-mt-32 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow mb-4">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+            Shipped this month
+          </h2>
+          {data.recently_shipped.length === 0 ? (
+            <div className="text-zinc-400 dark:text-zinc-500 text-sm italic py-3">
+              Nothing shipped yet this month — credit at full.
+            </div>
+          ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {COVERED_CLAUSES.map((c) => (
-                <div key={c.title} className="flex gap-3 py-2.5">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 inline-flex items-center justify-center text-xs font-bold mt-0.5">
-                    ✓
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">{c.title}</div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{c.detail}</div>
+              {data.recently_shipped.map((s) => (
+                <div key={s.id} className="flex justify-between gap-3 py-2.5 text-sm">
+                  <div className="min-w-0 truncate">{s.summary}</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                    {fmtDate(s.shipped_at)}{s.actual_hours != null ? ` · ${s.actual_hours.toFixed(1)} hrs` : ''}
                   </div>
                 </div>
               ))}
             </div>
-
-            <details className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 group">
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 list-none flex items-center justify-between [&amp;::-webkit-details-marker]:hidden">
-                <span>What&apos;s a separate quote</span>
-                <span className="text-base text-zinc-400 dark:text-zinc-500 group-open:rotate-45 transition-transform">+</span>
-              </summary>
-              <div className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
-                {NOT_COVERED_CLAUSES.map((c) => (
-                  <div key={c.title} className="flex gap-3 py-2.5">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-xs font-bold mt-0.5">
-                      −
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">{c.title}</div>
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{c.detail}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          </section>
-
-          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-              Shipped this month
-            </h2>
-            {data.recently_shipped.length === 0 ? (
-              <div className="text-zinc-400 dark:text-zinc-500 text-sm italic py-3">
-                Nothing shipped yet this month — credit at full.
-              </div>
-            ) : (
-              <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {data.recently_shipped.map((s) => (
-                  <div key={s.id} className="flex justify-between gap-3 py-2.5 text-sm">
-                    <div className="min-w-0 truncate">{s.summary}</div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                      {fmtDate(s.shipped_at)}{s.actual_hours != null ? ` · ${s.actual_hours.toFixed(1)} hrs` : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+          )}
+        </section>
 
         {/* Row 3: live activity + per-platform breakdown */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
-          <ActivityTicker events={data.activity} />
-          <PlatformBreakdown platforms={data.platforms} />
+          <div id="activity" className="scroll-mt-32">
+            <ActivityTicker events={data.activity} />
+          </div>
+          <div id="platforms" className="scroll-mt-32">
+            <PlatformBreakdown platforms={data.platforms} />
+          </div>
         </div>
 
         {/* Gray Areas — the honest middle */}
@@ -343,7 +312,62 @@ export default async function TransparencyDashboard() {
         </div>
 
         {/* Row 4: tabbed views — Overview / Kanban / List / By stakeholder */}
-        <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
+        <div id="queue" className="scroll-mt-32">
+          <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
+        </div>
+
+        {/* What's covered each month — collapsed by default to save vertical space */}
+        <section id="coverage" className="scroll-mt-32 mt-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+          <details className="group">
+            <summary className="cursor-pointer p-5 list-none flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 [&amp;::-webkit-details-marker]:hidden">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  What&apos;s covered each month
+                </h2>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  {COVERED_CLAUSES.length} items included · {NOT_COVERED_CLAUSES.length} items quoted separately. Click to expand the full coverage list.
+                </p>
+              </div>
+              <span className="flex-shrink-0 text-zinc-400 dark:text-zinc-500 text-2xl group-open:rotate-45 transition-transform leading-none">+</span>
+            </summary>
+            <div className="border-t border-zinc-100 dark:border-zinc-800 px-5 pb-5 pt-3">
+              <div className="grid md:grid-cols-2 gap-x-6">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-2 mt-3">Included in the monthly retainer</div>
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {COVERED_CLAUSES.map((c) => (
+                      <div key={c.title} className="flex gap-2.5 py-2">
+                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 inline-flex items-center justify-center text-[10px] font-bold mt-0.5">
+                          ✓
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium">{c.title}</div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{c.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 mb-2 mt-3">Separate quote (change order)</div>
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {NOT_COVERED_CLAUSES.map((c) => (
+                      <div key={c.title} className="flex gap-2.5 py-2">
+                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-[10px] font-bold mt-0.5">
+                          −
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium">{c.title}</div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{c.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </section>
 
         <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-12">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day warranty on shipped work · $90/hr overage<br />

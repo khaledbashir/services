@@ -206,6 +206,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       WHERE status = 'shipped'
         AND shipped_at IS NOT NULL
         AND shipped_at >= NOW() - INTERVAL '30 days'
+        AND source <> 'auto-push'
+        AND retainer_covered = true
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -232,6 +234,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       WHERE status = 'shipped'
         AND shipped_at IS NOT NULL
         AND shipped_at >= DATE_TRUNC('month', NOW())
+        AND source <> 'auto-push'
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -255,6 +258,7 @@ export async function getDashboardData(): Promise<DashboardData> {
        FROM service_requests
       WHERE received_at >= NOW() - INTERVAL '60 days'
         AND status <> 'cancelled'
+        AND source <> 'auto-push'
       ORDER BY received_at DESC
       LIMIT 25`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -432,12 +436,13 @@ export async function getDashboardData(): Promise<DashboardData> {
      daily AS (
        SELECT shipped_at::date AS d,
               COALESCE(SUM(actual_hours) FILTER (
-                WHERE classification = 'FIX' AND retainer_covered = true
+                WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
               ), 0)::numeric AS hrs
        FROM service_requests
        WHERE status = 'shipped'
          AND shipped_at IS NOT NULL
          AND shipped_at >= DATE_TRUNC('month', NOW())
+         AND source <> 'auto-push'
        GROUP BY shipped_at::date
      )
      SELECT days.d AS day,
@@ -464,22 +469,22 @@ export async function getDashboardData(): Promise<DashboardData> {
   const platformRes = await query(
     `SELECT COALESCE(repo, 'other') AS platform,
             COUNT(*) FILTER (
-              WHERE classification = 'FIX' AND status = 'shipped'
+              WHERE classification = 'FIX' AND status = 'shipped' AND source <> 'auto-push'
                 AND shipped_at >= DATE_TRUNC('month', NOW())
             )::int AS fixes_shipped,
             COALESCE(SUM(actual_hours) FILTER (
-              WHERE classification = 'FIX' AND retainer_covered = true AND status = 'shipped'
+              WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push' AND status = 'shipped'
                 AND shipped_at >= DATE_TRUNC('month', NOW())
             ), 0)::numeric AS hours_used,
             COUNT(*) FILTER (
-              WHERE classification = 'FIX' AND status = 'shipped'
+              WHERE classification = 'FIX' AND status = 'shipped' AND source <> 'auto-push'
                 AND shipped_at >= NOW() - INTERVAL '30 days'
             )::int AS active_warranties,
             COUNT(*) FILTER (
-              WHERE classification IN ('NEW','MIXED') AND status IN ('open','in_progress','quoted')
+              WHERE classification IN ('NEW','MIXED') AND status IN ('open','quoted','approved','in_progress') AND source <> 'auto-push'
             )::int AS open_cos,
-            COALESCE(SUM(estimated_usd) FILTER (
-              WHERE classification IN ('NEW','MIXED') AND status IN ('open','in_progress','quoted')
+            COALESCE(SUM(COALESCE(quote_amount, estimated_usd, 0)) FILTER (
+              WHERE classification IN ('NEW','MIXED') AND status IN ('open','quoted','approved','in_progress') AND source <> 'auto-push'
             ), 0)::numeric AS open_co_usd
      FROM service_requests
      WHERE status <> 'cancelled'
@@ -502,10 +507,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     `WITH events AS (
        SELECT id, classification, requester, summary, estimated_hours, estimated_usd, actual_hours,
               received_at AS ts, 'triaged'::text AS kind FROM service_requests
+         WHERE source <> 'auto-push'
        UNION ALL
        SELECT id, classification, requester, summary, estimated_hours, estimated_usd, actual_hours,
               shipped_at AS ts, 'shipped'::text AS kind FROM service_requests
-         WHERE shipped_at IS NOT NULL
+         WHERE shipped_at IS NOT NULL AND source <> 'auto-push'
      )
      SELECT id, ts, kind, classification, requester, summary, estimated_hours, estimated_usd, actual_hours
      FROM events
