@@ -562,9 +562,9 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 ? 'bg-[#0A52EF] text-white shadow-sm'
                 : 'text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40'
             }`}
-            title="Greenfield / new client — market rate, no relationship discount"
+            title="New project — fresh scope, no project context"
           >
-            New client
+            New project
           </button>
         </div>
       </div>
@@ -577,11 +577,11 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       }`}>
         {scopeMode === 'anc' ? (
           <>
-            <strong>ANC project mode:</strong> AI checks the four live ANC platforms, pulls past change-order pricing as the anchor, and applies the long-term-partner discount. Use this when scoping work that touches Service Dashboard, Proposal Engine, CRM, or Operator Docs.
+            <strong>ANC project mode:</strong> AI checks the four live platforms, pulls past change-order pricing as the anchor, and factors in our long-term partnership. Use this when scoping work that builds on what we already have — Service Dashboard, Proposal Engine, CRM, or Operator Docs.
           </>
         ) : (
           <>
-            <strong>New client mode:</strong> Clean-slate quote at market rate. No ANC platform references, no relationship discount, no past-CO anchor. Use this when scoping for a different client or for a portfolio piece — same engine, no leakage.
+            <strong>New project mode:</strong> AI has no knowledge of or access to current projects. Scope is built from the description alone — plus company website / brief / attached files if you provide them — and current market rates. Use this when the idea isn&apos;t tied to anything already running.
           </>
         )}
       </div>

@@ -75,27 +75,26 @@ Rules:
 - Bullets: what gets delivered. Benefit: what the stakeholder gains.
 `
 
-const PROMPT_SYSTEM_GREENFIELD = `You are a freelance technical scope drafter. A prospect describes an idea (and may attach reference documents), you turn it into a structured proposal card.
+const PROMPT_SYSTEM_GREENFIELD = `You are a technical scope drafter. The user describes a new project idea (and may attach reference documents — a brief, a company website excerpt, a spreadsheet of requirements). You turn it into a structured proposal card.
 
-This is a NEW client / greenfield project — there is no prior platform, no codebase to extend, no relationship-discount history. Treat this as a fresh quote at market rate.
+This is a brand-new project. You have no knowledge of any existing platforms, codebases, custom objects, or past work to anchor against. Scope is built from what's in front of you: the description, any attached files, and current market rates pulled from web search.
 
-**Pricing posture for greenfield work — read this every time:**
+**Pricing posture for new-project work — read this every time:**
 
-  - The "Live web search results" section gives you current US freelance rates. That IS your anchor — not an upper bound.
-  - There's no past-work history with this client, so you can't anchor against comparable internal projects. Lean on web rates.
-  - Quote MARKET rate, not relationship rate. Do not apply a long-term-partner discount.
-  - Round prices to clean numbers (\$2.5k / \$5k / \$8k / \$12k) — looks like a quote, not a calculation.
+  - The "Live web search results" section gives you current US development rates. That IS your anchor — use it directly.
+  - Without past-work history to compare against, lean on the web rates and the project's apparent complexity.
+  - Round prices to clean numbers (\$2.5k / \$5k / \$8k / \$12k) — reads like a quote, not a calculation.
   - When the work is small/clear, lean LOW within the market band (closes faster). When ambitious/ambiguous, lean HIGH (covers risk).
 
 **Narrate your reasoning like a tool-using assistant talking through its work.** Show your work — what the description is asking for, what files reveal, what the market says, how you sized scope vs. complexity. For example:
 
-  > "Let me read what they're asking for... they want a guided walkthrough with conditional logic, plus an admin layer to edit questions later. Two distinct surfaces.
+  > "Let me read what they're asking for... a guided walkthrough with conditional logic, plus an admin layer to edit questions later. Two distinct surfaces.
   >
-  > Looking at the web search snippets... \$3-6k seems typical for this kind of internal tool from US freelancers, mid-band probably \$4.5k.
+  > Looking at the web search snippets... \$3-6k is typical for an internal tool this size, mid-band around \$4.5k.
   >
-  > The conditional logic adds risk — that pushes me toward the upper end of the band. But the admin layer is straightforward CRUD on existing data.
+  > The conditional logic adds risk — pushes me toward the upper end of the band. The admin layer is straightforward CRUD.
   >
-  > **Final call:** \$5,000. Sits in market mid-band, accounts for the conditional logic, leaves room to negotiate down if they push back."
+  > **Final call:** \$5,000. Market mid-band, accounts for the conditional logic, leaves room to negotiate down if pushed back."
 
 Use markdown formatting in your reasoning — short paragraphs, **bold** for key conclusions, bullet lists for capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
 
@@ -118,7 +117,7 @@ Rules:
 - target_project is always "greenfield" in this mode.
 - Pick the workType that BEST matches; if unsure, lean smaller.
 - Names: clean, product-y. No vendor SKUs.
-- Bullets: what gets delivered. Benefit: what the prospect gains.
+- Bullets: what gets delivered. Benefit: what the user gains from the project.
 `
 
 interface OllamaSearchResult { title?: string; url?: string; content?: string }
@@ -163,10 +162,10 @@ export async function POST(request: NextRequest) {
   let refineFromId: string | null = null
   let parsedFiles: Awaited<ReturnType<typeof parseUploadedFile>>[] = []
 
-  // mode: 'anc' (default) uses project context + relationship pricing.
-  // mode: 'greenfield' is a clean-slate, market-rate scope — no ANC
-  // platform references, no long-term-partner discount. Same engine,
-  // portable to any client / portfolio use.
+  // mode: 'anc' (default) uses live project context + relationship pricing.
+  // mode: 'greenfield' is a fresh-scope quote — no project-intelligence
+  // access, no past-CO anchor, no long-term-partner discount. The AI
+  // works only from the description + attached files + market rates.
   let mode: 'anc' | 'greenfield' = 'anc'
 
   if (contentType.includes('multipart/form-data')) {
@@ -263,7 +262,7 @@ export async function POST(request: NextRequest) {
               },
               {
                 role: 'user',
-                content: `${mode === 'greenfield' ? 'Prospect' : 'Stakeholder'} description:\n${description || '(no text — see attached files)'}${priorContext}${webContext}${filesContext}`,
+                content: `Project description:\n${description || '(no text — see attached files)'}${priorContext}${webContext}${filesContext}`,
               },
             ],
           }),
