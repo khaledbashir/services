@@ -13,7 +13,7 @@ const METRICS: Array<{ name: string; tone: 'blue' | 'emerald' | 'amber'; how: st
     name: 'Warranty active count',
     tone: 'emerald',
     how:
-      'Count of shipped FIX rows where shipped_at falls within the last 30 days. Each one carries a 30-day clock during which a regression on that same delivery is fixed at no charge — they appear here until the clock runs out.',
+      'Count of recently delivered Change Orders (NEW / MIXED in shipped or paid status) whose ship date is within the last 30 days. The standing contract term is "30 days on shipped work" — within that window, regressions on the same delivery are fixed at no charge and don\'t tick the retainer meter. Applies to all four platforms continuously and to every fresh CO during its 30-day window.',
   },
   {
     name: 'Change Orders dollars',

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { DashboardLayout } from '@/components/dashboard-layout'
 
 interface ServiceRequest {
   id: string
@@ -135,8 +134,7 @@ export default function ServiceLogPage() {
   const remaining = meter ? Math.max(0, meter.cap_hours - meter.hours_used) : 0
 
   return (
-    <DashboardLayout>
-      <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Service Log</h1>
@@ -361,7 +359,6 @@ export default function ServiceLogPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </DashboardLayout>
+    </div>
   )
 }

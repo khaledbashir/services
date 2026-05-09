@@ -11,7 +11,8 @@ import PlatformBreakdown from './PlatformBreakdown'
 import GrayAreas from './GrayAreas'
 import MetricsExplainer from './MetricsExplainer'
 import PaymentCTAs from './PaymentCTAs'
-import SectionNav, { SectionNavMobile } from './SectionNav'
+import PrintButton from './PrintButton'
+import CoverageModel from './CoverageModel'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -66,29 +67,34 @@ export default async function TransparencyDashboard() {
     : 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-100">
-      {/* Two-column shell: sidebar owns branding + section nav, main owns content. */}
-      {/* No top header bar — explicitly different from the rest of the app. */}
-      <div className="lg:grid lg:grid-cols-[240px_1fr]">
-        <SectionNav generatedAt={data.generated_at} />
-
-        <div className="max-w-5xl mx-auto px-5 pt-8 pb-16 w-full min-w-0">
-        {/* Mobile-only horizontal section nav (lg:hidden inside the component) */}
-        <SectionNavMobile />
-
-        <h1 className="text-3xl font-bold tracking-tight mb-1">Live service-contract transparency</h1>
-        <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-8 max-w-2xl">
-          Every hour, every fix, every change order, every dollar — visible in real time.
-          Pulled live from the operating systems ANC runs on, never typed in by hand.
-        </p>
+    <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 w-full min-w-0">
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-1">Live service-contract transparency</h1>
+            <p className="text-zinc-600 dark:text-zinc-400 text-sm max-w-2xl">
+              Every hour, every fix, every change order, every dollar — visible in real time.
+              Pulled live from the operating systems ANC runs on, never typed in by hand.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0" data-no-print="true">
+            <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              live · {fmtTime(data.generated_at)}
+            </span>
+            <PrintButton />
+          </div>
+        </div>
 
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
 
-        {/* Coverage strip — three buckets at a glance, sticky on scroll */}
+        {/* Coverage strip — three buckets at a glance */}
         <div id="overview" className="rounded-xl mb-4">
           <CoverageStrip coverage={data.coverage} />
         </div>
+
+        {/* Three-bucket model — explicit clarity on what falls where */}
+        <CoverageModel />
 
         {/* "How these numbers are calculated" — collapsible audit trail */}
         <div className="mt-4 mb-6">
@@ -163,11 +169,11 @@ export default async function TransparencyDashboard() {
                 <span className="text-sm font-semibold tabular-nums">$90/hr</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Warranty window</span>
-                <span className="text-sm font-semibold tabular-nums">30 days per delivered project</span>
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Warranty</span>
+                <span className="text-sm font-semibold tabular-nums">30 days on shipped work</span>
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Hours used today</span>
+                <span className="text-sm text-zinc-600 dark:text-zinc-400">Used so far this month</span>
                 <span className={`text-sm font-semibold tabular-nums ${meterColor === 'rose' ? 'text-rose-600 dark:text-rose-400' : meterColor === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                   {meter.hours_used.toFixed(1)} / {meter.cap_hours}
                 </span>
@@ -218,10 +224,10 @@ export default async function TransparencyDashboard() {
               <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                    Active warranties
+                    Recently delivered — re-fix-free window
                   </span>
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    30-day clock per shipped fix
+                    30 days on shipped work
                   </span>
                 </div>
                 <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -352,9 +358,6 @@ export default async function TransparencyDashboard() {
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
-
-        </div>
-      </div>
     </div>
   )
 }

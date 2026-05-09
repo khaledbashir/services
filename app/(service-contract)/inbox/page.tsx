@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { DashboardLayout } from '@/components/dashboard-layout'
 
 interface Request {
   id: string
@@ -111,8 +110,7 @@ export default function InboxPage() {
   const meterTone = meterPct >= 100 ? 'bg-red-500' : meterPct >= 75 ? 'bg-amber-500' : 'bg-emerald-500'
 
   return (
-    <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
         <div className="mb-6">
           <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -205,8 +203,7 @@ export default function InboxPage() {
         {loading && (
           <div className="text-sm text-gray-400 text-center py-8">Loading…</div>
         )}
-      </div>
-    </DashboardLayout>
+    </div>
   )
 }
 
