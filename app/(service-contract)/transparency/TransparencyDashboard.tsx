@@ -94,6 +94,9 @@ export default async function TransparencyDashboard() {
           <CoverageStrip coverage={data.coverage} />
         </div>
 
+        {/* Live warranty countdown — every platform gets its own d/h/m/s timer */}
+        <WarrantyTimers />
+
         {/* Three-bucket model — explicit clarity on what falls where */}
         <CoverageModel />
 

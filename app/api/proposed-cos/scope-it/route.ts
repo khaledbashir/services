@@ -10,6 +10,43 @@ const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
 const AI_MODEL = process.env.AI_MODEL || 'MiniMax-M2.7'
 
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || ''
+const OLLAMA_WEB_SEARCH_URL = 'https://ollama.com/api/web_search'
+
+interface OllamaSearchResult {
+  title?: string
+  url?: string
+  content?: string
+}
+
+async function ollamaWebSearch(query: string): Promise<OllamaSearchResult[]> {
+  if (!OLLAMA_API_KEY) return []
+  try {
+    const res = await fetch(OLLAMA_WEB_SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OLLAMA_API_KEY}`,
+      },
+      body: JSON.stringify({ query, max_results: 5 }),
+    })
+    if (!res.ok) {
+      console.warn('[scope-it] Ollama web search failed:', res.status)
+      return []
+    }
+    const data = await res.json()
+    const results = Array.isArray(data?.results) ? data.results : []
+    return results.slice(0, 5).map((r: any) => ({
+      title: typeof r.title === 'string' ? r.title : '',
+      url: typeof r.url === 'string' ? r.url : '',
+      content: typeof r.content === 'string' ? r.content.slice(0, 800) : '',
+    }))
+  } catch (err) {
+    console.warn('[scope-it] Ollama web search error:', err)
+    return []
+  }
+}
+
 interface ScopedDraft {
   name: string
   pitch: string
@@ -69,6 +106,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Live web search — Ollama API. Pulls real-time freelance pricing snippets
+  // for similar work, gives the AI a sanity check beyond the static market table.
+  // Soft-fails if the API key isn't set or the call errors — we still have
+  // market-rate.ts as the authoritative grounding.
+  const searchQuery = `freelance fixed-price quote ${description.slice(0, 80)} development`
+  const webSnippets = await ollamaWebSearch(searchQuery)
+  const webContext = webSnippets.length
+    ? `\n\nLive web search results (${webSnippets.length}) for similar freelance work:\n` +
+      webSnippets.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.content || ''}`).join('\n\n')
+    : ''
+
   let aiResp: Response
   try {
     aiResp = await fetch(`${AI_BASE_URL}/chat/completions`, {
@@ -83,7 +131,7 @@ export async function POST(request: NextRequest) {
         max_tokens: 700,
         messages: [
           { role: 'system', content: PROMPT_SYSTEM },
-          { role: 'user', content: `Stakeholder description:\n${description}${priorContext}` },
+          { role: 'user', content: `Stakeholder description:\n${description}${priorContext}${webContext}` },
         ],
       }),
     })
@@ -172,5 +220,6 @@ export async function POST(request: NextRequest) {
       usd: Number(r.usd) || 0,
       shipped_at: r.shipped_at,
     })),
+    web_search: webSnippets,
   })
 }
