@@ -530,6 +530,20 @@ export default function WorkflowPage() {
                     </p>
                   )}
                 </div>
+                <div className="rounded border border-slate-200 bg-white p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1">Notes</p>
+                    <p className="text-sm text-zinc-900 whitespace-pre-wrap">
+                      {postGameData.notes?.trim() || <span className="text-zinc-400 italic">None</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1">Incidents</p>
+                    <p className="text-sm text-zinc-900 whitespace-pre-wrap">
+                      {postGameData.incidents?.trim() || <span className="text-zinc-400 italic">None</span>}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setPostGameFormOpen(true)}
@@ -537,6 +551,25 @@ export default function WorkflowPage() {
                 >
                   Edit post game ops report
                 </button>
+              </div>
+            )}
+
+            {isPostGameDone && !postGameEditable && (
+              <div className="px-4 pb-4 border-t border-[#E8E8E8]">
+                <div className="rounded border border-slate-200 bg-white p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1">Notes</p>
+                    <p className="text-sm text-zinc-900 whitespace-pre-wrap">
+                      {postGameData.notes?.trim() || <span className="text-zinc-400 italic">None</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1">Incidents</p>
+                    <p className="text-sm text-zinc-900 whitespace-pre-wrap">
+                      {postGameData.incidents?.trim() || <span className="text-zinc-400 italic">None</span>}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
