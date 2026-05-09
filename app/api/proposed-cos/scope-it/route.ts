@@ -92,6 +92,7 @@ Rules:
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
+  const authedUser = auth as { userId: string; email: string; fullName: string }
 
   const body = await request.json().catch(() => ({}))
   const description = String(body.description || '').trim()
@@ -235,8 +236,9 @@ export async function POST(request: NextRequest) {
     `INSERT INTO proposed_change_orders
        (name, pitch, bullets, price_usd, timeline_label, benefit,
         category, target_project, status, pitched_to, is_placeholder, sort_order, notes,
-        market_breakdown, work_type, scope_band, ai_reasoning)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', '{}', false, 0, $9, $10, $11, $12, $13)
+        market_breakdown, work_type, scope_band, ai_reasoning,
+        created_by_user_id, created_by_name, created_by_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', '{}', false, 0, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
       (draft.name || '').slice(0, 200),
@@ -252,6 +254,9 @@ export async function POST(request: NextRequest) {
       workType,
       scope,
       reasoningField || null,
+      authedUser.userId || null,
+      authedUser.fullName || null,
+      authedUser.email || null,
     ],
   )
 

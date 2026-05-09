@@ -612,6 +612,17 @@ async function runMigrations() {
     // the AI arrived at the price, scope, and timeline.
     await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`)
 
+    // SSO-based identity tracking — every action carries the authenticated
+    // user's id + name + email captured at action time. Pulled from the JWT
+    // session via requireRole, so it's tamper-proof at the API layer.
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS created_by_user_id UUID`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS created_by_name TEXT`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS created_by_email TEXT`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS promoted_by_user_id UUID`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS promoted_by_name TEXT`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS view_count INTEGER NOT NULL DEFAULT 0`)
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ`)
+
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.
     await client.query(`CREATE TABLE IF NOT EXISTS retainer_alerts (

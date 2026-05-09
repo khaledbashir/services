@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
+  const authedUser = auth as { userId: string; email: string; fullName: string }
   const body = await request.json().catch(() => ({}))
   const name = String(body.name || '').trim()
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -33,8 +34,9 @@ export async function POST(request: NextRequest) {
   const r = await query(
     `INSERT INTO proposed_change_orders
        (name, pitch, bullets, price_usd, timeline_label, benefit,
-        category, target_project, status, pitched_to, is_placeholder, sort_order, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        category, target_project, status, pitched_to, is_placeholder, sort_order, notes,
+        created_by_user_id, created_by_name, created_by_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
       name,
@@ -52,6 +54,9 @@ export async function POST(request: NextRequest) {
       Boolean(body.is_placeholder),
       Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 0,
       typeof body.notes === 'string' ? body.notes : null,
+      authedUser.userId || null,
+      authedUser.fullName || null,
+      authedUser.email || null,
     ],
   )
   return NextResponse.json(r.rows[0])

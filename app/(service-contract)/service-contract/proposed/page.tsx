@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import ReasoningPanel from './ReasoningPanel'
+import ReasoningPanel, { ReasoningModal } from './ReasoningPanel'
+import { ConfirmModal, PromptModal, SuccessModal } from './Modal'
 
 interface ProposedCO {
   id: string
@@ -69,6 +70,9 @@ export default function ProposedCOsPage() {
   const [drawer, setDrawer] = useState<{ mode: 'new' | 'edit'; data: Partial<ProposedCO> & { id?: string } } | null>(null)
   const [filter, setFilter] = useState<'all' | 'bundle' | 'individual'>('all')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [archiveTarget, setArchiveTarget] = useState<ProposedCO | null>(null)
+  const [promotePrompt, setPromotePrompt] = useState<ProposedCO | null>(null)
+  const [postPromote, setPostPromote] = useState<{ requestId: string } | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -111,14 +115,21 @@ export default function ProposedCOsPage() {
     await refresh()
   }
 
-  const remove = async (id: string) => {
-    if (!confirm('Archive this card? It will disappear from the catalog.')) return
-    await fetch(`/api/proposed-cos/${id}`, { method: 'DELETE' })
+  const remove = (item: ProposedCO) => setArchiveTarget(item)
+
+  const confirmArchive = async () => {
+    if (!archiveTarget) return
+    await fetch(`/api/proposed-cos/${archiveTarget.id}`, { method: 'DELETE' })
+    setArchiveTarget(null)
     await refresh()
   }
 
-  const promote = async (item: ProposedCO) => {
-    const requester = window.prompt('Who is this getting pitched to / promoted for? (optional, e.g. "Joe", "Charlie", "Jireh")', '') || ''
+  const promote = (item: ProposedCO) => setPromotePrompt(item)
+
+  const submitPromote = async (requester: string) => {
+    if (!promotePrompt) return
+    const item = promotePrompt
+    setPromotePrompt(null)
     setSavingId(item.id)
     const res = await fetch(`/api/proposed-cos/${item.id}`, {
       method: 'POST',
@@ -127,14 +138,12 @@ export default function ProposedCOsPage() {
     })
     setSavingId(null)
     if (!res.ok) {
-      alert('Promotion failed')
+      setPostPromote({ requestId: '' })
       return
     }
     const data = await res.json()
     await refresh()
-    if (data.request_id && confirm('Promoted! Open the new change-order on the kanban?')) {
-      window.location.href = '/service-log/change-orders'
-    }
+    if (data.request_id) setPostPromote({ requestId: data.request_id })
   }
 
   return (
@@ -188,7 +197,7 @@ export default function ProposedCOsPage() {
               <Card key={item.id} item={item}
                 onEdit={() => setDrawer({ mode: 'edit', data: item })}
                 onPromote={() => promote(item)}
-                onArchive={() => remove(item.id)}
+                onArchive={() => remove(item)}
                 saving={savingId === item.id}
               />
             ))}
@@ -204,7 +213,7 @@ export default function ProposedCOsPage() {
               <Card key={item.id} item={item}
                 onEdit={() => setDrawer({ mode: 'edit', data: item })}
                 onPromote={() => promote(item)}
-                onArchive={() => remove(item.id)}
+                onArchive={() => remove(item)}
                 saving={savingId === item.id}
               />
             ))}
@@ -230,6 +239,37 @@ export default function ProposedCOsPage() {
           onSave={save}
         />
       )}
+
+      {/* In-app modals replace the native browser confirm/prompt dialogs */}
+      <ConfirmModal
+        open={!!archiveTarget}
+        onClose={() => setArchiveTarget(null)}
+        title="Archive this idea?"
+        body={archiveTarget ? `“${archiveTarget.name}” will move to the archive and stop showing in the catalog. You can restore it later from the database if you change your mind.` : ''}
+        confirmLabel="Archive"
+        cancelLabel="Keep it"
+        tone="destructive"
+        onConfirm={confirmArchive}
+      />
+
+      <PromptModal
+        open={!!promotePrompt}
+        onClose={() => setPromotePrompt(null)}
+        title="Lock this in"
+        body={promotePrompt ? `Who is this for? (optional — e.g. Joe, Charlie, Jireh.) Press Enter to lock it in as a real change order on the kanban.` : ''}
+        placeholder="Who's this for?"
+        confirmLabel="Lock it in →"
+        onSubmit={submitPromote}
+      />
+
+      <SuccessModal
+        open={!!postPromote}
+        onClose={() => setPostPromote(null)}
+        title="Locked in"
+        body="The idea is now a real change order on the kanban — quoted and ready to ship."
+        actionLabel="Open the kanban →"
+        onAction={() => { window.location.href = '/service-log/change-orders' }}
+      />
     </div>
   )
 }
@@ -462,18 +502,6 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             </button>
           </div>
           {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
-
-          {/* Live reasoning — appears as soon as the stream starts.
-              The reasoning IS the loader. */}
-          {(busy || liveReasoning) && (
-            <div className="mt-4">
-              <ReasoningPanel
-                reasoning={liveReasoning}
-                status={liveStatus}
-                busy={busy}
-              />
-            </div>
-          )}
         </div>
       ) : (
         <div>
@@ -535,15 +563,6 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 {busy ? '…' : 'Refine'}
               </button>
             </div>
-            {(busy || liveReasoning) && (
-              <div className="mt-3">
-                <ReasoningPanel
-                  reasoning={liveReasoning}
-                  status={liveStatus}
-                  busy={busy}
-                />
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200 dark:border-blue-800/60">
@@ -568,6 +587,16 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
           {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
         </div>
       )}
+
+      {/* Reasoning modal — pops the moment Scope-it / Refine fires.
+          Closes on user dismiss after 'done', or on Escape (when not busy). */}
+      <ReasoningModal
+        open={busy || !!liveReasoning}
+        onClose={() => { setLiveReasoning(''); setLiveStatus(null) }}
+        reasoning={liveReasoning}
+        status={liveStatus}
+        busy={busy}
+      />
     </section>
   )
 }

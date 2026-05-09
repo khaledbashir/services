@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PricingTransparency from '../PricingTransparency'
 import ReasoningPanel from '../ReasoningPanel'
+import { PromptModal, SuccessModal } from '../Modal'
 
 interface ProposedCO {
   id: string
@@ -25,6 +26,13 @@ interface ProposedCO {
   work_type: string | null
   scope_band: string | null
   ai_reasoning: string | null
+  created_by_user_id: string | null
+  created_by_name: string | null
+  created_by_email: string | null
+  promoted_by_user_id: string | null
+  promoted_by_name: string | null
+  view_count: number | null
+  last_viewed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -56,6 +64,9 @@ export default function ProposedCODetailPage() {
   const [refineBusy, setRefineBusy] = useState(false)
   const [refineError, setRefineError] = useState<string | null>(null)
   const [promoting, setPromoting] = useState(false)
+  const [promoteOpen, setPromoteOpen] = useState(false)
+  const [postPromote, setPostPromote] = useState(false)
+  const [promoteError, setPromoteError] = useState<string | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -92,22 +103,25 @@ export default function ProposedCODetailPage() {
     }
   }
 
-  const promote = async () => {
+  const promote = () => setPromoteOpen(true)
+
+  const submitPromote = async (requester: string) => {
     if (!item) return
-    const requester = window.prompt('Who is this getting promoted for? (optional, e.g. "Joe", "Jireh")', '') || ''
+    setPromoteOpen(false)
     setPromoting(true)
+    setPromoteError(null)
     const res = await fetch(`/api/proposed-cos/${item.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requester: requester || undefined }),
     })
     setPromoting(false)
-    if (!res.ok) { alert('Promotion failed'); return }
-    if (confirm('Promoted! Open the new change-order on the kanban?')) {
-      window.location.href = '/service-log/change-orders'
-    } else {
-      await refresh()
+    if (!res.ok) {
+      setPromoteError('Lock-in failed — try again.')
+      return
     }
+    setPostPromote(true)
+    await refresh()
   }
 
   const flipStatus = async (next: ProposedCO['status']) => {
@@ -366,8 +380,66 @@ export default function ProposedCODetailPage() {
               </div>
             </div>
           )}
+
+          {/* Audit trail — SSO-verified actor history. Tamper-proof at the API layer. */}
+          <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2">
+              Audit trail · SSO-verified
+            </div>
+            <div className="space-y-1.5 text-[11px] text-gray-700 dark:text-gray-300">
+              {item.created_by_name ? (
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Scoped by:</span>{' '}
+                  <strong>{item.created_by_name}</strong>
+                  {item.created_by_email && <span className="text-gray-500"> · {item.created_by_email}</span>}
+                </div>
+              ) : (
+                <div className="text-gray-500 italic">Created before SSO tracking was added.</div>
+              )}
+              {item.promoted_by_name && (
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Locked in by:</span>{' '}
+                  <strong>{item.promoted_by_name}</strong>
+                </div>
+              )}
+              {(item.view_count ?? 0) > 0 && (
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Opened:</span>{' '}
+                  {item.view_count} {item.view_count === 1 ? 'time' : 'times'}
+                  {item.last_viewed_at && (
+                    <span className="text-gray-500"> · last {new Date(item.last_viewed_at).toLocaleString()}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </aside>
       </div>
+
+      <PromptModal
+        open={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        title="Lock this in"
+        body="Who is this for? (optional — e.g. Joe, Charlie, Jireh.) Press Enter to lock it in as a real change order on the kanban."
+        placeholder="Who's this for?"
+        confirmLabel="Lock it in →"
+        onSubmit={submitPromote}
+      />
+
+      <SuccessModal
+        open={postPromote}
+        onClose={() => { setPostPromote(false); refresh() }}
+        title="Locked in"
+        body="The idea is now a real change order on the kanban — quoted and ready to ship."
+        actionLabel="Open the kanban →"
+        onAction={() => { window.location.href = '/service-log/change-orders' }}
+      />
+
+      {promoteError && (
+        <div className="fixed bottom-4 right-4 px-4 py-3 rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-950/40 dark:border-rose-800/60 text-sm text-rose-900 dark:text-rose-100 shadow-lg z-50">
+          {promoteError}
+        </div>
+      )}
     </div>
   )
 }

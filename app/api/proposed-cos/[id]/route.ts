@@ -10,6 +10,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
   const { id } = await ctx.params
+  // Fire-and-forget view tracking — bump the count + last-seen on every detail fetch.
+  ;(async () => {
+    try {
+      await query(
+        `UPDATE proposed_change_orders SET view_count = view_count + 1, last_viewed_at = NOW() WHERE id = $1`,
+        [id],
+      )
+    } catch {}
+  })()
   const r = await query(`SELECT * FROM proposed_change_orders WHERE id = $1`, [id])
   if (r.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(r.rows[0])
@@ -72,6 +81,7 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
+  const authedUser = auth as { userId: string; email: string; fullName: string }
   const { id } = await ctx.params
   const body = await request.json().catch(() => ({}))
   const requester = typeof body.requester === 'string' ? body.requester : null
@@ -88,6 +98,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     p.bullets?.length ? `\n\nCapabilities:\n` + p.bullets.map((b: string) => `- ${b}`).join('\n') : '',
     p.benefit ? `\n\nBenefit: ${p.benefit}` : '',
     p.timeline_label ? `\n\nTimeline: ${p.timeline_label}` : '',
+    `\n\nLocked in by: ${authedUser.fullName} (${authedUser.email}) via SSO`,
   ].join('')
 
   const newRow = await query(
@@ -104,9 +115,13 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const newId = newRow.rows[0].id
 
   await query(
-    `UPDATE proposed_change_orders SET status='won', promoted_request_id=$2, updated_at=NOW() WHERE id = $1`,
-    [id, newId],
+    `UPDATE proposed_change_orders
+        SET status='won', promoted_request_id=$2,
+            promoted_by_user_id=$3, promoted_by_name=$4,
+            updated_at=NOW()
+      WHERE id = $1`,
+    [id, newId, authedUser.userId || null, authedUser.fullName || null],
   )
 
-  return NextResponse.json({ ok: true, request_id: newId })
+  return NextResponse.json({ ok: true, request_id: newId, promoted_by: authedUser.fullName })
 }
