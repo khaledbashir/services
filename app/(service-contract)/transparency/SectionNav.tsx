@@ -42,7 +42,7 @@ export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
   return (
     <aside
       data-no-print="true"
-      className="sticky top-0 self-start hidden lg:flex flex-col h-screen border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 -ml-5 pl-5 pr-4 py-6"
+      className="sticky top-0 self-start hidden lg:flex flex-col h-screen border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 -ml-5 pl-5 pr-4 py-6"
       aria-label="Transparency dashboard"
     >
       {/* Brand block */}
@@ -53,14 +53,14 @@ export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-8 w-auto hidden dark:block" />
         </div>
-        <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-500 dark:text-zinc-400 leading-none mb-0.5">
+        <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-500 dark:text-gray-400 leading-none mb-0.5">
           Service
         </div>
-        <div className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
+        <div className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight tracking-tight">
           Transparency
         </div>
         {generatedAt && (
-          <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-2">
+          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-2">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             live · {new Date(generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </div>
@@ -77,13 +77,13 @@ export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
               href={`#${s.id}`}
               className={`group block px-3 py-2 rounded-md transition-colors border-l-2 ${
                 isActive
-                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white shadow-sm'
-                  : 'border-transparent text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40'
+                  ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white shadow-sm'
+                  : 'border-transparent text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100/70 dark:hover:bg-gray-800/40'
               }`}
             >
               <div className="text-sm font-medium leading-tight">{s.label}</div>
               <div className={`text-[11px] mt-0.5 leading-tight ${
-                isActive ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-400'
+                isActive ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400'
               }`}>
                 {s.description}
               </div>
@@ -92,25 +92,25 @@ export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
         })}
       </nav>
 
-      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 px-3 mb-4">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-2">
+      <div className="border-t border-gray-200 dark:border-gray-800 pt-4 px-3 mb-4">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
           Manage
         </div>
         <div className="flex flex-col gap-1.5">
-          <a href="/service-log/change-orders" className="text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+          <a href="/service-log/change-orders" className="text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
             Change orders board →
           </a>
-          <a href="/inbox" className="text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+          <a href="/inbox" className="text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
             Morning brief →
           </a>
-          <a href="/service-log" className="text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
+          <a href="/service-log" className="text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
             Full service log →
           </a>
         </div>
       </div>
 
-      <div className="px-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-        <a href="/" className="text-[11px] text-zinc-500 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
+      <div className="px-3 pt-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <a href="/" className="text-[11px] text-gray-500 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-100">
           ← Back to app
         </a>
         <PrintButton />
@@ -146,7 +146,7 @@ export function SectionNavMobile() {
   return (
     <nav
       data-no-print="true"
-      className="lg:hidden sticky top-0 z-[5] -mx-5 px-5 py-2 bg-zinc-50/95 dark:bg-zinc-950/95 backdrop-blur border-b border-zinc-200 dark:border-zinc-800"
+      className="lg:hidden sticky top-0 z-[5] -mx-5 px-5 py-2 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur border-b border-gray-200 dark:border-gray-800"
       aria-label="Dashboard sections"
     >
       <div className="flex gap-1.5 overflow-x-auto -my-1 py-1">
@@ -158,8 +158,8 @@ export function SectionNavMobile() {
               href={`#${s.id}`}
               className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors ${
                 isActive
-                  ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
               {s.label}

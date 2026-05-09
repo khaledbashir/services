@@ -30,8 +30,8 @@ export default function WarrantyCountdown({ shippedAt, expiresAt }: Props) {
 
   if (total === 0) {
     return (
-      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs font-semibold whitespace-nowrap">
-        <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs font-semibold whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
         Warranty expired
       </div>
     )

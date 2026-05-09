@@ -607,6 +607,10 @@ async function runMigrations() {
     await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS market_breakdown JSONB`)
     await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS work_type TEXT`)
     await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS scope_band TEXT`)
+    // AI reasoning chain-of-thought captured from reasoning models (glm-5.1, etc.)
+    // — surfaced on the detail page in an accordion so stakeholders can see HOW
+    // the AI arrived at the price, scope, and timeline.
+    await client.query(`ALTER TABLE proposed_change_orders ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`)
 
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.

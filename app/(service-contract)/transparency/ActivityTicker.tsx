@@ -14,7 +14,7 @@ interface Props {
 }
 
 const KIND_DOT: Record<string, string> = {
-  triaged: 'bg-zinc-400',
+  triaged: 'bg-gray-400',
   started: 'bg-blue-500',
   quoted:  'bg-purple-500',
   shipped: 'bg-emerald-500',
@@ -48,22 +48,22 @@ function initials(n: string | null): string {
 export default function ActivityTicker({ events }: Props) {
   if (!events.length) {
     return (
-      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+      <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
           Live activity
         </h2>
-        <div className="text-zinc-400 dark:text-zinc-500 text-sm italic">No activity in the last 14 days.</div>
+        <div className="text-gray-400 dark:text-gray-500 text-sm italic">No activity in the last 14 days.</div>
       </section>
     )
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+    <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
           Live activity
         </h2>
-        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+        <span className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           auto-refresh 1m
         </span>
@@ -71,18 +71,18 @@ export default function ActivityTicker({ events }: Props) {
       <ul className="space-y-3">
         {events.map((e) => (
           <li key={e.id + e.kind} className="flex items-start gap-3 text-sm">
-            <span className={`flex-shrink-0 w-2 h-2 rounded-full mt-1.5 ${KIND_DOT[e.kind] || 'bg-zinc-400'}`} />
+            <span className={`flex-shrink-0 w-2 h-2 rounded-full mt-1.5 ${KIND_DOT[e.kind] || 'bg-gray-400'}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap leading-tight">
                 <span
                   title={e.requester || ''}
-                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold text-zinc-600 dark:text-zinc-300"
+                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 text-[9px] font-bold text-gray-600 dark:text-gray-300"
                 >
                   {initials(e.requester)}
                 </span>
-                <span className="text-xs text-zinc-700 dark:text-zinc-300">
+                <span className="text-xs text-gray-700 dark:text-gray-300">
                   <strong className="font-semibold">{e.requester || 'someone'}</strong>{' '}
-                  <span className="text-zinc-500 dark:text-zinc-400">
+                  <span className="text-gray-500 dark:text-gray-400">
                     — {KIND_VERB[e.kind] || e.kind} a
                   </span>{' '}
                   <span
@@ -96,11 +96,11 @@ export default function ActivityTicker({ events }: Props) {
                   </span>
                 </span>
               </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 leading-snug mt-0.5 line-clamp-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5 line-clamp-1">
                 {e.summary}
               </div>
             </div>
-            <span className="flex-shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums whitespace-nowrap">
+            <span className="flex-shrink-0 text-[10px] text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
               {relTime(e.ts)}
             </span>
           </li>

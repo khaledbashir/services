@@ -18,13 +18,13 @@ interface Props {
 
 export default function GrayAreas({ clauses, liveItems }: Props) {
   return (
-    <section className="rounded-xl border border-amber-200/50 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/30 to-zinc-50 dark:from-amber-950/20 dark:to-zinc-950 p-6 shadow-sm">
+    <section className="rounded-xl border border-amber-200/50 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/30 to-gray-50 dark:from-amber-950/20 dark:to-gray-950 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
             Gray Areas · the honest middle
           </h2>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
             Items that aren&apos;t a clean fix or a clean change order. Here&apos;s how the call gets made.
           </p>
         </div>
@@ -39,16 +39,16 @@ export default function GrayAreas({ clauses, liveItems }: Props) {
         {clauses.map((c, i) => (
           <div
             key={i}
-            className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-white/70 dark:bg-zinc-900/40 p-3"
+            className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-white/70 dark:bg-gray-900/40 p-3"
           >
-            <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 leading-snug">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-snug">
               {c.title}
             </div>
-            <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 leading-snug">
+            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-snug">
               {c.detail}
             </div>
             <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-2 leading-snug font-medium">
-              <span className="text-zinc-500 dark:text-zinc-500 font-normal">how it&apos;s called: </span>
+              <span className="text-gray-500 dark:text-gray-500 font-normal">how it&apos;s called: </span>
               {c.rule}
             </div>
           </div>
@@ -64,11 +64,11 @@ export default function GrayAreas({ clauses, liveItems }: Props) {
             {liveItems.map((it) => (
               <li
                 key={it.id}
-                className="text-xs text-zinc-600 dark:text-zinc-400 flex items-start gap-2"
+                className="text-xs text-gray-600 dark:text-gray-400 flex items-start gap-2"
               >
                 <span className="inline-block w-1 h-1 rounded-full bg-amber-500 mt-1.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <span className="text-zinc-800 dark:text-zinc-200">
+                  <span className="text-gray-800 dark:text-gray-200">
                     {it.requester || 'someone'}:
                   </span>{' '}
                   <span className="line-clamp-1 inline">{it.summary}</span>

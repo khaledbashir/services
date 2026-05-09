@@ -41,7 +41,7 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-semibold">
+        <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
           Burndown · day {lastDay.day}
         </span>
         <span className={`text-[10px] font-mono tabular-nums ${overPace ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
@@ -60,14 +60,14 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
               stroke="currentColor"
               strokeOpacity="0.08"
               strokeWidth="0.5"
-              className="text-zinc-500"
+              className="text-gray-500"
             />
             <text
               x={padX - 3}
               y={g.y + 2.5}
               textAnchor="end"
               fontSize="5"
-              className="fill-zinc-400 dark:fill-zinc-500"
+              className="fill-gray-400 dark:fill-gray-500"
               fontFamily="ui-monospace, monospace"
             >
               {g.label}
@@ -83,7 +83,7 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
           stroke="currentColor"
           strokeOpacity="0.25"
           strokeDasharray="3,3"
-          className="text-zinc-500"
+          className="text-gray-500"
         />
         {/* Area fill under actual */}
         <path
@@ -100,7 +100,7 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
           strokeWidth="1"
           strokeOpacity="0.3"
           strokeDasharray="4,2"
-          className="text-zinc-500"
+          className="text-gray-500"
         />
         {/* Actual path */}
         <path
@@ -118,7 +118,7 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
           r="5"
           fill="white"
           fillOpacity="0.9"
-          className="dark:fill-zinc-900 dark:fill-opacity-90"
+          className="dark:fill-gray-900 dark:fill-opacity-90"
         />
         <circle
           cx={xFor(lastDay.day)}
@@ -127,15 +127,15 @@ export default function Burndown({ days, cap, daysInMonth }: Props) {
           fill={lineColor}
         />
       </svg>
-      <div className="flex items-center gap-3 text-[9px] text-zinc-500 dark:text-zinc-400 mt-1">
+      <div className="flex items-center gap-3 text-[9px] text-gray-500 dark:text-gray-400 mt-1">
         <span className="flex items-center gap-1">
           <span className={`inline-block w-2 h-0.5 ${overPace ? 'bg-amber-500' : 'bg-blue-500'}`} /> actual
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-0.5 border-t border-dashed border-zinc-500" /> pace
+          <span className="inline-block w-2 h-0.5 border-t border-dashed border-gray-500" /> pace
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-sm" /> cap
+          <span className="inline-block w-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-sm" /> cap
         </span>
         <span className="flex items-center gap-1 ml-auto font-mono tabular-nums">
           {lastDay.hours_cum.toFixed(1)}h / {cap}h cap

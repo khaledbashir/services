@@ -117,6 +117,13 @@ export async function POST(request: NextRequest) {
       webSnippets.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.content || ''}`).join('\n\n')
     : ''
 
+  // Reasoning model on purpose — glm-5.1 splits its output into:
+  //   .content   = clean structured JSON (the proposal)
+  //   .reasoning = chain-of-thought (saved + shown in accordion on detail page)
+  // Per Ahmad's ask: stakeholders should see HOW the AI arrived at the price,
+  // not just the final number. Override via AI_MODEL_SCOPE if needed.
+  const modelForScope = process.env.AI_MODEL_SCOPE || 'glm-5.1'
+
   let aiResp: Response
   try {
     aiResp = await fetch(`${AI_BASE_URL}/chat/completions`, {
@@ -126,9 +133,10 @@ export async function POST(request: NextRequest) {
         Authorization: `Bearer ${AI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: AI_MODEL,
+        model: modelForScope,
         temperature: 0.3,
-        max_tokens: 700,
+        max_tokens: 2500,
+        response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: PROMPT_SYSTEM },
           { role: 'user', content: `Stakeholder description:\n${description}${priorContext}${webContext}` },
@@ -137,28 +145,44 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     console.error('[scope-it] AI fetch failed:', err)
-    return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
+    return NextResponse.json({ error: 'AI request failed', detail: String(err) }, { status: 502 })
   }
 
   if (!aiResp.ok) {
     const t = await aiResp.text()
-    console.error('[scope-it] AI returned', aiResp.status, t.slice(0, 200))
-    return NextResponse.json({ error: 'AI returned an error' }, { status: 502 })
+    console.error('[scope-it] AI returned', aiResp.status, t.slice(0, 400))
+    return NextResponse.json({ error: 'AI returned an error', status: aiResp.status, detail: t.slice(0, 200) }, { status: 502 })
   }
 
   const aiData = await aiResp.json()
-  const raw = aiData?.choices?.[0]?.message?.content
-  if (!raw || typeof raw !== 'string') {
-    return NextResponse.json({ error: 'AI returned no content' }, { status: 502 })
+  const msg = aiData?.choices?.[0]?.message
+  const contentField = (typeof msg?.content === 'string' && msg.content.trim()) || ''
+  const reasoningField = (typeof msg?.reasoning === 'string' && msg.reasoning.trim()) || ''
+  // Reasoning models put JSON in .content and the thinking trace in .reasoning.
+  // Non-reasoning models put JSON in .content only. Either way, we parse from
+  // whichever field actually carries JSON, and we save the reasoning trace
+  // separately for the accordion.
+  const candidate = contentField || reasoningField
+  if (!candidate) {
+    console.error('[scope-it] AI returned empty content/reasoning. Response:', JSON.stringify(aiData).slice(0, 600))
+    return NextResponse.json({ error: 'AI returned no content', model: modelForScope }, { status: 502 })
+  }
+
+  // Strip common JSON wrappers — fenced code, prefix prose before {, etc.
+  const extractJson = (s: string): string => {
+    const fenced = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const firstBrace = fenced.indexOf('{')
+    const lastBrace = fenced.lastIndexOf('}')
+    if (firstBrace >= 0 && lastBrace > firstBrace) return fenced.slice(firstBrace, lastBrace + 1)
+    return fenced
   }
 
   let draft: ScopedDraft
   try {
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim()
-    draft = JSON.parse(cleaned) as ScopedDraft
+    draft = JSON.parse(extractJson(candidate)) as ScopedDraft
   } catch (err) {
-    console.error('[scope-it] JSON parse failed:', err, 'raw:', raw.slice(0, 300))
-    return NextResponse.json({ error: 'AI output not valid JSON', raw }, { status: 502 })
+    console.error('[scope-it] JSON parse failed:', err, 'candidate:', candidate.slice(0, 400))
+    return NextResponse.json({ error: 'AI output not valid JSON', raw: candidate.slice(0, 400) }, { status: 502 })
   }
 
   // Ground the price + timeline in the market-pricing chain so the AI can't
@@ -188,12 +212,13 @@ export async function POST(request: NextRequest) {
 
   // Save the draft to the catalog as is_placeholder=false but status='draft'
   // (so Ahmad reviews before it hits "available"). Tag the source in notes.
+  // ai_reasoning carries the chain-of-thought from glm-5.1 for the accordion.
   const inserted = await query(
     `INSERT INTO proposed_change_orders
        (name, pitch, bullets, price_usd, timeline_label, benefit,
         category, target_project, status, pitched_to, is_placeholder, sort_order, notes,
-        market_breakdown, work_type, scope_band)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', '{}', false, 0, $9, $10, $11, $12)
+        market_breakdown, work_type, scope_band, ai_reasoning)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', '{}', false, 0, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       (draft.name || '').slice(0, 200),
@@ -208,6 +233,7 @@ export async function POST(request: NextRequest) {
       JSON.stringify(market),
       workType,
       scope,
+      reasoningField || null,
     ],
   )
 

@@ -165,17 +165,17 @@ export default function KanbanView({ requests }: Props) {
               className={`rounded-xl border p-3 transition-colors min-h-[200px] ${
                 isDropTarget
                   ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30'
-                  : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40'
+                  : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/40'
               }`}
             >
               <div className="flex items-center justify-between mb-3 px-1">
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                  <div className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                     {col.label}
                   </div>
-                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400">{col.hint}</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400">{col.hint}</div>
                 </div>
-                <span className="text-xs font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                <span className="text-xs font-mono tabular-nums text-gray-500 dark:text-gray-400">
                   {cards.length}
                 </span>
               </div>
@@ -191,7 +191,7 @@ export default function KanbanView({ requests }: Props) {
                       draggable
                       onDragStart={(e) => onDragStart(e, r.id)}
                       onDragEnd={onDragEnd}
-                      className={`bg-white dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800 border-l-4 ${stripe} ${dim} p-2.5 cursor-grab active:cursor-grabbing shadow-sm hover:shadow transition-shadow`}
+                      className={`bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 border-l-4 ${stripe} ${dim} p-2.5 cursor-grab active:cursor-grabbing shadow-sm hover:shadow transition-shadow`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span
@@ -203,25 +203,25 @@ export default function KanbanView({ requests }: Props) {
                         >
                           {isFix ? 'CONTRACT' : 'CHANGE ORDER'}
                         </span>
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
                           {fmtDate(r.received_at)}
                         </span>
                       </div>
-                      <div className="text-xs leading-snug text-zinc-700 dark:text-zinc-300 line-clamp-3">
+                      <div className="text-xs leading-snug text-gray-700 dark:text-gray-300 line-clamp-3">
                         {r.summary}
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         {r.requester ? (
                           <span
                             title={r.requester}
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-[9px] font-bold text-zinc-700 dark:text-zinc-300"
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-[9px] font-bold text-gray-700 dark:text-gray-300"
                           >
                             {initials(r.requester)}
                           </span>
                         ) : (
                           <span />
                         )}
-                        <span className="text-[10px] font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                        <span className="text-[10px] font-mono tabular-nums text-gray-500 dark:text-gray-400">
                           {col.key === 'shipped' && r.actual_hours != null
                             ? `${r.actual_hours}h`
                             : isFix
@@ -235,7 +235,7 @@ export default function KanbanView({ requests }: Props) {
                   )
                 })}
                 {cards.length === 0 ? (
-                  <div className="text-[11px] text-zinc-400 dark:text-zinc-500 italic px-1 py-3 text-center">
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500 italic px-1 py-3 text-center">
                     drop here
                   </div>
                 ) : null}
@@ -246,7 +246,7 @@ export default function KanbanView({ requests }: Props) {
       </div>
 
       {isPending ? (
-        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">syncing…</div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center">syncing…</div>
       ) : null}
     </div>
   )

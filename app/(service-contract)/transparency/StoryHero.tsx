@@ -25,39 +25,39 @@ export default function StoryHero({ story }: Props) {
     : 'from-emerald-500 to-emerald-600'
 
   return (
-    <section className={`rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 p-6 mb-6 shadow-sm ring-1 ${tone.ring}`}>
+    <section className={`rounded-2xl border border-gray-200 dark:border-gray-800 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-950 p-6 mb-6 shadow-sm ring-1 ${tone.ring}`}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
             {story.month_label}
           </div>
-          <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mt-0.5">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
             How the month is going
           </h2>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800">
           <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
-          <span className="text-xs font-medium uppercase tracking-wide text-zinc-700 dark:text-zinc-300">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-700 dark:text-gray-300">
             {tone.label}
           </span>
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums ml-1">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums ml-1">
             day {story.days_elapsed}/{story.days_total} · {story.pct_elapsed}%
           </span>
         </div>
       </div>
 
-      <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-300 max-w-3xl">
+      <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300 max-w-3xl">
         {story.narrative}
       </p>
 
       {/* Month progress bar */}
-      <div className="mt-5 h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+      <div className="mt-5 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
         <div
           className={`h-full rounded-full bg-gradient-to-r ${pacingGradient} transition-[width] duration-700`}
           style={{ width: `${story.pct_elapsed}%` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
+      <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-1">
         <span>Start of month</span>
         <span>End of month</span>
       </div>

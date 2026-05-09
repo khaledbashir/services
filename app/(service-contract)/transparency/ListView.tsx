@@ -134,19 +134,19 @@ export default function ListView({ requests }: Props) {
   const totalUsd = filtered.reduce((sum, r) => sum + (r.estimated_usd || 0), 0)
 
   return (
-    <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 flex flex-wrap items-center gap-2 border-b border-zinc-100 dark:border-zinc-800">
+    <section className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-gray-800">
         <input
           type="text"
           placeholder="Search summary or requester…"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          className="flex-1 min-w-[200px] text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 min-w-[200px] text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1.5 outline-none"
+          className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 outline-none"
         >
           <option value="">All types</option>
           <option value="CONTRACT">Service Contract</option>
@@ -155,7 +155,7 @@ export default function ListView({ requests }: Props) {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1.5 outline-none"
+          className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 outline-none"
         >
           <option value="">All statuses</option>
           <option value="open">Open</option>
@@ -163,7 +163,7 @@ export default function ListView({ requests }: Props) {
           <option value="quoted">Quoted</option>
           <option value="shipped">Shipped</option>
         </select>
-        <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums ml-auto">
+        <span className="text-[11px] text-gray-500 dark:text-gray-400 tabular-nums ml-auto">
           {filtered.length} of {requests.length} · Σ {totalHours.toFixed(1)}h
           {totalUsd > 0 ? ` · ${fmtUSD(totalUsd)}` : ''}
         </span>
@@ -171,7 +171,7 @@ export default function ListView({ requests }: Props) {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-[10px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/60">
+          <thead className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-900/60">
             <tr>
               <Th onClick={() => toggleSort('received_at')}>Date{arrow('received_at')}</Th>
               <Th onClick={() => toggleSort('type')}>Type{arrow('type')}</Th>
@@ -186,7 +186,7 @@ export default function ListView({ requests }: Props) {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500 italic">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 dark:text-gray-500 italic">
                   No requests match these filters.
                 </td>
               </tr>
@@ -197,8 +197,8 @@ export default function ListView({ requests }: Props) {
                 const slug = r.repo ? REPO_TO_GITHUB[r.repo] : null
                 const sha = r.shipped_commit_sha
                 return (
-                  <tr key={r.id} className="border-t border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50">
-                    <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap text-zinc-600 dark:text-zinc-400">
+                  <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                    <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap text-gray-600 dark:text-gray-400">
                       {fmtDate(r.received_at)}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
@@ -206,10 +206,10 @@ export default function ListView({ requests }: Props) {
                         {cov.label}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-xs whitespace-nowrap text-zinc-700 dark:text-zinc-300">
+                    <td className="px-3 py-2 text-xs whitespace-nowrap text-gray-700 dark:text-gray-300">
                       {r.requester || '—'}
                     </td>
-                    <td className="px-3 py-2 text-xs leading-snug max-w-md text-zinc-700 dark:text-zinc-300">
+                    <td className="px-3 py-2 text-xs leading-snug max-w-md text-gray-700 dark:text-gray-300">
                       <div className="line-clamp-2">{r.summary}</div>
                     </td>
                     <td className="px-3 py-2 text-xs font-mono tabular-nums text-right whitespace-nowrap">
@@ -219,7 +219,7 @@ export default function ListView({ requests }: Props) {
                       {fmtUSD(r.estimated_usd)}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span className="text-[10px] uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                      <span className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-gray-400">
                         {r.status.replace('_', ' ')}
                       </span>
                     </td>
@@ -235,7 +235,7 @@ export default function ListView({ requests }: Props) {
                           ↗ {sha.slice(0, 7)}
                         </a>
                       ) : r.shipped_at ? (
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{fmtDate(r.shipped_at)}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtDate(r.shipped_at)}</span>
                       ) : null}
                     </td>
                   </tr>
@@ -262,7 +262,7 @@ function Th({
     <th
       onClick={onClick}
       className={`px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'} font-semibold ${
-        onClick ? 'cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none' : ''
+        onClick ? 'cursor-pointer hover:text-gray-900 dark:hover:text-gray-100 select-none' : ''
       }`}
     >
       {children}

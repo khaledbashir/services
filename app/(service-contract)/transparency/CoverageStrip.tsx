@@ -33,7 +33,7 @@ function delta(current: number, prev: number, suffix = ''): { arrow: string; ton
     return { arrow: '▲', tone: 'text-emerald-600 dark:text-emerald-400', text: `new${suffix}` }
   }
   const diff = current - prev
-  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: `same as last month` }
+  if (diff === 0) return { arrow: '·', tone: 'text-gray-400 dark:text-gray-500', text: `same as last month` }
   const pct = Math.round((Math.abs(diff) / prev) * 100)
   const arrow = diff > 0 ? '▲' : '▼'
   const tone = diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
@@ -43,7 +43,7 @@ function delta(current: number, prev: number, suffix = ''): { arrow: string; ton
 function deltaHours(current: number, prev: number) {
   if (prev === 0 && current === 0) return null
   const diff = current - prev
-  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: 'same' }
+  if (diff === 0) return { arrow: '·', tone: 'text-gray-400 dark:text-gray-500', text: 'same' }
   const arrow = diff > 0 ? '▲' : '▼'
   const tone = diff > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
   return { arrow, tone, text: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}h vs last month` }
@@ -52,7 +52,7 @@ function deltaHours(current: number, prev: number) {
 function deltaUsd(current: number, prev: number) {
   if (prev === 0 && current === 0) return null
   const diff = current - prev
-  if (diff === 0) return { arrow: '·', tone: 'text-zinc-400 dark:text-zinc-500', text: 'same' }
+  if (diff === 0) return { arrow: '·', tone: 'text-gray-400 dark:text-gray-500', text: 'same' }
   const arrow = diff > 0 ? '▲' : '▼'
   const tone = diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
   return { arrow, tone, text: `${diff > 0 ? '+' : ''}${fmtUSD(Math.abs(diff))} vs last month` }

@@ -131,10 +131,10 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
     })
 
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2.5 shadow-sm" data-no-print="true">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 shadow-sm" data-no-print="true">
       <div className="flex items-center gap-2 flex-wrap">
         {/* Date preset */}
-        <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-0.5">
           {(['this-month', 'last-30', 'last-month', 'all-time'] as const).map((p) => (
             <button
               key={p}
@@ -142,8 +142,8 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
               onClick={() => setPreset(p)}
               className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${
                 state.preset === p
-                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
             >
               {PRESET_LABEL[p]}
@@ -163,7 +163,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
             className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
               state.stakeholders.length > 0
                 ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
             <span>From</span>
@@ -172,17 +172,17 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
                 {state.stakeholders.length}
               </span>
             ) : null}
-            <span className="text-zinc-400">▾</span>
+            <span className="text-gray-400">▾</span>
           </button>
           {stakeholdersOpen ? (
-            <div className="absolute top-full left-0 mt-1 z-30 w-56 max-h-72 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-1">
+            <div className="absolute top-full left-0 mt-1 z-30 w-56 max-h-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
               {allStakeholders.length === 0 ? (
-                <div className="px-2 py-2 text-xs text-zinc-400 italic">No stakeholders yet</div>
+                <div className="px-2 py-2 text-xs text-gray-400 italic">No stakeholders yet</div>
               ) : (
                 allStakeholders.map((s) => (
                   <label
                     key={s}
-                    className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -210,7 +210,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
             className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
               state.platforms.length > 0
                 ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
             <span>Platform</span>
@@ -219,14 +219,14 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
                 {state.platforms.length}
               </span>
             ) : null}
-            <span className="text-zinc-400">▾</span>
+            <span className="text-gray-400">▾</span>
           </button>
           {platformsOpen ? (
-            <div className="absolute top-full left-0 mt-1 z-30 w-56 max-h-72 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-1">
+            <div className="absolute top-full left-0 mt-1 z-30 w-56 max-h-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
               {allPlatforms.map((p) => (
                 <label
                   key={p}
-                  className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                  className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -242,7 +242,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
         </div>
 
         {/* Type segmented */}
-        <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-0.5">
           {(['all', 'CONTRACT', 'CO'] as const).map((t) => (
             <button
               key={t}
@@ -254,8 +254,8 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                     : t === 'CO'
                       ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200'
-                      : 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                      : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
             >
               {t === 'all' ? 'All types' : t === 'CONTRACT' ? 'Contract' : 'Change Order'}
@@ -275,7 +275,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
             className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1.5 ${
               state.statuses.length > 0
                 ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
             <span>Status</span>
@@ -284,14 +284,14 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
                 {state.statuses.length}
               </span>
             ) : null}
-            <span className="text-zinc-400">▾</span>
+            <span className="text-gray-400">▾</span>
           </button>
           {statusesOpen ? (
-            <div className="absolute top-full left-0 mt-1 z-30 w-44 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-1">
+            <div className="absolute top-full left-0 mt-1 z-30 w-44 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1">
               {STATUS_OPTIONS.map((o) => (
                 <label
                   key={o.key}
-                  className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                  className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -312,7 +312,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
           value={state.search}
           onChange={(e) => setState((s) => ({ ...s, search: e.target.value }))}
           placeholder="Search…"
-          className="text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[140px] max-w-[260px]"
+          className="text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[140px] max-w-[260px]"
         />
 
         {/* Reset */}
@@ -320,7 +320,7 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
           <button
             type="button"
             onClick={reset}
-            className="text-[11px] text-zinc-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium ml-auto"
+            className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium ml-auto"
           >
             Clear {activeCount}
           </button>
@@ -329,20 +329,20 @@ export default function FilterBar({ allStakeholders, allPlatforms, initial, onCh
 
       {/* Custom date range */}
       {state.preset === 'custom' ? (
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <span className="text-[10px] uppercase tracking-wider text-zinc-500">Range</span>
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <span className="text-[10px] uppercase tracking-wider text-gray-500">Range</span>
           <input
             type="date"
             value={state.from || ''}
             onChange={(e) => setState((s) => ({ ...s, from: e.target.value || null }))}
-            className="text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1"
+            className="text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1"
           />
-          <span className="text-xs text-zinc-400">→</span>
+          <span className="text-xs text-gray-400">→</span>
           <input
             type="date"
             value={state.to || ''}
             onChange={(e) => setState((s) => ({ ...s, to: e.target.value || null }))}
-            className="text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1"
+            className="text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1"
           />
         </div>
       ) : null}

@@ -42,9 +42,9 @@ export default function PlatformBreakdown({ platforms }: Props) {
 
   if (!visible.length) {
     return (
-      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By platform</h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 italic">
+      <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">By platform</h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
           No platform activity yet this month.
         </p>
       </section>
@@ -52,33 +52,33 @@ export default function PlatformBreakdown({ platforms }: Props) {
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+    <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By platform</h2>
-        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">where the work landed</span>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">By platform</h2>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">where the work landed</span>
       </div>
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800">
         {visible.map((p) => {
           const meta = PLATFORM_LABEL[p.platform] || { label: p.platform, tagline: '' }
           return (
             <div key={p.platform} className="flex items-center gap-4 py-3">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">
+                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
                   {meta.label}
                 </div>
                 {meta.tagline && (
-                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug truncate">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug truncate">
                     {meta.tagline}
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-5 flex-shrink-0 text-xs">
                 <div className="text-right">
-                  <div className="text-base font-bold tabular-nums text-zinc-900 dark:text-zinc-100 leading-tight">
+                  <div className="text-base font-bold tabular-nums text-gray-900 dark:text-gray-100 leading-tight">
                     {p.hours_used.toFixed(1)}
-                    <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400 ml-1">hrs</span>
+                    <span className="text-[10px] font-normal text-gray-500 dark:text-gray-400 ml-1">hrs</span>
                   </div>
-                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
                     {p.fixes_shipped} shipped
                   </div>
                 </div>

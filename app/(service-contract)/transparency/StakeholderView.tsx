@@ -93,7 +93,7 @@ export default function StakeholderView({ requests }: Props) {
 
   if (buckets.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm text-zinc-400 dark:text-zinc-500 italic text-sm text-center">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm text-gray-400 dark:text-gray-500 italic text-sm text-center">
         No requests yet.
       </div>
     )
@@ -104,27 +104,27 @@ export default function StakeholderView({ requests }: Props) {
       {buckets.map((b) => (
         <section
           key={b.name}
-          className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden"
+          className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
         >
-          <header className="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/60">
-            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 text-xs font-bold text-zinc-700 dark:text-zinc-300">
+          <header className="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/60">
+            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300">
               {b.name.startsWith('—') ? '?' : initials(b.name)}
             </span>
-            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{b.name}</h3>
-            <div className="flex items-center gap-3 ml-auto text-[11px] text-zinc-600 dark:text-zinc-400 tabular-nums">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{b.name}</h3>
+            <div className="flex items-center gap-3 ml-auto text-[11px] text-gray-600 dark:text-gray-400 tabular-nums">
               <span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{b.total}</strong> total
+                <strong className="text-gray-800 dark:text-gray-200">{b.total}</strong> total
               </span>
-              <span className="text-zinc-300 dark:text-zinc-700">·</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
               <span>
                 <strong className="text-emerald-700 dark:text-emerald-400">{b.shippedCount}</strong> shipped
               </span>
               <span>
-                <strong className="text-zinc-700 dark:text-zinc-300">{b.openCount}</strong> open
+                <strong className="text-gray-700 dark:text-gray-300">{b.openCount}</strong> open
               </span>
               {b.contractHours > 0 ? (
                 <>
-                  <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                  <span className="text-gray-300 dark:text-gray-700">·</span>
                   <span className="text-blue-700 dark:text-blue-400">
                     {b.contractHours.toFixed(1)}h contract
                   </span>
@@ -132,14 +132,14 @@ export default function StakeholderView({ requests }: Props) {
               ) : null}
               {b.changeOrderUsd > 0 ? (
                 <>
-                  <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                  <span className="text-gray-300 dark:text-gray-700">·</span>
                   <span className="text-amber-700 dark:text-amber-400">{fmtUSD(b.changeOrderUsd)} CO</span>
                 </>
               ) : null}
             </div>
           </header>
 
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {b.rows.map((r) => {
               const isContractFix = r.classification === 'FIX' && r.retainer_covered
               const stripe = isContractFix
@@ -152,7 +152,7 @@ export default function StakeholderView({ requests }: Props) {
                   key={r.id}
                   className={`px-4 py-2.5 flex items-start gap-3 border-l-4 ${stripe}`}
                 >
-                  <div className="text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap pt-0.5 w-12">
+                  <div className="text-[10px] tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap pt-0.5 w-12">
                     {fmtDate(r.received_at)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -166,15 +166,15 @@ export default function StakeholderView({ requests }: Props) {
                       >
                         {isContractFix ? 'CONTRACT' : 'CO'}
                       </span>
-                      <span className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
                         {STATUS_LABEL[r.status] || r.status}
                       </span>
                     </div>
-                    <div className="text-xs leading-snug text-zinc-700 dark:text-zinc-300 line-clamp-2">
+                    <div className="text-xs leading-snug text-gray-700 dark:text-gray-300 line-clamp-2">
                       {r.summary}
                     </div>
                   </div>
-                  <div className="text-right whitespace-nowrap text-[11px] font-mono tabular-nums text-zinc-600 dark:text-zinc-400">
+                  <div className="text-right whitespace-nowrap text-[11px] font-mono tabular-nums text-gray-600 dark:text-gray-400">
                     {hours != null ? `${hours.toFixed(1)}h` : ''}
                     {r.estimated_usd != null ? (
                       <div className="text-[10px] text-amber-700 dark:text-amber-400">

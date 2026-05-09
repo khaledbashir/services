@@ -72,13 +72,13 @@ export default async function TransparencyDashboard() {
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight mb-1">Live service-contract transparency</h1>
-            <p className="text-zinc-600 dark:text-zinc-400 text-sm max-w-2xl">
+            <p className="text-gray-600 dark:text-gray-400 text-sm max-w-2xl">
               Every hour, every fix, every change order, every dollar — visible in real time.
               Pulled live from the operating systems ANC runs on, never typed in by hand.
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0" data-no-print="true">
-            <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               live · {fmtTime(data.generated_at)}
             </span>
@@ -120,28 +120,28 @@ export default async function TransparencyDashboard() {
         {/* Row 1: credit meter + payment status */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">
 
-          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between gap-3 mb-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 Service Credit · {meter.month}
               </h2>
               <PaymentBadge payment={data.payment} />
             </div>
             <div className="text-4xl font-bold tracking-tight tabular-nums leading-tight">
               {meter.hours_used.toFixed(1)}
-              <span className="text-base font-medium text-zinc-500 dark:text-zinc-400 ml-1">/ {meter.cap_hours} hrs used</span>
+              <span className="text-base font-medium text-gray-500 dark:text-gray-400 ml-1">/ {meter.cap_hours} hrs used</span>
             </div>
-            <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
+            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1.5">
               {meter.hours_remaining.toFixed(1)} hrs remaining this month ·{' '}
               {meter.overage_hours > 0 ? <span className="text-rose-600 dark:text-rose-400 font-medium">{meter.overage_hours.toFixed(1)} hrs overage at $90/hr</span> : 'No overage'}
             </div>
-            <div className="h-3 rounded-full bg-zinc-100 dark:bg-zinc-800 mt-5 overflow-hidden">
+            <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800 mt-5 overflow-hidden">
               <div
                 className="h-full rounded-full transition-[width] duration-700 ease-out"
                 style={{ width: `${Math.min(meter.pct_used, 100)}%`, background: meterGradient }}
               />
             </div>
-            <div className="flex justify-between text-xs text-zinc-400 dark:text-zinc-500 mt-1.5">
+            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1.5">
               <span>0 hrs</span>
               <span>{meter.cap_hours} hrs cap</span>
             </div>
@@ -154,30 +154,30 @@ export default async function TransparencyDashboard() {
           </section>
 
           {/* Payment + Contract summary card */}
-          <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-4">
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
               Contract Summary
             </h2>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Monthly retainer</span>
+              <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Monthly retainer</span>
                 <span className="text-sm font-semibold tabular-nums">$1,500</span>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Hours included</span>
+              <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Hours included</span>
                 <span className="text-sm font-semibold tabular-nums">{meter.cap_hours} hrs</span>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Overage rate</span>
+              <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Overage rate</span>
                 <span className="text-sm font-semibold tabular-nums">$90/hr</span>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Warranty</span>
+              <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Warranty</span>
                 <span className="text-sm font-semibold tabular-nums">30 days on shipped work</span>
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Used so far this month</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Used so far this month</span>
                 <span className={`text-sm font-semibold tabular-nums ${meterColor === 'rose' ? 'text-rose-600 dark:text-rose-400' : meterColor === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                   {meter.hours_used.toFixed(1)} / {meter.cap_hours}
                 </span>
@@ -186,8 +186,8 @@ export default async function TransparencyDashboard() {
 
             {/* Month-over-month trend */}
             {data.coverage.prev_service_contract_hours > 0 && (
-              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-2">
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
                   <span className="uppercase tracking-wider font-semibold">vs last month</span>
                   <span>same-day comparison</span>
                 </div>
@@ -199,22 +199,22 @@ export default async function TransparencyDashboard() {
                     return (
                       <>
                         <div>
-                          <div className={`text-sm font-bold tabular-nums ${hoursDiff > 0 ? 'text-amber-600 dark:text-amber-400' : hoursDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                          <div className={`text-sm font-bold tabular-nums ${hoursDiff > 0 ? 'text-amber-600 dark:text-amber-400' : hoursDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'}`}>
                             {hoursDiff > 0 ? '+' : ''}{hoursDiff.toFixed(1)}h
                           </div>
-                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">contract hours</div>
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500">contract hours</div>
                         </div>
                         <div>
-                          <div className={`text-sm font-bold tabular-nums ${warrantyDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : warrantyDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                          <div className={`text-sm font-bold tabular-nums ${warrantyDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : warrantyDiff < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-600 dark:text-gray-400'}`}>
                             {warrantyDiff > 0 ? '+' : ''}{warrantyDiff}
                           </div>
-                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">warranty fixes</div>
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500">warranty fixes</div>
                         </div>
                         <div>
-                          <div className={`text-sm font-bold tabular-nums ${coDiff > 0 ? 'text-amber-600 dark:text-amber-400' : coDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                          <div className={`text-sm font-bold tabular-nums ${coDiff > 0 ? 'text-amber-600 dark:text-amber-400' : coDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'}`}>
                             {coDiff > 0 ? '+' : ''}{coDiff >= 1000 ? '$' + (coDiff / 1000).toFixed(1) + 'k' : '$' + Math.round(Math.abs(coDiff)).toLocaleString('en-US')}
                           </div>
-                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">CO value</div>
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500">CO value</div>
                         </div>
                       </>
                     )
@@ -225,21 +225,21 @@ export default async function TransparencyDashboard() {
 
             {/* Active warranties mini-list */}
             {data.warranty_items.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                     Recently delivered — re-fix-free window
                   </span>
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
                     30 days on shipped work
                   </span>
                 </div>
-                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {data.warranty_items.map((w) => (
                     <div key={w.id} className="flex items-start justify-between gap-3 py-2.5">
                       <div className="min-w-0">
                         <div className="text-sm leading-snug truncate">{w.summary}</div>
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                           {fmtDate(w.shipped_at)}{w.repo ? ` · ${w.repo}` : ''}
                         </div>
                       </div>
@@ -253,20 +253,20 @@ export default async function TransparencyDashboard() {
         </div>
 
         {/* Row 2: shipped this month — full width since coverage clauses moved to a collapsed section below */}
-        <section id="shipped" className="scroll-mt-32 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow mb-4">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+        <section id="shipped" className="scroll-mt-32 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm hover:shadow-md transition-shadow mb-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
             Shipped this month
           </h2>
           {data.recently_shipped.length === 0 ? (
-            <div className="text-zinc-400 dark:text-zinc-500 text-sm italic py-3">
+            <div className="text-gray-400 dark:text-gray-500 text-sm italic py-3">
               Nothing shipped yet this month — credit at full.
             </div>
           ) : (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {data.recently_shipped.map((s) => (
                 <div key={s.id} className="flex justify-between gap-3 py-2.5 text-sm">
                   <div className="min-w-0 truncate">{s.summary}</div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                     {fmtDate(s.shipped_at)}{s.actual_hours != null ? ` · ${s.actual_hours.toFixed(1)} hrs` : ''}
                   </div>
                 </div>
@@ -306,24 +306,24 @@ export default async function TransparencyDashboard() {
         </div>
 
         {/* What's covered each month — collapsed by default to save vertical space */}
-        <section id="coverage" className="scroll-mt-32 mt-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+        <section id="coverage" className="scroll-mt-32 mt-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
           <details className="group">
-            <summary className="cursor-pointer p-5 list-none flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 [&amp;::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer p-5 list-none flex items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 [&amp;::-webkit-details-marker]:hidden">
               <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                   What&apos;s covered each month
                 </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {COVERED_CLAUSES.length} items included · {NOT_COVERED_CLAUSES.length} items quoted separately. Click to expand the full coverage list.
                 </p>
               </div>
-              <span className="flex-shrink-0 text-zinc-400 dark:text-zinc-500 text-2xl group-open:rotate-45 transition-transform leading-none">+</span>
+              <span className="flex-shrink-0 text-gray-400 dark:text-gray-500 text-2xl group-open:rotate-45 transition-transform leading-none">+</span>
             </summary>
-            <div className="border-t border-zinc-100 dark:border-zinc-800 px-5 pb-5 pt-3">
+            <div className="border-t border-gray-100 dark:border-gray-800 px-5 pb-5 pt-3">
               <div className="grid md:grid-cols-2 gap-x-6">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-2 mt-3">Included in the monthly retainer</div>
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {COVERED_CLAUSES.map((c) => (
                       <div key={c.title} className="flex gap-2.5 py-2">
                         <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 inline-flex items-center justify-center text-[10px] font-bold mt-0.5">
@@ -331,7 +331,7 @@ export default async function TransparencyDashboard() {
                         </span>
                         <div className="min-w-0">
                           <div className="text-xs font-medium">{c.title}</div>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{c.detail}</div>
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{c.detail}</div>
                         </div>
                       </div>
                     ))}
@@ -339,7 +339,7 @@ export default async function TransparencyDashboard() {
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 mb-2 mt-3">Separate quote (change order)</div>
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {NOT_COVERED_CLAUSES.map((c) => (
                       <div key={c.title} className="flex gap-2.5 py-2">
                         <span className="flex-shrink-0 w-4 h-4 rounded-full bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-[10px] font-bold mt-0.5">
@@ -347,7 +347,7 @@ export default async function TransparencyDashboard() {
                         </span>
                         <div className="min-w-0">
                           <div className="text-xs font-medium">{c.title}</div>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{c.detail}</div>
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{c.detail}</div>
                         </div>
                       </div>
                     ))}
@@ -358,7 +358,7 @@ export default async function TransparencyDashboard() {
           </details>
         </section>
 
-        <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-12">
+        <footer className="text-center text-[11px] text-gray-400 dark:text-gray-500 mt-12">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>

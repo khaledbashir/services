@@ -23,6 +23,7 @@ interface ProposedCO {
   market_breakdown: any | null
   work_type: string | null
   scope_band: string | null
+  ai_reasoning: string | null
   created_at: string
   updated_at: string
 }
@@ -186,6 +187,34 @@ export default function ProposedCODetailPage() {
               workType={item.work_type}
             />
           </div>
+
+          {/* AI reasoning accordion — how the model arrived at this scope */}
+          {item.ai_reasoning && (
+            <details className="mb-8 rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/30 dark:bg-purple-950/20 group">
+              <summary className="cursor-pointer p-4 list-none flex items-center justify-between gap-3 hover:bg-purple-50/60 dark:hover:bg-purple-950/30 rounded-xl [&amp;::-webkit-details-marker]:hidden">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🧠</span>
+                    <h2 className="text-sm font-bold text-purple-900 dark:text-purple-100">
+                      How the AI arrived at this scope
+                    </h2>
+                  </div>
+                  <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5 ml-6">
+                    Step-by-step reasoning from the AI model. Read it to audit the price, scope, or timeline.
+                  </p>
+                </div>
+                <span className="text-purple-400 dark:text-purple-500 text-xl group-open:rotate-45 transition-transform leading-none flex-shrink-0">+</span>
+              </summary>
+              <div className="border-t border-purple-200 dark:border-purple-800/60 px-4 pb-4 pt-3">
+                <pre className="text-[12px] leading-relaxed text-purple-900 dark:text-purple-200 whitespace-pre-wrap font-sans max-w-none">
+                  {item.ai_reasoning}
+                </pre>
+                <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/40 text-[10px] text-purple-600 dark:text-purple-400/70 italic">
+                  Reasoning trace from glm-5.1. The price + workType + scope this reasoning lands on are then anchored against the static market-rate table above — the AI suggests the bucket, the table sets the number.
+                </div>
+              </div>
+            </details>
+          )}
 
           {/* AI iterate */}
           <section className="mb-8 rounded-xl border-2 border-blue-200 dark:border-blue-800/60 bg-blue-50/40 dark:bg-blue-950/30 p-5">

@@ -128,9 +128,9 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
       />
 
       {/* Result count + sort */}
-      <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 px-1 flex-wrap">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400 px-1 flex-wrap">
         <span className="tabular-nums">
-          Showing <strong className="text-zinc-700 dark:text-zinc-300">{filteredTriaged.length}</strong> of {triaged.length} requests
+          Showing <strong className="text-gray-700 dark:text-gray-300">{filteredTriaged.length}</strong> of {triaged.length} requests
           {filteredTriaged.length !== triaged.length ? ' (filtered)' : ''}
         </span>
         <div className="flex items-center gap-1.5" data-no-print="true">
@@ -138,7 +138,7 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            className="text-[11px] bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.key} value={o.key}>{o.label}</option>
@@ -148,7 +148,7 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 -mb-px overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 -mb-px overflow-x-auto">
         {TABS.map((t) => {
           const active = view === t.key
           return (
@@ -158,19 +158,19 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
               onClick={() => setView(t.key)}
               className={`relative px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
                 active
-                  ? 'text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                  ? 'text-gray-900 dark:text-gray-100'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
               aria-pressed={active}
             >
               {t.label}
               {active ? (
-                <span className="absolute left-2 right-2 -bottom-px h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                <span className="absolute left-2 right-2 -bottom-px h-0.5 bg-[#0A52EF] dark:bg-blue-400 rounded-full" />
               ) : null}
             </button>
           )
         })}
-        <span className="ml-auto text-[10px] text-zinc-400 dark:text-zinc-500 hidden md:inline pr-2">
+        <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 hidden md:inline pr-2">
           {TABS.find((t) => t.key === view)?.hint}
         </span>
       </div>
@@ -190,12 +190,12 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
               estimated_usd: r.estimated_usd,
             }))}
           />
-          <section className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
+          <section className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 Request timeline
               </h2>
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide">
                 click any row for the why
               </span>
             </div>

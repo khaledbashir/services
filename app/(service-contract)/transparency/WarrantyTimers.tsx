@@ -66,44 +66,44 @@ export default function WarrantyTimers() {
           const expired = total === 0
           const urgent = !expired && d <= 7
           const tone = expired
-            ? 'border-zinc-300 bg-zinc-50 dark:bg-zinc-900/60 dark:border-zinc-700'
+            ? 'border-gray-300 bg-gray-50 dark:bg-gray-900/60 dark:border-gray-700'
             : urgent
               ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800/60'
-              : 'border-emerald-300 bg-white dark:bg-zinc-900 dark:border-emerald-900/60'
+              : 'border-emerald-300 bg-white dark:bg-gray-900 dark:border-emerald-900/60'
 
           return (
             <div
               key={p.id}
               className={`rounded-xl border-2 p-4 transition-colors ${tone}`}
             >
-              <div className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-200 mb-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 mb-1">
                 {p.name}
               </div>
               {p.tagline && (
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mb-3 leading-tight line-clamp-2">
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-3 leading-tight line-clamp-2">
                   {p.tagline}
                 </div>
               )}
 
               {expired ? (
-                <div className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                <div className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                   Warranty expired
                 </div>
               ) : (
                 <>
-                  <div className="font-mono tabular-nums text-2xl font-bold leading-none text-zinc-900 dark:text-zinc-100">
-                    {d}<span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 ml-0.5">d</span>
+                  <div className="font-mono tabular-nums text-2xl font-bold leading-none text-gray-900 dark:text-gray-100">
+                    {d}<span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-0.5">d</span>
                   </div>
-                  <div className="font-mono tabular-nums text-base text-zinc-600 dark:text-zinc-300 mt-1.5">
+                  <div className="font-mono tabular-nums text-base text-gray-600 dark:text-gray-300 mt-1.5">
                     {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
                   </div>
-                  <div className={`text-[10px] mt-2 ${urgent ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                  <div className={`text-[10px] mt-2 ${urgent ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
                     {urgent ? 'expiring soon' : 'until warranty expires'}
                   </div>
                 </>
               )}
 
-              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-3 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-3 pt-2 border-t border-gray-200 dark:border-gray-800">
                 delivered {new Date(p.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
             </div>
