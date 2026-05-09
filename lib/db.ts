@@ -560,6 +560,21 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS inbox BOOLEAN NOT NULL DEFAULT false`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_inbox ON service_requests(inbox) WHERE inbox = true`)
 
+    // Platforms registry — drives the warranty countdown timers on /transparency.
+    // Each row is a "thing ANC has paid for" that carries a 30-day post-delivery
+    // warranty. delivered_at + warranty_days defines the window.
+    await client.query(`CREATE TABLE IF NOT EXISTS platforms (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      slug TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      tagline TEXT,
+      delivered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      warranty_days INTEGER NOT NULL DEFAULT 30,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+
     // Proposed change-orders catalog — Ahmad's proactive CO ideas with
     // pre-baked price + timeline + benefit, ready to pitch to stakeholders.
     // Lives separately from service_requests because these are unsolicited

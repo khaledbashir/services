@@ -13,6 +13,7 @@ import MetricsExplainer from './MetricsExplainer'
 import PaymentCTAs from './PaymentCTAs'
 import PrintButton from './PrintButton'
 import CoverageModel from './CoverageModel'
+import WarrantyTimers from './WarrantyTimers'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {

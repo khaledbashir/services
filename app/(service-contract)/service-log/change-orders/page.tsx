@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { DashboardLayout } from '@/components/dashboard-layout'
 
 interface ChangeOrder {
   id: string
@@ -197,8 +196,7 @@ export default function ChangeOrdersKanbanPage() {
   const isInbox = activeProject === 'inbox'
 
   return (
-    <DashboardLayout>
-      <div className="p-6 max-w-[1600px] mx-auto">
+    <div className="p-6 max-w-[1600px] mx-auto">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
@@ -398,8 +396,7 @@ export default function ChangeOrdersKanbanPage() {
             }}
           />
         )}
-      </div>
-    </DashboardLayout>
+    </div>
   )
 }
 
