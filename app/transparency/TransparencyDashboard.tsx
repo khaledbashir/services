@@ -185,7 +185,7 @@ export default async function TransparencyDashboard() {
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">Warranty window</span>
-                <span className="text-sm font-semibold tabular-nums">30 days per fix</span>
+                <span className="text-sm font-semibold tabular-nums">30 days per delivered project</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">Hours used today</span>
@@ -370,7 +370,7 @@ export default async function TransparencyDashboard() {
         </section>
 
         <footer className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-12">
-          ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day warranty on shipped work · $90/hr overage<br />
+          ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
       </div>

@@ -107,12 +107,12 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
             Warranty Active
           </span>
-          <span className="text-[10px] text-emerald-500 dark:text-emerald-400/60">30-day clock</span>
+          <span className="text-[10px] text-emerald-500 dark:text-emerald-400/60">30 days per project</span>
         </div>
         <div className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
           {c.warranty_active_count}
           <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 ml-1">
-            {c.warranty_active_count === 1 ? 'fix' : 'fixes'}
+            {c.warranty_active_count === 1 ? 'project' : 'projects'}
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
@@ -127,7 +127,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           ) : null}
         </div>
         <div className="text-[10px] text-emerald-500 dark:text-emerald-400/70 mt-0.5">
-          Each fix carries a free 30-day re-fix promise. The clock counts down the newest fix&apos;s warranty.
+          Each delivered project carries a 30-day post-delivery responsibility window. The clock counts down the newest delivery&apos;s warranty.
         </div>
       </div>
 

@@ -201,14 +201,18 @@ export async function getDashboardData(): Promise<DashboardData> {
   const remaining = Math.max(0, cap - used)
   const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
 
+  // Warranty = 30-day post-delivery responsibility window per shipped *project*
+  // (NEW / MIXED change order that's been delivered). Not per individual fix.
+  // Within the 30-day window, anything related to that delivered project is
+  // on the house. After 30 days, related FIX work bills against the retainer.
   const warrantyRes = await query(
     `SELECT id, summary, shipped_at, repo, area
        FROM service_requests
-      WHERE status = 'shipped'
+      WHERE classification IN ('NEW', 'MIXED')
+        AND status IN ('shipped', 'paid')
         AND shipped_at IS NOT NULL
         AND shipped_at >= NOW() - INTERVAL '30 days'
         AND source <> 'auto-push'
-        AND retainer_covered = true
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -301,28 +305,25 @@ export async function getDashboardData(): Promise<DashboardData> {
            AND shipped_at >= DATE_TRUNC('month', NOW())
        ), 0)::numeric AS service_contract_hours_used,
        COUNT(*) FILTER (
-         WHERE classification = 'FIX'
-           AND retainer_covered = true
+         WHERE classification IN ('NEW', 'MIXED')
            AND source <> 'auto-push'
-           AND status = 'shipped'
+           AND status IN ('shipped', 'paid')
            AND shipped_at IS NOT NULL
            AND shipped_at >= NOW() - INTERVAL '30 days'
        )::int AS warranty_active_count,
        COALESCE(
          MAX(GREATEST(0, EXTRACT(EPOCH FROM (shipped_at + INTERVAL '30 days' - NOW())) / 86400)) FILTER (
-           WHERE classification = 'FIX'
-             AND retainer_covered = true
+           WHERE classification IN ('NEW', 'MIXED')
              AND source <> 'auto-push'
-             AND status = 'shipped'
+             AND status IN ('shipped', 'paid')
              AND shipped_at IS NOT NULL
              AND shipped_at >= NOW() - INTERVAL '30 days'
          ), 0
        )::numeric AS warranty_days_remaining_total,
-       COALESCE(SUM(actual_hours) FILTER (
-         WHERE classification = 'FIX'
-           AND retainer_covered = true
+       COALESCE(SUM(COALESCE(quote_amount, estimated_usd, 0)) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
            AND source <> 'auto-push'
-           AND status = 'shipped'
+           AND status IN ('shipped', 'paid')
            AND shipped_at IS NOT NULL
            AND shipped_at >= NOW() - INTERVAL '30 days'
        ), 0)::numeric AS warranty_hours_protected,
