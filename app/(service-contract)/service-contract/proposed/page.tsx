@@ -143,17 +143,19 @@ export default function ProposedCOsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Proposed Change Orders</h1>
+          <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">Explore · before you commit</div>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Have an idea? See what it would take.</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Browse the catalog or describe a new idea — AI drafts a real proposal with price, timeline, and benefit
-            in front of you. Promote any card to push it onto the change-orders kanban as a quoted CO.
+            Browse what&apos;s already scoped, or describe a new idea in plain words — get back a real
+            estimate with price, timeline, and what you&apos;d get. Nothing gets ordered. You see it
+            first, then you decide.
           </p>
         </div>
         <button
           onClick={() => setDrawer({ mode: 'new', data: { ...EMPTY_DRAFT } })}
           className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap"
         >
-          + New idea (manual)
+          + Add an idea (manual)
         </button>
       </div>
 
@@ -193,7 +195,7 @@ export default function ProposedCOsPage() {
 
       {!loading && bundles.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Bundles</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Bundles · multi-feature ideas</h2>
           <div className="grid md:grid-cols-2 gap-3">
             {bundles.map(item => (
               <Card key={item.id} item={item}
@@ -209,7 +211,7 @@ export default function ProposedCOsPage() {
 
       {!loading && individuals.length > 0 && (
         <section>
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Individual features</h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Individual features · single ideas</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {individuals.map(item => (
               <Card key={item.id} item={item}
@@ -343,7 +345,7 @@ function Card({
             disabled={saving}
             className="px-2 py-1.5 text-[11px] bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
           >
-            {saving ? '...' : 'Promote'}
+            {saving ? '...' : 'Lock it in'}
           </button>
         )}
         <button
@@ -421,9 +423,9 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       <div className="flex items-center gap-2 mb-3">
         <span className="text-2xl">✨</span>
         <div>
-          <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe an idea — AI scopes it</h2>
+          <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe what you want — see what it would take</h2>
           <p className="text-xs text-blue-700 dark:text-blue-300">
-            Type what you want in plain English. AI returns a real proposal card with price, timeline, and benefit. Iterate until it fits, then promote.
+            Plain English is fine. You&apos;ll get back a real estimate with price, timeline, and what you&apos;d be getting. Tweak it until it fits. Nothing is ordered until you say so.
           </p>
         </div>
       </div>

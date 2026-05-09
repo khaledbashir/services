@@ -268,7 +268,7 @@ export default function ProposedCODetailPage() {
                   disabled={promoting || item.is_placeholder}
                   className="w-full px-4 py-3 text-sm font-semibold bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {promoting ? 'Promoting…' : item.is_placeholder ? 'Fill in first' : 'Promote → Change Order'}
+                  {promoting ? 'Locking it in…' : item.is_placeholder ? 'Fill in first' : 'Lock it in →'}
                 </button>
               )}
               {item.status === 'won' && item.promoted_request_id && (

@@ -29,8 +29,8 @@ const PAGES: PageNav[] = [
   },
   {
     href: '/service-contract/proposed',
-    label: 'Proposed COs',
-    description: 'Pitch catalog',
+    label: 'Explore',
+    description: 'Ideas before you commit',
     icon: '💡',
     match: (p) => p.startsWith('/service-contract/proposed'),
   },
