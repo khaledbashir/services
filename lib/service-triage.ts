@@ -625,12 +625,15 @@ export async function hoursThisMonth(): Promise<{
   cap_hours: number
   overage_hours: number
 }> {
+  // Retainer math excludes source='auto-push' — those are Ahmad's own pushes,
+  // tracked in the ledger for visibility but never billed against the 12-hr cap.
   const r = await query(
     `SELECT
        COALESCE(SUM(CASE WHEN status='shipped' AND shipped_at >= DATE_TRUNC('month', NOW()) THEN actual_hours ELSE 0 END), 0)::float8 AS used,
        COALESCE(SUM(CASE WHEN status IN ('open','in_progress') AND retainer_covered = true THEN estimated_hours ELSE 0 END), 0)::float8 AS open_est
      FROM service_requests
-     WHERE retainer_covered = true`,
+     WHERE retainer_covered = true
+       AND source <> 'auto-push'`,
   )
   const used = Number(r.rows[0].used)
   const openEst = Number(r.rows[0].open_est)

@@ -57,7 +57,8 @@ export interface CoverageStrip {
   service_contract_hours_used: number    // FIX retainer-covered, shipped this month, sum(actual_hours)
   service_contract_cap: number            // RETAINER_CAP_HOURS
   warranty_active_count: number           // FIX shipped within 30d
-  warranty_hours_protected: number        // sum(actual_hours) on those 30d-window FIX ships
+  warranty_hours_protected: number        // sum(actual_hours) on those 30d-window FIX ships (informational, not a separate billing pool)
+  warranty_days_remaining_total: number   // sum across active fixes of days-remaining-until-30d-expiry
   change_order_open_count: number         // NEW + MIXED with status in (open, in_progress, quoted)
   change_order_open_usd: number           // sum(estimated_usd) on those open COs
   change_order_shipped_count: number      // NEW + MIXED shipped this month
@@ -280,23 +281,42 @@ export async function getDashboardData(): Promise<DashboardData> {
   }))
 
   // Coverage-strip aggregates — three numbers above the meter.
+  // CRITICAL: every retainer-math filter excludes source='auto-push'. Auto-push rows
+  // are Ahmad's own pushes (his workflow improvements) — they live in the ledger/
+  // kanban for visibility but must never count against the 12-hr/month stakeholder
+  // retainer or the warranty roster. Stakeholder sources only.
   const coverageRes = await query(
     `SELECT
        COALESCE(SUM(actual_hours) FILTER (
          WHERE classification = 'FIX'
            AND retainer_covered = true
+           AND source <> 'auto-push'
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= DATE_TRUNC('month', NOW())
        ), 0)::numeric AS service_contract_hours_used,
        COUNT(*) FILTER (
          WHERE classification = 'FIX'
+           AND retainer_covered = true
+           AND source <> 'auto-push'
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= NOW() - INTERVAL '30 days'
        )::int AS warranty_active_count,
+       COALESCE(
+         SUM(GREATEST(0, EXTRACT(EPOCH FROM (shipped_at + INTERVAL '30 days' - NOW())) / 86400)) FILTER (
+           WHERE classification = 'FIX'
+             AND retainer_covered = true
+             AND source <> 'auto-push'
+             AND status = 'shipped'
+             AND shipped_at IS NOT NULL
+             AND shipped_at >= NOW() - INTERVAL '30 days'
+         ), 0
+       )::numeric AS warranty_days_remaining_total,
        COALESCE(SUM(actual_hours) FILTER (
          WHERE classification = 'FIX'
+           AND retainer_covered = true
+           AND source <> 'auto-push'
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= NOW() - INTERVAL '30 days'
@@ -330,6 +350,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     service_contract_cap: cap,
     warranty_active_count: Number(coverageRow.warranty_active_count) || 0,
     warranty_hours_protected: Number(coverageRow.warranty_hours_protected) || 0,
+    warranty_days_remaining_total: Number(coverageRow.warranty_days_remaining_total) || 0,
     change_order_open_count: Number(coverageRow.change_order_open_count) || 0,
     change_order_open_usd: Number(coverageRow.change_order_open_usd) || 0,
     change_order_shipped_count: Number(coverageRow.change_order_shipped_count) || 0,
@@ -362,24 +383,26 @@ export async function getDashboardData(): Promise<DashboardData> {
      )
      SELECT
        COALESCE(SUM(actual_hours) FILTER (
-         WHERE classification = 'FIX' AND retainer_covered = true
+         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
            AND status = 'shipped' AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_month_start
            AND shipped_at <= ctx.prev_cutoff
        ), 0)::numeric AS prev_service_contract_hours,
        COUNT(*) FILTER (
-         WHERE classification = 'FIX' AND status = 'shipped'
+         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+           AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_cutoff - INTERVAL '30 days'
            AND shipped_at <= ctx.prev_cutoff
        )::int AS prev_warranty_active_count,
        COALESCE(SUM(estimated_usd) FILTER (
-         WHERE classification IN ('NEW','MIXED')
+         WHERE classification IN ('NEW','MIXED') AND source <> 'auto-push'
            AND received_at >= ctx.prev_month_start
            AND received_at <= ctx.prev_cutoff
        ), 0)::numeric AS prev_change_order_total_usd,
        COUNT(*) FILTER (
-         WHERE classification = 'FIX' AND status = 'shipped'
+         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+           AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_month_start
            AND shipped_at <= ctx.prev_cutoff

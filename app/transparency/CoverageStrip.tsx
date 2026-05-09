@@ -4,6 +4,7 @@ interface CoverageProps {
     service_contract_cap: number
     warranty_active_count: number
     warranty_hours_protected: number
+    warranty_days_remaining_total: number
     change_order_open_count: number
     change_order_open_usd: number
     change_order_shipped_count: number
@@ -112,7 +113,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-          <span>{fmtHrs(c.warranty_hours_protected)}h re-fix-free</span>
+          <span>{Math.round(c.warranty_days_remaining_total)} days of coverage remaining</span>
           {dWar ? (
             <>
               <span className="text-emerald-300 dark:text-emerald-700">·</span>
@@ -121,6 +122,9 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
               </span>
             </>
           ) : null}
+        </div>
+        <div className="text-[10px] text-emerald-500 dark:text-emerald-400/70 mt-0.5">
+          Each fix carries a free 30-day re-fix promise. This is days-of-protection across all active fixes — not retainer hours.
         </div>
       </div>
 
