@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PricingTransparency from '../PricingTransparency'
+import ReasoningPanel from '../ReasoningPanel'
 
 interface ProposedCO {
   id: string
@@ -206,9 +207,7 @@ export default function ProposedCODetailPage() {
                 <span className="text-purple-400 dark:text-purple-500 text-xl group-open:rotate-45 transition-transform leading-none flex-shrink-0">+</span>
               </summary>
               <div className="border-t border-purple-200 dark:border-purple-800/60 px-4 pb-4 pt-3">
-                <pre className="text-[12px] leading-relaxed text-purple-900 dark:text-purple-200 whitespace-pre-wrap font-sans max-w-none">
-                  {item.ai_reasoning}
-                </pre>
+                <ReasoningPanel reasoning={item.ai_reasoning} autoScroll={false} />
                 <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/40 text-[10px] text-purple-600 dark:text-purple-400/70 italic">
                   Reasoning trace from glm-5.1. The price + workType + scope this reasoning lands on are then anchored against the static market-rate table above — the AI suggests the bucket, the table sets the number.
                 </div>

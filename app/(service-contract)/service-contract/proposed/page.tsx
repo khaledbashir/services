@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import ReasoningPanel from './ReasoningPanel'
 
 interface ProposedCO {
   id: string
@@ -351,50 +352,72 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<ProposedCO | null>(null)
   const [refining, setRefining] = useState('')
+  const [liveReasoning, setLiveReasoning] = useState('')
+  const [liveStatus, setLiveStatus] = useState<string | null>(null)
 
-  const generate = async () => {
-    if (!description.trim()) return
-    setBusy(true); setError(null)
+  // Stream the scope-it endpoint. The reasoning IS the loader — it appears
+  // live as the model thinks, then collapses into the final card on 'done'.
+  const streamScope = async (payload: { description: string; refine_from?: string }) => {
+    setBusy(true)
+    setError(null)
+    setLiveReasoning('')
+    setLiveStatus('Starting…')
+
     try {
-      const res = await fetch('/api/proposed-cos/scope-it', {
+      const res = await fetch('/api/proposed-cos/scope-it/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description }),
+        body: JSON.stringify(payload),
       })
-      if (!res.ok) {
-        const t = await res.json().catch(() => ({}))
-        setError(t?.error || 'Scoping failed')
+      if (!res.ok || !res.body) {
+        setError(`Scoping failed (${res.status})`)
         return
       }
-      const data = await res.json()
-      setDraft(data.draft)
-      await onCreated()
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const blocks = buffer.split('\n\n')
+        buffer = blocks.pop() || ''
+        for (const block of blocks) {
+          let event = 'message'
+          let dataLine = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim()
+            else if (line.startsWith('data:')) dataLine = line.slice(5).trim()
+          }
+          if (!dataLine) continue
+          let parsed: any
+          try { parsed = JSON.parse(dataLine) } catch { continue }
+          if (event === 'status') {
+            setLiveStatus(parsed.message || parsed.stage || '…')
+          } else if (event === 'reasoning') {
+            setLiveReasoning((prev) => prev + (parsed.delta || ''))
+          } else if (event === 'done') {
+            setDraft(parsed.draft)
+            setLiveStatus(null)
+            await onCreated()
+          } else if (event === 'error') {
+            setError(parsed.error || 'Scoping failed')
+          }
+        }
+      }
+    } catch (err) {
+      setError(String(err))
     } finally {
       setBusy(false)
     }
   }
 
-  const refine = async () => {
+  const generate = () => streamScope({ description })
+
+  const refine = () => {
     if (!refining.trim() || !draft) return
-    setBusy(true); setError(null)
-    try {
-      const res = await fetch('/api/proposed-cos/scope-it', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: refining, refine_from: draft.id }),
-      })
-      if (!res.ok) {
-        const t = await res.json().catch(() => ({}))
-        setError(t?.error || 'Refinement failed')
-        return
-      }
-      const data = await res.json()
-      setDraft(data.draft)
-      setRefining('')
-      await onCreated()
-    } finally {
-      setBusy(false)
-    }
+    streamScope({ description: refining, refine_from: draft.id })
+    setRefining('')
   }
 
   const reset = () => {
@@ -423,7 +446,8 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder='e.g. "I want a way to see all the shipped venues for the season in one place, with a filter by region and a way to email any of them at once."'
             rows={3}
-            className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            disabled={busy}
+            className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60"
           />
           <div className="flex items-center justify-between mt-3">
             <div className="text-[11px] text-blue-700 dark:text-blue-400">
@@ -438,6 +462,18 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
             </button>
           </div>
           {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
+
+          {/* Live reasoning — appears as soon as the stream starts.
+              The reasoning IS the loader. */}
+          {(busy || liveReasoning) && (
+            <div className="mt-4">
+              <ReasoningPanel
+                reasoning={liveReasoning}
+                status={liveStatus}
+                busy={busy}
+              />
+            </div>
+          )}
         </div>
       ) : (
         <div>
@@ -488,7 +524,8 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 value={refining}
                 onChange={(e) => setRefining(e.target.value)}
                 placeholder='e.g. "Make it cheaper", "add region filtering", "drop the email part"'
-                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm"
+                disabled={busy}
+                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm disabled:opacity-60"
               />
               <button
                 onClick={refine}
@@ -498,6 +535,15 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 {busy ? '…' : 'Refine'}
               </button>
             </div>
+            {(busy || liveReasoning) && (
+              <div className="mt-3">
+                <ReasoningPanel
+                  reasoning={liveReasoning}
+                  status={liveStatus}
+                  busy={busy}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200 dark:border-blue-800/60">

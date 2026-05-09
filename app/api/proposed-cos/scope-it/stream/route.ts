@@ -1,0 +1,272 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+import { NextRequest } from 'next/server'
+import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
+import { estimate as marketEstimate, classifyWorkType, type WorkType } from '@/lib/market-rate'
+import { buildProjectContext } from '@/lib/project-intelligence'
+
+const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OLLAMA_API_KEY || ''
+const AI_BASE_URL = process.env.AI_BASE_URL || 'https://ollama.com/v1'
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || ''
+
+interface ScopedDraft {
+  name: string
+  pitch: string
+  bullets: string[]
+  benefit: string
+  category: 'individual' | 'bundle'
+  target_project: string
+  workType: WorkType
+  scope: 'low' | 'mid' | 'high'
+}
+
+const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea, you turn it into a structured proposal card.
+
+You have READ ACCESS (below) to a live snapshot of all four ANC platforms. USE it:
+  - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
+  - If the request touches a custom object already in the CRM, lean on it instead of scoping a parallel object.
+  - Anchor pricing against the "Recently shipped change orders" section.
+  - target_project should match where the work would naturally land based on the surfaces inventory.
+  - If greenfield (no overlap), say so in the pitch — that justifies a higher scope band.
+
+In your reasoning, structure your thinking as readable markdown — short paragraphs, **bold** for key conclusions, bullet lists for capabilities. Avoid raw asterisks; use proper markdown bold/italic so the UI renders cleanly.
+
+Output ONLY valid JSON in .content matching this schema (your reasoning goes in .reasoning, not .content):
+{
+  "name": "string — short product-y name, max 60 chars",
+  "pitch": "string — one sentence, 80-150 chars",
+  "bullets": ["3-5 short capability bullets, each <80 chars"],
+  "benefit": "string — outcome-led, 80-150 chars",
+  "category": "individual" | "bundle",
+  "target_project": "service-dashboard" | "proposal-engine" | "crm" | "kb" | "mirror-mode" | "anything-llm" | "cross-platform",
+  "workType": "new_feature_small" | "new_feature_medium" | "new_feature_large" | "new_module" | "new_dashboard" | "new_report" | "new_integration" | "new_automation" | "data_migration" | "new_ai_agent",
+  "scope": "low" | "mid" | "high"
+}
+
+Rules:
+- "category"="bundle" when multi-feature OR cross-platform; else "individual".
+- Pick the workType that BEST matches; if unsure, lean smaller.
+- "scope": low = extends existing surface, mid = standard, high = ambitious / greenfield.
+- Names: no vendor SKUs. No "Twenty" / "Ollama" / etc.
+- Bullets: what gets delivered. Benefit: what the stakeholder gains.
+`
+
+interface OllamaSearchResult { title?: string; url?: string; content?: string }
+
+async function ollamaWebSearch(query: string): Promise<OllamaSearchResult[]> {
+  if (!OLLAMA_API_KEY) return []
+  try {
+    const res = await fetch('https://ollama.com/api/web_search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OLLAMA_API_KEY}` },
+      body: JSON.stringify({ query, max_results: 5 }),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const results = Array.isArray(data?.results) ? data.results : []
+    return results.slice(0, 5).map((r: any) => ({
+      title: typeof r.title === 'string' ? r.title : '',
+      url: typeof r.url === 'string' ? r.url : '',
+      content: typeof r.content === 'string' ? r.content.slice(0, 800) : '',
+    }))
+  } catch {
+    return []
+  }
+}
+
+function extractJson(s: string): string {
+  const fenced = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  const firstBrace = fenced.indexOf('{')
+  const lastBrace = fenced.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) return fenced.slice(firstBrace, lastBrace + 1)
+  return fenced
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, 'manager')
+  if (isAuthError(auth)) return auth as Response
+
+  const body = await request.json().catch(() => ({}))
+  const description = String(body.description || '').trim()
+  const refineFromId = typeof body.refine_from === 'string' ? body.refine_from : null
+
+  if (!description) return new Response(JSON.stringify({ error: 'description is required' }), { status: 400 })
+  if (!AI_API_KEY) return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 500 })
+
+  const modelForScope = process.env.AI_MODEL_SCOPE || 'glm-5.1'
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+      }
+      // Anti-buffering padding for nginx/Cloudflare/EasyPanel reverse proxy.
+      controller.enqueue(encoder.encode(': ' + ' '.repeat(2048) + '\n\n'))
+
+      try {
+        // 1. Pull prior draft + project context + web snippets in parallel
+        emit('status', { stage: 'gathering', message: 'Reading project surfaces and recent work…' })
+
+        let priorContext = ''
+        if (refineFromId) {
+          const r = await query(`SELECT name, pitch, bullets, price_usd, timeline_label, benefit, category, target_project FROM proposed_change_orders WHERE id = $1`, [refineFromId])
+          if (r.rows.length > 0) {
+            priorContext = `\n\nPrior draft of this proposal:\n${JSON.stringify(r.rows[0], null, 2)}\n\nThe stakeholder feedback below refines this prior draft.`
+          }
+        }
+
+        const [projectContext, webSnippets] = await Promise.all([
+          buildProjectContext().catch(() => ''),
+          ollamaWebSearch(`freelance fixed-price quote ${description.slice(0, 80)} development`),
+        ])
+
+        const webContext = webSnippets.length
+          ? `\n\nLive web search results for similar freelance work:\n` +
+            webSnippets.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.content || ''}`).join('\n\n')
+          : ''
+
+        emit('status', { stage: 'thinking', message: 'AI reasoning…' })
+
+        // 2. Stream from the AI
+        const aiResp = await fetch(`${AI_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${AI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: modelForScope,
+            temperature: 0.3,
+            max_tokens: 2500,
+            stream: true,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: PROMPT_SYSTEM + '\n\n' + projectContext },
+              { role: 'user', content: `Stakeholder description:\n${description}${priorContext}${webContext}` },
+            ],
+          }),
+        })
+
+        if (!aiResp.ok || !aiResp.body) {
+          const t = await aiResp.text().catch(() => '')
+          emit('error', { error: 'AI returned an error', status: aiResp.status, detail: t.slice(0, 200) })
+          controller.close()
+          return
+        }
+
+        const reader = aiResp.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let fullContent = ''
+        let fullReasoning = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed.startsWith('data:')) continue
+            const payload = trimmed.slice(5).trim()
+            if (payload === '[DONE]') continue
+            try {
+              const chunk = JSON.parse(payload)
+              const delta = chunk?.choices?.[0]?.delta
+              if (!delta) continue
+              const reasoningChunk = typeof delta.reasoning === 'string' ? delta.reasoning : ''
+              const contentChunk = typeof delta.content === 'string' ? delta.content : ''
+              if (reasoningChunk) {
+                fullReasoning += reasoningChunk
+                emit('reasoning', { delta: reasoningChunk })
+              }
+              if (contentChunk) {
+                fullContent += contentChunk
+                emit('content', { delta: contentChunk })
+              }
+            } catch {
+              // ignore malformed chunks
+            }
+          }
+        }
+
+        // 3. Parse final output
+        const candidate = fullContent.trim() || fullReasoning.trim()
+        if (!candidate) {
+          emit('error', { error: 'AI returned no content' })
+          controller.close()
+          return
+        }
+
+        let draft: ScopedDraft
+        try {
+          draft = JSON.parse(extractJson(candidate)) as ScopedDraft
+        } catch (err) {
+          emit('error', { error: 'AI output not valid JSON', raw: candidate.slice(0, 400) })
+          controller.close()
+          return
+        }
+
+        // 4. Anchor pricing against market-rate.ts
+        let workType = draft.workType
+        let scope = draft.scope
+        if (!workType || !scope) {
+          const heuristic = classifyWorkType(description)
+          workType = workType || heuristic.workType
+          scope = scope || heuristic.scope
+        }
+        const market = marketEstimate(workType, scope)
+
+        emit('status', { stage: 'saving', message: 'Saving the draft…' })
+
+        const inserted = await query(
+          `INSERT INTO proposed_change_orders
+             (name, pitch, bullets, price_usd, timeline_label, benefit,
+              category, target_project, status, pitched_to, is_placeholder, sort_order, notes,
+              market_breakdown, work_type, scope_band, ai_reasoning)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', '{}', false, 0, $9, $10, $11, $12, $13)
+           RETURNING *`,
+          [
+            (draft.name || '').slice(0, 200),
+            (draft.pitch || '').slice(0, 500),
+            Array.isArray(draft.bullets) ? draft.bullets.map((b) => String(b).slice(0, 200)) : [],
+            market.finalUSD,
+            `${market.finalHours}h${market.finalHours >= 40 ? ` (~${Math.ceil(market.finalHours / 40)} weeks)` : ''}`,
+            (draft.benefit || '').slice(0, 500),
+            draft.category === 'bundle' ? 'bundle' : 'individual',
+            draft.target_project || null,
+            `AI-generated from description on ${new Date().toISOString().slice(0, 10)}.\n\nOriginal description:\n${description.slice(0, 1500)}`,
+            JSON.stringify(market),
+            workType,
+            scope,
+            fullReasoning || null,
+          ],
+        )
+
+        emit('done', {
+          draft: inserted.rows[0],
+          market_breakdown: market,
+        })
+        controller.close()
+      } catch (err) {
+        try {
+          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`))
+        } catch {}
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
