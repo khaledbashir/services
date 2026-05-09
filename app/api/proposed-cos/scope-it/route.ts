@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { estimate as marketEstimate, classifyWorkType, type WorkType } from '@/lib/market-rate'
+import { buildProjectContext } from '@/lib/project-intelligence'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://api.minimax.io/v1'
@@ -60,6 +61,13 @@ interface ScopedDraft {
 
 const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea, and you turn it into a structured proposal card.
 
+You have READ ACCESS (below) to a live snapshot of all four ANC platforms — what's already built, what data exists, what changes recently shipped, what change orders historically priced at. USE this snapshot:
+  - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
+  - If the request touches a custom object already in the CRM, lean on it instead of scoping a parallel object.
+  - Anchor pricing against the "Recently shipped change orders" section — your number should sit in the same range as comparable past work.
+  - target_project should match where the work would naturally land based on the surfaces inventory.
+  - If the description is greenfield (no overlap with existing surfaces), say so in the pitch — that justifies a higher scope band.
+
 Output ONLY valid JSON matching this schema (no markdown, no commentary):
 {
   "name": "string — short product-y name, max 60 chars",
@@ -75,7 +83,7 @@ Output ONLY valid JSON matching this schema (no markdown, no commentary):
 Rules:
 - "category" is "bundle" when it's multi-feature OR cross-platform; otherwise "individual".
 - Pick the workType that BEST matches what's described. If unsure, lean smaller.
-- "scope" reflects complexity within that workType: low = simple version, mid = standard, high = ambitious.
+- "scope" reflects complexity within that workType: low = simple version (extends existing surface), mid = standard, high = ambitious / greenfield.
 - Names should not include the word "Twenty" or any vendor SKU. Stay platform-neutral in the user's language.
 - Bullets describe what gets delivered, not how it's built.
 - Benefit answers "what does the stakeholder gain" — never "what we build".
@@ -117,6 +125,16 @@ export async function POST(request: NextRequest) {
       webSnippets.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.content || ''}`).join('\n\n')
     : ''
 
+  // Live project intelligence — read-context snapshot of all four ANC platforms
+  // so the AI scopes against what's actually built (vs guessing greenfield).
+  // Cached internally for 5 minutes so repeated scoping calls don't re-query.
+  let projectContext = ''
+  try {
+    projectContext = '\n\n' + (await buildProjectContext())
+  } catch (err) {
+    console.warn('[scope-it] project-intelligence failed, continuing without:', err)
+  }
+
   // Reasoning model on purpose — glm-5.1 splits its output into:
   //   .content   = clean structured JSON (the proposal)
   //   .reasoning = chain-of-thought (saved + shown in accordion on detail page)
@@ -138,7 +156,7 @@ export async function POST(request: NextRequest) {
         max_tokens: 2500,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: PROMPT_SYSTEM },
+          { role: 'system', content: PROMPT_SYSTEM + projectContext },
           { role: 'user', content: `Stakeholder description:\n${description}${priorContext}${webContext}` },
         ],
       }),
