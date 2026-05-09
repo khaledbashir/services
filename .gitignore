@@ -21,13 +21,42 @@ process-proofs.js
 test-db.ts
 tsconfig.tsbuildinfo
 
-# Stray screenshots + uploads that shouldn't be tracked
+# Stray screenshots + uploads that shouldn't be tracked.
+# Images / pastes Ahmad drops at the repo root while iterating get cleaned
+# by these patterns. Files INSIDE app/ public/ docs/ are unaffected.
 image.png
 image\ copy.png
-Slack\ Channel\ ID.xlsx
+image\ copy\ *.png
+/image (*.png
+/Image from iOS*.jpg
+/Screenshot*.png
+/ScreenRecording*.MP4
+/ScreenRecording*.mp4
+/*.MP4
+/*.mp4
+/*.xlsx
+/Slack Channel ID.xlsx
+/ANC Service*.txt
+/ANC-Wrike*.pdf
+/ANC-Phase*.pdf
+/anc-service-contract-*.pdf
+/1 ANC LOGO*.png
+/8116AF*.jpg
+/Fav.png
+/File.png
+/Youtube_logo*.png
+/displays-table.png
+/operations-*.png
+/verify-*.png
+/post-scrub*.png
+/nocodb-skills.zip
 .playwright-mcp/
-image (*.png
 
 # playwright verification screenshots
 ai-draft-preview-*.png
-.playwright-mcp/
+
+# Python __pycache__ + ad-hoc script state caches
+__pycache__/
+**/__pycache__/
+scripts/*-cache.json
+scripts/geocode-cache.json
