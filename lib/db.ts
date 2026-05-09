@@ -560,6 +560,33 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS inbox BOOLEAN NOT NULL DEFAULT false`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_inbox ON service_requests(inbox) WHERE inbox = true`)
 
+    // Proposed change-orders catalog — Ahmad's proactive CO ideas with
+    // pre-baked price + timeline + benefit, ready to pitch to stakeholders.
+    // Lives separately from service_requests because these are unsolicited
+    // ideas (no requester yet); when one gets approved it's promoted into a
+    // real service_requests row.
+    await client.query(`CREATE TABLE IF NOT EXISTS proposed_change_orders (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      pitch TEXT,
+      bullets TEXT[] NOT NULL DEFAULT '{}',
+      price_usd NUMERIC(10,2),
+      timeline_label TEXT,
+      benefit TEXT,
+      category TEXT NOT NULL DEFAULT 'individual',
+      target_project TEXT,
+      status TEXT NOT NULL DEFAULT 'available',
+      pitched_to TEXT[] NOT NULL DEFAULT '{}',
+      promoted_request_id UUID REFERENCES service_requests(id),
+      is_placeholder BOOLEAN NOT NULL DEFAULT false,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proposed_cos_status ON proposed_change_orders(status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proposed_cos_sort ON proposed_change_orders(sort_order, created_at DESC)`)
+
     // Retainer alert ledger — fires once per (month, threshold) so the
     // 90% / 100% emails to Joe + Jireh + Charlie don't spam.
     await client.query(`CREATE TABLE IF NOT EXISTS retainer_alerts (

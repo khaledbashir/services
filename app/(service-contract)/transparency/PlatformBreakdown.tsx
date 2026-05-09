@@ -26,54 +26,82 @@ function fmtUSD(n: number): string {
   return '$' + Math.round(n).toLocaleString('en-US')
 }
 
+// Platform display order — locks to the four contract platforms.
+// Anything else (other / openclaw / unmapped) is hidden unless it has activity.
+const ORDER = ['anc-services', 'rag2', 'twenty-crm', 'anc-kb', 'crmdocs', 'openclaw', 'other']
+
 export default function PlatformBreakdown({ platforms }: Props) {
   if (!platforms.length) return null
+
+  // Hide rows with zero activity entirely — keeps the card focused on what's
+  // actually moving this month. Sort by the contract order so platforms always
+  // render in a stable left→right sequence.
+  const visible = platforms
+    .filter(p => p.fixes_shipped > 0 || p.hours_used > 0 || p.active_warranties > 0 || p.open_cos > 0)
+    .sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform))
+
+  if (!visible.length) {
+    return (
+      <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By platform</h2>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 italic">
+          No platform activity yet this month.
+        </p>
+      </section>
+    )
+  }
+
   return (
     <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          By platform
-        </h2>
-        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-          where the work landed
-        </span>
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">By platform</h2>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">where the work landed</span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        {platforms.map((p) => {
+      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+        {visible.map((p) => {
           const meta = PLATFORM_LABEL[p.platform] || { label: p.platform, tagline: '' }
           return (
-            <div
-              key={p.platform}
-              className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-gradient-to-br from-zinc-50 to-white dark:from-zinc-900/60 dark:to-zinc-900/30 p-3.5 hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors"
-            >
-              <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                {meta.label}
-              </div>
-              {meta.tagline ? (
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mb-2.5 leading-tight">
-                  {meta.tagline}
+            <div key={p.platform} className="flex items-center gap-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 leading-tight">
+                  {meta.label}
                 </div>
-              ) : null}
-              <div className="flex items-baseline gap-2 mt-1.5">
-                <span className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {p.hours_used.toFixed(1)}
-                </span>
-                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">hrs this month</span>
+                {meta.tagline && (
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug truncate">
+                    {meta.tagline}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3 text-[10px] text-zinc-500 dark:text-zinc-400 mt-2 flex-wrap">
-                <span>
-                  <strong className="text-zinc-700 dark:text-zinc-300">{p.fixes_shipped}</strong> shipped
-                </span>
-                {p.active_warranties > 0 ? (
-                  <span className="text-emerald-700 dark:text-emerald-400">
-                    {p.active_warranties} under warranty
-                  </span>
-                ) : null}
-                {p.open_cos > 0 ? (
-                  <span className="text-amber-700 dark:text-amber-400">
-                    {p.open_cos} CO · {fmtUSD(p.open_co_usd)}
-                  </span>
-                ) : null}
+              <div className="flex items-center gap-5 flex-shrink-0 text-xs">
+                <div className="text-right">
+                  <div className="text-base font-bold tabular-nums text-zinc-900 dark:text-zinc-100 leading-tight">
+                    {p.hours_used.toFixed(1)}
+                    <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400 ml-1">hrs</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    {p.fixes_shipped} shipped
+                  </div>
+                </div>
+                {p.active_warranties > 0 && (
+                  <div className="text-right">
+                    <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400 leading-tight">
+                      {p.active_warranties}
+                    </div>
+                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400/80 mt-0.5">
+                      warranty
+                    </div>
+                  </div>
+                )}
+                {p.open_cos > 0 && (
+                  <div className="text-right">
+                    <div className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400 leading-tight">
+                      {p.open_cos}
+                    </div>
+                    <div className="text-[10px] text-amber-600 dark:text-amber-400/80 mt-0.5 tabular-nums">
+                      CO · {fmtUSD(p.open_co_usd)}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )
