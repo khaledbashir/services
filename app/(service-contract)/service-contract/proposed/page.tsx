@@ -396,12 +396,27 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   const [liveStatus, setLiveStatus] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
+  // ANC mode = uses project context + relationship discount.
+  // Greenfield mode = market rate, no platform context (portfolio-friendly).
+  // Persisted per-browser in localStorage so the choice sticks.
+  const [scopeMode, setScopeMode] = useState<'anc' | 'greenfield'>('anc')
+
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem('scopeItMode')
+      if (m === 'greenfield' || m === 'anc') setScopeMode(m)
+    } catch {}
+  }, [])
+  const setScopeModePersist = (m: 'anc' | 'greenfield') => {
+    setScopeMode(m)
+    try { localStorage.setItem('scopeItMode', m) } catch {}
+  }
 
   // Stream the scope-it endpoint. The reasoning IS the loader — it appears
   // live as the model thinks, then collapses into the final card on 'done'.
   // Switches to multipart/form-data when files are attached so the parser
   // can extract spreadsheet content + factor it into the proposal.
-  const streamScope = async (payload: { description: string; refine_from?: string; files?: File[] }) => {
+  const streamScope = async (payload: { description: string; refine_from?: string; files?: File[]; mode: 'anc' | 'greenfield' }) => {
     setBusy(true)
     setError(null)
     setLiveReasoning('')
@@ -412,6 +427,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       if (payload.files && payload.files.length > 0) {
         const fd = new FormData()
         fd.append('description', payload.description)
+        fd.append('mode', payload.mode)
         if (payload.refine_from) fd.append('refine_from', payload.refine_from)
         for (const f of payload.files) fd.append('files', f, f.name)
         res = await fetch('/api/proposed-cos/scope-it/stream', { method: 'POST', body: fd })
@@ -419,7 +435,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
         res = await fetch('/api/proposed-cos/scope-it/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description: payload.description, refine_from: payload.refine_from }),
+          body: JSON.stringify({ description: payload.description, refine_from: payload.refine_from, mode: payload.mode }),
         })
       }
       if (!res.ok || !res.body) {
@@ -466,13 +482,13 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   }
 
   const generate = () => {
-    streamScope({ description, files: files.length ? files : undefined })
+    streamScope({ description, files: files.length ? files : undefined, mode: scopeMode })
     setFiles([]) // clear after submit so the next scope starts fresh
   }
 
   const refine = () => {
     if (!refining.trim() || !draft) return
-    streamScope({ description: refining, refine_from: draft.id, files: files.length ? files : undefined })
+    streamScope({ description: refining, refine_from: draft.id, files: files.length ? files : undefined, mode: scopeMode })
     setRefining('')
     setFiles([])
   }
@@ -506,14 +522,68 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
 
   return (
     <section className="rounded-2xl border-2 border-blue-200 dark:border-blue-800/60 bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100/40 dark:from-blue-950/30 dark:via-indigo-950/30 dark:to-blue-950/20 p-6 shadow-sm mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-2xl">✨</span>
-        <div>
-          <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe what you want — see what it would take</h2>
-          <p className="text-xs text-blue-700 dark:text-blue-300">
-            Plain English is fine. You&apos;ll get back a real estimate with price, timeline, and what you&apos;d be getting. Tweak it until it fits. Nothing is ordered until you say so.
-          </p>
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">✨</span>
+          <div>
+            <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe what you want — see what it would take</h2>
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              Plain English is fine. You&apos;ll get back a real estimate with price, timeline, and what you&apos;d be getting. Tweak it until it fits. Nothing is ordered until you say so.
+            </p>
+          </div>
         </div>
+        {/* Mode toggle — ANC vs greenfield */}
+        <div
+          role="tablist"
+          aria-label="Scope mode"
+          className="inline-flex rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-900 p-0.5 text-[11px] font-semibold flex-shrink-0"
+        >
+          <button
+            role="tab"
+            aria-selected={scopeMode === 'anc'}
+            onClick={() => setScopeModePersist('anc')}
+            disabled={busy}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              scopeMode === 'anc'
+                ? 'bg-[#0A52EF] text-white shadow-sm'
+                : 'text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+            }`}
+            title="Uses ANC project context + relationship pricing"
+          >
+            ANC project
+          </button>
+          <button
+            role="tab"
+            aria-selected={scopeMode === 'greenfield'}
+            onClick={() => setScopeModePersist('greenfield')}
+            disabled={busy}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              scopeMode === 'greenfield'
+                ? 'bg-[#0A52EF] text-white shadow-sm'
+                : 'text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+            }`}
+            title="Greenfield / new client — market rate, no relationship discount"
+          >
+            New client
+          </button>
+        </div>
+      </div>
+
+      {/* Mode-specific helper line */}
+      <div className={`mb-3 px-3 py-2 rounded-md text-[11px] ${
+        scopeMode === 'anc'
+          ? 'bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 text-blue-800 dark:text-blue-200'
+          : 'bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-200'
+      }`}>
+        {scopeMode === 'anc' ? (
+          <>
+            <strong>ANC project mode:</strong> AI checks the four live ANC platforms, pulls past change-order pricing as the anchor, and applies the long-term-partner discount. Use this when scoping work that touches Service Dashboard, Proposal Engine, CRM, or Operator Docs.
+          </>
+        ) : (
+          <>
+            <strong>New client mode:</strong> Clean-slate quote at market rate. No ANC platform references, no relationship discount, no past-CO anchor. Use this when scoping for a different client or for a portfolio piece — same engine, no leakage.
+          </>
+        )}
       </div>
 
       {!draft ? (

@@ -23,7 +23,7 @@ interface ScopedDraft {
   scope: 'low' | 'mid' | 'high'
 }
 
-const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea (and may attach reference documents), you turn it into a structured proposal card.
+const PROMPT_SYSTEM_ANC = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea (and may attach reference documents), you turn it into a structured proposal card.
 
 You have READ ACCESS (below) to a live snapshot of all four ANC platforms — what's already built, what data is in the CRM, what change orders shipped recently. USE it:
   - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
@@ -75,6 +75,52 @@ Rules:
 - Bullets: what gets delivered. Benefit: what the stakeholder gains.
 `
 
+const PROMPT_SYSTEM_GREENFIELD = `You are a freelance technical scope drafter. A prospect describes an idea (and may attach reference documents), you turn it into a structured proposal card.
+
+This is a NEW client / greenfield project — there is no prior platform, no codebase to extend, no relationship-discount history. Treat this as a fresh quote at market rate.
+
+**Pricing posture for greenfield work — read this every time:**
+
+  - The "Live web search results" section gives you current US freelance rates. That IS your anchor — not an upper bound.
+  - There's no past-work history with this client, so you can't anchor against comparable internal projects. Lean on web rates.
+  - Quote MARKET rate, not relationship rate. Do not apply a long-term-partner discount.
+  - Round prices to clean numbers (\$2.5k / \$5k / \$8k / \$12k) — looks like a quote, not a calculation.
+  - When the work is small/clear, lean LOW within the market band (closes faster). When ambitious/ambiguous, lean HIGH (covers risk).
+
+**Narrate your reasoning like a tool-using assistant talking through its work.** Show your work — what the description is asking for, what files reveal, what the market says, how you sized scope vs. complexity. For example:
+
+  > "Let me read what they're asking for... they want a guided walkthrough with conditional logic, plus an admin layer to edit questions later. Two distinct surfaces.
+  >
+  > Looking at the web search snippets... \$3-6k seems typical for this kind of internal tool from US freelancers, mid-band probably \$4.5k.
+  >
+  > The conditional logic adds risk — that pushes me toward the upper end of the band. But the admin layer is straightforward CRUD on existing data.
+  >
+  > **Final call:** \$5,000. Sits in market mid-band, accounts for the conditional logic, leaves room to negotiate down if they push back."
+
+Use markdown formatting in your reasoning — short paragraphs, **bold** for key conclusions, bullet lists for capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
+
+If files are attached, READ THEM and factor their contents into the scope. Spreadsheets become structured data signals.
+
+Output ONLY valid JSON in .content matching this schema (your reasoning goes in .reasoning, not .content):
+{
+  "name": "string — short product-y name, max 60 chars",
+  "pitch": "string — one sentence, 80-150 chars",
+  "bullets": ["3-5 short capability bullets, each <80 chars"],
+  "benefit": "string — outcome-led, 80-150 chars",
+  "category": "individual" | "bundle",
+  "target_project": "greenfield",
+  "workType": "new_feature_small" | "new_feature_medium" | "new_feature_large" | "new_module" | "new_dashboard" | "new_report" | "new_integration" | "new_automation" | "data_migration" | "new_ai_agent",
+  "scope": "low" | "mid" | "high"
+}
+
+Rules:
+- "category"="bundle" when multi-feature; else "individual".
+- target_project is always "greenfield" in this mode.
+- Pick the workType that BEST matches; if unsure, lean smaller.
+- Names: clean, product-y. No vendor SKUs.
+- Bullets: what gets delivered. Benefit: what the prospect gains.
+`
+
 interface OllamaSearchResult { title?: string; url?: string; content?: string }
 
 async function ollamaWebSearch(query: string): Promise<OllamaSearchResult[]> {
@@ -117,17 +163,26 @@ export async function POST(request: NextRequest) {
   let refineFromId: string | null = null
   let parsedFiles: Awaited<ReturnType<typeof parseUploadedFile>>[] = []
 
+  // mode: 'anc' (default) uses project context + relationship pricing.
+  // mode: 'greenfield' is a clean-slate, market-rate scope — no ANC
+  // platform references, no long-term-partner discount. Same engine,
+  // portable to any client / portfolio use.
+  let mode: 'anc' | 'greenfield' = 'anc'
+
   if (contentType.includes('multipart/form-data')) {
     const form = await request.formData()
     description = String(form.get('description') || '').trim()
     const refine = form.get('refine_from')
     refineFromId = typeof refine === 'string' && refine ? refine : null
+    const m = String(form.get('mode') || '')
+    if (m === 'greenfield') mode = 'greenfield'
     const files = form.getAll('files').filter((v): v is File => v instanceof File)
     parsedFiles = await Promise.all(files.slice(0, 6).map((f) => parseUploadedFile(f)))
   } else {
     const body = await request.json().catch(() => ({}))
     description = String(body.description || '').trim()
     refineFromId = typeof body.refine_from === 'string' ? body.refine_from : null
+    if (body.mode === 'greenfield') mode = 'greenfield'
   }
 
   if (!description && parsedFiles.length === 0) {
@@ -158,8 +213,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ANC mode pulls live project context. Greenfield mode skips it
+        // entirely — no platform inventory, no past-CO anchor, no
+        // relationship discount. Same engine, two postures.
+        const projectContextPromise = mode === 'anc'
+          ? buildProjectContext().catch(() => '')
+          : Promise.resolve('')
         const [projectContext, webSnippets] = await Promise.all([
-          buildProjectContext().catch(() => ''),
+          projectContextPromise,
           ollamaWebSearch(`freelance fixed-price quote ${description.slice(0, 80)} development`),
         ])
 
@@ -194,8 +255,16 @@ export async function POST(request: NextRequest) {
             stream: true,
             response_format: { type: 'json_object' },
             messages: [
-              { role: 'system', content: PROMPT_SYSTEM + '\n\n' + projectContext },
-              { role: 'user', content: `Stakeholder description:\n${description || '(no text — see attached files)'}${priorContext}${webContext}${filesContext}` },
+              {
+                role: 'system',
+                content: mode === 'greenfield'
+                  ? PROMPT_SYSTEM_GREENFIELD
+                  : PROMPT_SYSTEM_ANC + '\n\n' + projectContext,
+              },
+              {
+                role: 'user',
+                content: `${mode === 'greenfield' ? 'Prospect' : 'Stakeholder'} description:\n${description || '(no text — see attached files)'}${priorContext}${webContext}${filesContext}`,
+              },
             ],
           }),
         })
