@@ -549,10 +549,60 @@ export async function markQuoted(id: string, args: { quote_amount?: number; note
   await query(
     `UPDATE service_requests
      SET status = 'quoted',
-         notes = COALESCE($2, '') || CASE WHEN $3::numeric IS NOT NULL THEN ' [quote $' || $3::text || ']' ELSE '' END,
+         quote_amount = COALESCE($3::numeric, quote_amount),
+         estimated_usd = COALESCE($3::numeric, estimated_usd),
+         notes = CASE WHEN $2::text IS NOT NULL THEN $2::text ELSE notes END,
          updated_at = NOW()
      WHERE id = $1`,
     [id, args.notes || null, args.quote_amount || null],
+  )
+}
+
+// Mark a quoted change order as approved by the stakeholder.
+export async function markApproved(id: string): Promise<void> {
+  await query(
+    `UPDATE service_requests
+     SET status = 'approved',
+         approved_at = COALESCE(approved_at, NOW()),
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id],
+  )
+}
+
+// Mark a shipped change order as paid. paid_amount defaults to quote_amount/estimated_usd.
+export async function markPaid(id: string, args: { paid_amount?: number; notes?: string }): Promise<void> {
+  await query(
+    `UPDATE service_requests
+     SET status = 'paid',
+         paid_at = NOW(),
+         paid_amount = COALESCE($2::numeric, paid_amount, quote_amount, estimated_usd),
+         notes = CASE WHEN $3::text IS NOT NULL THEN $3::text ELSE notes END,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id, args.paid_amount || null, args.notes || null],
+  )
+}
+
+// Move a change order back one stage. Used when something gets reverted (quote
+// rejected, payment bounced, etc.). Order: open → quoted → approved → in_progress → shipped → paid.
+export async function revertStage(id: string): Promise<void> {
+  await query(
+    `UPDATE service_requests
+     SET status = CASE status
+         WHEN 'paid' THEN 'shipped'
+         WHEN 'shipped' THEN 'in_progress'
+         WHEN 'in_progress' THEN 'approved'
+         WHEN 'approved' THEN 'quoted'
+         WHEN 'quoted' THEN 'open'
+         ELSE status
+       END,
+       paid_at = CASE WHEN status = 'paid' THEN NULL ELSE paid_at END,
+       shipped_at = CASE WHEN status = 'shipped' THEN NULL ELSE shipped_at END,
+       approved_at = CASE WHEN status = 'approved' THEN NULL ELSE approved_at END,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [id],
   )
 }
 

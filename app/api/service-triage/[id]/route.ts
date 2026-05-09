@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import { markStarted, markShipped, markQuoted } from '@/lib/service-triage'
+import { markStarted, markShipped, markQuoted, markApproved, markPaid, revertStage } from '@/lib/service-triage'
 
 // GET /api/service-triage/:id — single request detail
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -52,6 +52,20 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
           quote_amount: typeof body.quote_amount === 'number' ? body.quote_amount : undefined,
           notes: typeof body.notes === 'string' ? body.notes : undefined,
         })
+        break
+      case 'approve':
+        await markApproved(id)
+        break
+      case 'mark_paid':
+      case 'pay':
+        await markPaid(id, {
+          paid_amount: typeof body.paid_amount === 'number' ? body.paid_amount : undefined,
+          notes: typeof body.notes === 'string' ? body.notes : undefined,
+        })
+        break
+      case 'revert':
+      case 'revert_stage':
+        await revertStage(id)
         break
       case 'reclassify': {
         const cls = String(body.classification || '').toUpperCase()

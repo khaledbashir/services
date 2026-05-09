@@ -124,13 +124,16 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
         </div>
       </div>
 
-      {/* Change Orders */}
-      <div className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-950/20 p-4 shadow-sm">
+      {/* Change Orders — click through to the kanban */}
+      <a
+        href="/service-log/change-orders"
+        className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-950/20 p-4 shadow-sm transition-shadow hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer block"
+      >
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
             Change Orders
           </span>
-          <span className="text-[10px] text-amber-500 dark:text-amber-400/60">separate quotes</span>
+          <span className="text-[10px] text-amber-500 dark:text-amber-400/60">separate quotes →</span>
         </div>
         <div className="text-2xl font-bold tabular-nums text-amber-900 dark:text-amber-100">
           {fmtUSD(totalCO)}
@@ -152,7 +155,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
             </>
           ) : null}
         </div>
-      </div>
+      </a>
     </div>
   )
 }

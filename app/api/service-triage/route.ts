@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
   const status = url.searchParams.get('status')
   const month = url.searchParams.get('month') // YYYY-MM
   const classification = url.searchParams.get('classification')
+  const retainer = url.searchParams.get('retainer') // 'true' | 'false'
   const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10)))
 
   const where: string[] = []
@@ -58,6 +59,9 @@ export async function GET(request: NextRequest) {
     params.push(classification)
     where.push(`classification = $${params.length}`)
   }
+  if (retainer === 'true' || retainer === 'false') {
+    where.push(`retainer_covered = ${retainer === 'true' ? 'true' : 'false'}`)
+  }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     params.push(month + '-01')
     where.push(`received_at >= $${params.length}::date AND received_at < ($${params.length}::date + INTERVAL '1 month')`)
@@ -65,8 +69,9 @@ export async function GET(request: NextRequest) {
   const sql = `SELECT id, received_at, source, source_url, requester, summary,
                       classification, classification_confidence, classification_basis,
                       repo, area, keywords,
-                      estimated_hours, estimate_basis, retainer_covered,
-                      status, started_at, shipped_at, actual_hours, shipped_commit_sha, notes
+                      estimated_hours, estimate_basis, estimated_usd, retainer_covered,
+                      status, started_at, approved_at, shipped_at, paid_at,
+                      actual_hours, quote_amount, paid_amount, shipped_commit_sha, notes
                FROM service_requests
                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
                ORDER BY received_at DESC

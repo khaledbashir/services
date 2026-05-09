@@ -539,6 +539,14 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS market_breakdown JSONB`)
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS estimated_usd NUMERIC(10,2)`)
 
+    // Change-order kanban lifecycle. Retainer rows still use status='open'/'in_progress'/'shipped'.
+    // Change-order rows extend the same status field with 'approved' and 'paid' so the kanban can
+    // run Requested → Quoted → Approved → In Progress → Shipped → Paid without a parallel column.
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10,2)`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS quote_amount NUMERIC(10,2)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
