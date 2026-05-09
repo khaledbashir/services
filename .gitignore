@@ -60,3 +60,11 @@ __pycache__/
 **/__pycache__/
 scripts/*-cache.json
 scripts/geocode-cache.json
+
+# Migration runtime state — never commit, always derived per-run
+scripts/**/state.json
+scripts/**/migrate.log
+
+# Recon outputs — regeneratable from the *-recon.py scripts
+scripts/ops-views-recon.json
+scripts/ops-views-deep.json
