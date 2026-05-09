@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { estimate as marketEstimate, classifyWorkType, type WorkType } from '@/lib/market-rate'
 import { buildProjectContext } from '@/lib/project-intelligence'
+import { parseUploadedFile, formatFilesForPrompt } from '@/lib/parse-uploaded-file'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OLLAMA_API_KEY || ''
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://ollama.com/v1'
@@ -22,16 +23,37 @@ interface ScopedDraft {
   scope: 'low' | 'mid' | 'high'
 }
 
-const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea, you turn it into a structured proposal card.
+const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea (and may attach reference documents), you turn it into a structured proposal card.
 
-You have READ ACCESS (below) to a live snapshot of all four ANC platforms. USE it:
+You have READ ACCESS (below) to a live snapshot of all four ANC platforms — what's already built, what data is in the CRM, what change orders shipped recently. USE it:
   - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
   - If the request touches a custom object already in the CRM, lean on it instead of scoping a parallel object.
   - Anchor pricing against the "Recently shipped change orders" section.
   - target_project should match where the work would naturally land based on the surfaces inventory.
   - If greenfield (no overlap), say so in the pitch — that justifies a higher scope band.
 
-In your reasoning, structure your thinking as readable markdown — short paragraphs, **bold** for key conclusions, bullet lists for capabilities. Avoid raw asterisks; use proper markdown bold/italic so the UI renders cleanly.
+If files are attached, READ THEM and factor their contents into the scope. Spreadsheets become structured data signals (column headers tell you the data model the stakeholder works with day-to-day; row counts give you volume).
+
+**Pricing posture — read this every time before naming a number:**
+
+  - The "Live web search results" section gives you current US freelance rates. That's the market median. Use it as a UPPER BOUND, not the answer.
+  - The "Recently shipped change orders" section gives you what ANC has actually paid Ahmad for similar past work. That's your real anchor. Land within ±20% of it unless the new ask is meaningfully larger.
+  - **Ahmad under-prices for the ANC relationship.** It's a long-term partner deal — Ahmad already discounted Bundle A from $4.5k to $3k specifically to protect Bundle B leverage. So when the market says $X, Ahmad's number is typically X × 0.5 to X × 0.7. Mirror that posture: don't quote market rate, quote relationship rate.
+  - When in doubt, lean LOWER. ANC's stakeholders see the price + decide whether to ship. Underbidding by $500 keeps the relationship; overbidding by $2k loses the deal.
+
+**Narrate your reasoning like a tool-using assistant talking through its work, not a black box emitting JSON.** Show your work — the trade-offs, the cross-references, the second-guessing. For example:
+
+  > "Let me check what's already built on the Service Dashboard... I see they have an Events page and a Staff page already, so this is really an extension, not a new module.
+  >
+  > Now let me check the web search for what something like this typically costs in the freelance market... the snippets suggest \$4-6k for a feature this size.
+  >
+  > But wait — Ahmad with ANC normally under-prices for the relationship. Looking at recently shipped COs, similar-scope work landed at \$2-3k. So the relationship rate here is probably around \$2.5k, not the market \$5k.
+  >
+  > Looking at the M&S Master Schedule file Grant attached — 218 rows, 6 sheets. That tells me the data model is bigger than I assumed; nudges me toward the upper end of the relationship range.
+  >
+  > **Final call:** \$2,800. Sits inside relationship-rate norms, accounts for the heavier data set, leaves Ahmad room to discount if Joe pushes back."
+
+That's the texture — surface the trade-offs explicitly, compare market vs relationship rate, name the file evidence, anchor against past COs, show the math. Use markdown — short paragraphs, **bold** for the final call, bullet lists when listing capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
 
 Output ONLY valid JSON in .content matching this schema (your reasoning goes in .reasoning, not .content):
 {
@@ -89,11 +111,28 @@ export async function POST(request: NextRequest) {
   if (isAuthError(auth)) return auth as Response
   const authedUser = auth as { userId: string; email: string; fullName: string }
 
-  const body = await request.json().catch(() => ({}))
-  const description = String(body.description || '').trim()
-  const refineFromId = typeof body.refine_from === 'string' ? body.refine_from : null
+  // Accept either application/json (no files) OR multipart/form-data (with files).
+  const contentType = request.headers.get('content-type') || ''
+  let description = ''
+  let refineFromId: string | null = null
+  let parsedFiles: Awaited<ReturnType<typeof parseUploadedFile>>[] = []
 
-  if (!description) return new Response(JSON.stringify({ error: 'description is required' }), { status: 400 })
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData()
+    description = String(form.get('description') || '').trim()
+    const refine = form.get('refine_from')
+    refineFromId = typeof refine === 'string' && refine ? refine : null
+    const files = form.getAll('files').filter((v): v is File => v instanceof File)
+    parsedFiles = await Promise.all(files.slice(0, 6).map((f) => parseUploadedFile(f)))
+  } else {
+    const body = await request.json().catch(() => ({}))
+    description = String(body.description || '').trim()
+    refineFromId = typeof body.refine_from === 'string' ? body.refine_from : null
+  }
+
+  if (!description && parsedFiles.length === 0) {
+    return new Response(JSON.stringify({ error: 'description or files required' }), { status: 400 })
+  }
   if (!AI_API_KEY) return new Response(JSON.stringify({ error: 'AI not configured' }), { status: 500 })
 
   const modelForScope = process.env.AI_MODEL_SCOPE || 'glm-5.1'
@@ -129,6 +168,16 @@ export async function POST(request: NextRequest) {
             webSnippets.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.content || ''}`).join('\n\n')
           : ''
 
+        // Surface attached files in the prompt + status stream
+        const filesContext = formatFilesForPrompt(parsedFiles)
+        if (parsedFiles.length > 0) {
+          emit('status', {
+            stage: 'files',
+            message: `Reading ${parsedFiles.length} attached file${parsedFiles.length === 1 ? '' : 's'}…`,
+            files: parsedFiles.map((f) => ({ name: f.filename, size: f.size, truncated: f.truncated })),
+          })
+        }
+
         emit('status', { stage: 'thinking', message: 'AI reasoning…' })
 
         // 2. Stream from the AI
@@ -146,7 +195,7 @@ export async function POST(request: NextRequest) {
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: PROMPT_SYSTEM + '\n\n' + projectContext },
-              { role: 'user', content: `Stakeholder description:\n${description}${priorContext}${webContext}` },
+              { role: 'user', content: `Stakeholder description:\n${description || '(no text — see attached files)'}${priorContext}${webContext}${filesContext}` },
             ],
           }),
         })

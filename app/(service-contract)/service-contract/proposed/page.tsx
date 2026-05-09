@@ -394,21 +394,34 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   const [refining, setRefining] = useState('')
   const [liveReasoning, setLiveReasoning] = useState('')
   const [liveStatus, setLiveStatus] = useState<string | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [dragActive, setDragActive] = useState(false)
 
   // Stream the scope-it endpoint. The reasoning IS the loader — it appears
   // live as the model thinks, then collapses into the final card on 'done'.
-  const streamScope = async (payload: { description: string; refine_from?: string }) => {
+  // Switches to multipart/form-data when files are attached so the parser
+  // can extract spreadsheet content + factor it into the proposal.
+  const streamScope = async (payload: { description: string; refine_from?: string; files?: File[] }) => {
     setBusy(true)
     setError(null)
     setLiveReasoning('')
     setLiveStatus('Starting…')
 
     try {
-      const res = await fetch('/api/proposed-cos/scope-it/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      let res: Response
+      if (payload.files && payload.files.length > 0) {
+        const fd = new FormData()
+        fd.append('description', payload.description)
+        if (payload.refine_from) fd.append('refine_from', payload.refine_from)
+        for (const f of payload.files) fd.append('files', f, f.name)
+        res = await fetch('/api/proposed-cos/scope-it/stream', { method: 'POST', body: fd })
+      } else {
+        res = await fetch('/api/proposed-cos/scope-it/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: payload.description, refine_from: payload.refine_from }),
+        })
+      }
       if (!res.ok || !res.body) {
         setError(`Scoping failed (${res.status})`)
         return
@@ -452,12 +465,36 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
     }
   }
 
-  const generate = () => streamScope({ description })
+  const generate = () => {
+    streamScope({ description, files: files.length ? files : undefined })
+    setFiles([]) // clear after submit so the next scope starts fresh
+  }
 
   const refine = () => {
     if (!refining.trim() || !draft) return
-    streamScope({ description: refining, refine_from: draft.id })
+    streamScope({ description: refining, refine_from: draft.id, files: files.length ? files : undefined })
     setRefining('')
+    setFiles([])
+  }
+
+  const addFiles = (incoming: FileList | File[] | null) => {
+    if (!incoming) return
+    const arr = Array.from(incoming).slice(0, 6)
+    setFiles((prev) => {
+      const merged = [...prev, ...arr]
+      // Dedupe by name+size
+      const seen = new Set<string>()
+      return merged.filter((f) => {
+        const key = `${f.name}::${f.size}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).slice(0, 6)
+    })
+  }
+
+  const removeFile = (idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const reset = () => {
@@ -480,22 +517,83 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       </div>
 
       {!draft ? (
-        <div>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragActive(false)
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+              addFiles(e.dataTransfer.files)
+            }
+          }}
+          onPaste={(e) => {
+            const list = e.clipboardData?.files
+            if (list && list.length > 0) {
+              e.preventDefault()
+              addFiles(list)
+            }
+          }}
+          className={dragActive ? 'rounded-md ring-2 ring-blue-500 ring-offset-2' : ''}
+        >
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder='e.g. "I want a way to see all the shipped venues for the season in one place, with a filter by region and a way to email any of them at once."'
+            placeholder='e.g. "I want a way to see all the shipped venues for the season in one place, with a filter by region and a way to email any of them at once." — drag in a file or paste an attachment to factor it into the scope.'
             rows={3}
             disabled={busy}
             className="w-full px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60"
           />
-          <div className="flex items-center justify-between mt-3">
-            <div className="text-[11px] text-blue-700 dark:text-blue-400">
-              Pricing is grounded in our market-rate model — AI can&apos;t underprice.
+
+          {/* File chips */}
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {files.map((f, i) => (
+                <div
+                  key={`${f.name}-${i}`}
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-900 text-[11px]"
+                >
+                  <span className="text-base">{
+                    f.name.match(/\.(xlsx|xls|csv|tsv)$/i) ? '📊' :
+                    f.name.match(/\.(pdf)$/i) ? '📄' :
+                    f.name.match(/\.(docx|doc)$/i) ? '📝' :
+                    f.name.match(/\.(json|yaml|yml)$/i) ? '🧾' :
+                    '📎'
+                  }</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]">{f.name}</span>
+                  <span className="text-gray-500">{(f.size / 1024).toFixed(0)} KB</span>
+                  {!busy && (
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="text-gray-400 hover:text-rose-600 ml-1"
+                      aria-label="Remove"
+                    >×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40">
+                📎 Attach
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  disabled={busy}
+                  accept=".xlsx,.xls,.csv,.tsv,.txt,.md,.json,.yaml,.yml,.log"
+                  onChange={(e) => { addFiles(e.target.files); e.target.value = '' }}
+                />
+              </label>
+              <span className="text-[11px] text-blue-700 dark:text-blue-400">
+                Pricing grounded in our market-rate model — AI can&apos;t underprice.
+              </span>
             </div>
             <button
               onClick={generate}
-              disabled={busy || !description.trim()}
+              disabled={busy || (!description.trim() && files.length === 0)}
               className="px-4 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50 font-medium"
             >
               {busy ? 'Scoping…' : 'Scope it →'}
