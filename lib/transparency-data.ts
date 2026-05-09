@@ -58,7 +58,8 @@ export interface CoverageStrip {
   service_contract_cap: number            // RETAINER_CAP_HOURS
   warranty_active_count: number           // FIX shipped within 30d
   warranty_hours_protected: number        // sum(actual_hours) on those 30d-window FIX ships (informational, not a separate billing pool)
-  warranty_days_remaining_total: number   // sum across active fixes of days-remaining-until-30d-expiry
+  warranty_days_remaining_total: number   // MAX days remaining = the newest fix's warranty period
+  warranty_newest_expires_at: string | null // ISO timestamp the newest active warranty expires — drives the live countdown widget
   change_order_open_count: number         // NEW + MIXED with status in (open, in_progress, quoted)
   change_order_open_usd: number           // sum(estimated_usd) on those open COs
   change_order_shipped_count: number      // NEW + MIXED shipped this month
@@ -353,12 +354,16 @@ export async function getDashboardData(): Promise<DashboardData> {
   ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
 
   const coverageRow = coverageRes.rows[0] || {}
+  // Newest warranty's expiry — first warranty_items row is sorted DESC by shipped_at
+  // so it's the most recent fix; its expires_at drives the live countdown.
+  const newestWarranty = warranty_items.find(w => w.days_remaining > 0)
   const coverage: CoverageStrip = {
     service_contract_hours_used: Number(coverageRow.service_contract_hours_used) || 0,
     service_contract_cap: cap,
     warranty_active_count: Number(coverageRow.warranty_active_count) || 0,
     warranty_hours_protected: Number(coverageRow.warranty_hours_protected) || 0,
     warranty_days_remaining_total: Number(coverageRow.warranty_days_remaining_total) || 0,
+    warranty_newest_expires_at: newestWarranty ? newestWarranty.warranty_expires : null,
     change_order_open_count: Number(coverageRow.change_order_open_count) || 0,
     change_order_open_usd: Number(coverageRow.change_order_open_usd) || 0,
     change_order_shipped_count: Number(coverageRow.change_order_shipped_count) || 0,

@@ -1,3 +1,5 @@
+import WarrantyLiveCountdown from './WarrantyLiveCountdown'
+
 interface CoverageProps {
   coverage: {
     service_contract_hours_used: number
@@ -5,6 +7,7 @@ interface CoverageProps {
     warranty_active_count: number
     warranty_hours_protected: number
     warranty_days_remaining_total: number
+    warranty_newest_expires_at: string | null
     change_order_open_count: number
     change_order_open_usd: number
     change_order_shipped_count: number
@@ -113,7 +116,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-          <span>up to {Math.round(c.warranty_days_remaining_total)} days of coverage remaining</span>
+          <WarrantyLiveCountdown expiresAt={c.warranty_newest_expires_at} />
           {dWar ? (
             <>
               <span className="text-emerald-300 dark:text-emerald-700">·</span>
@@ -124,7 +127,7 @@ export default function CoverageStrip({ coverage }: CoverageProps) {
           ) : null}
         </div>
         <div className="text-[10px] text-emerald-500 dark:text-emerald-400/70 mt-0.5">
-          Each fix carries a free 30-day re-fix promise. The number above is days until the newest fix&apos;s warranty expires.
+          Each fix carries a free 30-day re-fix promise. The clock counts down the newest fix&apos;s warranty.
         </div>
       </div>
 
