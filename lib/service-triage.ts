@@ -527,6 +527,8 @@ export async function markStarted(id: string): Promise<void> {
 }
 
 // Mark a request as shipped. actual_hours is required; commit sha optional.
+// Triggers retainer-cap alert checks after the update so 90%/100% emails
+// fire automatically when a retainer-covered fix tips us past a threshold.
 export async function markShipped(
   id: string,
   args: { actual_hours: number; shipped_commit_sha?: string; notes?: string },
@@ -542,6 +544,15 @@ export async function markShipped(
      WHERE id = $1`,
     [id, args.actual_hours, args.shipped_commit_sha || null, args.notes || null],
   )
+  // Fire-and-forget — never block ship on alert plumbing
+  ;(async () => {
+    try {
+      const { checkAndFireRetainerAlerts } = await import('./retainer-alerts')
+      await checkAndFireRetainerAlerts()
+    } catch (err) {
+      console.error('[markShipped] retainer alert check failed:', err)
+    }
+  })()
 }
 
 // Mark NEW request as quoted (separate from retainer).

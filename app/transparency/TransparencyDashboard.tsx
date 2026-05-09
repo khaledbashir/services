@@ -1,4 +1,6 @@
 import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES, GRAY_AREA_CLAUSES } from '@/lib/transparency-data'
+import { getPublicPayoneerLinks } from '@/lib/retainer-alerts'
+import { query } from '@/lib/db'
 import WarrantyCountdown from './WarrantyCountdown'
 import CoverageStrip from './CoverageStrip'
 import TransparencyTabs from './TransparencyTabs'
@@ -9,6 +11,7 @@ import PlatformBreakdown from './PlatformBreakdown'
 import PrintButton from './PrintButton'
 import GrayAreas from './GrayAreas'
 import MetricsExplainer from './MetricsExplainer'
+import PaymentCTAs from './PaymentCTAs'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -43,6 +46,14 @@ function PaymentBadge({ payment }: { payment: { status: string; amount: number |
 export default async function TransparencyDashboard() {
   const data = await getDashboardData()
   const meter = data.meter
+  const payoneer = getPublicPayoneerLinks()
+  const pendingCheck = await query(
+    `SELECT 1 FROM service_requests
+      WHERE retainer_covered = false
+        AND status = 'shipped'
+      LIMIT 1`,
+  ).catch(() => ({ rows: [] }))
+  const hasPendingChangeOrder = pendingCheck.rows.length > 0
 
   const meterColor =
     meter.pct_used >= 100 ? 'rose'
@@ -99,6 +110,16 @@ export default async function TransparencyDashboard() {
         <div className="mt-4 mb-6">
           <MetricsExplainer />
         </div>
+
+        {/* Pay / top-up CTAs — visible above the fold so stakeholders can act */}
+        <PaymentCTAs
+          pendingUrl={payoneer.pending}
+          topupUrl={payoneer.topup}
+          rate={payoneer.rate}
+          hoursRemaining={meter.hours_remaining}
+          pctUsed={meter.pct_used}
+          hasPendingChangeOrder={hasPendingChangeOrder}
+        />
 
         {/* Row 1: credit meter + payment status */}
         <div className="grid gap-4 md:grid-cols-2 mb-4">

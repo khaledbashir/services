@@ -14,7 +14,8 @@ export async function sendEmail(
   to: string[],
   subject: string,
   html: string,
-  replyTo?: string
+  replyTo?: string,
+  opts?: { cc?: string[]; bcc?: string[] }
 ): Promise<boolean> {
   const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
   if (!RESEND_API_KEY) {
@@ -27,6 +28,8 @@ export async function sendEmail(
   try {
     const payload: any = { from: FROM_ADDRESS, to, subject, html }
     if (replyTo) payload.reply_to = replyTo
+    if (opts?.cc && opts.cc.length > 0) payload.cc = opts.cc
+    if (opts?.bcc && opts.bcc.length > 0) payload.bcc = opts.bcc
 
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',

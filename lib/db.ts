@@ -547,6 +547,22 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10,2)`)
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS quote_amount NUMERIC(10,2)`)
 
+    // Retainer alert ledger — fires once per (month, threshold) so the
+    // 90% / 100% emails to Joe + Jireh + Charlie don't spam.
+    await client.query(`CREATE TABLE IF NOT EXISTS retainer_alerts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      month TEXT NOT NULL,
+      threshold TEXT NOT NULL,
+      hours_used NUMERIC(6,2) NOT NULL,
+      cap_hours NUMERIC(6,2) NOT NULL,
+      recipients TEXT[],
+      cc TEXT[],
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      delivered BOOLEAN NOT NULL DEFAULT false,
+      UNIQUE (month, threshold)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_retainer_alerts_month ON retainer_alerts(month)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
