@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { ConfirmModal, PromptModal } from '../../Modal'
 
 interface ChangeOrder {
   id: string
@@ -80,6 +81,16 @@ export default function ChangeOrdersKanbanPage() {
   const [openCard, setOpenCard] = useState<ChangeOrder | null>(null)
   const [activeProject, setActiveProject] = useState<string>('all')
   const [projectCounts, setProjectCounts] = useState<Record<string, number>>({})
+  // Action-prompt state. Replaces native window.prompt/confirm with branded modals.
+  const [actionPrompt, setActionPrompt] = useState<{
+    kind: 'quote' | 'ship' | 'pay'
+    order: ChangeOrder
+    title: string
+    body: string
+    placeholder: string
+    initialValue: string
+  } | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<ChangeOrder | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -159,25 +170,51 @@ export default function ChangeOrdersKanbanPage() {
 
   const advance = async (o: ChangeOrder) => {
     if (o.status === 'open') {
-      const amt = window.prompt('Quote amount in USD?', String(o.estimated_usd || ''))
-      if (amt === null) return
-      const n = Number(amt)
-      await act(o.id, 'quote', { quote_amount: Number.isFinite(n) && n > 0 ? n : undefined })
+      setActionPrompt({
+        kind: 'quote',
+        order: o,
+        title: 'Send a quote',
+        body: 'Quote amount in USD. Press Enter to send the quote and move this card to the Quoted column.',
+        placeholder: 'e.g. 2500',
+        initialValue: String(o.estimated_usd || ''),
+      })
     } else if (o.status === 'quoted') {
       await act(o.id, 'approve')
     } else if (o.status === 'approved') {
       await act(o.id, 'start')
     } else if (o.status === 'in_progress') {
-      const hrs = window.prompt('Actual hours spent?', String(o.estimated_hours || ''))
-      if (hrs === null) return
-      const n = Number(hrs)
-      if (!Number.isFinite(n) || n < 0) return
-      await act(o.id, 'ship', { actual_hours: n })
+      setActionPrompt({
+        kind: 'ship',
+        order: o,
+        title: 'Mark as shipped',
+        body: 'Actual hours spent on this delivery. Used to anchor future estimates.',
+        placeholder: 'e.g. 12',
+        initialValue: String(o.estimated_hours || ''),
+      })
     } else if (o.status === 'shipped') {
-      const amt = window.prompt('Paid amount in USD?', String(o.quote_amount || o.estimated_usd || ''))
-      if (amt === null) return
-      const n = Number(amt)
-      await act(o.id, 'mark_paid', { paid_amount: Number.isFinite(n) && n > 0 ? n : undefined })
+      setActionPrompt({
+        kind: 'pay',
+        order: o,
+        title: 'Mark as paid',
+        body: 'Paid amount in USD. Closes this card out into the Paid column.',
+        placeholder: 'e.g. 2500',
+        initialValue: String(o.quote_amount || o.estimated_usd || ''),
+      })
+    }
+  }
+
+  const submitAction = async (raw: string) => {
+    if (!actionPrompt) return
+    const { kind, order } = actionPrompt
+    const n = Number(raw)
+    setActionPrompt(null)
+    if (kind === 'quote') {
+      await act(order.id, 'quote', { quote_amount: Number.isFinite(n) && n > 0 ? n : undefined })
+    } else if (kind === 'ship') {
+      if (!Number.isFinite(n) || n < 0) return
+      await act(order.id, 'ship', { actual_hours: n })
+    } else if (kind === 'pay') {
+      await act(order.id, 'mark_paid', { paid_amount: Number.isFinite(n) && n > 0 ? n : undefined })
     }
   }
 
@@ -376,12 +413,7 @@ export default function ChangeOrdersKanbanPage() {
             onAdvance={() => advance(openCard)}
             advanceLabel={advanceLabel(openCard.status)}
             onRevert={() => act(openCard.id, 'revert')}
-            onCancel={async () => {
-              if (!confirm('Cancel this change order? It will move to the cancelled bin.')) return
-              await fetch(`/api/service-triage/${openCard.id}`, { method: 'DELETE' })
-              await refresh()
-              setOpenCard(null)
-            }}
+            onCancel={() => setCancelTarget(openCard)}
             onUpdateNote={async (notes: string) => {
               await act(openCard.id, 'update', { notes })
             }}
@@ -396,6 +428,36 @@ export default function ChangeOrdersKanbanPage() {
             }}
           />
         )}
+
+        {/* In-app modals replacing the native browser confirm/prompt */}
+        <PromptModal
+          open={!!actionPrompt}
+          onClose={() => setActionPrompt(null)}
+          title={actionPrompt?.title || ''}
+          body={actionPrompt?.body}
+          placeholder={actionPrompt?.placeholder}
+          initialValue={actionPrompt?.initialValue || ''}
+          confirmLabel="Save →"
+          onSubmit={submitAction}
+        />
+
+        <ConfirmModal
+          open={!!cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          title="Cancel this change order?"
+          body={cancelTarget ? `“${(cancelTarget.summary || '').slice(0, 100)}” will move to the cancelled bin. You can find it later under the Cancelled section.` : ''}
+          confirmLabel="Cancel CO"
+          cancelLabel="Keep it"
+          tone="destructive"
+          onConfirm={async () => {
+            if (!cancelTarget) return
+            const id = cancelTarget.id
+            setCancelTarget(null)
+            await fetch(`/api/service-triage/${id}`, { method: 'DELETE' })
+            await refresh()
+            setOpenCard(null)
+          }}
+        />
     </div>
   )
 }

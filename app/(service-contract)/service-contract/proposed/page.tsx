@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import ReasoningPanel, { ReasoningModal } from './ReasoningPanel'
-import { ConfirmModal, PromptModal, SuccessModal } from './Modal'
+import { ConfirmModal, PromptModal, SuccessModal } from '../../Modal'
 
 interface ProposedCO {
   id: string

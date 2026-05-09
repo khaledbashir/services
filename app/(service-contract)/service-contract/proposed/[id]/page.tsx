@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PricingTransparency from '../PricingTransparency'
 import ReasoningPanel from '../ReasoningPanel'
-import { PromptModal, SuccessModal } from '../Modal'
+import { PromptModal, SuccessModal } from '../../../Modal'
 
 interface ProposedCO {
   id: string
