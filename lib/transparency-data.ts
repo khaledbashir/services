@@ -323,23 +323,27 @@ export async function getDashboardData(): Promise<DashboardData> {
        ), 0)::numeric AS warranty_hours_protected,
        COUNT(*) FILTER (
          WHERE classification IN ('NEW', 'MIXED')
-           AND status IN ('open', 'in_progress', 'quoted')
+           AND source <> 'auto-push'
+           AND status IN ('open', 'quoted', 'approved', 'in_progress')
        )::int AS change_order_open_count,
-       COALESCE(SUM(estimated_usd) FILTER (
+       COALESCE(SUM(COALESCE(quote_amount, estimated_usd, 0)) FILTER (
          WHERE classification IN ('NEW', 'MIXED')
-           AND status IN ('open', 'in_progress', 'quoted')
+           AND source <> 'auto-push'
+           AND status IN ('open', 'quoted', 'approved', 'in_progress')
        ), 0)::numeric AS change_order_open_usd,
        COUNT(*) FILTER (
          WHERE classification IN ('NEW', 'MIXED')
-           AND status = 'shipped'
-           AND shipped_at IS NOT NULL
-           AND shipped_at >= DATE_TRUNC('month', NOW())
+           AND source <> 'auto-push'
+           AND status IN ('shipped', 'paid')
+           AND COALESCE(shipped_at, paid_at) IS NOT NULL
+           AND COALESCE(shipped_at, paid_at) >= DATE_TRUNC('month', NOW())
        )::int AS change_order_shipped_count,
-       COALESCE(SUM(estimated_usd) FILTER (
+       COALESCE(SUM(COALESCE(paid_amount, quote_amount, estimated_usd, 0)) FILTER (
          WHERE classification IN ('NEW', 'MIXED')
-           AND status = 'shipped'
-           AND shipped_at IS NOT NULL
-           AND shipped_at >= DATE_TRUNC('month', NOW())
+           AND source <> 'auto-push'
+           AND status IN ('shipped', 'paid')
+           AND COALESCE(shipped_at, paid_at) IS NOT NULL
+           AND COALESCE(shipped_at, paid_at) >= DATE_TRUNC('month', NOW())
        ), 0)::numeric AS change_order_shipped_usd
      FROM service_requests`
   ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))

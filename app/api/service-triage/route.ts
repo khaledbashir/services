@@ -61,6 +61,13 @@ export async function GET(request: NextRequest) {
   }
   if (retainer === 'true' || retainer === 'false') {
     where.push(`retainer_covered = ${retainer === 'true' ? 'true' : 'false'}`)
+    // When the caller asks for the change-orders pool (retainer=false), exclude
+    // Ahmad's own pre-push ledger rows — those are internal workflow, not
+    // stakeholder change orders. Phase 1 multi-board kanban will show them on
+    // a dedicated "Internal" board.
+    if (retainer === 'false') {
+      where.push(`source <> 'auto-push'`)
+    }
   }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     params.push(month + '-01')
