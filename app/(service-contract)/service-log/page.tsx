@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { PromptModal } from '../Modal'
 
 interface ServiceRequest {
   id: string
@@ -65,6 +66,9 @@ export default function ServiceLogPage() {
   const [triageSource, setTriageSource] = useState('slack')
   const [submitting, setSubmitting] = useState(false)
   const [latestCard, setLatestCard] = useState<any>(null)
+  // Action prompts — replace native window.prompt for ship + quote actions
+  const [shipPrompt, setShipPrompt] = useState<string | null>(null)
+  const [quotePrompt, setQuotePrompt] = useState<string | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -97,14 +101,18 @@ export default function ServiceLogPage() {
     }
   }
 
-  const ship = async (id: string) => {
-    const hours = window.prompt('Actual hours spent on this fix?')
-    if (!hours) return
-    const sha = window.prompt('Shipping commit SHA (optional)?') || ''
+  const ship = (id: string) => setShipPrompt(id)
+
+  const submitShip = async (raw: string) => {
+    if (!shipPrompt) return
+    const id = shipPrompt
+    setShipPrompt(null)
+    const hours = Number(raw)
+    if (!Number.isFinite(hours) || hours < 0) return
     await fetch(`/api/service-triage/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'ship', actual_hours: Number(hours), shipped_commit_sha: sha || undefined }),
+      body: JSON.stringify({ action: 'ship', actual_hours: hours }),
     })
     await refresh()
   }
@@ -118,13 +126,17 @@ export default function ServiceLogPage() {
     await refresh()
   }
 
-  const quote = async (id: string) => {
-    const amt = window.prompt('Quote amount in USD (optional)?') || ''
-    const notes = window.prompt('Notes (optional)?') || ''
+  const quote = (id: string) => setQuotePrompt(id)
+
+  const submitQuote = async (raw: string) => {
+    if (!quotePrompt) return
+    const id = quotePrompt
+    setQuotePrompt(null)
+    const amt = raw ? Number(raw) : undefined
     await fetch(`/api/service-triage/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'quote', quote_amount: amt ? Number(amt) : undefined, notes: notes || undefined }),
+      body: JSON.stringify({ action: 'quote', quote_amount: amt }),
     })
     await refresh()
   }
@@ -359,6 +371,27 @@ export default function ServiceLogPage() {
             </tbody>
           </table>
         </div>
+
+        <PromptModal
+          open={!!shipPrompt}
+          onClose={() => setShipPrompt(null)}
+          title="Mark as shipped"
+          body="Actual hours spent on this fix. Used to track real-vs-estimate over time."
+          placeholder="e.g. 1.5"
+          confirmLabel="Mark shipped →"
+          required
+          onSubmit={submitShip}
+        />
+
+        <PromptModal
+          open={!!quotePrompt}
+          onClose={() => setQuotePrompt(null)}
+          title="Send a quote"
+          body="Quote amount in USD. Press Enter to mark this row as quoted."
+          placeholder="e.g. 2500"
+          confirmLabel="Send quote →"
+          onSubmit={submitQuote}
+        />
     </div>
   )
 }
