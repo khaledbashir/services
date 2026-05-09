@@ -8,7 +8,6 @@ import StoryHero from './StoryHero'
 import Burndown from './Burndown'
 import ActivityTicker from './ActivityTicker'
 import PlatformBreakdown from './PlatformBreakdown'
-import PrintButton from './PrintButton'
 import GrayAreas from './GrayAreas'
 import MetricsExplainer from './MetricsExplainer'
 import PaymentCTAs from './PaymentCTAs'
@@ -68,45 +67,20 @@ export default async function TransparencyDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white dark:from-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-100">
-      <div className="max-w-7xl mx-auto px-5 pt-8 pb-16">
+      {/* Two-column shell: sidebar owns branding + section nav, main owns content. */}
+      {/* No top header bar — explicitly different from the rest of the app. */}
+      <div className="lg:grid lg:grid-cols-[240px_1fr]">
+        <SectionNav generatedAt={data.generated_at} />
 
-        <header className="flex items-center justify-between gap-4 mb-8 flex-wrap">
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-10 w-auto dark:hidden" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-10 w-auto hidden dark:block" />
-            <div className="border-l border-zinc-300 dark:border-zinc-700 pl-3">
-              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.2em] font-semibold leading-none">
-                Service
-              </div>
-              <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
-                Transparency
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3" data-no-print="true">
-            <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              live · {fmtTime(data.generated_at)}
-            </span>
-            <PrintButton />
-          </div>
-        </header>
+        <div className="max-w-5xl mx-auto px-5 pt-8 pb-16 w-full min-w-0">
+        {/* Mobile-only horizontal section nav (lg:hidden inside the component) */}
+        <SectionNavMobile />
 
         <h1 className="text-3xl font-bold tracking-tight mb-1">Live service-contract transparency</h1>
         <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-8 max-w-2xl">
           Every hour, every fix, every change order, every dollar — visible in real time.
           Pulled live from the operating systems ANC runs on, never typed in by hand.
         </p>
-
-        {/* Two-column layout: dedicated sidebar nav + main content */}
-        <div className="grid lg:grid-cols-[200px_1fr] gap-8">
-          <SectionNav />
-          <div className="min-w-0">
-
-        {/* Mobile-only horizontal section nav (lg:hidden inside the component) */}
-        <SectionNavMobile />
 
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
@@ -379,7 +353,6 @@ export default async function TransparencyDashboard() {
           Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
 
-          </div>
         </div>
       </div>
     </div>

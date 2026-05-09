@@ -107,16 +107,18 @@ export default function ChangeOrdersKanbanPage() {
     ])
     setOrders(boardRes.requests || [])
     const counts: Record<string, number> = { all: 0, inbox: 0 }
+    // "Active" for the headline count = needs attention from Ahmad. That means
+    // open / quoted / approved / in_progress. Shipped items are delivered and
+    // sit awaiting payment — they shouldn't count as "things to deal with."
+    const ACTIVE_STAGES = new Set(['open', 'quoted', 'approved', 'in_progress'])
     for (const row of (countsRes.requests || []) as ChangeOrder[]) {
       const p = row.project || 'service-dashboard'
-      const stage = row.status
       const isStakeholder = row.source !== 'auto-push'
-      const isActive = stage !== 'cancelled' && stage !== 'paid'
       if (row.inbox) {
         counts.inbox = (counts.inbox || 0) + 1
         continue
       }
-      if (!isActive) continue
+      if (!ACTIVE_STAGES.has(row.status)) continue
       if (p !== 'internal' && isStakeholder) counts.all = (counts.all || 0) + 1
       counts[p] = (counts[p] || 0) + 1
     }

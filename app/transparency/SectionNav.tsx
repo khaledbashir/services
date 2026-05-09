@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import PrintButton from './PrintButton'
 
 interface NavItem {
   id: string
@@ -18,7 +19,7 @@ const SECTIONS: NavItem[] = [
   { id: 'coverage',   label: "What's covered",  description: 'Contract clauses' },
 ]
 
-export default function SectionNav() {
+export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
   const [active, setActive] = useState<string>('overview')
 
   useEffect(() => {
@@ -41,13 +42,33 @@ export default function SectionNav() {
   return (
     <aside
       data-no-print="true"
-      className="sticky top-6 self-start hidden lg:block"
-      aria-label="Transparency dashboard sections"
+      className="sticky top-0 self-start hidden lg:flex flex-col h-screen border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 -ml-5 pl-5 pr-4 py-6"
+      aria-label="Transparency dashboard"
     >
-      <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-3 px-3">
-        Transparency
+      {/* Brand block */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ANC_Logo_2023_blue.png" alt="ANC Sports" className="h-8 w-auto dark:hidden" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ANC_Logo_2023_white.png" alt="ANC Sports" className="h-8 w-auto hidden dark:block" />
+        </div>
+        <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-500 dark:text-zinc-400 leading-none mb-0.5">
+          Service
+        </div>
+        <div className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight tracking-tight">
+          Transparency
+        </div>
+        {generatedAt && (
+          <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-2">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            live · {new Date(generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </div>
+        )}
       </div>
-      <nav className="flex flex-col gap-0.5">
+
+      {/* Section nav */}
+      <nav className="flex flex-col gap-0.5 mb-6 flex-1 overflow-y-auto -mx-1 px-1">
         {SECTIONS.map(s => {
           const isActive = active === s.id
           return (
@@ -71,11 +92,11 @@ export default function SectionNav() {
         })}
       </nav>
 
-      <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 px-3">
+      <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 px-3 mb-4">
         <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-2">
-          Jump to
+          Manage
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
           <a href="/service-log/change-orders" className="text-xs text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100">
             Change orders board →
           </a>
@@ -86,6 +107,13 @@ export default function SectionNav() {
             Full service log →
           </a>
         </div>
+      </div>
+
+      <div className="px-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+        <a href="/" className="text-[11px] text-zinc-500 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
+          ← Back to app
+        </a>
+        <PrintButton />
       </div>
     </aside>
   )
