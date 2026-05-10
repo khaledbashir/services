@@ -155,7 +155,7 @@ export default function PricingTransparency({ breakdown, workType, fetchComparab
         <div className="flex items-start gap-2">
           <span className="text-amber-600 dark:text-amber-400 text-base leading-none flex-shrink-0">⚠️</span>
           <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
-            <strong>Not the final price.</strong> This is an AI-grounded estimate based on US market rates, our standard contract relationship, and similar past work. The final price is set by Ahmad and may move up or down based on actual scope, integration complexity, or relationship adjustments. Treat this as a strong opening number, not a binding quote.
+            <strong>Planning estimate only.</strong> This is an AI-assisted estimate based on US market rates, the ANC service-contract relationship, and similar past work. Ahmad confirms the final scope and price before work starts, and the number may move up or down based on actual complexity, integration risk, or timing.
           </p>
         </div>
       </div>

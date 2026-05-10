@@ -215,7 +215,7 @@ export default function ProposedCODetailPage() {
                     </h2>
                   </div>
                   <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5 ml-6">
-                    Step-by-step reasoning from the AI model. Read it to audit the price, scope, or timeline.
+                    Draft scoping notes from the AI model. Read them to audit the price, scope, or timeline before Ahmad confirms the final quote.
                   </p>
                 </div>
                 <span className="text-purple-400 dark:text-purple-500 text-xl group-open:rotate-45 transition-transform leading-none flex-shrink-0">+</span>
@@ -223,7 +223,7 @@ export default function ProposedCODetailPage() {
               <div className="border-t border-purple-200 dark:border-purple-800/60 px-4 pb-4 pt-3">
                 <ReasoningPanel reasoning={item.ai_reasoning} autoScroll={false} />
                 <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/40 text-[10px] text-purple-600 dark:text-purple-400/70 italic">
-                  Reasoning trace from glm-5.1. The price + workType + scope this reasoning lands on are then anchored against the static market-rate table above — the AI suggests the bucket, the table sets the number.
+                  Draft scoping trace from the AI model. The work type and scope are then anchored against the static market-rate table above — the AI suggests the bucket, the table provides the starting number, and Ahmad confirms the final quote.
                 </div>
               </div>
             </details>

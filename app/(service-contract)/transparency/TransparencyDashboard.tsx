@@ -360,7 +360,7 @@ export default async function TransparencyDashboard() {
 
         <footer className="text-center text-[11px] text-gray-400 dark:text-gray-500 mt-12">
           ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
-          Quotes for new work derived from US market median → outsourcing efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
+          Quotes for new work derived from US market median → AI-assisted delivery efficiency → contract rate → long-term-partner adjustment. Click any request row above to see the chain.
         </footer>
     </div>
   )

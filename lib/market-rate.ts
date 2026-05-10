@@ -3,8 +3,8 @@
 // Every estimated number on the public transparency dashboard has to defend
 // itself — Joe / Jireh / anyone else who clicks "why this many hours, why
 // this $ amount" sees the chain that produced it: US market median →
-// outsourcing efficiency → outsourcing rate → friendly-partner cushion →
-// final ANC quote. No magic numbers, no AI hallucination, just a small
+// AI-assisted delivery efficiency → contract rate → long-term-partner
+// adjustment → final ANC quote. No magic numbers, no AI hallucination, just a small
 // curated table + transparent multipliers.
 //
 // Refresh the MARKET_TABLE quarterly against public sources.
@@ -138,7 +138,7 @@ function getMarketRow(workType: WorkType): MarketReference {
 // (Claude / Cursor / Copilot) ships faster than the US senior baseline by
 // ~30% on greenfield work, less on integration-heavy tasks. Anchored at
 // 0.70x with a 0.05 jitter for risk-heavy categories.
-const OUTSOURCING_HOURS_FACTOR: Record<WorkType, number> = {
+const DELIVERY_EFFICIENCY_FACTOR: Record<WorkType, number> = {
   new_feature_small: 0.65,
   new_feature_medium: 0.70,
   new_feature_large: 0.75,
@@ -155,7 +155,7 @@ const OUTSOURCING_HOURS_FACTOR: Record<WorkType, number> = {
 // ANC contract overage rate from anc-service-contract-2026-04-30.pdf.
 // All NEW-work quotes are derived from this rate × hours, never exposed
 // hourly per the contract clause but used as the internal cost basis.
-const OUTSOURCING_RATE_USD = 90
+const CONTRACT_RATE_USD = 90
 
 // Additional cushion for ongoing retainer partners — bakes in the
 // "we're already on a $1,500/mo + 12hr cap" relationship goodwill into
@@ -186,9 +186,9 @@ export function estimate(workType: WorkType, scope: ScopeBand = 'mid'): MarketEs
   const usRate = row.hourlyRateUSD[scope]
   const usTotal = Math.round(usHours * usRate)
 
-  const efficiencyFactor = OUTSOURCING_HOURS_FACTOR[workType]
+  const efficiencyFactor = DELIVERY_EFFICIENCY_FACTOR[workType]
   const opHours = Math.round(usHours * efficiencyFactor * 10) / 10  // 1 decimal
-  const opTotalBeforeDiscount = Math.round(opHours * OUTSOURCING_RATE_USD)
+  const opTotalBeforeDiscount = Math.round(opHours * CONTRACT_RATE_USD)
 
   const friendlyTotal = Math.round(opTotalBeforeDiscount * (1 - FRIENDLY_DISCOUNT))
 
@@ -201,15 +201,15 @@ export function estimate(workType: WorkType, scope: ScopeBand = 'mid'): MarketEs
       detail: `Sourced from: ${row.sources.join(' · ')}`,
     },
     {
-      label: 'Outsourcing efficiency (senior operator + AI tooling)',
+      label: 'AI-assisted delivery efficiency',
       hours: opHours,
-      detail: `${Math.round((1 - efficiencyFactor) * 100)}% faster than US baseline — ships in fewer hours but same quality bar.`,
+      detail: `${Math.round((1 - efficiencyFactor) * 100)}% faster than a typical US baseline because the platform owner is using the existing codebase, context, and AI tooling.`,
     },
     {
       label: 'ANC contract overage rate',
-      rateUSD: OUTSOURCING_RATE_USD,
+      rateUSD: CONTRACT_RATE_USD,
       totalUSD: opTotalBeforeDiscount,
-      detail: `$${OUTSOURCING_RATE_USD}/hr per the signed service contract (2026-04-30).`,
+      detail: `$${CONTRACT_RATE_USD}/hr per the signed service contract (2026-04-30).`,
     },
     {
       label: 'Long-term partner adjustment',

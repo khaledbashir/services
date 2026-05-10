@@ -153,9 +153,9 @@ export default function ProposedCOsPage() {
           <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">Explore · before you commit</div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Have an idea? See what it would take.</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Browse what&apos;s already scoped, or describe a new idea in plain words — get back a real
-            estimate with price, timeline, and what you&apos;d get. Nothing gets ordered. You see it
-            first, then you decide.
+            Browse scoped ideas, or describe a new request in plain words. You&apos;ll see a planning
+            estimate with scope, timeline, pricing logic, and what you&apos;d get before anything becomes
+            a change order. Nothing is ordered or billed until the final scope is confirmed.
           </p>
         </div>
         <button
@@ -528,7 +528,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
           <div>
             <h2 className="text-base font-semibold text-blue-900 dark:text-blue-100">Describe what you want — see what it would take</h2>
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              Plain English is fine. You&apos;ll get back a real estimate with price, timeline, and what you&apos;d be getting. Tweak it until it fits. Nothing is ordered until you say so.
+            Plain English is fine. You&apos;ll get back a planning estimate with price, timeline, and what you&apos;d be getting. Tweak it until it fits. Nothing is ordered or billed until the final scope is confirmed.
             </p>
           </div>
         </div>
@@ -577,11 +577,11 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       }`}>
         {scopeMode === 'anc' ? (
           <>
-            <strong>ANC project mode:</strong> AI checks the four live platforms, pulls past change-order pricing as the anchor, and factors in our long-term partnership. Use this when scoping work that builds on what we already have — Service Dashboard, Proposal Engine, CRM, or Operator Docs.
+            <strong>ANC project mode:</strong> AI checks the four live platforms, pulls past change-order pricing as the anchor, and factors in our long-term partnership. Use this for ideas that build on what is already running — Service Dashboard, Proposal Engine, CRM, or Operator Docs. Ahmad still confirms final scope and price before work starts.
           </>
         ) : (
           <>
-            <strong>New project mode:</strong> AI has no knowledge of or access to current projects. Scope is built from the description alone — plus company website / brief / attached files if you provide them — and current market rates. Use this when the idea isn&apos;t tied to anything already running.
+            <strong>New project mode:</strong> AI has no knowledge of or access to current projects. Scope is built from the description alone — plus company website / brief / attached files if you provide them — and current market rates. Use this when the idea is not tied to anything already running. Ahmad still confirms final scope and price before work starts.
           </>
         )}
       </div>

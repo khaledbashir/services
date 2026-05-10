@@ -22,16 +22,16 @@ function ConfidenceBar({ score }: { score: number }) {
     score >= 5 ? 'bg-amber-500' :
     'bg-rose-500'
   const label =
-    score >= 8 ? 'high' :
-    score >= 5 ? 'medium' :
-    'low'
+    score >= 8 ? 'reviewed' :
+    score >= 5 ? 'needs review' :
+    'needs human review'
   return (
     <div className="inline-flex items-center gap-1.5">
       <div className="w-12 h-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-[10px] font-mono tabular-nums text-gray-500 dark:text-gray-400">
-        {score}/10 {label}
+        {label}
       </span>
     </div>
   )
@@ -61,7 +61,7 @@ export default function Rationale({
       >
         <div className="flex items-center gap-2 flex-wrap text-[11px]">
           <span className="font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            AI rationale
+            Classification note
           </span>
           {confidence != null ? <ConfidenceBar score={confidence} /> : null}
           <span className="text-gray-400 dark:text-gray-600">·</span>
@@ -130,7 +130,7 @@ export default function Rationale({
 
           {confidence != null && confidence < 5 ? (
             <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/40 px-2 py-1.5 text-[10px] text-amber-800 dark:text-amber-300">
-              <strong>Low confidence read.</strong> The AI flagged this for human review — say <em>reclassify as fix</em> or <em>reclassify as change order</em> if you disagree.
+              <strong>Needs human review.</strong> The AI flagged this as a judgment call — say <em>reclassify as fix</em> or <em>reclassify as change order</em> if you disagree.
             </div>
           ) : null}
         </div>
