@@ -13,7 +13,7 @@ function safeRedirectPath(raw: string | null): string | null {
 // useSearchParams triggers a CSR bailout during prerender in Next 14 unless
 // wrapped in a Suspense boundary, so the form lives in a child component.
 function LoginForm() {
-  const microsoftSsoEnabled = process.env.NEXT_PUBLIC_MICROSOFT_SSO_ENABLED === 'true'
+  const microsoftSsoEnabled = process.env.NEXT_PUBLIC_MICROSOFT_SSO_ENABLED !== 'false'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
