@@ -1051,7 +1051,7 @@ export default function VenueDetailPage() {
                     const wf = workflowConfig[event.workflow_status] || workflowConfig.pending
                     const isPastEvent = new Date(`${event.event_date}T23:59:59`).getTime() < Date.now()
                     return (
-                      <tr key={event.id} onClick={() => router.push(`/events/${event.id}`)} className={`border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors ${isPastEvent ? 'bg-zinc-50/40' : ''}`}>
+                      <tr key={event.id} onClick={() => router.push(`/events/${event.id}?from=venue`)} className={`border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors ${isPastEvent ? 'bg-zinc-50/40' : ''}`}>
                         <td className="py-3 px-6 text-zinc-600 text-xs whitespace-nowrap">{formatDate(event.event_date)}</td>
                         <td className="py-3 px-6 font-medium text-zinc-900">{event.event_name}</td>
                         <td className="py-3 px-6"><span className={`text-xs font-medium px-2 py-0.5 rounded ${lc.bg} ${lc.text}`}>{event.league}</span></td>

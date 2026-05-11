@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useToast } from '@/components/toast'
 import Link from 'next/link'
@@ -55,7 +55,9 @@ export default function EventDetailPage() {
   const auth = useAuth()
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const eventId = params?.id as string
+  const cameFromVenue = searchParams?.get('from') === 'venue'
   const { showToast } = useToast()
 
   const [event, setEvent] = useState<EventDetail | null>(null)
@@ -291,7 +293,7 @@ export default function EventDetailPage() {
       const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete event')
       showToast('Event deleted', 'success')
-      router.push('/events')
+      router.push(cameFromVenue && event?.venue_id ? `/venues/${event.venue_id}` : '/events')
     } catch (err) {
       console.error('Event delete error:', err)
       showToast('Failed to delete event', 'error')
@@ -332,8 +334,11 @@ export default function EventDetailPage() {
         {/* Header */}
         <div>
           <div className="flex items-center justify-between gap-3 mb-4">
-            <Link href="/events" className="text-sm text-[#0A52EF] hover:text-[#0840C0] font-medium">
-              ← Back to Events
+            <Link
+              href={cameFromVenue && event.venue_id ? `/venues/${event.venue_id}` : '/events'}
+              className="text-sm text-[#0A52EF] hover:text-[#0840C0] font-medium"
+            >
+              ← Back to {cameFromVenue && event.venue_name ? event.venue_name : 'Events'}
             </Link>
             {isManager && (
               <button
@@ -917,7 +922,7 @@ export default function EventDetailPage() {
                   {recentEvents.map((evt) => (
                     <div
                       key={evt.id}
-                      onClick={() => router.push(`/events/${evt.id}`)}
+                      onClick={() => router.push(`/events/${evt.id}${cameFromVenue ? '?from=venue' : ''}`)}
                       className="text-xs cursor-pointer hover:bg-zinc-50 p-2 rounded transition-colors"
                     >
                       <p className="font-medium text-zinc-900">{evt.summary}</p>

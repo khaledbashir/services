@@ -218,13 +218,38 @@ function isOfficialSourceKind(sourceKind: string): boolean {
   return ['ticketmaster', 'league_schedule', 'venue_calendar', 'team_website'].includes(sourceKind)
 }
 
+// venue_calendar + team_website extractions are LLM-scraped from a venue's
+// website. When the source URL points at a specific event detail page we trust
+// it as official evidence. When it's just the homepage or a generic events
+// listing, the LLM is inferring schedule rows from promotional banners and
+// regularly hallucinates dates — Stevie @ Rocket Arena 5/11 saw a phantom
+// "Monsters Game 2" + "Cavs vs Pistons Evan Mobley bobblehead" pulled out of
+// www.rocketarena.com/. Treat those as ai_inferred so they hit the review
+// queue instead of auto-importing.
+function isEventSpecificUrl(sourceUrl: string): boolean {
+  try {
+    const url = new URL(sourceUrl)
+    const path = url.pathname.replace(/\/+$/, '')
+    if (!path || path === '/') return false
+    if (/^\/(events?|schedule|calendar|tickets?|whats[-_]?on|upcoming)\/?$/i.test(path)) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
 function getMatchType(sourceKind: string, sourceUrl: string | null): DiscoveryMatchType {
-  return isOfficialSourceKind(sourceKind) && Boolean(sourceUrl) ? 'official_source' : 'ai_inferred'
+  if (!sourceUrl || !isOfficialSourceKind(sourceKind)) return 'ai_inferred'
+  if ((sourceKind === 'venue_calendar' || sourceKind === 'team_website') && !isEventSpecificUrl(sourceUrl)) {
+    return 'ai_inferred'
+  }
+  return 'official_source'
 }
 
 function scoreDiscoveryTrust(params: {
   confidence: number
   sourceKind: string
+  sourceUrl: string | null
   sourceDomain: string | null
   matchType: DiscoveryMatchType
   evidenceSnippet: string | null
@@ -236,6 +261,12 @@ function scoreDiscoveryTrust(params: {
   if (params.matchType === 'official_source') {
     score += 0.25
     reasons.push('Official source URL captured at discovery time')
+  } else if (
+    params.sourceUrl &&
+    (params.sourceKind === 'venue_calendar' || params.sourceKind === 'team_website') &&
+    !isEventSpecificUrl(params.sourceUrl)
+  ) {
+    reasons.push('Source URL points at the venue homepage / generic listing, not the event itself — held for review')
   } else {
     reasons.push('No official source URL captured, so this remains AI-inferred')
   }
@@ -808,6 +839,7 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
   const { trustScore, trustReasons } = scoreDiscoveryTrust({
     confidence,
     sourceKind,
+    sourceUrl,
     sourceDomain,
     matchType,
     evidenceSnippet,
