@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ConfirmModal } from '@/app/(service-contract)/Modal'
 
 type Category = 'ai' | 'cloud' | 'domain' | 'dev_tool' | 'comms' | 'storage' | 'monitoring' | 'other'
 
@@ -167,8 +168,17 @@ export default function ExpensesClient() {
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
   const [drawerId, setDrawerId] = useState<string | null>(null)
+  const [confirmRequest, setConfirmRequest] = useState<null | { title: string; body: string; confirmLabel: string; tone: 'primary' | 'destructive' | 'success'; onConfirm: () => void }>(null)
+  const [toast, setToast] = useState<null | { tone: 'success' | 'error'; message: string }>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragCounter = useRef(0)
+
+  // Auto-dismiss toasts
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const loadSummary = useCallback(async (opts: { month?: string; all?: boolean }) => {
     setLoading(true)
@@ -389,25 +399,48 @@ export default function ExpensesClient() {
     return summary.category_breakdown.map((c) => ({ ...c, pct: c.total_cents / summary.month_total_cents }))
   }, [summary])
 
-  async function deleteReceipt(id: string) {
-    if (!confirm('Delete this receipt? The PDF will be removed too.')) return
+  async function performDelete(id: string) {
     const res = await fetch(`/api/receipts/${id}`, { method: 'DELETE' })
-    if (res.ok) reload()
-    else alert('Delete failed')
+    if (res.ok) {
+      reload()
+      setToast({ tone: 'success', message: 'Receipt deleted' })
+    } else {
+      setToast({ tone: 'error', message: 'Delete failed' })
+    }
   }
 
-  async function deleteSelected() {
+  function deleteReceipt(id: string) {
+    setConfirmRequest({
+      title: 'Delete this receipt?',
+      body: 'The PDF will be removed too. This can’t be undone.',
+      confirmLabel: 'Delete',
+      tone: 'destructive',
+      onConfirm: () => performDelete(id),
+    })
+  }
+
+  function deleteSelected() {
     if (selectedIds.size === 0) return
-    if (!confirm(`Delete ${selectedIds.size} receipt${selectedIds.size === 1 ? '' : 's'} and their files? This can't be undone.`)) return
-    setBulkDeleting(true)
-    try {
-      const ids = Array.from(selectedIds)
-      await Promise.all(ids.map((id) => fetch(`/api/receipts/${id}`, { method: 'DELETE' })))
-      setSelectedIds(new Set())
-      await reload()
-    } finally {
-      setBulkDeleting(false)
-    }
+    setConfirmRequest({
+      title: `Delete ${selectedIds.size} receipt${selectedIds.size === 1 ? '' : 's'}?`,
+      body: `${selectedIds.size === 1 ? 'This file' : 'These files'} will be removed from storage too. This can’t be undone.`,
+      confirmLabel: `Delete ${selectedIds.size}`,
+      tone: 'destructive',
+      onConfirm: async () => {
+        setBulkDeleting(true)
+        try {
+          const ids = Array.from(selectedIds)
+          const results = await Promise.all(ids.map((id) => fetch(`/api/receipts/${id}`, { method: 'DELETE' })))
+          const failed = results.filter((r) => !r.ok).length
+          setSelectedIds(new Set())
+          await reload()
+          if (failed > 0) setToast({ tone: 'error', message: `${failed} delete${failed === 1 ? '' : 's'} failed` })
+          else setToast({ tone: 'success', message: `${ids.length} receipt${ids.length === 1 ? '' : 's'} deleted` })
+        } finally {
+          setBulkDeleting(false)
+        }
+      },
+    })
   }
 
   function toggleSelected(id: string) {
@@ -451,8 +484,9 @@ export default function ExpensesClient() {
       setEditingId(null)
       setEditDraft({})
       reload()
+      setToast({ tone: 'success', message: 'Saved' })
     } else {
-      alert('Save failed')
+      setToast({ tone: 'error', message: 'Save failed' })
     }
   }
 
@@ -472,9 +506,10 @@ export default function ExpensesClient() {
     if (res.ok) {
       setManualOpen(false)
       reload()
+      setToast({ tone: 'success', message: 'Receipt added' })
     } else {
       const e = await res.json().catch(() => ({}))
-      alert(e.error || 'Could not add receipt')
+      setToast({ tone: 'error', message: e.error || 'Could not add receipt' })
     }
   }
 
@@ -709,6 +744,31 @@ export default function ExpensesClient() {
           onClose={() => setDrawerId(null)}
           onChanged={reload}
         />
+      )}
+
+      <ConfirmModal
+        open={!!confirmRequest}
+        onClose={() => setConfirmRequest(null)}
+        title={confirmRequest?.title || ''}
+        body={confirmRequest?.body || ''}
+        confirmLabel={confirmRequest?.confirmLabel || 'Confirm'}
+        tone={confirmRequest?.tone || 'primary'}
+        onConfirm={() => confirmRequest?.onConfirm()}
+      />
+
+      {toast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium animate-in fade-in slide-in-from-bottom-2 ${
+            toast.tone === 'success'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-rose-600 text-white'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{toast.tone === 'success' ? '✓' : '✕'}</span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -967,12 +1027,12 @@ function FilesTab({
   startEdit: (r: Receipt) => void
   saveEdit: () => Promise<void>
   cancelEdit: () => void
-  deleteReceipt: (id: string) => Promise<void>
+  deleteReceipt: (id: string) => void
   selectedIds: Set<string>
   toggleSelected: (id: string) => void
   selectAllVisible: () => void
   clearSelection: () => void
-  deleteSelected: () => Promise<void>
+  deleteSelected: () => void
   bulkDeleting: boolean
   openDrawer: (id: string) => void
 }) {
@@ -1346,7 +1406,7 @@ function LibraryTab({ receipts, search, setSearch, openDrawer, deleteReceipt }: 
   search: string
   setSearch: (s: string) => void
   openDrawer: (id: string) => void
-  deleteReceipt: (id: string) => Promise<void>
+  deleteReceipt: (id: string) => void
 }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
