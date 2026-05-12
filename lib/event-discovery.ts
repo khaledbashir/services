@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { extractStateFromAddress } from '@/lib/geocode'
+import { checkEventSanity } from '@/lib/event-sanity'
 import { classifyHomeAway } from '@/lib/feed-parsers/shared'
 import { parseVenueFeed, type FeedType } from '@/lib/feed-parsers'
 import { buildAutomationSelect, getVenueAutomationInfo, withComputedAutomation } from '@/lib/venue-automation'
@@ -1073,6 +1074,17 @@ export async function importDiscoveryEvents(
     }
     const automation = automationByVenue.get(venueId)!
     if ((automation.venue_type || 'sports') !== 'sports' && event.event_type === 'game') {
+      skipped++
+      continue
+    }
+
+    const sanity = checkEventSanity({
+      summary: event.summary,
+      league: event.league,
+      event_date: event.event_date,
+      event_type: event.event_type,
+    })
+    if (!sanity.valid) {
       skipped++
       continue
     }

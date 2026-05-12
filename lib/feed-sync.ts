@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { importDiscoveryEvents, type DiscoveryCandidate } from '@/lib/event-discovery'
+import { checkEventSanity } from '@/lib/event-sanity'
 import { parseVenueFeed, type FeedEvent, type FeedType } from '@/lib/feed-parsers'
 import { buildAutomationSelect, withComputedAutomation } from '@/lib/venue-automation'
 
@@ -193,7 +194,17 @@ export async function syncVenueFeed(
       venueAddress: venue.address,
     })
 
-    const windowedEvents = parsedEvents.filter((event) => event.date >= today && event.date <= ninetyDaysOut && !isPlaceholderSummary(event.name))
+    const windowedEvents = parsedEvents.filter((event) => {
+      if (event.date < today || event.date > ninetyDaysOut) return false
+      if (isPlaceholderSummary(event.name)) return false
+      const sanity = checkEventSanity({
+        summary: event.name,
+        league: event.league,
+        event_date: event.date,
+        event_type: event.eventType,
+      })
+      return sanity.valid
+    })
     const existingEvents = await loadExistingEvents(venue.id, today, ninetyDaysOut)
     const discovered = windowedEvents.map((event) => {
       const candidate = feedEventToCandidate(event, venue)
