@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DashboardLayout } from '@/components/dashboard-layout'
 
 type Category = 'ai' | 'cloud' | 'domain' | 'dev_tool' | 'comms' | 'storage' | 'monitoring' | 'other'
 
@@ -315,9 +314,8 @@ export default function ExpensesClient() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="max-w-6xl mx-auto px-6 pt-8 pb-16 w-full min-w-0">
-        {/* Header */}
+    <div className="max-w-6xl mx-auto px-6 pt-8 pb-16 w-full min-w-0">
+      {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-6 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
@@ -459,14 +457,13 @@ export default function ExpensesClient() {
         {loading && !summary && <div className="mt-4 text-sm text-gray-500">Loading…</div>}
 
         {manualOpen && (
-          <ManualEntryModal
-            onClose={() => setManualOpen(false)}
-            onSubmit={submitManual}
-            defaultMonth={month}
-          />
-        )}
-      </div>
-    </DashboardLayout>
+        <ManualEntryModal
+          onClose={() => setManualOpen(false)}
+          onSubmit={submitManual}
+          defaultMonth={month}
+        />
+      )}
+    </div>
   )
 }
 

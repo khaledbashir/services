@@ -48,6 +48,13 @@ const PAGES: PageNav[] = [
     icon: '📒',
     match: (p) => p === '/service-log',
   },
+  {
+    href: '/expenses',
+    label: 'Expenses',
+    description: 'SaaS / cloud receipts',
+    icon: '💳',
+    match: (p) => p === '/expenses' || p.startsWith('/expenses/'),
+  },
 ]
 
 const STORAGE_KEY = 'anc-service-contract-sidebar-collapsed'
