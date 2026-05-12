@@ -106,6 +106,9 @@ export default function SectionNav({ generatedAt }: { generatedAt?: string }) {
           <a href="/service-log" className="text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
             Full service log →
           </a>
+          <a href="/expenses" className="text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+            Operational expenses →
+          </a>
         </div>
       </div>
 
