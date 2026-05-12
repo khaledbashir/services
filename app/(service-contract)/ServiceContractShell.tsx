@@ -55,6 +55,13 @@ const PAGES: PageNav[] = [
     icon: '💳',
     match: (p) => p === '/expenses' || p.startsWith('/expenses/'),
   },
+  {
+    href: '/consultant',
+    label: 'Advisor',
+    description: 'AI counsel + web search',
+    icon: '🧭',
+    match: (p) => p === '/consultant' || p.startsWith('/consultant/'),
+  },
 ]
 
 const STORAGE_KEY = 'anc-service-contract-sidebar-collapsed'
