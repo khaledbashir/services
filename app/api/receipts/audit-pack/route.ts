@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       csvEscape(row.vendor_canonical),
       csvEscape(row.vendor_raw),
       csvEscape(row.category),
-      csvEscape(row.amount_cents !== null ? (row.amount_cents / 100).toFixed(2) : ''),
+      csvEscape(row.amount_cents !== null && row.amount_cents !== undefined ? (Number(row.amount_cents) / 100).toFixed(2) : ''),
       csvEscape(row.currency || ''),
       csvEscape(row.invoice_number || ''),
       csvEscape(row.period_start || ''),
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     ].join(','))
     .join('\n')
 
-  const totalCents = result.rows.reduce((sum, row) => sum + (row.amount_cents || 0), 0)
+  const totalCents = result.rows.reduce((sum, row) => sum + (row.amount_cents !== null && row.amount_cents !== undefined ? Number(row.amount_cents) : 0), 0)
   const totalLine = `\n,,,TOTAL,${(totalCents / 100).toFixed(2)},USD,,,,\n`
 
   zip.addFile(`summary-${month}.csv`, Buffer.from(csvHeader + csvBody + totalLine, 'utf-8'))

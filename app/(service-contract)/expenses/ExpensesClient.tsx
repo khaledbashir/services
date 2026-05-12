@@ -492,9 +492,25 @@ export default function ExpensesClient() {
         {/* KPI strip — always visible */}
         {summary && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            <KpiCard label="Month total" value={fmtUsd(summary.month_total_cents)} sub={`${summary.receipts.length} receipt${summary.receipts.length === 1 ? '' : 's'}`} />
-            <KpiCard label="Vendors" value={String(summary.vendor_rollup.length)} sub={`${summary.vendor_rollup.filter((v) => v.is_recurring).length} recurring`} />
-            <KpiCard label="Categories" value={String(summary.category_breakdown.length)} sub={summary.category_breakdown[0]?.category ? `top: ${CATEGORY_LABEL[summary.category_breakdown[0].category]}` : '—'} />
+            {(() => {
+              const rangeLabel =
+                dateRange === 'all' ? 'All-time total'
+                : dateRange === 'this_month' ? 'This month'
+                : dateRange === 'month_picker' ? fmtMonth(month)
+                : dateRange === 'last_30' ? 'Last 30 days'
+                : dateRange === 'last_90' ? 'Last 90 days'
+                : 'Custom range'
+              const visibleVendors = new Set(filteredReceipts.map((r) => r.vendor_canonical).filter(Boolean))
+              const visibleCategories = new Set(filteredReceipts.map((r) => r.category).filter(Boolean))
+              const recurringInWindow = filteredReceipts.filter((r) => r.is_recurring).length
+              return (
+                <>
+                  <KpiCard label={rangeLabel} value={fmtUsd(filteredTotal)} sub={`${filteredReceipts.length} receipt${filteredReceipts.length === 1 ? '' : 's'}`} />
+                  <KpiCard label="Vendors" value={String(visibleVendors.size)} sub={`${recurringInWindow} recurring`} />
+                  <KpiCard label="Categories" value={String(visibleCategories.size)} sub={summary.category_breakdown[0]?.category ? `top: ${CATEGORY_LABEL[summary.category_breakdown[0].category]}` : '—'} />
+                </>
+              )
+            })()}
             <KpiCard
               label="Missing recurring"
               value={String(summary.missing_recurring_vendors.length)}

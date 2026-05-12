@@ -143,7 +143,10 @@ export async function GET(request: NextRequest) {
     vendor_raw: row.vendor_raw,
     vendor_canonical: row.vendor_canonical,
     category: row.category,
-    amount_cents: row.amount_cents,
+    // node-pg returns BIGINT as a string by default — coerce so JS math
+    // doesn't fall back to string concatenation (would render an
+    // 8-digit "total" that's really three values stuck together).
+    amount_cents: row.amount_cents !== null ? Number(row.amount_cents) : null,
     currency: row.currency,
     period_start: row.period_start,
     period_end: row.period_end,
