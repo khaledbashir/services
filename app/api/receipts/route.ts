@@ -90,7 +90,10 @@ export async function GET(request: NextRequest) {
   let monthFilter = ''
   const params: unknown[] = []
   if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
-    monthFilter = `WHERE TO_CHAR(paid_at, 'YYYY-MM') = $1`
+    // Use paid_at when present, otherwise fall back to the upload date.
+    // Mistral sometimes can't find a payment date in a receipt — those
+    // rows would otherwise disappear from every month view.
+    monthFilter = `WHERE TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM') = $1`
     params.push(monthParam)
   }
 
@@ -106,6 +109,7 @@ export async function GET(request: NextRequest) {
        TO_CHAR(period_end, 'YYYY-MM-DD') as period_end,
        invoice_number,
        TO_CHAR(paid_at, 'YYYY-MM-DD') as paid_at,
+       TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM-DD') as effective_date,
        file_key,
        original_filename,
        extractor_confidence,
@@ -115,15 +119,15 @@ export async function GET(request: NextRequest) {
        created_at
      FROM infra_receipts
      ${monthFilter}
-     ORDER BY paid_at DESC NULLS LAST, created_at DESC`,
+     ORDER BY COALESCE(paid_at, created_at::date) DESC, created_at DESC`,
     params
   )
 
   const vendorMonthsResult = await query(
-    `SELECT vendor_canonical, TO_CHAR(paid_at, 'YYYY-MM') as month
+    `SELECT vendor_canonical, TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM') as month
      FROM infra_receipts
-     WHERE vendor_canonical IS NOT NULL AND paid_at IS NOT NULL
-     GROUP BY vendor_canonical, TO_CHAR(paid_at, 'YYYY-MM')`
+     WHERE vendor_canonical IS NOT NULL
+     GROUP BY vendor_canonical, TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM')`
   )
   const vendorMonthCount = new Map<string, Set<string>>()
   for (const row of vendorMonthsResult.rows) {
@@ -145,6 +149,7 @@ export async function GET(request: NextRequest) {
     period_end: row.period_end,
     invoice_number: row.invoice_number,
     paid_at: row.paid_at,
+    effective_date: row.effective_date,
     original_filename: row.original_filename,
     extractor_confidence: row.extractor_confidence ? Number(row.extractor_confidence) : null,
     extractor_provider: row.extractor_provider,
@@ -170,7 +175,8 @@ export async function GET(request: NextRequest) {
     }
     entry.total_cents += row.amount_cents || 0
     entry.count += 1
-    if (!entry.last_paid || (row.paid_at && row.paid_at > entry.last_paid)) entry.last_paid = row.paid_at
+    const refDate = row.effective_date || row.paid_at
+    if (!entry.last_paid || (refDate && refDate > entry.last_paid)) entry.last_paid = refDate
     vendorTotals.set(key, entry)
   }
 

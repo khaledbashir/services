@@ -16,6 +16,7 @@ interface Receipt {
   period_end: string | null
   invoice_number: string | null
   paid_at: string | null
+  effective_date: string | null
   original_filename: string | null
   extractor_confidence: number | null
   extractor_provider: string | null
@@ -31,7 +32,6 @@ interface VendorRollup {
   total_cents: number
   count: number
   is_recurring: boolean
-  missing_this_month: boolean
   last_paid: string | null
 }
 
@@ -61,6 +61,10 @@ interface ProgressEntry {
   amount_cents?: number | null
 }
 
+type Tab = 'dashboard' | 'files' | 'vendors'
+type SortKey = 'date' | 'vendor' | 'amount' | 'category'
+type SortDir = 'asc' | 'desc'
+
 const CATEGORY_LABEL: Record<string, string> = {
   ai: 'AI', cloud: 'Cloud', domain: 'Domain', dev_tool: 'Dev tools',
   comms: 'Comms', storage: 'Storage', monitoring: 'Monitoring', other: 'Other',
@@ -76,6 +80,8 @@ const CATEGORY_COLOR: Record<string, string> = {
   monitoring: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
   other: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }
+
+const ALL_CATEGORIES: Category[] = ['ai', 'cloud', 'domain', 'dev_tool', 'comms', 'storage', 'monitoring', 'other']
 
 function fmtUsd(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return '—'
@@ -97,8 +103,6 @@ function StatusPill({ status }: { status: FileStatus }) {
   return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${tone}`}>{status}</span>
 }
 
-const ALL_CATEGORIES: Category[] = ['ai', 'cloud', 'domain', 'dev_tool', 'comms', 'storage', 'monitoring', 'other']
-
 export default function ExpensesClient() {
   const [summary, setSummary] = useState<SummaryPayload | null>(null)
   const [loading, setLoading] = useState(false)
@@ -109,6 +113,11 @@ export default function ExpensesClient() {
   const [manualOpen, setManualOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<Partial<Receipt>>({})
+  const [tab, setTab] = useState<Tab>('dashboard')
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<Set<Category>>(new Set())
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragCounter = useRef(0)
 
@@ -189,6 +198,37 @@ export default function ExpensesClient() {
     return list
   }, [])
 
+  // Filter + sort applied to all receipts in this month
+  const filteredReceipts = useMemo(() => {
+    if (!summary) return []
+    let list = summary.receipts
+    const q = search.trim().toLowerCase()
+    if (q) {
+      list = list.filter((r) =>
+        (r.vendor_canonical || '').toLowerCase().includes(q) ||
+        (r.vendor_raw || '').toLowerCase().includes(q) ||
+        (r.invoice_number || '').toLowerCase().includes(q) ||
+        (r.original_filename || '').toLowerCase().includes(q)
+      )
+    }
+    if (categoryFilter.size > 0) {
+      list = list.filter((r) => r.category && categoryFilter.has(r.category as Category))
+    }
+    const sorted = [...list].sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'date': cmp = (a.effective_date || '').localeCompare(b.effective_date || ''); break
+        case 'vendor': cmp = (a.vendor_canonical || '').localeCompare(b.vendor_canonical || ''); break
+        case 'amount': cmp = (a.amount_cents || 0) - (b.amount_cents || 0); break
+        case 'category': cmp = (a.category || '').localeCompare(b.category || ''); break
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return sorted
+  }, [summary, search, categoryFilter, sortKey, sortDir])
+
+  const filteredTotal = useMemo(() => filteredReceipts.reduce((s, r) => s + (r.amount_cents || 0), 0), [filteredReceipts])
+
   const categoryDonut = useMemo(() => {
     if (!summary || summary.month_total_cents === 0) return []
     return summary.category_breakdown.map((c) => ({ ...c, pct: c.total_cents / summary.month_total_cents }))
@@ -256,15 +296,33 @@ export default function ExpensesClient() {
     }
   }
 
+  function toggleCategory(c: Category) {
+    setCategoryFilter((prev) => {
+      const next = new Set(prev)
+      if (next.has(c)) next.delete(c); else next.add(c)
+      return next
+    })
+  }
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir(k === 'date' || k === 'amount' ? 'desc' : 'asc') }
+  }
+
+  function sortIndicator(k: SortKey) {
+    if (sortKey !== k) return <span className="text-gray-300 dark:text-gray-700">↕</span>
+    return <span className="text-gray-900 dark:text-gray-100">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto px-6 pt-8 pb-16 w-full min-w-0">
+        {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-6 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-              Drop a receipt PDF or image. Vendor, amount, category, recurring vs one-off — all auto-detected.
-              Use the audit pack button to ship every receipt + a CSV summary for accounting.
+              Drop receipts, get a vendor-grouped audit pack. Vendor, amount, category, recurring vs one-off — all auto-detected.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -297,7 +355,7 @@ export default function ExpensesClient() {
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`cursor-pointer border-2 border-dashed rounded-xl p-8 text-center transition-colors mb-6 ${dragging ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 bg-white dark:bg-gray-900'}`}
+          className={`cursor-pointer border-2 border-dashed rounded-xl px-6 py-5 text-center transition-colors mb-4 ${dragging ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 bg-white dark:bg-gray-900'}`}
         >
           <input
             ref={fileInputRef}
@@ -315,7 +373,7 @@ export default function ExpensesClient() {
             Drop receipts here · or click to browse
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-            PDF, PNG, JPG — many at once. Read by Mistral OCR, normalized by Ollama Cloud, categorized + recurring-tagged automatically.
+            PDF, PNG, JPG — many at once.
           </div>
         </div>
 
@@ -333,175 +391,73 @@ export default function ExpensesClient() {
                 <StatusPill status={p.status} />
               </div>
             ))}
-            {progress.length > 16 && <div className="text-[10px] text-gray-500 text-center">+{progress.length - 16} more processed</div>}
             <button onClick={() => setProgress([])} className="text-xs text-gray-500 hover:underline mt-1">clear progress</button>
           </div>
         )}
 
         {error && <div className="mb-4 text-sm text-rose-600 dark:text-rose-400">Failed to load: {error}</div>}
 
+        {/* KPI strip — always visible */}
         {summary && (
-          <>
-            {/* Top stats + breakdown */}
-            <div className="grid gap-4 md:grid-cols-3 mb-6">
-              <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Month total</div>
-                <div className="text-4xl font-bold tabular-nums mt-1">{fmtUsd(summary.month_total_cents)}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {summary.receipts.length} receipt{summary.receipts.length === 1 ? '' : 's'} · {summary.vendor_rollup.length} vendor{summary.vendor_rollup.length === 1 ? '' : 's'}
-                </div>
-              </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <KpiCard label="Month total" value={fmtUsd(summary.month_total_cents)} sub={`${summary.receipts.length} receipt${summary.receipts.length === 1 ? '' : 's'}`} />
+            <KpiCard label="Vendors" value={String(summary.vendor_rollup.length)} sub={`${summary.vendor_rollup.filter((v) => v.is_recurring).length} recurring`} />
+            <KpiCard label="Categories" value={String(summary.category_breakdown.length)} sub={summary.category_breakdown[0]?.category ? `top: ${CATEGORY_LABEL[summary.category_breakdown[0].category]}` : '—'} />
+            <KpiCard
+              label="Missing recurring"
+              value={String(summary.missing_recurring_vendors.length)}
+              sub={summary.missing_recurring_vendors[0]?.vendor || 'none'}
+              tone={summary.missing_recurring_vendors.length > 0 ? 'rose' : 'gray'}
+            />
+          </div>
+        )}
 
-              <div className="md:col-span-2 rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">By category</div>
-                {categoryDonut.length === 0 ? (
-                  <div className="text-xs text-gray-400 italic">Drop something above to see the breakdown.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {categoryDonut.map((c) => (
-                      <div key={c.category}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className={`px-2 py-0.5 rounded ${CATEGORY_COLOR[c.category] || CATEGORY_COLOR.other}`}>
-                            {CATEGORY_LABEL[c.category] || c.category}
-                          </span>
-                          <span className="tabular-nums text-gray-600 dark:text-gray-400">{fmtUsd(c.total_cents)} · {(c.pct * 100).toFixed(0)}%</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-gray-900 dark:bg-gray-100 rounded-full" style={{ width: `${Math.max(2, c.pct * 100)}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className="border-b border-gray-200 dark:border-gray-800 mb-4 flex gap-1">
+          <TabButton active={tab === 'dashboard'} onClick={() => setTab('dashboard')}>Dashboard</TabButton>
+          <TabButton active={tab === 'files'} onClick={() => setTab('files')}>
+            Files <span className="ml-1 text-[10px] text-gray-500">{summary?.receipts.length ?? 0}</span>
+          </TabButton>
+          <TabButton active={tab === 'vendors'} onClick={() => setTab('vendors')}>
+            Vendors <span className="ml-1 text-[10px] text-gray-500">{summary?.vendor_rollup.length ?? 0}</span>
+          </TabButton>
+        </div>
 
-            {/* Missing recurring */}
-            {summary.missing_recurring_vendors.length > 0 && (
-              <div className="mb-4 px-4 py-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-sm">
-                <div className="font-semibold text-rose-700 dark:text-rose-300 mb-1">
-                  ⚠ {summary.missing_recurring_vendors.length} recurring vendor{summary.missing_recurring_vendors.length === 1 ? '' : 's'} not seen in {fmtMonth(month)}
-                </div>
-                <div className="text-rose-700/80 dark:text-rose-300/80 text-xs">
-                  {summary.missing_recurring_vendors.map((m) => `${m.vendor} (last ${m.last_paid})`).join(' · ')}
-                </div>
-              </div>
-            )}
+        {/* Tab body */}
+        {summary && tab === 'dashboard' && (
+          <DashboardTab summary={summary} categoryDonut={categoryDonut} />
+        )}
 
-            {/* Vendor cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-              {summary.vendor_rollup.map((v) => (
-                <div key={v.vendor} className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 bg-white dark:bg-gray-900">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-semibold truncate">{v.vendor}</div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                        {v.count} receipt{v.count === 1 ? '' : 's'}{v.last_paid ? ` · last ${v.last_paid}` : ''}
-                      </div>
-                    </div>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${CATEGORY_COLOR[v.category || 'other']}`}>
-                      {CATEGORY_LABEL[v.category || 'other']}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-end justify-between gap-2">
-                    <div className="text-2xl font-bold tabular-nums">{fmtUsd(v.total_cents)}</div>
-                    {v.is_recurring && <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">↻ recurring</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {summary && tab === 'files' && (
+          <FilesTab
+            receipts={filteredReceipts}
+            filteredTotal={filteredTotal}
+            allReceiptsCount={summary.receipts.length}
+            search={search}
+            setSearch={setSearch}
+            categoryFilter={categoryFilter}
+            toggleCategory={toggleCategory}
+            clearFilters={() => { setSearch(''); setCategoryFilter(new Set()) }}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            toggleSort={toggleSort}
+            sortIndicator={sortIndicator}
+            editingId={editingId}
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            startEdit={startEdit}
+            saveEdit={saveEdit}
+            cancelEdit={() => { setEditingId(null); setEditDraft({}) }}
+            deleteReceipt={deleteReceipt}
+          />
+        )}
 
-            {/* Receipt table with inline edit */}
-            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-              <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">All receipts · {fmtMonth(month)}</h2>
-                <span className="text-xs text-gray-500">{summary.receipts.length} row{summary.receipts.length === 1 ? '' : 's'}</span>
-              </div>
-              {summary.receipts.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-gray-500 italic">
-                  Nothing logged for {fmtMonth(month)} yet. Drop a receipt above or add one manually.
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                  <div className="grid grid-cols-[120px_1fr_120px_140px_140px_120px] gap-3 px-4 py-2 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50">
-                    <div>Paid</div>
-                    <div>Vendor</div>
-                    <div>Category</div>
-                    <div>Invoice #</div>
-                    <div className="text-right">Amount</div>
-                    <div className="text-right">Actions</div>
-                  </div>
-                  {summary.receipts.map((r) => (
-                    <div key={r.id} className="grid grid-cols-[120px_1fr_120px_140px_140px_120px] gap-3 px-4 py-2.5 items-center">
-                      {editingId === r.id ? (
-                        <>
-                          <input
-                            type="date"
-                            value={editDraft.paid_at || ''}
-                            onChange={(e) => setEditDraft({ ...editDraft, paid_at: e.target.value })}
-                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
-                          />
-                          <input
-                            type="text"
-                            value={editDraft.vendor_canonical || ''}
-                            onChange={(e) => setEditDraft({ ...editDraft, vendor_canonical: e.target.value })}
-                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
-                          />
-                          <select
-                            value={editDraft.category || 'other'}
-                            onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value as Category })}
-                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
-                          >
-                            {ALL_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-                          </select>
-                          <input
-                            type="text"
-                            value={editDraft.invoice_number || ''}
-                            onChange={(e) => setEditDraft({ ...editDraft, invoice_number: e.target.value })}
-                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
-                          />
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={editDraft.amount_cents !== null && editDraft.amount_cents !== undefined ? (editDraft.amount_cents / 100).toFixed(2) : ''}
-                            onChange={(e) => setEditDraft({ ...editDraft, amount_cents: e.target.value === '' ? null : Math.round(Number(e.target.value) * 100) })}
-                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-right"
-                          />
-                          <div className="flex justify-end gap-1">
-                            <button onClick={saveEdit} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white">Save</button>
-                            <button onClick={() => { setEditingId(null); setEditDraft({}) }} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700">Cancel</button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="text-xs text-gray-600 dark:text-gray-400 tabular-nums">{r.paid_at || '—'}</div>
-                          <div className="min-w-0">
-                            <div className="font-medium truncate">{r.vendor_canonical || r.vendor_raw || 'Unknown'}</div>
-                            {r.extracted_fields?.manual_entry && <span className="text-[10px] text-gray-400 uppercase tracking-wider">manual</span>}
-                          </div>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] w-fit ${CATEGORY_COLOR[r.category || 'other']}`}>{CATEGORY_LABEL[r.category || 'other']}</span>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{r.invoice_number || '—'}</div>
-                          <div className="text-right tabular-nums font-semibold">{fmtUsd(r.amount_cents)}</div>
-                          <div className="flex justify-end gap-2 text-xs">
-                            {!r.extracted_fields?.manual_entry && r.original_filename && (
-                              <a href={`/api/receipts/${r.id}/file`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">PDF</a>
-                            )}
-                            <button onClick={() => startEdit(r)} className="text-gray-600 dark:text-gray-400 hover:underline">Edit</button>
-                            <button onClick={() => deleteReceipt(r.id)} className="text-rose-600 dark:text-rose-400 hover:underline">Delete</button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+        {summary && tab === 'vendors' && (
+          <VendorsTab summary={summary} setSearch={setSearch} setTab={setTab} />
         )}
 
         {loading && !summary && <div className="mt-4 text-sm text-gray-500">Loading…</div>}
 
-        {/* Manual entry modal */}
         {manualOpen && (
           <ManualEntryModal
             onClose={() => setManualOpen(false)}
@@ -511,6 +467,354 @@ export default function ExpensesClient() {
         )}
       </div>
     </DashboardLayout>
+  )
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+        active
+          ? 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
+          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function KpiCard({ label, value, sub, tone = 'gray' }: { label: string; value: string; sub: string; tone?: 'gray' | 'rose' }) {
+  const toneClasses = tone === 'rose'
+    ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40'
+    : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
+  return (
+    <div className={`rounded-lg border p-3 ${toneClasses}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="text-2xl font-bold tabular-nums mt-0.5">{value}</div>
+      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{sub}</div>
+    </div>
+  )
+}
+
+function DashboardTab({ summary, categoryDonut }: {
+  summary: SummaryPayload
+  categoryDonut: Array<{ category: string; total_cents: number; pct: number }>
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Category breakdown */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
+        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">By category</div>
+        {categoryDonut.length === 0 ? (
+          <div className="text-xs text-gray-400 italic">Drop a receipt above to see the breakdown.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {categoryDonut.map((c) => (
+              <div key={c.category}>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className={`px-2 py-0.5 rounded ${CATEGORY_COLOR[c.category] || CATEGORY_COLOR.other}`}>
+                    {CATEGORY_LABEL[c.category] || c.category}
+                  </span>
+                  <span className="tabular-nums text-gray-600 dark:text-gray-400">{fmtUsd(c.total_cents)} · {(c.pct * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-gray-900 dark:bg-gray-100 rounded-full" style={{ width: `${Math.max(2, c.pct * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Missing recurring */}
+      {summary.missing_recurring_vendors.length > 0 && (
+        <div className="px-4 py-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-sm">
+          <div className="font-semibold text-rose-700 dark:text-rose-300 mb-1">
+            ⚠ {summary.missing_recurring_vendors.length} recurring vendor{summary.missing_recurring_vendors.length === 1 ? '' : 's'} not seen this month
+          </div>
+          <div className="text-rose-700/80 dark:text-rose-300/80 text-xs">
+            {summary.missing_recurring_vendors.map((m) => `${m.vendor} (last ${m.last_paid})`).join(' · ')}
+          </div>
+        </div>
+      )}
+
+      {/* Top vendors */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
+        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Top vendors</div>
+        {summary.vendor_rollup.length === 0 ? (
+          <div className="text-xs text-gray-400 italic">No vendors yet.</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {summary.vendor_rollup.slice(0, 9).map((v) => (
+              <div key={v.vendor} className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 bg-gray-50/40 dark:bg-gray-900/40">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate text-sm">{v.vendor}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      {v.count}× · last {v.last_paid || '—'}
+                    </div>
+                  </div>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${CATEGORY_COLOR[v.category || 'other']}`}>
+                    {CATEGORY_LABEL[v.category || 'other']}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-end justify-between gap-2">
+                  <div className="text-xl font-bold tabular-nums">{fmtUsd(v.total_cents)}</div>
+                  {v.is_recurring && <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">↻</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FilesTab({
+  receipts, filteredTotal, allReceiptsCount,
+  search, setSearch, categoryFilter, toggleCategory, clearFilters,
+  sortKey, sortDir, toggleSort, sortIndicator,
+  editingId, editDraft, setEditDraft, startEdit, saveEdit, cancelEdit, deleteReceipt,
+}: {
+  receipts: Receipt[]
+  filteredTotal: number
+  allReceiptsCount: number
+  search: string
+  setSearch: (s: string) => void
+  categoryFilter: Set<Category>
+  toggleCategory: (c: Category) => void
+  clearFilters: () => void
+  sortKey: SortKey
+  sortDir: SortDir
+  toggleSort: (k: SortKey) => void
+  sortIndicator: (k: SortKey) => React.ReactNode
+  editingId: string | null
+  editDraft: Partial<Receipt>
+  setEditDraft: (d: Partial<Receipt>) => void
+  startEdit: (r: Receipt) => void
+  saveEdit: () => Promise<void>
+  cancelEdit: () => void
+  deleteReceipt: (id: string) => Promise<void>
+}) {
+  const hasFilter = search || categoryFilter.size > 0
+  return (
+    <div className="space-y-3">
+      {/* Filter strip */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search vendor, invoice #, filename…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">⌕</span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          {ALL_CATEGORIES.map((c) => {
+            const active = categoryFilter.has(c)
+            return (
+              <button
+                key={c}
+                onClick={() => toggleCategory(c)}
+                className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
+                  active
+                    ? CATEGORY_COLOR[c] + ' ring-2 ring-offset-1 ring-gray-900 dark:ring-gray-100 dark:ring-offset-gray-900'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
+              >
+                {CATEGORY_LABEL[c]}
+              </button>
+            )
+          })}
+        </div>
+        {hasFilter && (
+          <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+        )}
+      </div>
+
+      {/* Filter summary */}
+      {hasFilter && (
+        <div className="text-xs text-gray-600 dark:text-gray-400">
+          Showing {receipts.length} of {allReceiptsCount} · subtotal <span className="font-semibold tabular-nums">{fmtUsd(filteredTotal)}</span>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+        {receipts.length === 0 ? (
+          <div className="px-4 py-12 text-center text-sm text-gray-500 italic">
+            {hasFilter ? 'No receipts match the filter.' : 'No receipts logged yet for this month. Drop a file above or use “Add manually”.'}
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">
+              <tr>
+                <th className="text-left px-3 py-2 cursor-pointer" onClick={() => toggleSort('date')}>
+                  <div className="flex items-center gap-1">Paid {sortIndicator('date')}</div>
+                </th>
+                <th className="text-left px-3 py-2 cursor-pointer" onClick={() => toggleSort('vendor')}>
+                  <div className="flex items-center gap-1">Vendor {sortIndicator('vendor')}</div>
+                </th>
+                <th className="text-left px-3 py-2 cursor-pointer" onClick={() => toggleSort('category')}>
+                  <div className="flex items-center gap-1">Category {sortIndicator('category')}</div>
+                </th>
+                <th className="text-left px-3 py-2">Invoice #</th>
+                <th className="text-right px-3 py-2 cursor-pointer" onClick={() => toggleSort('amount')}>
+                  <div className="flex items-center justify-end gap-1">Amount {sortIndicator('amount')}</div>
+                </th>
+                <th className="text-right px-3 py-2 w-[140px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {receipts.map((r) => (
+                <tr key={r.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-900/30">
+                  {editingId === r.id ? (
+                    <>
+                      <td className="px-3 py-1.5">
+                        <input
+                          type="date"
+                          value={editDraft.paid_at || ''}
+                          onChange={(e) => setEditDraft({ ...editDraft, paid_at: e.target.value })}
+                          className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 w-[130px]"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <input
+                          type="text"
+                          value={editDraft.vendor_canonical || ''}
+                          onChange={(e) => setEditDraft({ ...editDraft, vendor_canonical: e.target.value })}
+                          className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 w-full"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <select
+                          value={editDraft.category || 'other'}
+                          onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value as Category })}
+                          className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900"
+                        >
+                          {ALL_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <input
+                          type="text"
+                          value={editDraft.invoice_number || ''}
+                          onChange={(e) => setEditDraft({ ...editDraft, invoice_number: e.target.value })}
+                          className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 w-full"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editDraft.amount_cents !== null && editDraft.amount_cents !== undefined ? (editDraft.amount_cents / 100).toFixed(2) : ''}
+                          onChange={(e) => setEditDraft({ ...editDraft, amount_cents: e.target.value === '' ? null : Math.round(Number(e.target.value) * 100) })}
+                          className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 text-right w-[100px]"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button onClick={saveEdit} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white">Save</button>
+                          <button onClick={cancelEdit} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700">Cancel</button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">
+                        {r.effective_date || '—'}
+                        {!r.paid_at && <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400" title="Paid date wasn't on the receipt — using upload date">est</span>}
+                      </td>
+                      <td className="px-3 py-2 min-w-0">
+                        <div className="font-medium truncate max-w-[280px]">
+                          {r.vendor_canonical || r.vendor_raw || 'Unknown'}
+                          {r.extracted_fields?.manual_entry && <span className="ml-2 text-[9px] text-gray-400 uppercase tracking-wider">manual</span>}
+                        </div>
+                        {r.original_filename && <div className="text-[10px] text-gray-400 truncate max-w-[280px]">{r.original_filename}</div>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${CATEGORY_COLOR[r.category || 'other']}`}>
+                          {CATEGORY_LABEL[r.category || 'other']}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[140px]">
+                        {r.invoice_number || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap">
+                        {fmtUsd(r.amount_cents)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2 text-xs">
+                          {!r.extracted_fields?.manual_entry && r.original_filename && (
+                            <a href={`/api/receipts/${r.id}/file`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">PDF</a>
+                          )}
+                          <button onClick={() => startEdit(r)} className="text-gray-600 dark:text-gray-400 hover:underline">Edit</button>
+                          <button onClick={() => deleteReceipt(r.id)} className="text-rose-600 dark:text-rose-400 hover:underline">Delete</button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold">
+              <tr>
+                <td colSpan={4} className="px-3 py-2 text-right text-gray-500">
+                  {hasFilter ? 'Filtered subtotal' : 'Total'}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmtUsd(filteredTotal)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function VendorsTab({ summary, setSearch, setTab }: {
+  summary: SummaryPayload
+  setSearch: (s: string) => void
+  setTab: (t: Tab) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {summary.vendor_rollup.map((v) => (
+          <button
+            key={v.vendor}
+            onClick={() => { setSearch(v.vendor); setTab('files') }}
+            className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-left hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{v.vendor}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  {v.count} receipt{v.count === 1 ? '' : 's'} · last {v.last_paid || '—'}
+                </div>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] ${CATEGORY_COLOR[v.category || 'other']}`}>
+                {CATEGORY_LABEL[v.category || 'other']}
+              </span>
+            </div>
+            <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="text-2xl font-bold tabular-nums">{fmtUsd(v.total_cents)}</div>
+              {v.is_recurring && <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">↻ recurring</span>}
+            </div>
+          </button>
+        ))}
+      </div>
+      {summary.vendor_rollup.length === 0 && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-12 text-center text-sm text-gray-500 italic">
+          No vendors logged yet.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -589,7 +893,7 @@ function ManualEntryModal({ onClose, onSubmit, defaultMonth }: {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="e.g. Google Cloud, the $5.52 charge — Charlie couldn't find the receipt"
+              placeholder="e.g. Google Cloud, the $5.52 charge"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900"
             />
           </div>

@@ -63,6 +63,14 @@ export async function POST(request: NextRequest) {
       const filename = file.name || 'receipt.pdf'
 
       const extracted = await extractor.extract(buffer, mime, filename)
+
+      // If Mistral can't find a payment date, fall back to today so the
+      // row lands in the current month's view. The UI flags these with
+      // "date estimated" so the user can edit.
+      if (!extracted.paid_at) {
+        extracted.paid_at = new Date().toISOString().slice(0, 10)
+      }
+
       const insight = await reasonAboutReceipt({ extracted, history })
 
       // Idempotent dedupe on (vendor_canonical, invoice_number)

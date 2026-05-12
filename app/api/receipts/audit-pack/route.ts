@@ -32,15 +32,15 @@ export async function GET(request: NextRequest) {
        category,
        amount_cents,
        currency,
-       TO_CHAR(paid_at, 'YYYY-MM-DD') as paid_at,
+       TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM-DD') as paid_at,
        TO_CHAR(period_start, 'YYYY-MM-DD') as period_start,
        TO_CHAR(period_end, 'YYYY-MM-DD') as period_end,
        invoice_number,
        file_key,
        original_filename
      FROM infra_receipts
-     WHERE TO_CHAR(paid_at, 'YYYY-MM') = $1
-     ORDER BY paid_at ASC, vendor_canonical ASC`,
+     WHERE TO_CHAR(COALESCE(paid_at, created_at::date), 'YYYY-MM') = $1
+     ORDER BY COALESCE(paid_at, created_at::date) ASC, vendor_canonical ASC`,
     [month]
   )
 
