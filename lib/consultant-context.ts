@@ -1,13 +1,13 @@
 /**
- * Consultant Context — gathers live ANC data and serializes it as a
- * compact markdown block we prepend to every message sent to the
- * AnythingLLM workspace. Without this the model only has the system
- * prompt and hallucinates generic "procurement consultant" answers
- * (Ahmad caught it asking "who am I" and getting a stranger's role).
+ * Consultant Context — gathers ANC's live operational state and serializes
+ * it as a markdown block we pin into the advisor's AnythingLLM workspace.
+ *
+ * Scope is ANC THE BUSINESS — their venue footprint, field staff, ticket
+ * volume, event schedule, design pipeline, client base. NOT the
+ * service-contract ledger (that's Ahmad's invoicing, a separate concern).
  */
 
 import { query } from '@/lib/db'
-import { getReceiptInsights } from '@/lib/receipt-insights'
 
 interface UserContext {
   fullName: string | null
@@ -15,127 +15,197 @@ interface UserContext {
   role: string | null
 }
 
-export async function buildConsultantContext(user: UserContext): Promise<string> {
-  const today = new Date()
-  const currentMonth = today.toISOString().slice(0, 7)
+function safeRows<T = Record<string, unknown>>(promise: Promise<{ rows: T[] }>): Promise<T[]> {
+  return promise.then((r) => r.rows).catch(() => [] as T[])
+}
 
-  // ── Retainer meter (current month) ───────────────────────────────
-  const meterRes = await query(
+export async function buildConsultantContext(_user: UserContext): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10)
+
+  // ── Venue footprint ─────────────────────────────────────────────
+  const venueScale = await safeRows<{ total: string; active: string; sports: string; ooh: string }>(query(
     `SELECT
-       COALESCE(SUM(actual_hours), 0)::float8 as hours_used,
-       COUNT(*) FILTER (WHERE retainer_covered AND status = 'shipped')::int as fix_count_shipped,
-       COUNT(*) FILTER (WHERE classification = 'NEW' AND status NOT IN ('shipped', 'cancelled', 'paid'))::int as open_change_orders
-     FROM service_requests
-     WHERE retainer_covered = true
-       AND status = 'shipped'
-       AND TO_CHAR(shipped_at, 'YYYY-MM') = $1`,
-    [currentMonth]
-  ).catch(() => ({ rows: [{ hours_used: 0, fix_count_shipped: 0, open_change_orders: 0 }] }))
+       COUNT(*)::text as total,
+       COUNT(*) FILTER (WHERE COALESCE(is_active, true))::text as active,
+       COUNT(*) FILTER (WHERE COALESCE(is_active, true) AND COALESCE(venue_type,'sports') = 'sports')::text as sports,
+       COUNT(*) FILTER (WHERE COALESCE(is_active, true) AND venue_type = 'ooh')::text as ooh
+     FROM venues`
+  ))
+  const v = venueScale[0] || { total: '0', active: '0', sports: '0', ooh: '0' }
 
-  const meter = meterRes.rows[0]
-  const capHours = 12
-  const hoursUsed = Number(meter.hours_used || 0)
-  const hoursRemaining = Math.max(0, capHours - hoursUsed)
-  const overage = Math.max(0, hoursUsed - capHours)
+  // Top 12 venues by upcoming-event load — these are the workhorse sites
+  const topVenues = await safeRows<{ name: string; venue_type: string; upcoming: number; assigned_count: number }>(query(
+    `SELECT v.name, COALESCE(v.venue_type,'sports') as venue_type,
+            COUNT(e.id)::int as upcoming,
+            COUNT(DISTINCT ea.staff_id)::int as assigned_count
+     FROM venues v
+     LEFT JOIN events e ON e.venue_id = v.id AND e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '30 days'
+     LEFT JOIN event_assignments ea ON ea.event_id = e.id
+     WHERE COALESCE(v.is_active, true)
+     GROUP BY v.id, v.name, v.venue_type
+     ORDER BY upcoming DESC NULLS LAST, v.name
+     LIMIT 12`
+  ))
 
-  // ── Recent shipped fixes (last 14 days) ──────────────────────────
-  const shippedRes = await query(
-    `SELECT summary, actual_hours, TO_CHAR(shipped_at, 'YYYY-MM-DD') as shipped_at, area
-     FROM service_requests
-     WHERE status = 'shipped' AND shipped_at >= NOW() - INTERVAL '14 days'
-     ORDER BY shipped_at DESC LIMIT 20`
-  ).catch(() => ({ rows: [] }))
+  // ── Field staff ────────────────────────────────────────────────
+  const staffRoles = await safeRows<{ role: string; count: number }>(query(
+    `SELECT role, COUNT(*)::int as count
+     FROM staff
+     WHERE COALESCE(is_active, true)
+     GROUP BY role ORDER BY count DESC`
+  ))
 
-  // ── Open service requests / change orders ────────────────────────
-  const openRes = await query(
-    `SELECT id, summary, classification, status, requester, estimated_hours, quote_amount, project,
-            TO_CHAR(received_at, 'YYYY-MM-DD') as received_at
-     FROM service_requests
-     WHERE status NOT IN ('shipped', 'cancelled', 'paid')
-     ORDER BY received_at DESC LIMIT 25`
-  ).catch(() => ({ rows: [] }))
+  // ── Ticket volume (rolling 30 days) ────────────────────────────
+  const ticketsByPriority = await safeRows<{ priority: string; status: string; count: number }>(query(
+    `SELECT COALESCE(priority,'unset') as priority, COALESCE(status,'open') as status, COUNT(*)::int as count
+     FROM tickets
+     WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+     GROUP BY priority, status
+     ORDER BY count DESC`
+  ))
+  const ticketHotspots = await safeRows<{ venue_name: string; cnt: number }>(query(
+    `SELECT COALESCE(v.name, '(no venue)') as venue_name, COUNT(*)::int as cnt
+     FROM tickets t
+     LEFT JOIN venues v ON v.id = t.venue_id
+     WHERE t.created_at >= CURRENT_DATE - INTERVAL '30 days'
+       AND t.status NOT IN ('closed', 'resolved')
+     GROUP BY v.name
+     ORDER BY cnt DESC
+     LIMIT 8`
+  ))
 
-  // ── Receipt insights (already memoized) ──────────────────────────
-  let insightsBlock = ''
-  try {
-    const insights = await getReceiptInsights({ force: false })
-    if (insights.receipt_count > 0) {
-      const recurring = insights.recurring_patterns.slice(0, 12)
-        .map((p) => `  - **${p.vendor}** (${p.cadence}): typically $${p.typical_amount_usd.toFixed(2)}, ${p.charge_count}× charged, $${p.total_paid_usd.toFixed(2)} total${p.next_expected ? `, next expected ~${p.next_expected}` : ''}`)
-        .join('\n')
-      const anomalies = insights.anomalies.slice(0, 5)
-        .map((a) => `  - **${a.vendor}**: ${a.description} (${a.severity})`)
-        .join('\n')
-      const missing = insights.missing_this_month
-        .map((m) => `  - **${m.vendor}** — last seen ${m.last_seen}${m.expected_around ? `, expected around ${m.expected_around}` : ''}`)
-        .join('\n')
-      insightsBlock = `
-## SaaS / Cloud Expenses
-- Total receipts logged: **${insights.receipt_count}** worth **$${insights.total_paid_usd.toFixed(2)}**
-- Trailing-90d run rate: **$${insights.projection.monthly_run_rate_usd.toFixed(2)}/mo** → projected **$${insights.projection.yearly_projection_usd.toFixed(0)}/yr**
+  // ── Event schedule (next 7 days) ───────────────────────────────
+  const upcomingEvents = await safeRows<{ event_date: string; venue_name: string; summary: string; assigned: number }>(query(
+    `SELECT TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
+            COALESCE(v.name,'(no venue)') as venue_name,
+            e.summary,
+            COUNT(ea.id)::int as assigned
+     FROM events e
+     LEFT JOIN venues v ON v.id = e.venue_id
+     LEFT JOIN event_assignments ea ON ea.event_id = e.id
+     WHERE e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '7 days'
+     GROUP BY e.id, v.name
+     ORDER BY e.event_date, e.start_time NULLS LAST
+     LIMIT 25`
+  ))
+  const eventCounts = await safeRows<{ horizon: string; cnt: number }>(query(
+    `SELECT
+       CASE
+         WHEN event_date = CURRENT_DATE THEN 'today'
+         WHEN event_date < CURRENT_DATE + INTERVAL '7 days' THEN 'next_7d'
+         WHEN event_date < CURRENT_DATE + INTERVAL '30 days' THEN 'next_30d'
+         ELSE 'beyond_30d'
+       END as horizon,
+       COUNT(*)::int as cnt
+     FROM events
+     WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + INTERVAL '90 days'
+     GROUP BY 1`
+  ))
 
-### Recurring vendors (by spend)
-${recurring || '  - (none yet)'}
+  // ── Design pipeline (the Alexis / Daniel surface) ─────────────
+  const designPipeline = await safeRows<{ status: string; cnt: number }>(query(
+    `SELECT COALESCE(status,'unset') as status, COUNT(*)::int as cnt
+     FROM design_requests
+     WHERE status NOT IN ('done', 'cancelled')
+     GROUP BY status
+     ORDER BY cnt DESC`
+  ))
 
-${anomalies ? `### Anomalies\n${anomalies}\n` : ''}${missing ? `### Recurring vendors NOT seen this month\n${missing}\n` : ''}`.trim()
-    }
-  } catch {
-    // insights failure is non-fatal
-  }
+  // ── Clients (teams / leagues we support) ──────────────────────
+  const clientBreakdown = await safeRows<{ client_kind: string; cnt: number }>(query(
+    `SELECT COALESCE(client_kind,'client') as client_kind, COUNT(*)::int as cnt
+     FROM clients
+     WHERE COALESCE(is_active, true)
+     GROUP BY client_kind
+     ORDER BY cnt DESC`
+  ))
 
-  // ── Compose the markdown ─────────────────────────────────────────
+  // ── Contracted services per venue ─────────────────────────────
+  const servicesEnabled = await safeRows<{ service_name: string; venue_count: number }>(query(
+    `SELECT st.name as service_name, COUNT(DISTINCT cv.venue_id)::int as venue_count
+     FROM service_types st
+     JOIN client_services cs ON cs.service_type_id = st.id AND cs.enabled
+     JOIN client_venues cv ON cv.client_id = cs.client_id
+     GROUP BY st.name
+     ORDER BY venue_count DESC`
+  ))
+
+  // ── Compose markdown ──────────────────────────────────────────
   const lines: string[] = []
-
-  lines.push('# LIVE ANC OPERATING CONTEXT')
-  lines.push('You are advising ANC Sports. The following data is pulled live from their dashboard right now. Use these specific numbers and names in your answer — do NOT speak in generic procurement terms.')
+  lines.push('# LIVE ANC OPERATIONAL CONTEXT')
+  lines.push(`Generated ${new Date().toISOString()} from the live ANC Sports operational dashboard. Use these specific numbers when discussing ANC — never speak in generic terms or use placeholder values.`)
   lines.push('')
 
-  if (user.fullName || user.email) {
-    lines.push('## Who is asking')
-    lines.push(`The signed-in user is **${user.fullName || user.email}**${user.role ? ` (role: ${user.role})` : ''}. They are an ANC Sports staff member with admin access to the service-contract dashboard at services.ancsports.net.`)
-    lines.push('')
-  }
-
-  lines.push('## Business in one paragraph')
-  lines.push('ANC Sports operates technology platforms (scoreboards, ribbon boards, fascia displays, LED video walls) at sports/entertainment venues nationwide — NBA arenas, MLB stadiums, college football, MiLB ballparks, etc. They sell installations and ongoing service contracts. This dashboard tracks one such service contract: a **$1,500/month retainer covering 12 hours of work per month**, overage billed at **$90/hr**, with a **30-day warranty** on shipped work. Change orders (new feature builds) are quoted separately. The work is a mix of fixes inside the service contract (retainer hours) and one-off paid projects (change orders).')
+  lines.push('## About ANC Sports — the business you advise')
+  lines.push('ANC Sports designs, installs, and supports LED video boards, ribbon boards, fascia displays, and scoreboards at sports venues (NBA arenas, MLB stadiums, college football, MiLB ballparks, soccer, and out-of-home / corporate sites) across the US. The company sells both one-time installations and ongoing service / event-support contracts. Field technicians visit venues, run game-night staffing, fix display issues, and produce custom graphic content. The advisor here is reading from ANCs internal operations system — the tool field teams, designers, and management use day-to-day.')
   lines.push('')
 
-  lines.push('## Current service contract status — ' + currentMonth)
-  lines.push(`- Retainer: **${hoursUsed.toFixed(1)} / ${capHours} hrs used** · ${hoursRemaining.toFixed(1)} hrs remaining${overage > 0 ? ` · **${overage.toFixed(1)} hrs overage** at $90/hr` : ''}`)
-  lines.push(`- Fixes shipped this month under the retainer: ${meter.fix_count_shipped}`)
-  lines.push(`- Open change orders / requests: ${meter.open_change_orders}`)
+  lines.push('## Footprint')
+  lines.push(`- **${v.active}** active venues across the network (${v.sports} sports, ${v.ooh} out-of-home, ${Number(v.total) - Number(v.active)} archived).`)
+  lines.push(`- **${staffRoles.reduce((s, r) => s + Number(r.count), 0)}** active staff: ` + staffRoles.map((r) => `${r.count} ${r.role}`).join(', ') + '.')
+  lines.push(`- **${clientBreakdown.reduce((s, c) => s + Number(c.cnt), 0)}** active clients (` + clientBreakdown.map((c) => `${c.cnt} ${c.client_kind}`).join(', ') + ').')
   lines.push('')
 
-  if (shippedRes.rows.length > 0) {
-    lines.push('## Last 14 days — shipped')
-    for (const row of shippedRes.rows) {
-      lines.push(`- ${row.shipped_at} · ${row.area || 'general'} · ${row.actual_hours ? row.actual_hours + 'h' : '—'} · ${row.summary?.slice(0, 140) || '(no summary)'}`)
+  if (topVenues.length > 0) {
+    lines.push('## Top venues by 30-day event load')
+    for (const row of topVenues) {
+      lines.push(`- **${row.name}** (${row.venue_type}) — ${row.upcoming} upcoming events, ${row.assigned_count} staff assigned`)
     }
     lines.push('')
   }
 
-  if (openRes.rows.length > 0) {
-    lines.push('## Open requests / change orders')
-    for (const row of openRes.rows) {
-      const meta = [
-        row.classification,
-        row.status,
-        row.project,
-        row.quote_amount ? `$${Number(row.quote_amount).toFixed(0)}` : (row.estimated_hours ? `~${row.estimated_hours}h` : null),
-        row.requester || null,
-      ].filter(Boolean).join(' · ')
-      lines.push(`- [${meta}] ${row.summary?.slice(0, 160) || '(no summary)'}`)
+  if (servicesEnabled.length > 0) {
+    lines.push('## Contracted-service coverage (how many venues enable each)')
+    for (const row of servicesEnabled) {
+      lines.push(`- ${row.service_name}: **${row.venue_count}** venue${row.venue_count === 1 ? '' : 's'}`)
     }
     lines.push('')
   }
 
-  if (insightsBlock) {
-    lines.push(insightsBlock)
+  if (eventCounts.length > 0) {
+    lines.push('## Event schedule horizon')
+    const horizonOrder: Record<string, number> = { today: 0, next_7d: 1, next_30d: 2, beyond_30d: 3 }
+    eventCounts.sort((a, b) => (horizonOrder[a.horizon] ?? 9) - (horizonOrder[b.horizon] ?? 9))
+    for (const row of eventCounts) {
+      const label = row.horizon === 'today' ? 'Today' : row.horizon === 'next_7d' ? 'Next 7 days' : row.horizon === 'next_30d' ? 'Next 30 days' : 'Days 30-90'
+      lines.push(`- ${label}: **${row.cnt}** events`)
+    }
+    lines.push('')
+  }
+
+  if (upcomingEvents.length > 0) {
+    lines.push('## Next 7 days — game / event detail')
+    for (const row of upcomingEvents) {
+      lines.push(`- ${row.event_date} · ${row.venue_name} · ${row.summary?.slice(0, 100) || '(no summary)'} · ${row.assigned} staff assigned`)
+    }
+    lines.push('')
+  }
+
+  if (ticketsByPriority.length > 0) {
+    lines.push('## Support tickets — last 30 days')
+    for (const row of ticketsByPriority) {
+      lines.push(`- ${row.priority} · ${row.status}: **${row.count}**`)
+    }
+    if (ticketHotspots.length > 0) {
+      lines.push('')
+      lines.push('### Open-ticket hotspots (venues with the most still-open tickets)')
+      for (const row of ticketHotspots) {
+        lines.push(`- ${row.venue_name}: ${row.cnt} open`)
+      }
+    }
+    lines.push('')
+  }
+
+  if (designPipeline.length > 0) {
+    lines.push('## Design-request pipeline (graphic content, internal + sales-support)')
+    for (const row of designPipeline) {
+      lines.push(`- ${row.status}: **${row.cnt}**`)
+    }
     lines.push('')
   }
 
   lines.push('---')
-  lines.push('Use the data above when the user asks anything about THEIR business. For benchmark questions ("typical SaaS pricing", "industry norms"), still use web search and cite sources.')
+  lines.push('When advising, talk about ANC — their venues, staff, ticket volume, event load, design pipeline. Use the specific names + counts above. For benchmark questions ("typical staffing ratios for venue ops", "industry rates for LED service contracts", "market rates for graphic designers"), use @agent web search and cite the sources. Never refer to ANC as "you" — the user is an ANC staff member asking about their company.')
 
   return lines.join('\n')
 }
