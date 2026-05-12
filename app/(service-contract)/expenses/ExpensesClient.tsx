@@ -63,6 +63,14 @@ interface ProgressEntry {
 type Tab = 'dashboard' | 'files' | 'vendors'
 type SortKey = 'date' | 'vendor' | 'amount' | 'category'
 type SortDir = 'asc' | 'desc'
+type DateRange = 'all' | 'this_month' | 'last_30' | 'last_90' | 'custom' | 'month_picker'
+
+const PROCESSING_STAGES = [
+  { label: 'Reading the PDF', sub: 'Mistral OCR is extracting text and tables', duration: 1500 },
+  { label: 'Finding vendor & amount', sub: 'Pattern-matching the structured fields', duration: 1200 },
+  { label: 'Categorizing & recurring check', sub: 'GLM-5.1 is reasoning over your history', duration: 1500 },
+  { label: 'Saving to vault', sub: 'Storing the file and writing the row', duration: 900 },
+]
 
 const CATEGORY_LABEL: Record<string, string> = {
   ai: 'AI', cloud: 'Cloud', domain: 'Domain', dev_tool: 'Dev tools',
@@ -117,14 +125,19 @@ export default function ExpensesClient() {
   const [categoryFilter, setCategoryFilter] = useState<Set<Category>>(new Set())
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [dateRange, setDateRange] = useState<DateRange>('month_picker')
+  const [customFrom, setCustomFrom] = useState<string>('')
+  const [customTo, setCustomTo] = useState<string>('')
+  const [processing, setProcessing] = useState<null | { batchSize: number; stageIndex: number; doneCount: number; failedCount: number }>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragCounter = useRef(0)
 
-  const loadSummary = useCallback(async (m: string) => {
+  const loadSummary = useCallback(async (opts: { month?: string; all?: boolean }) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/receipts?month=${m}`, { cache: 'no-store' })
+      const url = opts.all ? `/api/receipts` : `/api/receipts?month=${opts.month}`
+      const res = await fetch(url, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setSummary(data)
@@ -135,7 +148,19 @@ export default function ExpensesClient() {
     }
   }, [])
 
-  useEffect(() => { loadSummary(month) }, [month, loadSummary])
+  // Decide whether the API call is scoped to a month or pulls everything.
+  // Anything other than month_picker / this_month needs the full set so we
+  // can filter client-side.
+  const reload = useCallback(() => {
+    if (dateRange === 'month_picker' || dateRange === 'this_month') {
+      const m = dateRange === 'this_month' ? new Date().toISOString().slice(0, 7) : month
+      loadSummary({ month: m })
+    } else {
+      loadSummary({ all: true })
+    }
+  }, [dateRange, month, loadSummary])
+
+  useEffect(() => { reload() }, [reload])
 
   const handleFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
@@ -147,6 +172,18 @@ export default function ExpensesClient() {
     }))
     setProgress((prev) => [...queued, ...prev])
 
+    // Open the processing modal and animate through the stages while the
+    // POST is in flight. Stages advance on a timer; the last stage stays
+    // visible until the actual upload resolves.
+    setProcessing({ batchSize: files.length, stageIndex: 0, doneCount: 0, failedCount: 0 })
+    const stageTimers: Array<ReturnType<typeof setTimeout>> = []
+    for (let i = 1; i < PROCESSING_STAGES.length; i++) {
+      const at = PROCESSING_STAGES.slice(0, i).reduce((sum, s) => sum + s.duration, 0)
+      stageTimers.push(setTimeout(() => {
+        setProcessing((cur) => cur ? { ...cur, stageIndex: i } : cur)
+      }, at))
+    }
+
     const formData = new FormData()
     for (const f of files) formData.append('files', f)
 
@@ -157,6 +194,8 @@ export default function ExpensesClient() {
         throw new Error(errBody.error || `HTTP ${res.status}`)
       }
       const data = await res.json() as { results: Array<{ filename: string; status: 'ok' | 'duplicate' | 'failed'; vendor?: string; amount_cents?: number | null; error?: string }> }
+      const doneCount = data.results.filter((r) => r.status === 'ok' || r.status === 'duplicate').length
+      const failedCount = data.results.filter((r) => r.status === 'failed').length
       setProgress((prev) => {
         const next = [...prev]
         for (const result of data.results) {
@@ -172,15 +211,24 @@ export default function ExpensesClient() {
         }
         return next
       })
-      await loadSummary(month)
+      setProcessing({ batchSize: files.length, stageIndex: PROCESSING_STAGES.length, doneCount, failedCount })
+      // Auto-close the modal 1.2s after completion so the user sees the
+      // final state, then refresh the table.
+      setTimeout(() => setProcessing(null), 1200)
+      await reload()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed'
       setProgress((prev) => prev.map((p) => queued.find((q) => q.id === p.id) ? { ...p, status: 'failed' as FileStatus, error: message } : p))
+      setProcessing({ batchSize: files.length, stageIndex: PROCESSING_STAGES.length, doneCount: 0, failedCount: files.length })
+      setTimeout(() => setProcessing(null), 2000)
+    } finally {
+      for (const t of stageTimers) clearTimeout(t)
     }
-  }, [month, loadSummary])
+  }, [reload])
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragging(false)
     dragCounter.current = 0
     const files = Array.from(e.dataTransfer.files).filter((f) => f.size > 0)
@@ -198,9 +246,49 @@ export default function ExpensesClient() {
   }, [])
 
   // Filter + sort applied to all receipts in this month
+  // Compute the date window for the active range. Returns null on "all".
+  const dateWindow = useMemo<{ from: string | null; to: string | null }>(() => {
+    if (dateRange === 'all') return { from: null, to: null }
+    const today = new Date()
+    const todayIso = today.toISOString().slice(0, 10)
+    if (dateRange === 'this_month') {
+      const m = todayIso.slice(0, 7)
+      return { from: `${m}-01`, to: todayIso }
+    }
+    if (dateRange === 'month_picker') {
+      const m = month
+      const yr = Number(m.slice(0, 4))
+      const mo = Number(m.slice(5, 7))
+      const last = new Date(Date.UTC(yr, mo, 0)).toISOString().slice(0, 10)
+      return { from: `${m}-01`, to: last }
+    }
+    if (dateRange === 'last_30') {
+      const d = new Date(today); d.setDate(d.getDate() - 30)
+      return { from: d.toISOString().slice(0, 10), to: todayIso }
+    }
+    if (dateRange === 'last_90') {
+      const d = new Date(today); d.setDate(d.getDate() - 90)
+      return { from: d.toISOString().slice(0, 10), to: todayIso }
+    }
+    if (dateRange === 'custom') {
+      return { from: customFrom || null, to: customTo || null }
+    }
+    return { from: null, to: null }
+  }, [dateRange, month, customFrom, customTo])
+
   const filteredReceipts = useMemo(() => {
     if (!summary) return []
     let list = summary.receipts
+    // Date-range filter applies when the API returned the full set
+    if (dateRange !== 'month_picker' && dateRange !== 'this_month') {
+      list = list.filter((r) => {
+        const d = r.effective_date || r.paid_at
+        if (!d) return false
+        if (dateWindow.from && d < dateWindow.from) return false
+        if (dateWindow.to && d > dateWindow.to) return false
+        return true
+      })
+    }
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter((r) =>
@@ -224,7 +312,7 @@ export default function ExpensesClient() {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return sorted
-  }, [summary, search, categoryFilter, sortKey, sortDir])
+  }, [summary, search, categoryFilter, sortKey, sortDir, dateRange, dateWindow])
 
   const filteredTotal = useMemo(() => filteredReceipts.reduce((s, r) => s + (r.amount_cents || 0), 0), [filteredReceipts])
 
@@ -236,7 +324,7 @@ export default function ExpensesClient() {
   async function deleteReceipt(id: string) {
     if (!confirm('Delete this receipt? The PDF will be removed too.')) return
     const res = await fetch(`/api/receipts/${id}`, { method: 'DELETE' })
-    if (res.ok) loadSummary(month)
+    if (res.ok) reload()
     else alert('Delete failed')
   }
 
@@ -267,7 +355,7 @@ export default function ExpensesClient() {
     if (res.ok) {
       setEditingId(null)
       setEditDraft({})
-      loadSummary(month)
+      reload()
     } else {
       alert('Save failed')
     }
@@ -288,7 +376,7 @@ export default function ExpensesClient() {
     })
     if (res.ok) {
       setManualOpen(false)
-      loadSummary(month)
+      reload()
     } else {
       const e = await res.json().catch(() => ({}))
       alert(e.error || 'Could not add receipt')
@@ -324,13 +412,6 @@ export default function ExpensesClient() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <select
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="text-sm border border-gray-200 dark:border-gray-800 rounded-md px-2 py-1.5 bg-white dark:bg-gray-900"
-            >
-              {monthsAvailable.map((m) => <option key={m} value={m}>{fmtMonth(m)}</option>)}
-            </select>
             <button
               onClick={() => setManualOpen(true)}
               className="text-sm px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium"
@@ -346,13 +427,26 @@ export default function ExpensesClient() {
           </div>
         </div>
 
+        {/* Date range strip */}
+        <DateRangeStrip
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          month={month}
+          setMonth={setMonth}
+          monthsAvailable={monthsAvailable}
+          customFrom={customFrom}
+          customTo={customTo}
+          setCustomFrom={setCustomFrom}
+          setCustomTo={setCustomTo}
+        />
+
         {/* Drop zone */}
         <div
-          onDragEnter={(e) => { e.preventDefault(); dragCounter.current += 1; setDragging(true) }}
-          onDragLeave={(e) => { e.preventDefault(); dragCounter.current -= 1; if (dragCounter.current <= 0) { setDragging(false); dragCounter.current = 0 } }}
-          onDragOver={(e) => e.preventDefault()}
+          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); dragCounter.current += 1; setDragging(true) }}
+          onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); dragCounter.current -= 1; if (dragCounter.current <= 0) { setDragging(false); dragCounter.current = 0 } }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
           onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); fileInputRef.current?.click() }}
           className={`cursor-pointer border-2 border-dashed rounded-xl px-6 py-5 text-center transition-colors mb-4 ${dragging ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 bg-white dark:bg-gray-900'}`}
         >
           <input
@@ -462,6 +556,132 @@ export default function ExpensesClient() {
           onSubmit={submitManual}
           defaultMonth={month}
         />
+      )}
+
+      {processing && <ProcessingOverlay state={processing} />}
+    </div>
+  )
+}
+
+function ProcessingOverlay({ state }: { state: { batchSize: number; stageIndex: number; doneCount: number; failedCount: number } }) {
+  const isDone = state.stageIndex >= PROCESSING_STAGES.length
+  const currentStage = PROCESSING_STAGES[Math.min(state.stageIndex, PROCESSING_STAGES.length - 1)]
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-800">
+        <div className="flex items-center gap-3 mb-4">
+          {isDone ? (
+            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xl">✓</div>
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center">
+              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          <div>
+            <div className="text-base font-bold tracking-tight">
+              {isDone
+                ? state.failedCount > 0
+                  ? `Done with ${state.failedCount} error${state.failedCount === 1 ? '' : 's'}`
+                  : `Logged ${state.doneCount}${state.batchSize > 1 ? ` of ${state.batchSize}` : ''} receipt${state.doneCount === 1 ? '' : 's'}`
+                : currentStage.label}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {isDone ? 'Refreshing the table…' : currentStage.sub}
+            </div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {PROCESSING_STAGES.map((stage, i) => {
+            const done = i < state.stageIndex || isDone
+            const active = i === state.stageIndex && !isDone
+            return (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                  done ? 'bg-emerald-500 text-white'
+                  : active ? 'bg-blue-500 text-white animate-pulse'
+                  : 'bg-gray-200 dark:bg-gray-800 text-gray-400'
+                }`}>
+                  {done ? '✓' : active ? '·' : i + 1}
+                </div>
+                <span className={done || active ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-400 dark:text-gray-500'}>
+                  {stage.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {state.batchSize > 1 && (
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400 text-center">
+            Processing {state.batchSize} receipts in this batch
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DateRangeStrip({
+  dateRange, setDateRange, month, setMonth, monthsAvailable, customFrom, customTo, setCustomFrom, setCustomTo,
+}: {
+  dateRange: DateRange
+  setDateRange: (r: DateRange) => void
+  month: string
+  setMonth: (m: string) => void
+  monthsAvailable: string[]
+  customFrom: string
+  customTo: string
+  setCustomFrom: (s: string) => void
+  setCustomTo: (s: string) => void
+}) {
+  const pills: Array<{ key: DateRange; label: string }> = [
+    { key: 'all', label: 'All time' },
+    { key: 'this_month', label: 'This month' },
+    { key: 'last_30', label: 'Last 30d' },
+    { key: 'last_90', label: 'Last 90d' },
+    { key: 'month_picker', label: 'Pick month' },
+    { key: 'custom', label: 'Custom' },
+  ]
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 flex items-center gap-2 flex-wrap mb-4">
+      <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Range</span>
+      {pills.map((p) => (
+        <button
+          key={p.key}
+          onClick={() => setDateRange(p.key)}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            dateRange === p.key
+              ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
+        >
+          {p.label}
+        </button>
+      ))}
+      {dateRange === 'month_picker' && (
+        <select
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="text-xs border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 bg-white dark:bg-gray-900"
+        >
+          {monthsAvailable.map((m) => <option key={m} value={m}>{fmtMonth(m)}</option>)}
+        </select>
+      )}
+      {dateRange === 'custom' && (
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="text-xs border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 bg-white dark:bg-gray-900"
+          />
+          <span className="text-xs text-gray-400">→</span>
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="text-xs border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 bg-white dark:bg-gray-900"
+          />
+        </div>
       )}
     </div>
   )
