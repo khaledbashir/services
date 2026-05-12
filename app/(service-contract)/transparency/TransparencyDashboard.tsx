@@ -14,6 +14,7 @@ import PaymentCTAs from './PaymentCTAs'
 import PrintButton from './PrintButton'
 import CoverageModel from './CoverageModel'
 import WarrantyTimers from './WarrantyTimers'
+import Receipts from './Receipts'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -304,6 +305,9 @@ export default async function TransparencyDashboard() {
         <div id="queue" className="scroll-mt-32">
           <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
         </div>
+
+        {/* Operational expenses — drop receipts, get a monthly audit pack */}
+        <Receipts />
 
         {/* What's covered each month — collapsed by default to save vertical space */}
         <section id="coverage" className="scroll-mt-32 mt-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">

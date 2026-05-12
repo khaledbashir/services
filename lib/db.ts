@@ -245,6 +245,41 @@ async function runMigrations() {
       processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
 
+    // Slack-native service desk configuration. This is the Ravenna-style
+    // channel binding layer for ANC: a Slack channel can be connected to a
+    // venue, set to manual ticket capture, or set to auto-create tickets.
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_request_channels (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      channel_id TEXT NOT NULL UNIQUE,
+      channel_name TEXT,
+      venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      auto_create_tickets BOOLEAN NOT NULL DEFAULT false,
+      silent_mode BOOLEAN NOT NULL DEFAULT false,
+      triage_channel_id TEXT,
+      default_priority TEXT NOT NULL DEFAULT 'medium',
+      default_category TEXT NOT NULL DEFAULT 'slack',
+      request_type TEXT NOT NULL DEFAULT 'Support',
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_request_channels_venue ON slack_request_channels(venue_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_request_channels_enabled ON slack_request_channels(enabled) WHERE enabled = true`)
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_ticket_threads (
+      channel_id TEXT NOT NULL,
+      thread_ts TEXT NOT NULL,
+      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      created_by_slack_user_id TEXT,
+      created_from TEXT NOT NULL DEFAULT 'manual',
+      source_message_ts TEXT,
+      source_permalink TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_synced_at TIMESTAMPTZ,
+      PRIMARY KEY (channel_id, thread_ts)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_ticket_threads_ticket ON slack_ticket_threads(ticket_id)`)
+
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_venue_id UUID`)
@@ -638,6 +673,40 @@ async function runMigrations() {
       UNIQUE (month, threshold)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_retainer_alerts_month ON retainer_alerts(month)`)
+
+    // Infra / SaaS receipt vault — Ahmad drops receipts at /transparency, the
+    // dropzone extracts via Mistral OCR + reasons over the OCR'd text with
+    // Ollama Cloud, persists structured rows here. Charlie pulls a monthly
+    // audit pack (ZIP of every PDF + CSV summary) for accounting.
+    await client.query(`CREATE TABLE IF NOT EXISTS infra_receipts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vendor_raw TEXT,
+      vendor_canonical TEXT,
+      category TEXT,
+      amount_cents BIGINT,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      period_start DATE,
+      period_end DATE,
+      invoice_number TEXT,
+      paid_at DATE,
+      file_key TEXT NOT NULL,
+      original_filename TEXT,
+      file_mime TEXT,
+      file_size BIGINT,
+      extracted_fields JSONB NOT NULL DEFAULT '{}'::jsonb,
+      raw_ocr_text TEXT,
+      extractor_provider TEXT,
+      extractor_confidence NUMERIC(4,3),
+      reasoner_model TEXT,
+      notes TEXT,
+      uploaded_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_paid_month ON infra_receipts(date_trunc('month', paid_at))`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_vendor ON infra_receipts(vendor_canonical)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_category ON infra_receipts(category)`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_infra_receipts_invoice ON infra_receipts(vendor_canonical, invoice_number) WHERE invoice_number IS NOT NULL AND vendor_canonical IS NOT NULL`)
 
     migrationRan = true
   } catch (err) {
