@@ -8,6 +8,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { buildReceiptKey, uploadReceipt } from '@/lib/receipt-storage'
 import { getReceiptExtractor } from '@/lib/receipt-extractor'
 import { reasonAboutReceipt } from '@/lib/receipt-reasoner'
+import { invalidateInsights } from '@/lib/receipt-insights'
 
 interface HistoryRow {
   vendor_canonical: string | null
@@ -158,5 +159,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  invalidateInsights()
   return NextResponse.json({ results })
 }

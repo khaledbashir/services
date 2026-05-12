@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { deleteReceipt } from '@/lib/receipt-storage'
+import { invalidateInsights } from '@/lib/receipt-insights'
 
 export async function DELETE(
   request: NextRequest,
@@ -24,6 +25,7 @@ export async function DELETE(
   } catch {
     // MinIO object missing is fine — row is already deleted.
   }
+  invalidateInsights()
   return NextResponse.json({ deleted: true })
 }
 
@@ -63,5 +65,6 @@ export async function PATCH(
     `UPDATE infra_receipts SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${args.length}`,
     args
   )
+  invalidateInsights()
   return NextResponse.json({ updated: true })
 }

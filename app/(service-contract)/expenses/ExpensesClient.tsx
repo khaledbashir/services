@@ -23,6 +23,36 @@ interface Receipt {
   extracted_fields: { recurring_basis?: string | null; is_recurring_signal?: boolean; manual_entry?: boolean } | null
   is_recurring: boolean
   created_at: string
+  comment_count?: number
+}
+
+interface ReceiptComment {
+  id: string
+  body: string
+  author_name: string
+  created_at: string
+}
+
+interface InsightsResponse {
+  generated_at: string
+  summary: string
+  receipt_count: number
+  total_paid_usd: number
+  recurring_patterns: Array<{
+    vendor: string
+    cadence: string
+    typical_amount_usd: number
+    last_seen: string
+    next_expected: string | null
+    total_paid_usd: number
+    charge_count: number
+  }>
+  anomalies: Array<{ vendor: string; description: string; severity: 'high' | 'medium' | 'low' }>
+  missing_this_month: Array<{ vendor: string; expected_around: string | null; last_seen: string }>
+  overlapping_services: Array<{ description: string; vendors: string[] }>
+  projection: { monthly_run_rate_usd: number; yearly_projection_usd: number; note: string }
+  cost_saving_ideas: string[]
+  reasoner_model: string
 }
 
 interface VendorRollup {
@@ -60,7 +90,7 @@ interface ProgressEntry {
   amount_cents?: number | null
 }
 
-type Tab = 'dashboard' | 'files' | 'vendors'
+type Tab = 'dashboard' | 'files' | 'library' | 'vendors' | 'insights'
 type SortKey = 'date' | 'vendor' | 'amount' | 'category'
 type SortDir = 'asc' | 'desc'
 type DateRange = 'all' | 'this_month' | 'last_30' | 'last_90' | 'custom' | 'month_picker'
@@ -129,6 +159,14 @@ export default function ExpensesClient() {
   const [customFrom, setCustomFrom] = useState<string>('')
   const [customTo, setCustomTo] = useState<string>('')
   const [processing, setProcessing] = useState<null | { batchSize: number; stageIndex: number; doneCount: number; failedCount: number }>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [library, setLibrary] = useState<Receipt[] | null>(null)
+  const [librarySearch, setLibrarySearch] = useState('')
+  const [insights, setInsights] = useState<InsightsResponse | null>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsError, setInsightsError] = useState<string | null>(null)
+  const [drawerId, setDrawerId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragCounter = useRef(0)
 
@@ -148,6 +186,32 @@ export default function ExpensesClient() {
     }
   }, [])
 
+  const loadLibrary = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/receipts`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setLibrary(data.receipts || [])
+    } catch (err) {
+      setLibrary([])
+    }
+  }, [])
+
+  const loadInsights = useCallback(async (force = false) => {
+    setInsightsLoading(true)
+    setInsightsError(null)
+    try {
+      const res = await fetch(`/api/receipts/insights${force ? '?force=1' : ''}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setInsights(data)
+    } catch (err) {
+      setInsightsError(err instanceof Error ? err.message : 'Insights unavailable')
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
+
   // Decide whether the API call is scoped to a month or pulls everything.
   // Anything other than month_picker / this_month needs the full set so we
   // can filter client-side.
@@ -158,7 +222,11 @@ export default function ExpensesClient() {
     } else {
       loadSummary({ all: true })
     }
-  }, [dateRange, month, loadSummary])
+    // Library + insights are global views — refresh in the background so
+    // every tab stays in sync after a drop / edit / delete.
+    loadLibrary()
+    loadInsights(true)
+  }, [dateRange, month, loadSummary, loadLibrary, loadInsights])
 
   useEffect(() => { reload() }, [reload])
 
@@ -326,6 +394,33 @@ export default function ExpensesClient() {
     const res = await fetch(`/api/receipts/${id}`, { method: 'DELETE' })
     if (res.ok) reload()
     else alert('Delete failed')
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} receipt${selectedIds.size === 1 ? '' : 's'} and their files? This can't be undone.`)) return
+    setBulkDeleting(true)
+    try {
+      const ids = Array.from(selectedIds)
+      await Promise.all(ids.map((id) => fetch(`/api/receipts/${id}`, { method: 'DELETE' })))
+      setSelectedIds(new Set())
+      await reload()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function selectAllVisible(receipts: Receipt[]) {
+    const ids = new Set(receipts.map((r) => r.id))
+    setSelectedIds(ids)
   }
 
   function startEdit(r: Receipt) {
@@ -521,13 +616,19 @@ export default function ExpensesClient() {
         )}
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-800 mb-4 flex gap-1">
+        <div className="border-b border-gray-200 dark:border-gray-800 mb-4 flex gap-1 overflow-x-auto">
           <TabButton active={tab === 'dashboard'} onClick={() => setTab('dashboard')}>Dashboard</TabButton>
           <TabButton active={tab === 'files'} onClick={() => setTab('files')}>
             Files <span className="ml-1 text-[10px] text-gray-500">{summary?.receipts.length ?? 0}</span>
           </TabButton>
+          <TabButton active={tab === 'library'} onClick={() => setTab('library')}>
+            Library <span className="ml-1 text-[10px] text-gray-500">{library?.length ?? 0}</span>
+          </TabButton>
           <TabButton active={tab === 'vendors'} onClick={() => setTab('vendors')}>
             Vendors <span className="ml-1 text-[10px] text-gray-500">{summary?.vendor_rollup.length ?? 0}</span>
+          </TabButton>
+          <TabButton active={tab === 'insights'} onClick={() => setTab('insights')}>
+            AI Insights {insights ? <span className="ml-1 text-[10px] text-gray-500">·</span> : null}
           </TabButton>
         </div>
 
@@ -557,11 +658,37 @@ export default function ExpensesClient() {
             saveEdit={saveEdit}
             cancelEdit={() => { setEditingId(null); setEditDraft({}) }}
             deleteReceipt={deleteReceipt}
+            selectedIds={selectedIds}
+            toggleSelected={toggleSelected}
+            selectAllVisible={() => selectAllVisible(filteredReceipts)}
+            clearSelection={() => setSelectedIds(new Set())}
+            deleteSelected={deleteSelected}
+            bulkDeleting={bulkDeleting}
+            openDrawer={(id) => setDrawerId(id)}
+          />
+        )}
+
+        {tab === 'library' && (
+          <LibraryTab
+            receipts={library || []}
+            search={librarySearch}
+            setSearch={setLibrarySearch}
+            openDrawer={(id) => setDrawerId(id)}
+            deleteReceipt={deleteReceipt}
           />
         )}
 
         {summary && tab === 'vendors' && (
           <VendorsTab summary={summary} setSearch={setSearch} setTab={setTab} />
+        )}
+
+        {tab === 'insights' && (
+          <InsightsTab
+            insights={insights}
+            loading={insightsLoading}
+            error={insightsError}
+            onRefresh={() => loadInsights(true)}
+          />
         )}
 
         {loading && !summary && <div className="mt-4 text-sm text-gray-500">Loading…</div>}
@@ -575,6 +702,14 @@ export default function ExpensesClient() {
       )}
 
       {processing && <ProcessingOverlay state={processing} />}
+
+      {drawerId && (
+        <ReceiptDrawer
+          receiptId={drawerId}
+          onClose={() => setDrawerId(null)}
+          onChanged={reload}
+        />
+      )}
     </div>
   )
 }
@@ -811,6 +946,8 @@ function FilesTab({
   search, setSearch, categoryFilter, toggleCategory, clearFilters,
   sortKey, sortDir, toggleSort, sortIndicator,
   editingId, editDraft, setEditDraft, startEdit, saveEdit, cancelEdit, deleteReceipt,
+  selectedIds, toggleSelected, selectAllVisible, clearSelection, deleteSelected, bulkDeleting,
+  openDrawer,
 }: {
   receipts: Receipt[]
   filteredTotal: number
@@ -831,7 +968,15 @@ function FilesTab({
   saveEdit: () => Promise<void>
   cancelEdit: () => void
   deleteReceipt: (id: string) => Promise<void>
+  selectedIds: Set<string>
+  toggleSelected: (id: string) => void
+  selectAllVisible: () => void
+  clearSelection: () => void
+  deleteSelected: () => Promise<void>
+  bulkDeleting: boolean
+  openDrawer: (id: string) => void
 }) {
+  const allVisibleSelected = receipts.length > 0 && receipts.every((r) => selectedIds.has(r.id))
   const hasFilter = search || categoryFilter.size > 0
   return (
     <div className="space-y-3">
@@ -876,6 +1021,23 @@ function FilesTab({
         </div>
       )}
 
+      {/* Bulk-action bar */}
+      {selectedIds.size > 0 && (
+        <div className="rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 px-3 py-2 flex items-center justify-between text-sm">
+          <span><span className="font-semibold tabular-nums">{selectedIds.size}</span> selected</span>
+          <div className="flex items-center gap-2">
+            <button onClick={clearSelection} className="text-xs px-2 py-1 rounded hover:bg-white/10 dark:hover:bg-black/10">Clear</button>
+            <button
+              onClick={deleteSelected}
+              disabled={bulkDeleting}
+              className="text-xs px-3 py-1 rounded bg-rose-500 text-white font-semibold hover:bg-rose-600 disabled:opacity-50"
+            >
+              {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
         {receipts.length === 0 ? (
@@ -886,6 +1048,15 @@ function FilesTab({
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">
               <tr>
+                <th className="text-left px-3 py-2 w-[36px]">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={() => allVisibleSelected ? clearSelection() : selectAllVisible()}
+                    className="rounded"
+                    aria-label="Select all visible"
+                  />
+                </th>
                 <th className="text-left px-3 py-2 cursor-pointer" onClick={() => toggleSort('date')}>
                   <div className="flex items-center gap-1">Paid {sortIndicator('date')}</div>
                 </th>
@@ -899,14 +1070,22 @@ function FilesTab({
                 <th className="text-right px-3 py-2 cursor-pointer" onClick={() => toggleSort('amount')}>
                   <div className="flex items-center justify-end gap-1">Amount {sortIndicator('amount')}</div>
                 </th>
-                <th className="text-right px-3 py-2 w-[140px]">Actions</th>
+                <th className="text-right px-3 py-2 w-[160px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {receipts.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-900/30">
+                <tr key={r.id} className={`hover:bg-gray-50/60 dark:hover:bg-gray-900/30 ${selectedIds.has(r.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}>
                   {editingId === r.id ? (
                     <>
+                      <td className="px-3 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelected(r.id)}
+                          className="rounded"
+                        />
+                      </td>
                       <td className="px-3 py-1.5">
                         <input
                           type="date"
@@ -958,6 +1137,14 @@ function FilesTab({
                     </>
                   ) : (
                     <>
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelected(r.id)}
+                          className="rounded"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">
                         {r.effective_date || '—'}
                         {!r.paid_at && <span className="ml-1 text-[9px] text-amber-600 dark:text-amber-400" title="Paid date wasn't on the receipt — using upload date">est</span>}
@@ -981,7 +1168,10 @@ function FilesTab({
                         {fmtUsd(r.amount_cents)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2 text-xs">
+                        <div className="flex justify-end gap-2 text-xs items-center">
+                          <button onClick={() => openDrawer(r.id)} className="text-blue-600 dark:text-blue-400 hover:underline" title="Open details + comments">
+                            💬 {r.comment_count || 0}
+                          </button>
                           {!r.extracted_fields?.manual_entry && r.original_filename && (
                             <a href={`/api/receipts/${r.id}/file`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">PDF</a>
                           )}
@@ -996,7 +1186,7 @@ function FilesTab({
             </tbody>
             <tfoot className="bg-gray-50 dark:bg-gray-900/50 text-xs font-semibold">
               <tr>
-                <td colSpan={4} className="px-3 py-2 text-right text-gray-500">
+                <td colSpan={5} className="px-3 py-2 text-right text-gray-500">
                   {hasFilter ? 'Filtered subtotal' : 'Total'}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtUsd(filteredTotal)}</td>
@@ -1144,6 +1334,371 @@ function ManualEntryModal({ onClose, onSubmit, defaultMonth }: {
             className="px-3 py-1.5 rounded-md text-sm bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-semibold disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Add'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LibraryTab({ receipts, search, setSearch, openDrawer, deleteReceipt }: {
+  receipts: Receipt[]
+  search: string
+  setSearch: (s: string) => void
+  openDrawer: (id: string) => void
+  deleteReceipt: (id: string) => Promise<void>
+}) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return receipts
+    return receipts.filter((r) =>
+      (r.vendor_canonical || '').toLowerCase().includes(q) ||
+      (r.vendor_raw || '').toLowerCase().includes(q) ||
+      (r.invoice_number || '').toLowerCase().includes(q) ||
+      (r.original_filename || '').toLowerCase().includes(q)
+    )
+  }, [receipts, search])
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[240px]">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search every file you've uploaded…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">⌕</span>
+        </div>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {filtered.length} of {receipts.length} files across all time
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-16 text-center text-sm text-gray-500 italic">
+          {receipts.length === 0 ? 'No files uploaded yet. Drop one above to get started.' : 'No files match the search.'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {filtered.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+            >
+              <button
+                onClick={() => openDrawer(r.id)}
+                className="w-full aspect-[3/4] bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center text-4xl"
+                title="Open details"
+              >
+                {r.extracted_fields?.manual_entry ? '✏️' : (/\.(png|jpe?g|webp|gif)$/i.test(r.original_filename || '') ? '🖼️' : '📄')}
+              </button>
+              <div className="p-3">
+                <div className="font-semibold text-sm truncate" title={r.vendor_canonical || ''}>{r.vendor_canonical || r.vendor_raw || 'Unknown'}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center justify-between">
+                  <span>{r.effective_date || '—'}</span>
+                  <span className={`px-1.5 py-0.5 rounded ${CATEGORY_COLOR[r.category || 'other']}`}>
+                    {CATEGORY_LABEL[r.category || 'other']}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="text-lg font-bold tabular-nums">{fmtUsd(r.amount_cents)}</div>
+                  <div className="flex items-center gap-2 text-[10px]">
+                    {!r.extracted_fields?.manual_entry && r.original_filename && (
+                      <a href={`/api/receipts/${r.id}/file`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">PDF</a>
+                    )}
+                    <button onClick={() => openDrawer(r.id)} className="text-gray-500 dark:text-gray-400 hover:underline">💬 {r.comment_count || 0}</button>
+                    <button onClick={() => deleteReceipt(r.id)} className="text-rose-500 dark:text-rose-400 hover:underline">×</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function InsightsTab({ insights, loading, error, onRefresh }: {
+  insights: InsightsResponse | null
+  loading: boolean
+  error: string | null
+  onRefresh: () => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold tracking-tight">AI insights</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {insights?.summary || (loading ? 'Generating analysis…' : 'No analysis yet.')}
+          </p>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium disabled:opacity-50"
+        >
+          {loading ? 'Thinking…' : 'Recompute'}
+        </button>
+      </div>
+
+      {error && <div className="text-xs text-rose-600 dark:text-rose-400">{error}</div>}
+
+      {insights && (
+        <>
+          {/* Projection */}
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Projection (trailing 90d)</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-3xl font-bold tabular-nums">${insights.projection.monthly_run_rate_usd.toFixed(2)}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">per month</div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold tabular-nums">${insights.projection.yearly_projection_usd.toFixed(0)}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">per year (projected)</div>
+              </div>
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-3">{insights.projection.note}</div>
+          </div>
+
+          {/* Recurring patterns */}
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Recurring vendors & next expected charge</div>
+            {insights.recurring_patterns.length === 0 ? (
+              <div className="text-xs text-gray-400 italic">No recurring patterns yet — needs 2+ charges from the same vendor.</div>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {insights.recurring_patterns.map((p) => (
+                  <div key={p.vendor} className="py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{p.vendor}</div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                        {p.cadence} · ${p.typical_amount_usd.toFixed(2)} typical · {p.charge_count}× charged
+                        {p.next_expected && <span> · next ~{p.next_expected}</span>}
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold tabular-nums">${p.total_paid_usd.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Anomalies */}
+          {insights.anomalies.length > 0 && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2">⚠ Charges out of the ordinary</div>
+              <div className="space-y-1.5">
+                {insights.anomalies.map((a, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-semibold">{a.vendor}</span> — <span className="text-gray-700 dark:text-gray-300">{a.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Missing this month */}
+          {insights.missing_this_month.length > 0 && (
+            <div className="rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-400 mb-2">Recurring vendors not seen this month</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {insights.missing_this_month.map((m) => (
+                  <div key={m.vendor} className="text-sm">
+                    <span className="font-semibold">{m.vendor}</span>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                      last seen {m.last_seen}{m.expected_around && ` · expected around ${m.expected_around}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Overlapping services */}
+          {insights.overlapping_services.length > 0 && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Possible overlap</div>
+              <div className="space-y-2">
+                {insights.overlapping_services.map((o, i) => (
+                  <div key={i} className="text-sm">
+                    <div className="text-gray-700 dark:text-gray-300">{o.description}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{o.vendors.join(' · ')}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cost-saving ideas */}
+          {insights.cost_saving_ideas.length > 0 && (
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-2">💡 Ideas to consider</div>
+              <ul className="space-y-1.5 text-sm list-disc pl-5">
+                {insights.cost_saving_ideas.map((idea, i) => <li key={i}>{idea}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right">
+            Computed by {insights.reasoner_model} · {new Date(insights.generated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </div>
+        </>
+      )}
+
+      {!insights && loading && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 text-center text-sm text-gray-500">
+          <div className="w-6 h-6 mx-auto mb-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          Generating analysis…
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReceiptDrawer({ receiptId, onClose, onChanged }: {
+  receiptId: string
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [receipt, setReceipt] = useState<Receipt | null>(null)
+  const [comments, setComments] = useState<ReceiptComment[] | null>(null)
+  const [newComment, setNewComment] = useState('')
+  const [posting, setPosting] = useState(false)
+
+  useEffect(() => {
+    let aborted = false
+    ;(async () => {
+      const [recRes, comRes] = await Promise.all([
+        fetch(`/api/receipts?month=${new Date().toISOString().slice(0,7)}`, { cache: 'no-store' }),
+        fetch(`/api/receipts/${receiptId}/comments`, { cache: 'no-store' }),
+      ])
+      if (aborted) return
+      if (recRes.ok) {
+        const data = await recRes.json() as { receipts: Receipt[] }
+        let found = data.receipts.find((r) => r.id === receiptId)
+        if (!found) {
+          // Fall back to all-time
+          const allRes = await fetch(`/api/receipts`, { cache: 'no-store' })
+          if (allRes.ok) {
+            const allData = await allRes.json() as { receipts: Receipt[] }
+            found = allData.receipts.find((r) => r.id === receiptId)
+          }
+        }
+        setReceipt(found || null)
+      }
+      if (comRes.ok) {
+        const data = await comRes.json() as { comments: ReceiptComment[] }
+        setComments(data.comments)
+      }
+    })()
+    return () => { aborted = true }
+  }, [receiptId])
+
+  async function postComment() {
+    const body = newComment.trim()
+    if (!body || posting) return
+    setPosting(true)
+    try {
+      const res = await fetch(`/api/receipts/${receiptId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      })
+      if (res.ok) {
+        const added = await res.json() as ReceiptComment
+        setComments((prev) => [...(prev || []), added])
+        setNewComment('')
+        onChanged()
+      }
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  async function deleteComment(id: string) {
+    const res = await fetch(`/api/receipts/comments/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setComments((prev) => (prev || []).filter((c) => c.id !== id))
+      onChanged()
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex" role="dialog">
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="w-full max-w-md bg-white dark:bg-gray-950 shadow-2xl flex flex-col overflow-hidden border-l border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Receipt</div>
+            <div className="text-lg font-bold truncate">{receipt?.vendor_canonical || receipt?.vendor_raw || 'Loading…'}</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {receipt && (
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Amount</span><span className="font-bold tabular-nums">{fmtUsd(receipt.amount_cents)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Paid</span><span>{receipt.effective_date || '—'}{!receipt.paid_at && <span className="ml-1 text-[9px] text-amber-600">est</span>}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Category</span><span className={`px-1.5 py-0.5 rounded text-[10px] ${CATEGORY_COLOR[receipt.category || 'other']}`}>{CATEGORY_LABEL[receipt.category || 'other']}</span></div>
+              {receipt.invoice_number && <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Invoice #</span><span className="font-mono text-xs">{receipt.invoice_number}</span></div>}
+              {receipt.original_filename && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 dark:text-gray-400">File</span>
+                  <a href={`/api/receipts/${receiptId}/file`} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline text-xs truncate max-w-[200px]">{receipt.original_filename}</a>
+                </div>
+              )}
+              {receipt.reasoner_model && (
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>Read by</span><span>{receipt.extractor_provider} → {receipt.reasoner_model}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="px-5 py-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Wall · {comments?.length || 0}</div>
+            {!comments && <div className="text-xs text-gray-400 italic">Loading comments…</div>}
+            {comments && comments.length === 0 && (
+              <div className="text-xs text-gray-400 italic">No comments yet. Be the first.</div>
+            )}
+            <div className="space-y-3">
+              {(comments || []).map((c) => (
+                <div key={c.id} className="rounded-lg bg-gray-50 dark:bg-gray-900/60 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">{c.author_name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">{new Date(c.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                      <button onClick={() => deleteComment(c.id)} className="text-[10px] text-rose-500 hover:underline">delete</button>
+                    </div>
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap break-words">{c.body}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-800 p-3 flex items-end gap-2">
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postComment() }}
+            placeholder="Write a comment… (⌘+Enter to send)"
+            rows={2}
+            className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 resize-none"
+          />
+          <button
+            onClick={postComment}
+            disabled={!newComment.trim() || posting}
+            className="px-3 py-2 rounded-md text-sm bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-semibold disabled:opacity-50"
+          >
+            {posting ? '…' : 'Post'}
           </button>
         </div>
       </div>

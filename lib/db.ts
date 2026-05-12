@@ -708,6 +708,18 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_category ON infra_receipts(category)`)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_infra_receipts_invoice ON infra_receipts(vendor_canonical, invoice_number) WHERE invoice_number IS NOT NULL AND vendor_canonical IS NOT NULL`)
 
+    // Threaded comments per receipt — wall-feed style: any user can post,
+    // newest at the bottom. Cascade on receipt delete.
+    await client.query(`CREATE TABLE IF NOT EXISTS infra_receipt_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      receipt_id UUID NOT NULL REFERENCES infra_receipts(id) ON DELETE CASCADE,
+      author_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      author_name TEXT,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipt_comments_receipt ON infra_receipt_comments(receipt_id, created_at ASC)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

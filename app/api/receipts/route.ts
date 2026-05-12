@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { invalidateInsights } from '@/lib/receipt-insights'
 
 const ALLOWED_CATEGORIES = new Set(['ai', 'cloud', 'domain', 'dev_tool', 'comms', 'storage', 'monitoring', 'other'])
 
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
     ]
   )
 
+  invalidateInsights()
   return NextResponse.json({ id: result.rows[0].id })
 }
 
@@ -116,7 +118,8 @@ export async function GET(request: NextRequest) {
        extractor_provider,
        reasoner_model,
        extracted_fields,
-       created_at
+       created_at,
+       (SELECT COUNT(*)::int FROM infra_receipt_comments c WHERE c.receipt_id = infra_receipts.id) as comment_count
      FROM infra_receipts
      ${monthFilter}
      ORDER BY COALESCE(paid_at, created_at::date) DESC, created_at DESC`,
@@ -160,6 +163,7 @@ export async function GET(request: NextRequest) {
     extracted_fields: row.extracted_fields,
     is_recurring: (vendorMonthCount.get(row.vendor_canonical)?.size || 0) >= 2,
     created_at: row.created_at,
+    comment_count: typeof row.comment_count === 'number' ? row.comment_count : Number(row.comment_count || 0),
   }))
 
   // Vendor rollup for the focus month + "missing this month" detection
