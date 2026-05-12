@@ -293,6 +293,7 @@ export function Sidebar() {
       links: [
         { href: '/staff', label: 'Staff', role: 'admin' },
         { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
+        { href: '/expenses', label: 'Expenses', role: 'admin' },
         { href: '/settings', label: 'Settings', role: 'admin' },
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
       ],

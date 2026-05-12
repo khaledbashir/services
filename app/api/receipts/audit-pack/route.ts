@@ -44,11 +44,20 @@ export async function GET(request: NextRequest) {
     [month]
   )
 
-  if (result.rows.length === 0) {
-    return NextResponse.json({ error: `No receipts found for ${month}` }, { status: 404 })
-  }
-
   const zip = new AdmZip()
+
+  if (result.rows.length === 0) {
+    zip.addFile(`README-${month}.txt`, Buffer.from(`No receipts logged for ${month}.\n\nDrop receipts at /expenses to populate this audit pack.\n`, 'utf-8'))
+    const buf = zip.toBuffer()
+    return new NextResponse(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="anc-receipts-${month}-empty.zip"`,
+        'Content-Length': String(buf.length),
+      },
+    })
+  }
 
   const csvHeader = 'paid_at,vendor_canonical,vendor_raw,category,amount,currency,invoice_number,period_start,period_end,filename\n'
   const csvBody = result.rows

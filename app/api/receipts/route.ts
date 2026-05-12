@@ -1,8 +1,85 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+
+const ALLOWED_CATEGORIES = new Set(['ai', 'cloud', 'domain', 'dev_tool', 'comms', 'storage', 'monitoring', 'other'])
+
+export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, 'admin')
+  if (isAuthError(auth)) return auth
+
+  const body = await request.json().catch(() => ({})) as {
+    vendor?: string
+    amount?: number | string
+    currency?: string
+    paid_at?: string
+    invoice_number?: string
+    category?: string
+    notes?: string
+  }
+
+  const vendor = (body.vendor || '').trim()
+  if (!vendor) return NextResponse.json({ error: 'vendor required' }, { status: 400 })
+
+  const rawAmount = body.amount
+  let amount_cents: number | null = null
+  if (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') {
+    const n = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).replace(/[^\d.-]/g, ''))
+    if (!Number.isFinite(n)) return NextResponse.json({ error: 'amount must be a number' }, { status: 400 })
+    amount_cents = Math.round(n * 100)
+  }
+
+  const category = body.category && ALLOWED_CATEGORIES.has(body.category) ? body.category : 'other'
+  const currency = body.currency || 'USD'
+  const paid_at = body.paid_at && /^\d{4}-\d{2}-\d{2}$/.test(body.paid_at) ? body.paid_at : null
+  const invoice_number = body.invoice_number?.trim() || null
+
+  // Dedup on (vendor, invoice_number) if invoice present
+  if (invoice_number) {
+    const dup = await query(
+      `SELECT id FROM infra_receipts WHERE vendor_canonical = $1 AND invoice_number = $2 LIMIT 1`,
+      [vendor, invoice_number]
+    )
+    if (dup.rows.length > 0) {
+      return NextResponse.json({ error: 'A receipt with this vendor + invoice number already exists', id: dup.rows[0].id }, { status: 409 })
+    }
+  }
+
+  // Synthetic file_key for the no-file row so the NOT NULL constraint holds.
+  const synthetic_key = `infra-receipts/manual/${randomUUID()}`
+
+  const result = await query(
+    `INSERT INTO infra_receipts (
+       vendor_raw, vendor_canonical, category,
+       amount_cents, currency, paid_at, invoice_number,
+       file_key, original_filename, file_mime,
+       extracted_fields, extractor_provider, reasoner_model, notes, uploaded_by
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     RETURNING id`,
+    [
+      vendor,
+      vendor,
+      category,
+      amount_cents,
+      currency,
+      paid_at,
+      invoice_number,
+      synthetic_key,
+      null,
+      null,
+      JSON.stringify({ manual_entry: true }),
+      'manual',
+      'manual',
+      body.notes || null,
+      auth.userId,
+    ]
+  )
+
+  return NextResponse.json({ id: result.rows[0].id })
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'admin')
