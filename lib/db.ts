@@ -703,7 +703,7 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_paid_month ON infra_receipts(date_trunc('month', paid_at))`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_paid_at ON infra_receipts(paid_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_vendor ON infra_receipts(vendor_canonical)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipts_category ON infra_receipts(category)`)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_infra_receipts_invoice ON infra_receipts(vendor_canonical, invoice_number) WHERE invoice_number IS NOT NULL AND vendor_canonical IS NOT NULL`)
