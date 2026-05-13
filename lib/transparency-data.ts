@@ -32,6 +32,28 @@ export interface RecentlyShipped {
   repo: string | null
 }
 
+export interface EstimateComparable {
+  id: string
+  summary: string
+  actual_hours: number
+  shipped_at: string
+}
+
+export interface EstimateBasisChain {
+  method?: string                                 // 'db_priors' | 'baseline'
+  classification?: string
+  bucket?: string
+  bucket_reason?: string
+  repo?: string
+  area?: string
+  summary?: string
+  comparables?: EstimateComparable[]
+  commit_sha?: string
+  files_touched?: number
+  lines_added?: number
+  lines_removed?: number
+}
+
 export interface TriagedRequest {
   id: string
   received_at: string
@@ -42,8 +64,10 @@ export interface TriagedRequest {
   classification_basis: string | null         // why FIX vs NEW vs MIXED
   status: string
   retainer_covered: boolean
+  bucket: string | null                       // service_contract | warranty | change_order | not_billable
   estimated_hours: number | null
-  estimate_basis: string | null               // how the hours estimate was derived
+  estimate_basis: string | null               // human-readable rationale (one line)
+  estimate_basis_chain: EstimateBasisChain | null  // full audit chain (comparables, method, etc.)
   estimated_usd: number | null
   market_breakdown: any | null                // full chain when present (NEW/MIXED only)
   shipped_at: string | null
@@ -115,6 +139,34 @@ export interface PaymentStatus {
   invoice_number: string | null
 }
 
+export interface RequestIntelligencePlatform {
+  platform: string
+  inputs: number
+  opportunity_usd: number
+}
+
+export interface RequestIntelligenceMove {
+  title: string
+  detail: string
+  impact: string
+}
+
+export interface RequestIntelligence {
+  window_label: string
+  inputs_analyzed: number
+  slack_inputs: number
+  meeting_inputs: number
+  manual_inputs: number
+  unique_requesters: number
+  service_contract_count: number
+  change_order_count: number
+  mixed_count: number
+  open_opportunity_count: number
+  open_opportunity_usd: number
+  top_platforms: RequestIntelligencePlatform[]
+  next_moves: RequestIntelligenceMove[]
+}
+
 export interface DashboardData {
   meter: CreditMeter
   coverage: CoverageStrip
@@ -125,6 +177,7 @@ export interface DashboardData {
   recently_shipped: RecentlyShipped[]
   triaged_requests: TriagedRequest[]
   change_order_queue: TriagedRequest[]
+  request_intelligence: RequestIntelligence
   payment: PaymentStatus
   generated_at: string
 }
@@ -239,6 +292,10 @@ function publicEstimateBasis(classification: 'FIX' | 'NEW' | 'MIXED', retainerCo
   return 'Estimate based on comparable support work, current platform context, and logged delivery history.'
 }
 
+function fmtUsdShort(n: number): string {
+  return n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : '$' + Math.round(n).toLocaleString('en-US')
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   const meter = await hoursThisMonth().catch(() => ({
     month: new Date().toISOString().slice(0, 7),
@@ -292,6 +349,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         AND shipped_at IS NOT NULL
         AND shipped_at >= DATE_TRUNC('month', NOW())
         AND source <> 'auto-push'
+        AND COALESCE(bucket, 'service_contract') = 'service_contract'
+        AND COALESCE(bucket_confirmed, false) = true
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -309,13 +368,15 @@ export async function getDashboardData(): Promise<DashboardData> {
   const triagedRes = await query(
     `SELECT id, received_at, requester, summary, classification, status,
             classification_confidence, classification_basis,
-            retainer_covered, estimated_hours, estimate_basis, estimated_usd,
+            retainer_covered, bucket, bucket_confirmed,
+            estimated_hours, estimate_basis, estimate_basis_chain, estimated_usd,
             market_breakdown, shipped_at, actual_hours,
             shipped_commit_sha, repo, area
        FROM service_requests
       WHERE received_at >= NOW() - INTERVAL '60 days'
         AND status <> 'cancelled'
-        AND source <> 'auto-push'
+        AND COALESCE(bucket, 'service_contract') <> 'not_billable'
+        AND COALESCE(bucket_confirmed, false) = true
       ORDER BY received_at DESC
       LIMIT 25`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -323,6 +384,11 @@ export async function getDashboardData(): Promise<DashboardData> {
   const triaged_requests: TriagedRequest[] = triagedRes.rows.map((r) => {
     const classification = r.classification as 'FIX' | 'NEW' | 'MIXED'
     const retainerCovered = Boolean(r.retainer_covered)
+    // Use the row's actual estimate_basis (deterministic, comparable-derived)
+    // if present; fall back to the generic explainer for legacy rows.
+    const basisText = (r.estimate_basis && String(r.estimate_basis).trim())
+      ? String(r.estimate_basis)
+      : publicEstimateBasis(classification, retainerCovered)
     return {
       id: String(r.id),
       received_at: new Date(r.received_at as string).toISOString(),
@@ -333,8 +399,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       classification_basis: publicClassificationBasis(classification, retainerCovered),
       status: String(r.status || 'open'),
       retainer_covered: retainerCovered,
+      bucket: (r.bucket as string) || null,
       estimated_hours: r.estimated_hours == null ? null : Number(r.estimated_hours),
-      estimate_basis: publicEstimateBasis(classification, retainerCovered),
+      estimate_basis: basisText,
+      estimate_basis_chain: (r.estimate_basis_chain as EstimateBasisChain) || null,
       estimated_usd: r.estimated_usd == null ? null : Number(r.estimated_usd),
       market_breakdown: null,
       shipped_at: r.shipped_at ? new Date(r.shipped_at as string).toISOString() : null,
@@ -356,6 +424,8 @@ export async function getDashboardData(): Promise<DashboardData> {
          WHERE classification = 'FIX'
            AND retainer_covered = true
            AND source <> 'auto-push'
+           AND COALESCE(bucket, 'service_contract') = 'service_contract'
+           AND COALESCE(bucket_confirmed, false) = true
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= DATE_TRUNC('month', NOW())
@@ -440,6 +510,101 @@ export async function getDashboardData(): Promise<DashboardData> {
     )
     .sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime())
 
+  const intelSummaryRes = await query(
+    `SELECT
+       COUNT(*)::int AS inputs_analyzed,
+       COUNT(*) FILTER (WHERE source = 'slack')::int AS slack_inputs,
+       COUNT(*) FILTER (WHERE source = 'meeting')::int AS meeting_inputs,
+       COUNT(*) FILTER (WHERE source = 'manual')::int AS manual_inputs,
+       COUNT(DISTINCT requester)::int AS unique_requesters,
+       COUNT(*) FILTER (WHERE classification = 'FIX' AND retainer_covered = true)::int AS service_contract_count,
+       COUNT(*) FILTER (WHERE classification = 'NEW')::int AS change_order_count,
+       COUNT(*) FILTER (WHERE classification = 'MIXED')::int AS mixed_count,
+       COUNT(*) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status IN ('open', 'quoted', 'approved', 'in_progress')
+       )::int AS open_opportunity_count,
+       COALESCE(SUM(COALESCE(quote_amount, estimated_usd, 0)) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status IN ('open', 'quoted', 'approved', 'in_progress')
+       ), 0)::numeric AS open_opportunity_usd
+     FROM service_requests
+     WHERE received_at >= NOW() - INTERVAL '60 days'
+       AND status <> 'cancelled'
+       AND source <> 'auto-push'`
+  ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
+
+  const intelPlatformRes = await query(
+    `SELECT
+       COALESCE(repo, 'other') AS platform,
+       COUNT(*)::int AS inputs,
+       COALESCE(SUM(COALESCE(quote_amount, estimated_usd, 0)) FILTER (
+         WHERE classification IN ('NEW', 'MIXED')
+           AND status IN ('open', 'quoted', 'approved', 'in_progress')
+       ), 0)::numeric AS opportunity_usd
+     FROM service_requests
+     WHERE received_at >= NOW() - INTERVAL '60 days'
+       AND status <> 'cancelled'
+       AND source <> 'auto-push'
+     GROUP BY COALESCE(repo, 'other')
+     ORDER BY inputs DESC, opportunity_usd DESC
+     LIMIT 4`
+  ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
+
+  const intelRow = intelSummaryRes.rows[0] || {}
+  const topIntelligencePlatforms: RequestIntelligencePlatform[] = intelPlatformRes.rows.map((r) => ({
+    platform: publicPlatform(r.platform) || 'General platform work',
+    inputs: Number(r.inputs) || 0,
+    opportunity_usd: Number(r.opportunity_usd) || 0,
+  }))
+  const openOpportunityCount = Number(intelRow.open_opportunity_count) || 0
+  const openOpportunityUsd = Number(intelRow.open_opportunity_usd) || 0
+  const leadingPlatform = topIntelligencePlatforms[0]
+  const nextMoves: RequestIntelligenceMove[] = [
+    openOpportunityCount > 0
+      ? {
+          title: 'Package the open change-order queue',
+          detail: `${openOpportunityCount} scoped opportunity${openOpportunityCount === 1 ? '' : 'ies'} are already visible in the aggregated inputs.`,
+          impact: `${fmtUsdShort(openOpportunityUsd)} in visible open value`,
+        }
+      : {
+          title: 'Keep monitoring new-scope signals',
+          detail: 'No open change-order queue is active right now, so the next move is catching new requests early.',
+          impact: 'prevents scope drift',
+        },
+    leadingPlatform
+      ? {
+          title: `Bundle the ${leadingPlatform.platform} asks`,
+          detail: `${leadingPlatform.inputs} signal${leadingPlatform.inputs === 1 ? '' : 's'} point at this platform over the last 60 days.`,
+          impact: leadingPlatform.opportunity_usd > 0 ? `${fmtUsdShort(leadingPlatform.opportunity_usd)} visible upside` : 'clear adoption theme',
+        }
+      : {
+          title: 'Build the first signal cluster',
+          detail: 'As stakeholder requests come in, this panel will group them by affected platform.',
+          impact: 'cleaner roadmap',
+        },
+    {
+      title: 'Use message intake as the request source',
+      detail: `${Number(intelRow.slack_inputs) || 0} message-sourced input${Number(intelRow.slack_inputs) === 1 ? '' : 's'} are already feeding the ledger.`,
+      impact: 'less manual follow-up',
+    },
+  ]
+  const request_intelligence: RequestIntelligence = {
+    window_label: 'last 60 days',
+    inputs_analyzed: Number(intelRow.inputs_analyzed) || 0,
+    slack_inputs: Number(intelRow.slack_inputs) || 0,
+    meeting_inputs: Number(intelRow.meeting_inputs) || 0,
+    manual_inputs: Number(intelRow.manual_inputs) || 0,
+    unique_requesters: Number(intelRow.unique_requesters) || 0,
+    service_contract_count: Number(intelRow.service_contract_count) || 0,
+    change_order_count: Number(intelRow.change_order_count) || 0,
+    mixed_count: Number(intelRow.mixed_count) || 0,
+    open_opportunity_count: openOpportunityCount,
+    open_opportunity_usd: openOpportunityUsd,
+    top_platforms: topIntelligencePlatforms,
+    next_moves: nextMoves,
+  }
+
   // Previous-month comparison — same shape as current, but shipped between
   // the start of last month and (last month's start + days-elapsed-in-current-month).
   // This gives an apples-to-apples "where were we at this point last month" read.
@@ -499,12 +664,16 @@ export async function getDashboardData(): Promise<DashboardData> {
        SELECT shipped_at::date AS d,
               COALESCE(SUM(actual_hours) FILTER (
                 WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+                  AND COALESCE(bucket, 'service_contract') = 'service_contract'
+                  AND COALESCE(bucket_confirmed, false) = true
               ), 0)::numeric AS hrs
        FROM service_requests
        WHERE status = 'shipped'
          AND shipped_at IS NOT NULL
          AND shipped_at >= DATE_TRUNC('month', NOW())
          AND source <> 'auto-push'
+         AND COALESCE(bucket, 'service_contract') = 'service_contract'
+         AND COALESCE(bucket_confirmed, false) = true
        GROUP BY shipped_at::date
      )
      SELECT days.d AS day,
@@ -617,8 +786,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     shipDelta < 0 ? `${Math.abs(shipDelta)} behind ${prevMonthLabel}` :
     `matching ${prevMonthLabel}`
   const coUsdTotal = coverage.change_order_open_usd + coverage.change_order_shipped_usd
-  const fmtUsdShort = (n: number) =>
-    n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : '$' + Math.round(n).toLocaleString('en-US')
   const narrative =
     `${monthLabel} is ` +
     (pctElapsed < 33 ? 'just starting' : pctElapsed < 66 ? 'in motion' : 'wrapping up') +
@@ -684,6 +851,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     recently_shipped,
     triaged_requests,
     change_order_queue,
+    request_intelligence,
     payment,
     generated_at: new Date().toISOString(),
   }

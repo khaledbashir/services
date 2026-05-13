@@ -595,6 +595,47 @@ async function runMigrations() {
     await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS inbox BOOLEAN NOT NULL DEFAULT false`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_inbox ON service_requests(inbox) WHERE inbox = true`)
 
+    // Bucket model — every row is one of four buckets that drive what counts
+    // where on /transparency:
+    //   service_contract → FIX on shipped feature, counts toward 12hr/mo
+    //   warranty         → FIX on a NEW shipped <30d ago, free (doesn't count)
+    //   change_order     → NEW capability, separate quote (doesn't count toward retainer hours)
+    //   not_billable     → personal/internal/infra/non-ANC, never appears on stakeholder views
+    //
+    // bucket_confirmed flips to true when a human approves the auto-classified
+    // push from the inbox. Until then, auto-push rows (source='auto-push')
+    // stay invisible to the public meter even if their bucket=service_contract.
+    //
+    // estimate_basis_chain stores the executive-defensible rationale: which
+    // past change orders the hours were derived from, with similarity scores.
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS bucket TEXT`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS bucket_confirmed BOOLEAN NOT NULL DEFAULT false`)
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS estimate_basis_chain JSONB`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_bucket ON service_requests(bucket)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_pending_bucket ON service_requests(bucket_confirmed) WHERE source = 'auto-push' AND bucket_confirmed = false`)
+
+    // One-off: backfill bucket for existing rows based on classification +
+    // retainer_covered so the historical ledger lines up with the new model.
+    await client.query(`UPDATE service_requests
+       SET bucket = CASE
+         WHEN source = 'auto-push' AND COALESCE(repo, '') IN ('rag2', 'anc-kb') THEN 'not_billable'
+         WHEN classification = 'FIX' AND retainer_covered = true THEN 'service_contract'
+         WHEN classification IN ('NEW', 'MIXED') THEN 'change_order'
+         WHEN classification = 'FIX' AND retainer_covered = false THEN 'warranty'
+         ELSE 'not_billable'
+       END
+       WHERE bucket IS NULL`)
+
+    // One-off backfill: grandfather everything shipped BEFORE today as
+    // bucket_confirmed = true so the historical meter stays accurate. Rows
+    // shipped today are quarantined pending approval — the auto-push hook
+    // started inflating actual_hours via line-count estimates and that has
+    // to be reviewed before counting toward the public retainer cap.
+    await client.query(`UPDATE service_requests
+       SET bucket_confirmed = true
+       WHERE bucket_confirmed = false
+         AND (shipped_at IS NULL OR shipped_at < DATE_TRUNC('day', NOW()))`)
+
     // Platforms registry — drives the warranty countdown timers on /transparency.
     // Each row is a "thing ANC has paid for" that carries a 30-day post-delivery
     // warranty. delivered_at + warranty_days defines the window.

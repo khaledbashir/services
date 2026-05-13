@@ -14,6 +14,8 @@ import PaymentCTAs from './PaymentCTAs'
 import PrintButton from './PrintButton'
 import CoverageModel from './CoverageModel'
 import WarrantyTimers from './WarrantyTimers'
+import RequestIntelligence from './RequestIntelligence'
+import PendingInbox from './PendingInbox'
 import { ThemeToggle } from '@/components/theme-toggle'
 import './print.css'
 
@@ -91,6 +93,10 @@ export default async function TransparencyDashboard() {
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
 
+        {/* Admin-only inbox: pending auto-pushed rows that haven't been
+            confirmed into a bucket yet. Hidden for non-admin viewers. */}
+        <PendingInbox />
+
         {/* Coverage strip — three buckets at a glance */}
         <div id="overview" className="rounded-xl mb-4">
           <CoverageStrip coverage={data.coverage} />
@@ -106,6 +112,8 @@ export default async function TransparencyDashboard() {
         <div className="mt-4 mb-6">
           <MetricsExplainer />
         </div>
+
+        <RequestIntelligence data={data.request_intelligence} />
 
         {/* Pay / top-up CTAs — visible above the fold so stakeholders can act */}
         <div id="pay" className="scroll-mt-32">

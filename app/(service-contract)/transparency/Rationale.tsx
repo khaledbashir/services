@@ -2,11 +2,30 @@
 
 import { useState } from 'react'
 
+interface ChainComparable {
+  id: string
+  summary: string
+  actual_hours: number
+  shipped_at: string
+}
+
+interface ChainPayload {
+  method?: string
+  comparables?: ChainComparable[]
+  bucket?: string
+  bucket_reason?: string
+  files_touched?: number
+  lines_added?: number
+  lines_removed?: number
+  commit_sha?: string
+}
+
 interface Props {
   classification: 'FIX' | 'NEW' | 'MIXED'
   confidence: number | null
   classification_basis: string | null
   estimate_basis: string | null
+  estimate_basis_chain?: ChainPayload | null
   retainer_covered: boolean
   area: string | null
   repo: string | null
@@ -42,6 +61,7 @@ export default function Rationale({
   confidence,
   classification_basis,
   estimate_basis,
+  estimate_basis_chain,
   retainer_covered,
   area,
   repo,
@@ -90,7 +110,7 @@ export default function Rationale({
             </div>
           </div>
 
-          {/* Why this estimate */}
+          {/* Why this estimate — deterministic formula + comparable chain */}
           {estimated_hours != null || estimate_basis ? (
             <div>
               <div className="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
@@ -99,6 +119,29 @@ export default function Rationale({
               <div className="text-gray-600 dark:text-gray-400">
                 {estimate_basis || 'Baseline estimate — no comparable history yet.'}
               </div>
+
+              {/* Comparable past deliveries — the actual audit chain */}
+              {estimate_basis_chain?.comparables && estimate_basis_chain.comparables.length > 0 ? (
+                <div className="mt-2 rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950/60 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-500 mb-1 font-semibold">
+                    {estimate_basis_chain.method === 'db_priors'
+                      ? `Median of ${estimate_basis_chain.comparables.length} comparable past deliveries`
+                      : `${estimate_basis_chain.comparables.length} prior in-ledger (below threshold, using baseline)`}
+                  </div>
+                  <ul className="space-y-0.5">
+                    {estimate_basis_chain.comparables.slice(0, 5).map((c) => (
+                      <li key={c.id} className="text-[10px] font-mono flex gap-2 items-baseline">
+                        <span className="text-gray-500 dark:text-gray-500 w-20 shrink-0">{c.shipped_at}</span>
+                        <span className="text-gray-700 dark:text-gray-300 truncate flex-1">{c.summary}</span>
+                        <span className="text-gray-900 dark:text-gray-100 font-semibold shrink-0">
+                          {c.actual_hours.toFixed(2)}h
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {estimated_hours != null ? (
                 <div className="mt-1 text-gray-500 dark:text-gray-500 font-mono tabular-nums">
                   Estimate: {estimated_hours.toFixed(1)}h

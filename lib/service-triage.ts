@@ -646,6 +646,17 @@ export async function revertStage(id: string): Promise<void> {
 }
 
 // Hours-this-month vs 12-hr cap.
+//
+// Retainer math = service-contract bucket only:
+//   • classification = FIX        (NEW/MIXED are change orders, separate quote)
+//   • retainer_covered = true     (explicit opt-in flag, set by triage)
+//   • bucket IN ('service_contract', NULL)   (excludes warranty/change_order/not_billable)
+//   • source <> 'auto-push' UNLESS bucket_confirmed = true (auto-push rows
+//     stay invisible to the meter until Ahmad approves them via the inbox)
+//   • status = 'shipped' with shipped_at this month
+//
+// hours_used uses actual_hours (real billed time), NOT estimates. Auto-push
+// rows have actual_hours = NULL until a human confirms in the inbox.
 export async function hoursThisMonth(): Promise<{
   month: string
   hours_used: number
@@ -653,15 +664,20 @@ export async function hoursThisMonth(): Promise<{
   cap_hours: number
   overage_hours: number
 }> {
-  // Retainer math excludes source='auto-push' — those are Ahmad's own pushes,
-  // tracked in the ledger for visibility but never billed against the 12-hr cap.
   const r = await query(
     `SELECT
-       COALESCE(SUM(CASE WHEN status='shipped' AND shipped_at >= DATE_TRUNC('month', NOW()) THEN actual_hours ELSE 0 END), 0)::float8 AS used,
-       COALESCE(SUM(CASE WHEN status IN ('open','in_progress') AND retainer_covered = true THEN estimated_hours ELSE 0 END), 0)::float8 AS open_est
+       COALESCE(SUM(CASE
+         WHEN status='shipped'
+          AND shipped_at >= DATE_TRUNC('month', NOW())
+         THEN actual_hours ELSE 0 END), 0)::float8 AS used,
+       COALESCE(SUM(CASE
+         WHEN status IN ('open','in_progress')
+         THEN estimated_hours ELSE 0 END), 0)::float8 AS open_est
      FROM service_requests
-     WHERE retainer_covered = true
-       AND source <> 'auto-push'`,
+     WHERE classification = 'FIX'
+       AND retainer_covered = true
+       AND COALESCE(bucket, 'service_contract') = 'service_contract'
+       AND COALESCE(bucket_confirmed, false) = true`,
   )
   const used = Number(r.rows[0].used)
   const openEst = Number(r.rows[0].open_est)

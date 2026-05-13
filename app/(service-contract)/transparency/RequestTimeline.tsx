@@ -21,6 +21,22 @@ interface MarketBreakdown {
   sources: string[]
 }
 
+interface EstimateBasisChain {
+  method?: string
+  comparables?: Array<{
+    id: string
+    summary: string
+    actual_hours: number
+    shipped_at: string
+  }>
+  bucket?: string
+  bucket_reason?: string
+  files_touched?: number
+  lines_added?: number
+  lines_removed?: number
+  commit_sha?: string
+}
+
 interface TriagedRequest {
   id: string
   received_at: string
@@ -31,8 +47,10 @@ interface TriagedRequest {
   classification_basis: string | null
   status: string
   retainer_covered: boolean
+  bucket?: string | null
   estimated_hours: number | null
   estimate_basis: string | null
+  estimate_basis_chain?: EstimateBasisChain | null
   estimated_usd: number | null
   market_breakdown: MarketBreakdown | null
   shipped_at: string | null
@@ -185,6 +203,7 @@ export default function RequestTimeline({ requests }: Props) {
                     confidence={r.classification_confidence}
                     classification_basis={r.classification_basis}
                     estimate_basis={r.estimate_basis}
+                    estimate_basis_chain={r.estimate_basis_chain}
                     retainer_covered={r.retainer_covered}
                     area={r.area}
                     repo={r.repo}
