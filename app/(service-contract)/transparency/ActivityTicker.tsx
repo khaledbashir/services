@@ -63,9 +63,9 @@ export default function ActivityTicker({ events }: Props) {
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
           Live activity
         </h2>
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+        <span className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500" title="Refreshes every 5 minutes, but only when the tab is visible and you're not interacting.">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          auto-refresh 1m
+          auto-refresh 5m
         </span>
       </div>
       <ul className="space-y-3">

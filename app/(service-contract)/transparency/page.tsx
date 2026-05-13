@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import TransparencyDashboard from './TransparencyDashboard'
+import AutoRefresh from './AutoRefresh'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 export default function TransparencyPage() {
   return (
     <>
-      <meta httpEquiv="refresh" content="60" />
+      <AutoRefresh />
       <TransparencyDashboard />
     </>
   )
