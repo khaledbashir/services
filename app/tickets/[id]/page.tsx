@@ -98,6 +98,17 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [newComment, setNewComment] = useState('')
   const [isInternal, setIsInternal] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  // Surfaces what actually happened with the client email after a Client
+  // comment is posted. Chris parity 5/13: External path was silently no-op
+  // when the venue had no distribution list. This toast shows recipients
+  // sent, "no list configured", or send failure.
+  const [commentToast, setCommentToast] = useState<
+    | { kind: 'emailed'; count: number }
+    | { kind: 'no_list' }
+    | { kind: 'send_failed' }
+    | { kind: 'internal' }
+    | null
+  >(null)
   const [emailReply, setEmailReply] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -253,12 +264,29 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     e.preventDefault()
     if (!newComment.trim()) return
     setSubmitting(true)
+    setCommentToast(null)
     try {
       const res = await fetch(`/api/tickets/${params.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: newComment, is_internal: isInternal })
       })
-      if (res.ok) { setNewComment(''); await fetchData() }
+      if (res.ok) {
+        const data = await res.json().catch(() => null)
+        const email = data?.email
+        if (isInternal) {
+          setCommentToast({ kind: 'internal' })
+        } else if (email?.sent) {
+          setCommentToast({ kind: 'emailed', count: email.recipient_count || 0 })
+        } else if (email?.reason === 'no_list') {
+          setCommentToast({ kind: 'no_list' })
+        } else {
+          setCommentToast({ kind: 'send_failed' })
+        }
+        setNewComment('')
+        await fetchData()
+        // Auto-clear after 8s; user can dismiss earlier via the X.
+        setTimeout(() => setCommentToast(null), 8000)
+      }
     } catch {} finally { setSubmitting(false) }
   }
 
@@ -945,6 +973,22 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
                     {/* Comment composer */}
                     <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100">
+                      {commentToast && (
+                        <div className={`mb-3 rounded-md px-3 py-2 text-xs flex items-start justify-between gap-3 border ${
+                          commentToast.kind === 'emailed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                          commentToast.kind === 'internal' ? 'bg-indigo-50 border-indigo-200 text-indigo-800' :
+                          commentToast.kind === 'no_list' ? 'bg-amber-50 border-amber-200 text-amber-900' :
+                          'bg-rose-50 border-rose-200 text-rose-800'
+                        }`}>
+                          <span className="font-medium">
+                            {commentToast.kind === 'emailed' && `Posted — emailed to ${commentToast.count} client recipient${commentToast.count === 1 ? '' : 's'} on the venue's distribution list.`}
+                            {commentToast.kind === 'internal' && `Posted as internal note — not emailed to the client.`}
+                            {commentToast.kind === 'no_list' && `Posted, but no email went out — this venue has no client distribution list configured. Add recipients in venue settings to email future Client comments.`}
+                            {commentToast.kind === 'send_failed' && `Posted, but the client email failed to send. Check Slack #ops or the logs.`}
+                          </span>
+                          <button type="button" onClick={() => setCommentToast(null)} className="text-current/60 hover:text-current">×</button>
+                        </div>
+                      )}
                       <form onSubmit={addComment}>
                         {showCanned && cannedResponses.length > 0 && (
                           <div className="mb-3 border border-zinc-200 rounded-lg bg-white divide-y divide-zinc-100 max-h-40 overflow-y-auto">
@@ -994,6 +1038,11 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             <button type="button" onClick={() => setIsInternal(false)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Client
+                              {ticket && typeof (ticket as any).venue_distribution_count === 'number' && (
+                                <span className={`ml-1 ${(ticket as any).venue_distribution_count > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                  · {(ticket as any).venue_distribution_count > 0 ? `${(ticket as any).venue_distribution_count} ✉` : 'no list'}
+                                </span>
+                              )}
                             </button>
                             <button type="button" onClick={() => setIsInternal(true)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>

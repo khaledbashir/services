@@ -93,7 +93,12 @@ export async function POST(
       }
     }
 
-    // Track first response for SLA (external comments only)
+    // Track first response for SLA (external comments only). Also send the
+    // client email and SURFACE the send status back to the UI so the user
+    // knows whether the email actually went out. Chris's complaint 5/13:
+    // "external isn't behaving" — silent no-op when the venue has no
+    // distribution list is the real bug.
+    let emailStatus: { sent: boolean; recipient_count: number; reason?: string } | null = null
     if (!is_internal) {
       await query(
         `UPDATE tickets SET first_response_at = NOW(), sla_response_met = (NOW() <= sla_response_due)
@@ -101,24 +106,28 @@ export async function POST(
         [params.id]
       )
 
-      // Email distribution list for client-visible comments
       const ticketRes = await query(
         `SELECT t.title, t.ticket_number, t.venue_id FROM tickets t WHERE t.id = $1`,
         [params.id]
       )
       const t = ticketRes.rows[0]
       if (t) {
-        sendTicketDistributionEmail({
-          venueId: t.venue_id,
-          ticketTitle: t.title,
-          ticketNumber: t.ticket_number,
-          type: 'comment',
-          detail: body,
-        }).catch(err => console.error('[email] Comment email failed:', err))
+        try {
+          emailStatus = await sendTicketDistributionEmail({
+            venueId: t.venue_id,
+            ticketTitle: t.title,
+            ticketNumber: t.ticket_number,
+            type: 'comment',
+            detail: body,
+          })
+        } catch (err) {
+          console.error('[email] Comment email failed:', err)
+          emailStatus = { sent: false, recipient_count: 0, reason: 'send_failed' }
+        }
       }
     }
 
-    return NextResponse.json({ comment: result.rows[0] })
+    return NextResponse.json({ comment: result.rows[0], email: emailStatus })
   } catch (err) {
     console.error('Error creating comment:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -36,7 +36,7 @@ async function getBudgetRows() {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
             b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
-            b.notes, b.created_at, b.updated_at,
+            b.notes, b.tricode, b.created_at, b.updated_at,
             COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
             COUNT(te.id)::int as entry_count
      FROM designer_hours_budgets b
@@ -114,8 +114,8 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO designer_hours_budgets
-         (client_name, venue_id, league, season, total_hours, contract_start, contract_end, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (client_name, venue_id, league, season, total_hours, contract_start, contract_end, notes, tricode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         client_name,
@@ -126,13 +126,14 @@ export async function POST(request: NextRequest) {
         body.contract_start || null,
         body.contract_end || null,
         body.notes || null,
+        body.tricode?.trim() ? body.tricode.trim().toUpperCase() : null,
       ]
     )
 
     const created = await query(
       `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
               b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
-              b.notes, b.created_at, b.updated_at,
+              b.notes, b.tricode, b.created_at, b.updated_at,
               COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
               COUNT(te.id)::int as entry_count
        FROM designer_hours_budgets b

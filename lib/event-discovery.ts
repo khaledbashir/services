@@ -816,16 +816,42 @@ function hydrateCandidate(raw: RawDiscoveryCandidate, venue: DiscoveryVenue): Di
   // here they end up labeled `league_schedule` and stored against the venue.
   // Use the explicit home_team/away_team fields when present, otherwise
   // fall back to summary-based classification.
+  //
+  // Chris (5/13): Camping World Stadium was pulling Phillies games. The
+  // home/away check returned 'unknown' because neither team's tokens
+  // overlap with the venue's tokens — so AI hallucinations slipped past.
+  // Tightening: for games, ALSO reject when there's zero token overlap
+  // between either team and the venue (sign that the AI returned a game
+  // unrelated to this venue).
   if (raw.event_type === 'game') {
-    if (raw.home_team && raw.away_team) {
-      const verdict = classifyHomeAway(venue.name, `${raw.away_team} at ${raw.home_team}`, [raw.away_team, raw.home_team])
+    const teamsPair: [string, string] | null =
+      raw.home_team && raw.away_team
+        ? [raw.away_team, raw.home_team]
+        : (() => {
+            const m = raw.summary.match(/^(.+?)\s+(?:vs\.?|@|at)\s+(.+)$/i)
+            return m ? [m[1].trim(), m[2].trim()] as [string, string] : null
+          })()
+    if (teamsPair) {
+      const summaryForVerdict = raw.home_team && raw.away_team
+        ? `${raw.away_team} at ${raw.home_team}`
+        : raw.summary
+      const verdict = classifyHomeAway(venue.name, summaryForVerdict, teamsPair)
       if (verdict === 'away') return null
-    } else {
-      const summary = raw.summary
-      const splitMatch = summary.match(/^(.+?)\s+(?:vs\.?|@|at)\s+(.+)$/i)
-      if (splitMatch) {
-        const verdict = classifyHomeAway(venue.name, summary, [splitMatch[1].trim(), splitMatch[2].trim()])
-        if (verdict === 'away') return null
+
+      // Zero-overlap guard. If neither team shares any meaningful token with
+      // the venue name, this is almost certainly an AI hallucination
+      // (Phillies at Camping World, etc). Skip.
+      if (verdict === 'unknown') {
+        const VENUE_GENERIC = new Set(['park','stadium','arena','center','centre','field','ballpark','grounds','complex','pavilion','coliseum','court','house','the','of','at','and'])
+        const tokenize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+        const venueTokens = new Set(tokenize(venue.name).filter((w) => !VENUE_GENERIC.has(w)))
+        if (venueTokens.size > 0) {
+          const anyOverlap = teamsPair.some((team) => {
+            const teamTokens = tokenize(team).filter((w) => !VENUE_GENERIC.has(w))
+            return teamTokens.some((t) => venueTokens.has(t))
+          })
+          if (!anyOverlap) return null
+        }
       }
     }
   }

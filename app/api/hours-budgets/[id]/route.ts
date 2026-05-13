@@ -10,7 +10,7 @@ async function loadBudget(id: string) {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
             b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
-            b.notes, b.created_at, b.updated_at,
+            b.notes, b.tricode, b.created_at, b.updated_at,
             COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
             COUNT(te.id)::int as entry_count
      FROM designer_hours_budgets b
@@ -120,11 +120,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       contract_start: 'contract_start',
       contract_end: 'contract_end',
       notes: 'notes',
+      tricode: 'tricode',
     }
 
     for (const [key, column] of Object.entries(columns)) {
       if (body[key] !== undefined) {
-        const value = key === 'total_hours' ? Number(body[key]) : body[key] || null
+        let value: any
+        if (key === 'total_hours') value = Number(body[key])
+        else if (key === 'tricode') value = body[key]?.trim() ? body[key].trim().toUpperCase() : null
+        else value = body[key] || null
         updates.push(`${column} = $${idx++}`)
         values.push(value)
       }

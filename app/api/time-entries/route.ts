@@ -154,13 +154,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Auto-resolve budget by tri-code if the caller didn't pass one but the
+    // entry is linked to a design request. Alexis 5/13: budgets roll up by
+    // Tri-Code, not venue, so hours from any request with the same tri-code
+    // land in the same budget.
+    let resolvedBudgetId: string | null = body.budget_id || null
+    if (!resolvedBudgetId && body.design_request_id) {
+      try {
+        const lookup = await query(
+          `SELECT dr.tricode, dr.venue_id
+             FROM design_requests dr
+             WHERE dr.id = $1`,
+          [body.design_request_id]
+        )
+        const dr = lookup.rows[0]
+        if (dr?.tricode) {
+          const budgetMatch = await query(
+            `SELECT id FROM designer_hours_budgets
+              WHERE UPPER(tricode) = UPPER($1)
+              ORDER BY COALESCE(contract_end, created_at) DESC
+              LIMIT 1`,
+            [dr.tricode]
+          )
+          if (budgetMatch.rows[0]?.id) resolvedBudgetId = budgetMatch.rows[0].id
+        }
+        // Fallback: match by venue if no tri-code budget exists.
+        if (!resolvedBudgetId && dr?.venue_id) {
+          const venueMatch = await query(
+            `SELECT id FROM designer_hours_budgets
+              WHERE venue_id = $1
+              ORDER BY COALESCE(contract_end, created_at) DESC
+              LIMIT 1`,
+            [dr.venue_id]
+          )
+          if (venueMatch.rows[0]?.id) resolvedBudgetId = venueMatch.rows[0].id
+        }
+      } catch (e) {
+        console.warn('[time-entries] auto-budget resolution failed:', e)
+      }
+    }
+
     const result = await query(
       `INSERT INTO designer_time_entries
          (budget_id, designer_id, design_request_id, entry_date, hours, description)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
       [
-        body.budget_id || null,
+        resolvedBudgetId,
         body.designer_id || null,
         body.design_request_id || null,
         body.entry_date || new Date().toISOString().slice(0, 10),

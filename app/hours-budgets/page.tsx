@@ -17,6 +17,7 @@ interface Budget {
   contract_start: string | null
   contract_end: string | null
   notes: string | null
+  tricode: string | null
   created_at: string
   updated_at: string
   hours_spent: number
@@ -47,6 +48,7 @@ export default function HoursBudgetsPage() {
   const [formData, setFormData] = useState({
     client_name: '',
     venue_id: '',
+    tricode: '',
     league: '',
     season: '',
     total_hours: '',
@@ -97,6 +99,7 @@ export default function HoursBudgetsPage() {
         setFormData({
           client_name: '',
           venue_id: '',
+          tricode: '',
           league: '',
           season: '',
           total_hours: '',
@@ -191,6 +194,19 @@ export default function HoursBudgetsPage() {
                   ))}
                 </select>
               </div>
+            </div>
+            <div>
+              {/* Alexis 5/13: budgets roll up by Tri-Code. Any design request
+                  with the same Tri-Code lands hours in this budget. */}
+              <label className="mb-1 block text-xs font-medium text-zinc-600">Tri-Code</label>
+              <input
+                type="text"
+                value={formData.tricode}
+                onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value.toUpperCase() }))}
+                placeholder="e.g. ABC"
+                className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm uppercase font-mono outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+              />
+              <p className="mt-1 text-[11px] text-zinc-500">Design requests with this Tri-Code will roll up to this budget. Leave blank to match by venue only.</p>
             </div>
             <div className="grid gap-4 md:grid-cols-4">
               <div>
@@ -292,7 +308,13 @@ export default function HoursBudgetsPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center">{budget.client_name}{!isUnlimited && <AlertBadge budgetId={budget.id} progress={progress} />}</h2>
+                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                      {budget.client_name}
+                      {budget.tricode && (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-700 tracking-wider">{budget.tricode}</span>
+                      )}
+                      {!isUnlimited && <AlertBadge budgetId={budget.id} progress={progress} />}
+                    </h2>
                     <p className="mt-1 text-xs text-zinc-500">
                       {budget.venue_name || 'No venue linked'}
                       {budget.league ? ` · ${budget.league}` : ''}

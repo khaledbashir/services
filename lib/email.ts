@@ -115,13 +115,15 @@ export async function sendTicketDistributionEmail(opts: {
   type: 'created' | 'updated' | 'comment'
   detail: string
   resolution?: string
-}): Promise<void> {
+}): Promise<{ sent: boolean; recipient_count: number; reason?: 'no_list' | 'send_failed' }> {
   const venueRes = await query(
     `SELECT name, distribution_emails FROM venues WHERE id = $1`,
     [opts.venueId]
   )
   const venue = venueRes.rows[0]
-  if (!venue?.distribution_emails || venue.distribution_emails.length === 0) return
+  if (!venue?.distribution_emails || venue.distribution_emails.length === 0) {
+    return { sent: false, recipient_count: 0, reason: 'no_list' }
+  }
 
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
   const replyTo = ticketReplyAddress(opts.ticketNumber)
@@ -144,12 +146,20 @@ export async function sendTicketDistributionEmail(opts: {
       ${opts.resolution ? `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Resolution:</strong> ${opts.resolution}</p>` : ''}`
   }
 
-  await sendEmail(
-    venue.distribution_emails,
-    subjectMap[opts.type],
-    ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
-    replyTo
-  )
+  try {
+    const ok = await sendEmail(
+      venue.distribution_emails,
+      subjectMap[opts.type],
+      ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
+      replyTo
+    )
+    if (ok === false) {
+      return { sent: false, recipient_count: venue.distribution_emails.length, reason: 'send_failed' }
+    }
+    return { sent: true, recipient_count: venue.distribution_emails.length }
+  } catch (e) {
+    return { sent: false, recipient_count: venue.distribution_emails.length, reason: 'send_failed' }
+  }
 }
 
 export async function sendTicketReplyEmail(opts: {
