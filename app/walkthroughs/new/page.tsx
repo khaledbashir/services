@@ -47,13 +47,11 @@ export default function NewWalkthroughPage() {
   // ask (5/13): the form should "automatically know it's me" with no extra
   // step. The dropdown only appears if the tech needs to override (no match).
   const [loggedByAutoMatched, setLoggedByAutoMatched] = useState(false)
-  // Projected Log ID — Nick parity (5/13): "previously on airtable, when we
-  // started a ticket, it already created a ticket ID number". Fetched once
-  // on mount, displayed prominently as `YY-NNNN`. Final ID is stamped by
-  // the server after insert (atomic, no race) and shown in the success
-  // banner, so a stale projection here just means the displayed number
-  // may bump up by 1-2 if another tech submitted in the same minute.
-  const [projectedLogId, setProjectedLogId] = useState<string>('')
+  // Date prefix for the Log ID strip — Nick parity (5/13 video). Airtable
+  // shows `YY-MM-DD []` at form open, fills in the TAG once a venue is
+  // picked. We mirror that: prefix is set on mount, TAG composed from the
+  // selected venue's abbreviation as the user picks it.
+  const [logDatePrefix, setLogDatePrefix] = useState<string>('')
   const [venues, setVenues] = useState<VenueOption[]>([])
   const [venueId, setVenueId] = useState<number | ''>('')
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -93,9 +91,18 @@ export default function NewWalkthroughPage() {
       if (Array.isArray(d?.options)) setLoggedByOptions(d.options)
     })
     fetch('/api/walkthroughs/nocodb?action=projected-log-id').then((r) => r.ok ? r.json() : null).then((d) => {
-      if (d?.projected) setProjectedLogId(String(d.projected))
+      if (d?.date_prefix) setLogDatePrefix(String(d.date_prefix))
     })
   }, [])
+
+  // Compose the projected Log ID as the venue selection changes — mirrors
+  // the Airtable form behaviour (`YY-MM-DD [ABBR]`).
+  const projectedLogId = (() => {
+    if (!logDatePrefix) return '—'
+    const v = venues.find((x) => x.id === venueId)
+    const tag = v?.abbreviation || (v?.name ? v.name.slice(0, 4).toUpperCase() : '')
+    return tag ? `${logDatePrefix} [${tag}]` : `${logDatePrefix} [ ]`
+  })()
 
   // Auto-default the submitter to whichever option matches the current
   // tech's name — saves a click for the tech logging their own walkthrough.
