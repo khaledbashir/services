@@ -12,34 +12,34 @@ interface AuditRecipe {
 
 const AUDIT_RECIPES: AuditRecipe[] = [
   {
-    icon: '✂️',
-    label: 'Find $X/mo to cut',
-    prompt: 'Plan an audit to find $500/mo of recurring SaaS spend to cut. For each top recurring vendor, weigh business value vs cost and benchmark against market alternatives via web search. Rank candidates by ease-of-cut and dollars saved. End with one specific cut to make this week.',
+    icon: '💰',
+    label: 'Where can ANC grow revenue?',
+    prompt: 'Run a sales-growth audit on ANC. Surface the top revenue-expansion plays: uncovered venues to pitch service contracts to, ticket-pain venues that are upsell-ready, high-event venues without Event Support coverage, and dormant design requests that could become Content Subscriptions. For each play, estimate $ ARR opportunity. End with the single move ANC leadership should action this week. Build a dashboard.',
   },
   {
-    icon: '🔍',
-    label: 'Vendor benchmark sweep',
-    prompt: 'Benchmark every recurring vendor in the ANC context against current market pricing. For each: (1) state what we pay, (2) web-search competitors and typical rates, (3) verdict: under / at / above market. Cite sources. End with the single biggest renegotiation lever.',
-  },
-  {
-    icon: '⚠️',
-    label: 'Top 3 risks this month',
-    prompt: 'Audit the current ANC dashboard state and surface the top 3 financial or operational risks. For each: the data point that flags it, the size of the exposure, and one concrete mitigation. Be ruthless — no padding.',
+    icon: '🏟️',
+    label: 'Uncovered-venue opportunity map',
+    prompt: 'List the venues with NO Tech Support / Break-Fix / Event Support contracts but high event volume or open tickets. For each, recommend the right tier of service contract to pitch and rough monthly pricing using web-searched industry benchmarks. Build a dashboard showing the top 15 opportunities ranked by combined event load + ticket count.',
   },
   {
     icon: '📈',
-    label: 'Year-end projection',
-    prompt: 'Project full-year SaaS + cloud spend at the current trailing-90-day run rate. Then build a scenario with realistic vendor consolidations (call out which) to lower it. Compare both numbers in a table and recommend the consolidations worth doing.',
+    label: 'Pricing-power audit',
+    prompt: 'Audit ANC\'s current contracted-service pricing against market rates. For each service (Tech Support, Break-Fix, Event Support, White Glove, Walkthroughs, LiveSync, VisionStats, Parts), web-search what comparable LED / display service shops charge. Verdict per service: under / at / above market. End with the biggest underpriced service ANC could raise rates on. Cite sources.',
   },
   {
-    icon: '🎯',
-    label: 'Where is the retainer leaking?',
-    prompt: 'Audit the last 60 days of retainer-covered work. Which areas / requesters consume the most hours? Are any fixes repeating (same issue, multiple requests)? End with the structural change that would reduce monthly retainer burn by ~20%.',
+    icon: '🎨',
+    label: 'Design pipeline revenue play',
+    prompt: 'Audit the design-request pipeline. How many are dormant vs active? Which clients have submitted the most requests without follow-up? Recommend how ANC could package these into recurring Content Subscriptions (graphics, sponsor overlays, stat overlays) with realistic per-venue pricing. Estimate ARR potential at 10% and 25% close rates. Build a dashboard.',
+  },
+  {
+    icon: '⚠️',
+    label: 'Top 3 risks for ANC',
+    prompt: 'Surface the top 3 financial or operational risks ANC faces right now from the live dashboard data. For each: the data point that flags it, the size of the exposure, and one concrete mitigation ANC leadership should put in place. Risks should be about ANC\'s business — staffing, ticket backlog, missed event coverage, client concentration. Be ruthless.',
   },
   {
     icon: '🤝',
-    label: 'Change-order pricing audit',
-    prompt: 'Audit the open change-order queue. For each item, sanity-check the quoted hours/price against the market rate for that scope via web search. Flag any quote that looks under-priced for ANC. End with a punch list of quotes to revise.',
+    label: 'Vendor-cost audit (ANC\'s own bills)',
+    prompt: 'ANC pays vendors for things like SaaS, cloud, parts, and outside services. Where might ANC be overspending? Web-search market rates for the categories ANC consumes (event ticketing data, display parts, software platforms, etc.) and flag any line items that look high. This is about ANC\'s own vendor relationships — not about anyone billing ANC for services rendered.',
   },
 ]
 
