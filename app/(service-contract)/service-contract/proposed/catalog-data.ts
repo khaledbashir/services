@@ -348,6 +348,229 @@ export const UNLOCKS: Unlock[] = [
   { atHours: 60, label: 'Half-off Year-2 renewal',         description: 'Lock the rate going forward',                     icon: '💎' },
 ]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI SCOPING JOURNEY — idea seeds + clarifying-question patterns
+// Pre-baked starter ideas that match real ANC pattern history. They power the
+// "Idea Suggestions" panel — filter live as the user types, click to fill.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface IdeaSeed {
+  id: string
+  emoji: string
+  title: string
+  description: string
+  bucket: BucketKey
+  platforms: string[] // service-dashboard, crm, proposal-engine, docs
+  keywords: string[]  // for fuzzy match
+}
+
+export const IDEA_SEEDS: IdeaSeed[] = [
+  {
+    id: 'nielsen-auto-pull',
+    emoji: '📺',
+    title: 'Nielsen auto-pull for M&S verification',
+    description: 'Pull TRUE/FALSE broadcast confirmations directly into each sponsor\'s Nielsen verification grid. Stop the monthly manual export.',
+    bucket: 'l',
+    platforms: ['crm'],
+    keywords: ['nielsen', 'broadcast', 'verification', 'sponsor', 'pull', 'integration'],
+  },
+  {
+    id: 'venue-tree-design',
+    emoji: '🌳',
+    title: 'Venue tree on design requests',
+    description: 'Pick a parent venue and see every sub-venue (boards, ribbons, fascias) tree-style when filing a design request.',
+    bucket: 'm',
+    platforms: ['service-dashboard'],
+    keywords: ['venue', 'tree', 'design', 'hierarchy', 'parent', 'sub-venue'],
+  },
+  {
+    id: 'stakeholder-dashboard',
+    emoji: '📊',
+    title: 'Per-stakeholder CRM dashboard',
+    description: 'One landing page per stakeholder (Joe / Jireh / Natalia) — pinned reports, KPIs, and recent activity they care about.',
+    bucket: 'l',
+    platforms: ['crm'],
+    keywords: ['stakeholder', 'dashboard', 'kpi', 'natalia', 'jireh', 'joe', 'pinned'],
+  },
+  {
+    id: 'salesforce-account-sync',
+    emoji: '🔄',
+    title: 'Salesforce → CRM account sync',
+    description: 'Two-way sync for Accounts and Opportunities so legacy SF reports keep working while the new CRM becomes the source of truth.',
+    bucket: 'xl',
+    platforms: ['crm'],
+    keywords: ['salesforce', 'sf', 'sync', 'account', 'opportunity', 'migration'],
+  },
+  {
+    id: 'service-log-pdf',
+    emoji: '📄',
+    title: 'Service-log monthly PDF report',
+    description: 'Auto-generate a polished PDF every month with shipped items, hours used, retainer remaining — branded and emailable.',
+    bucket: 'm',
+    platforms: ['service-dashboard'],
+    keywords: ['pdf', 'report', 'monthly', 'service-log', 'export', 'invoice'],
+  },
+  {
+    id: 'designer-utilization',
+    emoji: '🎨',
+    title: 'Designer utilization heatmap',
+    description: 'Calendar heatmap per designer — who\'s overloaded, who has bandwidth, color-coded by hours-budget burn.',
+    bucket: 'm',
+    platforms: ['service-dashboard'],
+    keywords: ['designer', 'utilization', 'heatmap', 'hours', 'budget', 'capacity'],
+  },
+  {
+    id: 'voicemail-auto-ticket',
+    emoji: '📞',
+    title: 'Voicemail → ticket auto-route',
+    description: 'Inbound voicemail transcribed, classified, and dropped into the right venue ticket queue with a Slack alert.',
+    bucket: 'l',
+    platforms: ['service-dashboard'],
+    keywords: ['voicemail', 'phone', 'transcribe', 'ticket', 'auto', 'route'],
+  },
+  {
+    id: 'proposal-template-library',
+    emoji: '📚',
+    title: 'Proposal template library',
+    description: 'Reusable Mirror-Mode templates per stadium type (NBA arena / NFL stadium / college). One-click clone for new RFPs.',
+    bucket: 'l',
+    platforms: ['proposal-engine'],
+    keywords: ['proposal', 'template', 'mirror', 'rfp', 'library', 'clone'],
+  },
+  {
+    id: 'inventory-low-stock',
+    emoji: '📦',
+    title: 'Inventory low-stock alerts',
+    description: 'Slack ping the moment any spare-parts SKU drops below the per-venue threshold. Surface in the maintenance queue.',
+    bucket: 's',
+    platforms: ['service-dashboard'],
+    keywords: ['inventory', 'parts', 'stock', 'alert', 'slack', 'maintenance'],
+  },
+  {
+    id: 'walkthrough-mobile',
+    emoji: '📱',
+    title: 'Mobile walkthrough form',
+    description: 'Field-staff walkthrough form optimized for phones: photo upload, GPS-tagged, offline-capable, syncs when reconnected.',
+    bucket: 'l',
+    platforms: ['service-dashboard'],
+    keywords: ['mobile', 'walkthrough', 'field', 'photo', 'offline', 'phone'],
+  },
+  {
+    id: 'docs-search',
+    emoji: '🔎',
+    title: 'AI-powered operator docs search',
+    description: 'Natural-language search over operator docs — ask "how do I add a venue" and get the exact section + step list.',
+    bucket: 'm',
+    platforms: ['docs'],
+    keywords: ['docs', 'search', 'ai', 'operator', 'help', 'natural language'],
+  },
+  {
+    id: 'sponsor-roi-roll-up',
+    emoji: '💰',
+    title: 'Sponsor ROI quarterly roll-up',
+    description: 'Auto-aggregate ad impressions, broadcast minutes, and on-site activations into a sponsor-ready ROI brief.',
+    bucket: 'l',
+    platforms: ['crm'],
+    keywords: ['sponsor', 'roi', 'impressions', 'broadcast', 'quarterly', 'brief'],
+  },
+]
+
+// Pattern → clarifying questions. Fires when the user's description matches.
+// 2-4 questions show up before the final scope generation so the AI has
+// enough info to quote and plan accurately.
+export interface ClarifyPattern {
+  id: string
+  triggers: string[] // keyword triggers
+  questions: string[]
+}
+
+export const CLARIFY_PATTERNS: ClarifyPattern[] = [
+  {
+    id: 'report',
+    triggers: ['report', 'dashboard', 'widget', 'metric', 'kpi'],
+    questions: [
+      'Who needs to see it — one stakeholder or a team page?',
+      'How fresh — live, daily refresh, or weekly?',
+      'Should it export to PDF / email automatically?',
+    ],
+  },
+  {
+    id: 'automation',
+    triggers: ['automate', 'automation', 'auto', 'trigger', 'when X then Y'],
+    questions: [
+      'What triggers it — a database change, a schedule, or a manual button?',
+      'Where does the output land — Slack, email, a CRM record, a webhook?',
+      'Should it run for all rows or only a filtered subset?',
+    ],
+  },
+  {
+    id: 'integration',
+    triggers: ['sync', 'integration', 'pull', 'import', 'connect', 'api'],
+    questions: [
+      'Which system are we connecting to — name and API access?',
+      'One-way or two-way sync?',
+      'Real-time, scheduled, or on-demand?',
+    ],
+  },
+  {
+    id: 'venue',
+    triggers: ['venue', 'arena', 'stadium', 'site'],
+    questions: [
+      'All venues, a region, or a specific venue list?',
+      'Per-event, per-season, or always-on?',
+    ],
+  },
+  {
+    id: 'design',
+    triggers: ['design', 'designer', 'creative', 'graphic'],
+    questions: [
+      'Inside the Service Dashboard (Alexis\'s flow) or the CRM (Daniel/Leda)?',
+      'Should it tie to Hours Budgets for tracking?',
+    ],
+  },
+  {
+    id: 'staff',
+    triggers: ['staff', 'tech', 'technician', 'employee', 'crew'],
+    questions: [
+      'All staff or a specific role (techs / managers / contractors)?',
+      'Should it gate by venue assignment or role permission?',
+    ],
+  },
+  {
+    id: 'mobile',
+    triggers: ['mobile', 'phone', 'app', 'tablet', 'field'],
+    questions: [
+      'Should it work offline and sync later?',
+      'Native app or mobile-optimized web?',
+    ],
+  },
+  {
+    id: 'notification',
+    triggers: ['slack', 'email', 'alert', 'notification', 'ping'],
+    questions: [
+      'Per-venue channel or a central channel?',
+      '@-mention specific people or post quietly?',
+    ],
+  },
+]
+
+export function detectClarifyQuestions(description: string): string[] {
+  const lower = description.toLowerCase()
+  const seen = new Set<string>()
+  const questions: string[] = []
+  for (const pattern of CLARIFY_PATTERNS) {
+    const hit = pattern.triggers.some(t => lower.includes(t))
+    if (!hit) continue
+    for (const q of pattern.questions) {
+      if (!seen.has(q)) {
+        seen.add(q)
+        questions.push(q)
+      }
+    }
+  }
+  return questions.slice(0, 4)
+}
+
 export function rateForHours(hours: number): number {
   let rate = BASE_RATE
   for (const band of HOUR_BANDS) {
