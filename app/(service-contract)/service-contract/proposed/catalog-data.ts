@@ -306,6 +306,64 @@ export const TIER_BY_KEY = Object.fromEntries(SERVICE_TIERS.map(t => [t.key, t])
 export const OPERATOR_BY_KEY = Object.fromEntries(OPERATOR_PROGRAM.map(o => [o.key, o])) as Record<OperatorKey, OperatorOption>
 export const BUNDLE_BY_KEY = Object.fromEntries(BUNDLES.map(b => [b.key, b])) as Record<BundleKey, Bundle>
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAN BUILDER — interactive hour slider with volume discounts and unlocks.
+// Base rate is $90/hr. Each hour band drops the rate; each unlock threshold
+// activates a perk. This is the "build your own plan" experience.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const BASE_RATE = 90
+
+export interface HourBand {
+  minHours: number
+  rate: number
+  badge: string
+  emoji: string
+  tagline: string
+  color: string // tailwind accent
+}
+
+export const HOUR_BANDS: HourBand[] = [
+  { minHours: 1,  rate: 90, badge: 'Starter',    emoji: '🌱', tagline: 'Anchor rate · pay-as-you-go feel',    color: 'slate' },
+  { minHours: 9,  rate: 80, badge: 'Engaged',    emoji: '⚡', tagline: 'Volume discount kicks in',           color: 'blue' },
+  { minHours: 21, rate: 70, badge: 'Active',     emoji: '🔥', tagline: 'Most ANC months land here',          color: 'indigo' },
+  { minHours: 41, rate: 60, badge: 'Operator',   emoji: '🚀', tagline: 'Heavy-build cadence',                color: 'purple' },
+  { minHours: 60, rate: 50, badge: 'Enterprise', emoji: '👑', tagline: 'Custom enterprise tier — talk to us', color: 'emerald' },
+]
+
+export interface Unlock {
+  atHours: number
+  label: string
+  description: string
+  icon: string
+  worth?: string
+}
+
+export const UNLOCKS: Unlock[] = [
+  { atHours: 12, label: 'Maintenance retainer activates',  description: 'Bug fixes + ops support across all 4 platforms', icon: '🔧' },
+  { atHours: 20, label: 'Same-day SLA',                    description: 'Mon–Fri response in hours, not next-day',         icon: '⚡' },
+  { atHours: 30, label: 'Build credits unlock',            description: '4 hours/mo of NEW feature work, no extra invoice', icon: '🔨', worth: '+$2K value/mo' },
+  { atHours: 40, label: 'Operator training included',      description: 'Quarterly Charlie hands-on session',              icon: '🎓' },
+  { atHours: 50, label: 'Charlie Full Operator INCLUDED',  description: 'Full toolkit transfer to Charlie — bundled in',   icon: '🎁', worth: '$18,000 of value' },
+  { atHours: 60, label: 'Half-off Year-2 renewal',         description: 'Lock the rate going forward',                     icon: '💎' },
+]
+
+export function rateForHours(hours: number): number {
+  let rate = BASE_RATE
+  for (const band of HOUR_BANDS) {
+    if (hours >= band.minHours) rate = band.rate
+  }
+  return rate
+}
+
+export function bandForHours(hours: number): HourBand {
+  let active = HOUR_BANDS[0]
+  for (const band of HOUR_BANDS) {
+    if (hours >= band.minHours) active = band
+  }
+  return active
+}
+
 export function fmtUSD(n: number): string {
   if (n === 0) return '$0'
   if (Math.abs(n) >= 1000) {

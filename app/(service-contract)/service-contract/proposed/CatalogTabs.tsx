@@ -12,9 +12,10 @@ import {
   type TierKey, type OperatorKey, type BundleKey,
 } from './catalog-data'
 
-type TabKey = 'tiers' | 'operator' | 'buckets' | 'bundles' | 'forecast' | 'explore'
+type TabKey = 'build' | 'tiers' | 'operator' | 'buckets' | 'bundles' | 'forecast' | 'explore'
 
 const TABS: Array<{ key: TabKey; label: string; icon: string; hint: string }> = [
+  { key: 'build',    label: 'Build Your Plan', icon: '🎮', hint: 'Slide hours, unlock perks' },
   { key: 'tiers',    label: 'Service Tiers',   icon: '🎯', hint: 'Monthly retainer ladder' },
   { key: 'operator', label: 'Operator Program', icon: '🧑‍💻', hint: 'Train Charlie' },
   { key: 'buckets',  label: 'Build Catalog',   icon: '📦', hint: 'Fixed-price buckets for new work' },
@@ -24,7 +25,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; hint: string }> = 
 ]
 
 export default function CatalogTabs({ exploreContent }: { exploreContent: React.ReactNode }) {
-  const [tab, setTab] = useState<TabKey>('tiers')
+  const [tab, setTab] = useState<TabKey>('build')
   const [tier, setTier] = useState<TierKey | null>(null)
   const [operator, setOperator] = useState<OperatorKey | null>(null)
   const [bundle, setBundle] = useState<BundleKey | null>(null)
@@ -86,6 +87,7 @@ export default function CatalogTabs({ exploreContent }: { exploreContent: React.
 
       {/* Active panel */}
       <div className="mb-8">
+        {tab === 'build'    && <PlanBuilderPanel />}
         {tab === 'tiers'    && <ServiceTiersPanel selected={tier} onSelect={setTier} />}
         {tab === 'operator' && <OperatorProgramPanel selected={operator} onSelect={setOperator} />}
         {tab === 'buckets'  && <BuildBucketsPanel />}
