@@ -12,8 +12,12 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 // https://ancservices-anything-llm.izcgmb.easypanel.host. Web search runs
 // via Serper. We always prepend `@agent` so the model can use the
 // web-browsing skill on every message (without the user needing to know).
-const UPSTREAM_BASE = process.env.ANYTHINGLLM_BASE_URL || 'https://abc-anything-llm.izcgmb.easypanel.host'
-const EMBED_UUID = process.env.ANC_CONSULTANT_EMBED_UUID || '9382dff7-4f76-49ce-86e6-23199a136535'
+// Defaults updated 2026-05-13: the previous abc-anything-llm host + embed UUID
+// both 404'd on the live AnythingLLM instances. The Executive Advisor embed
+// lives on ancservices-anything-llm with UUID a8a0aa84-... Override either
+// via env vars on EasyPanel if a different workspace/embed is added later.
+const UPSTREAM_BASE = process.env.ANYTHINGLLM_BASE_URL || 'https://ancservices-anything-llm.izcgmb.easypanel.host'
+const EMBED_UUID = process.env.ANC_CONSULTANT_EMBED_UUID || 'a8a0aa84-a360-409c-ab5d-3ee7ac8afd26'
 
 export async function POST(request: NextRequest) {
   const auth = await requireRole(request, 'admin')

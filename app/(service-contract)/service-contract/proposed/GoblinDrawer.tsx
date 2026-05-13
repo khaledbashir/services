@@ -91,31 +91,57 @@ export default function GoblinDrawer({ co, onClose }: { co: ProposedCO; onClose:
       const decoder = new TextDecoder()
       let buffer = ''
       let acc = ''
+      let upstreamError: string | null = null
+
+      // Tries both SSE (`data: {...}`) and raw-JSON formats.
+      // AnythingLLM emits raw JSON for abort/error frames (no `data:` prefix),
+      // which used to be silently dropped — leaving an empty drawer.
+      const consumeChunk = (chunk: string) => {
+        const trimmed = chunk.trim()
+        if (!trimmed) return
+        const lines = trimmed.split('\n')
+        for (const rawLine of lines) {
+          const line = rawLine.trim()
+          if (!line) continue
+          const payload = line.startsWith('data:') ? line.slice(5).trim() : line
+          if (!payload) continue
+          try {
+            const obj = JSON.parse(payload)
+            if (obj && typeof obj === 'object') {
+              if (obj.error || obj.type === 'abort') {
+                upstreamError = obj.error || obj.textResponse || 'Advisor aborted the request'
+                continue
+              }
+              if (typeof obj.textResponse === 'string' && obj.textResponse) {
+                acc += obj.textResponse
+                const clean = acc.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '')
+                setText(clean)
+              }
+            }
+          } catch {
+            // Not JSON — treat as raw text the model emitted.
+            acc += payload
+            setText(acc)
+          }
+        }
+      }
+
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const parts = buffer.split('\n\n')
         buffer = parts.pop() || ''
-        for (const part of parts) {
-          const lines = part.split('\n').filter((l) => l.startsWith('data: '))
-          for (const line of lines) {
-            const payload = line.slice(6).trim()
-            if (!payload) continue
-            try {
-              const obj = JSON.parse(payload)
-              if (typeof obj.textResponse === 'string' && obj.textResponse) {
-                acc += obj.textResponse
-                // strip <think> tokens
-                const clean = acc.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '')
-                setText(clean)
-              }
-            } catch {
-              acc += payload
-              setText(acc)
-            }
-          }
-        }
+        for (const part of parts) consumeChunk(part)
+      }
+      // Drain whatever's left in the buffer — AnythingLLM error frames often
+      // arrive as a single JSON object with no trailing blank line.
+      if (buffer) consumeChunk(buffer)
+
+      if (upstreamError && !acc) {
+        setError(upstreamError)
+      } else if (!acc) {
+        setError('Advisor returned an empty response. Embed may be misconfigured — ping Ahmad.')
       }
       setStreaming(false)
     }).catch((err) => {
