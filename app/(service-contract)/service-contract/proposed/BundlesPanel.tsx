@@ -13,8 +13,8 @@ export default function BundlesPanel({ selected, onSelect }: Props) {
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1">Bundles</h2>
         <p className="text-sm text-gray-500 max-w-2xl">
-          The bundle is where the deal lives — committing to a year unlocks discounts on the retainer side.
-          Charlie Full Operator stays $18K as a standalone item, but bundled into Operator+ it&apos;s included.
+          Annual bundles combine monthly support capacity with operator enablement.
+          Larger commitments reduce approval overhead and make support costs easier to forecast.
         </p>
       </div>
 
@@ -86,7 +86,7 @@ export default function BundlesPanel({ selected, onSelect }: Props) {
                       : 'bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200'
                 }`}
               >
-                {isSelected ? '✓ Selected' : isBest ? 'Pick the Best Deal →' : 'Select this bundle'}
+                {isSelected ? '✓ Selected' : isBest ? 'Select Best Value' : 'Select this bundle'}
               </button>
             </div>
           )

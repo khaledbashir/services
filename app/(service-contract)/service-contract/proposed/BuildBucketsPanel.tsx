@@ -17,7 +17,7 @@ export default function BuildBucketsPanel() {
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1">Build Catalog</h2>
         <p className="text-sm text-gray-500 max-w-2xl">
           Every new feature lands in one of five buckets with a fixed price.
-          No scope doc for XS through L — just a bucket invoice. Only XL needs a full Phase letter.
+          XS through L can be approved from the catalog. Only XL needs a full phase scope.
         </p>
       </div>
 
@@ -89,10 +89,10 @@ export default function BuildBucketsPanel() {
       </div>
 
       <div className="mt-6 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-4 bg-gray-50/40 dark:bg-gray-900/40">
-        <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">How this kills the Phase 4.x grind</div>
+        <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">How this simplifies approvals</div>
         <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-          Today every new ask &gt; 2 hrs triggers a scope doc + separate invoice. Under this catalog,
-          XS/S/M/L all skip the scope doc — just pick a bucket. Scope-doc workload drops <strong>~80%</strong>.
+          Today every new ask above a small tweak needs a custom scope and separate approval. Under this catalog,
+          XS/S/M/L work can be approved from a standard bucket, keeping the larger phase documents for truly large builds.
         </p>
       </div>
     </section>

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const r = await query(
     `SELECT id, name, pitch, bullets, price_usd, timeline_label, benefit,
             category, target_project, status, pitched_to, promoted_request_id,
-            is_placeholder, sort_order, notes, created_at, updated_at
+            is_placeholder, sort_order, created_at, updated_at
        FROM proposed_change_orders
       WHERE status <> 'archived'
       ORDER BY is_placeholder ASC, sort_order ASC, created_at DESC
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       pitchedTo,
       Boolean(body.is_placeholder),
       Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 0,
-      typeof body.notes === 'string' ? body.notes : null,
+      null,
       authedUser.userId || null,
       authedUser.fullName || null,
       authedUser.email || null,

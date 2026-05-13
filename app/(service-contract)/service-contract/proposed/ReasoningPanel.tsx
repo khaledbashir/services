@@ -8,7 +8,7 @@ interface Props {
   reasoning: string
   status?: string | null
   busy?: boolean
-  /** Also auto-scrolls the reasoning panel as new tokens arrive */
+  /** Also auto-scrolls the rationale panel as new text arrives */
   autoScroll?: boolean
 }
 
@@ -18,8 +18,8 @@ interface ModalProps extends Props {
 }
 
 /**
- * Modal-overlay version. Pops the moment a stream starts and stays open
- * until the user dismisses it. Same ReasoningPanel rendering inside.
+ * Modal-overlay version. Pops the moment scoping starts and stays open
+ * until the user dismisses it. Same RationalePanel rendering inside.
  */
 export function ReasoningModal({ open, onClose, reasoning, status, busy }: ModalProps) {
   useEffect(() => {
@@ -47,7 +47,7 @@ export function ReasoningModal({ open, onClose, reasoning, status, busy }: Modal
                 AI is scoping your idea
               </div>
               <div className="text-[11px] text-purple-700 dark:text-purple-300 leading-tight">
-                {busy ? (status || 'Reasoning live…') : 'Done — close this to see your draft below.'}
+                {busy ? (status || 'Drafting scope…') : 'Done — close this to see your draft below.'}
               </div>
             </div>
           </div>
@@ -82,9 +82,8 @@ export function ReasoningModal({ open, onClose, reasoning, status, busy }: Modal
 }
 
 /**
- * Renders the AI's chain-of-thought as live markdown. Used both as the
- * loading-state ("AI is thinking…") AND as the static accordion content
- * on the detail page. Same component, two contexts.
+ * Renders client-safe scoping rationale as markdown. Used both as the
+ * loading-state and as the static accordion content on the detail page.
  */
 export default function ReasoningPanel({ reasoning, status, busy, autoScroll = true }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -102,7 +101,7 @@ export default function ReasoningPanel({ reasoning, status, busy, autoScroll = t
             <span className="inline-block w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
           )}
           <span className="text-xs font-semibold text-purple-900 dark:text-purple-100">
-            {status || 'AI reasoning…'}
+            {status || 'Drafting scope…'}
           </span>
         </div>
       )}
@@ -115,7 +114,7 @@ export default function ReasoningPanel({ reasoning, status, busy, autoScroll = t
             {reasoning}
           </ReactMarkdown>
         ) : (
-          <div className="text-xs text-gray-400 italic">{busy ? 'Waiting for the model to start thinking…' : 'No reasoning trace.'}</div>
+          <div className="text-xs text-gray-400 italic">{busy ? 'Preparing the scope card…' : 'No rationale available.'}</div>
         )}
       </div>
     </div>

@@ -203,7 +203,7 @@ export default function ProposedCODetailPage() {
             />
           </div>
 
-          {/* AI reasoning accordion — how the model arrived at this scope */}
+          {/* Scoping rationale accordion — client-safe explanation */}
           {item.ai_reasoning && (
             <details className="mb-8 rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/30 dark:bg-purple-950/20 group">
               <summary className="cursor-pointer p-4 list-none flex items-center justify-between gap-3 hover:bg-purple-50/60 dark:hover:bg-purple-950/30 rounded-xl [&amp;::-webkit-details-marker]:hidden">
@@ -211,11 +211,11 @@ export default function ProposedCODetailPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-base">🧠</span>
                     <h2 className="text-sm font-bold text-purple-900 dark:text-purple-100">
-                      How the AI arrived at this scope
+                      Scope rationale
                     </h2>
                   </div>
                   <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5 ml-6">
-                    Draft scoping notes from the AI model. Read them to audit the price, scope, or timeline before Ahmad confirms the final quote.
+                    Client-safe notes explaining the estimate, scope band, and delivery logic before final approval.
                   </p>
                 </div>
                 <span className="text-purple-400 dark:text-purple-500 text-xl group-open:rotate-45 transition-transform leading-none flex-shrink-0">+</span>
@@ -223,7 +223,7 @@ export default function ProposedCODetailPage() {
               <div className="border-t border-purple-200 dark:border-purple-800/60 px-4 pb-4 pt-3">
                 <ReasoningPanel reasoning={item.ai_reasoning} autoScroll={false} />
                 <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-800/40 text-[10px] text-purple-600 dark:text-purple-400/70 italic">
-                  Draft scoping trace from the AI model. The work type and scope are then anchored against the static market-rate table above — the AI suggests the bucket, the table provides the starting number, and Ahmad confirms the final quote.
+                  Planning estimate only. The final scope and price are confirmed before work starts.
                 </div>
               </div>
             </details>
@@ -256,13 +256,6 @@ export default function ProposedCODetailPage() {
             {refineError && <div className="text-xs text-rose-600 mt-2">{refineError}</div>}
           </section>
 
-          {item.notes && (
-            <section className="mb-8">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2">Internal notes</h2>
-              <pre className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap font-mono p-3 rounded bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800">{item.notes}</pre>
-            </section>
-          )}
-
           {related.length > 0 && (
             <section>
               <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-3">Other proposals</h2>
@@ -294,7 +287,7 @@ export default function ProposedCODetailPage() {
               {fmtUSD(item.price_usd)}
             </div>
             <div className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 leading-tight">
-              ⚠️ Estimate — final price set by Ahmad
+              Estimate — final price confirmed before work starts
             </div>
             <div className="text-xs text-gray-500 mt-2">
               {item.timeline_label ? `Delivery: ${item.timeline_label}` : 'Timeline TBD'}

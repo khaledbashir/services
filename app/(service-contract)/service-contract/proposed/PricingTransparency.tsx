@@ -68,7 +68,7 @@ export default function PricingTransparency({ breakdown, workType, fetchComparab
           Pricing breakdown
         </div>
         <p className="text-xs text-amber-900 dark:text-amber-200">
-          This card was added manually — no AI breakdown available. The price reflects Ahmad&apos;s direct estimate.
+          This card was added manually, so no AI breakdown is available. The price reflects a direct scope estimate.
         </p>
       </section>
     )
@@ -150,12 +150,12 @@ export default function PricingTransparency({ breakdown, workType, fetchComparab
         )}
       </div>
 
-      {/* Disclaimer — Ahmad reviews */}
+      {/* Disclaimer — final review */}
       <div className="rounded-md border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-2.5">
         <div className="flex items-start gap-2">
           <span className="text-amber-600 dark:text-amber-400 text-base leading-none flex-shrink-0">⚠️</span>
           <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
-            <strong>Planning estimate only.</strong> This is an AI-assisted estimate based on US market rates, the ANC service-contract relationship, and similar past work. Ahmad confirms the final scope and price before work starts, and the number may move up or down based on actual complexity, integration risk, or timing.
+            <strong>Planning estimate only.</strong> This is an AI-assisted estimate based on US market rates, the ANC service-contract context, and similar past work. Final scope and price are confirmed before work starts, and the number may move up or down based on actual complexity, integration risk, or timing.
           </p>
         </div>
       </div>

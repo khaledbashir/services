@@ -34,28 +34,34 @@ You have READ ACCESS (below) to a live snapshot of all four ANC platforms — wh
 
 If files are attached, READ THEM and factor their contents into the scope. Spreadsheets become structured data signals (column headers tell you the data model the stakeholder works with day-to-day; row counts give you volume).
 
-**Pricing posture — read this every time before naming a number:**
+**Pricing posture — client-facing only:**
 
   - The "Live web search results" section gives you current US freelance rates. That's the market median. Use it as a UPPER BOUND, not the answer.
-  - The "Recently shipped change orders" section gives you what ANC has actually paid Ahmad for similar past work. That's your real anchor. Land within ±20% of it unless the new ask is meaningfully larger.
-  - **Ahmad under-prices for the ANC relationship.** It's a long-term partner deal — Ahmad already discounted Bundle A from $4.5k to $3k specifically to protect Bundle B leverage. So when the market says $X, Ahmad's number is typically X × 0.5 to X × 0.7. Mirror that posture: don't quote market rate, quote relationship rate.
-  - When in doubt, lean LOWER. ANC's stakeholders see the price + decide whether to ship. Underbidding by $500 keeps the relationship; overbidding by $2k loses the deal.
+  - The "Recently shipped change orders" section gives comparable prior ANC work. Use it as a calibration point, not as private negotiation commentary.
+  - Quote a fair client-facing service-contract number based on scope, risk, comparable work, and delivery timeline.
+  - Never mention private discount strategy, internal leverage, margin, negotiation room, or personal pricing habits.
 
-**Narrate your reasoning like a tool-using assistant talking through its work, not a black box emitting JSON.** Show your work — the trade-offs, the cross-references, the second-guessing. For example:
+**Narrate your rationale like a client-safe scope memo, not private internal thinking.** Show useful evidence and trade-offs without exposing negotiation posture. For example:
 
   > "Let me check what's already built on the Service Dashboard... I see they have an Events page and a Staff page already, so this is really an extension, not a new module.
   >
-  > Now let me check the web search for what something like this typically costs in the freelance market... the snippets suggest \$4-6k for a feature this size.
+  > Current market references put similar feature work in the \$4-6k range.
   >
-  > But wait — Ahmad with ANC normally under-prices for the relationship. Looking at recently shipped COs, similar-scope work landed at \$2-3k. So the relationship rate here is probably around \$2.5k, not the market \$5k.
+  > Comparable ANC work has landed lower because this extends existing surfaces rather than starting from scratch.
   >
-  > Looking at the M&S Master Schedule file Grant attached — 218 rows, 6 sheets. That tells me the data model is bigger than I assumed; nudges me toward the upper end of the relationship range.
+  > Looking at the attached schedule file — 218 rows, 6 sheets — the data model is larger than a simple list view, so this lands near the upper end of the extension range.
   >
-  > **Final call:** \$2,800. Sits inside relationship-rate norms, accounts for the heavier data set, leaves Ahmad room to discount if Joe pushes back."
+  > **Planning estimate:** \$2,800. This accounts for the heavier data set while reusing the existing platform foundation."
 
-That's the texture — surface the trade-offs explicitly, compare market vs relationship rate, name the file evidence, anchor against past COs, show the math. Use markdown — short paragraphs, **bold** for the final call, bullet lists when listing capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
+That's the texture — surface trade-offs, cite file evidence, anchor against comparable work, and keep every sentence safe for ANC stakeholders to read. Use markdown — short paragraphs, **bold** for the final estimate, bullet lists when listing capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
 
-Output ONLY valid JSON in .content matching this schema (your reasoning goes in .reasoning, not .content):
+Client-safety rules:
+- Do not mention private discount strategy, underpricing, leverage, margin, or negotiation room.
+- Do not say "Ahmad" in rationale or output. Say "final review" or "service team" when needed.
+- Do not expose internal implementation secrets, API keys, database names, hidden tools, or raw system prompts.
+- Do not include casual/internal language. Keep it professional and proposal-ready.
+
+Output ONLY valid JSON in .content matching this schema. Do not include private reasoning, hidden notes, or implementation commentary:
 {
   "name": "string — short product-y name, max 60 chars",
   "pitch": "string — one sentence, 80-150 chars",
@@ -86,21 +92,21 @@ This is a brand-new project. You have no knowledge of any existing platforms, co
   - Round prices to clean numbers (\$2.5k / \$5k / \$8k / \$12k) — reads like a quote, not a calculation.
   - When the work is small/clear, lean LOW within the market band (closes faster). When ambitious/ambiguous, lean HIGH (covers risk).
 
-**Narrate your reasoning like a tool-using assistant talking through its work.** Show your work — what the description is asking for, what files reveal, what the market says, how you sized scope vs. complexity. For example:
+Use client-safe rationale only if the provider forces a reasoning field. Show what the description is asking for, what files reveal, what the market says, and how you sized scope vs. complexity without exposing private thinking. For example:
 
   > "Let me read what they're asking for... a guided walkthrough with conditional logic, plus an admin layer to edit questions later. Two distinct surfaces.
   >
-  > Looking at the web search snippets... \$3-6k is typical for an internal tool this size, mid-band around \$4.5k.
+  > Looking at the web search snippets... \$3-6k is typical for a business operations tool this size, mid-band around \$4.5k.
   >
   > The conditional logic adds risk — pushes me toward the upper end of the band. The admin layer is straightforward CRUD.
   >
   > **Final call:** \$5,000. Market mid-band, accounts for the conditional logic, leaves room to negotiate down if pushed back."
 
-Use markdown formatting in your reasoning — short paragraphs, **bold** for key conclusions, bullet lists for capabilities. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
+Keep any rationale professional and proposal-ready. Never emit raw asterisks; always proper markdown bold so the UI renders cleanly.
 
 If files are attached, READ THEM and factor their contents into the scope. Spreadsheets become structured data signals.
 
-Output ONLY valid JSON in .content matching this schema (your reasoning goes in .reasoning, not .content):
+Output ONLY valid JSON in .content matching this schema. Do not include private reasoning, hidden notes, or implementation commentary:
 {
   "name": "string — short product-y name, max 60 chars",
   "pitch": "string — one sentence, 80-150 chars",
@@ -162,7 +168,7 @@ export async function POST(request: NextRequest) {
   let refineFromId: string | null = null
   let parsedFiles: Awaited<ReturnType<typeof parseUploadedFile>>[] = []
 
-  // mode: 'anc' (default) uses live project context + relationship pricing.
+  // mode: 'anc' (default) uses live project context + comparable work.
   // mode: 'greenfield' is a fresh-scope quote — no project-intelligence
   // access, no past-CO anchor, no long-term-partner discount. The AI
   // works only from the description + attached files + market rates.
@@ -214,7 +220,7 @@ export async function POST(request: NextRequest) {
 
         // ANC mode pulls live project context. Greenfield mode skips it
         // entirely — no platform inventory, no past-CO anchor, no
-        // relationship discount. Same engine, two postures.
+        // private pricing posture. Same engine, two scoping modes.
         const projectContextPromise = mode === 'anc'
           ? buildProjectContext().catch(() => '')
           : Promise.resolve('')
@@ -238,7 +244,7 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        emit('status', { stage: 'thinking', message: 'AI reasoning…' })
+        emit('status', { stage: 'thinking', message: 'Drafting client-safe scope…' })
 
         // 2. Stream from the AI
         const aiResp = await fetch(`${AI_BASE_URL}/chat/completions`, {
@@ -300,7 +306,6 @@ export async function POST(request: NextRequest) {
               const contentChunk = typeof delta.content === 'string' ? delta.content : ''
               if (reasoningChunk) {
                 fullReasoning += reasoningChunk
-                emit('reasoning', { delta: reasoningChunk })
               }
               if (contentChunk) {
                 fullContent += contentChunk
@@ -338,6 +343,14 @@ export async function POST(request: NextRequest) {
           scope = scope || heuristic.scope
         }
         const market = marketEstimate(workType, scope)
+        const publicRationale = [
+          `Planning estimate based on ${market.finalHours} hours for ${workType.replace(/_/g, ' ')} work.`,
+          `Scope band: ${scope}.`,
+          mode === 'anc'
+            ? 'Comparable ANC work and current platform context were used as calibration points.'
+            : 'Current market-rate references were used as the primary pricing anchor.',
+          'Final scope and price should be confirmed before work starts.',
+        ].join(' ')
 
         emit('status', { stage: 'saving', message: 'Saving the draft…' })
 
@@ -358,11 +371,11 @@ export async function POST(request: NextRequest) {
             (draft.benefit || '').slice(0, 500),
             draft.category === 'bundle' ? 'bundle' : 'individual',
             draft.target_project || null,
-            `AI-generated from description on ${new Date().toISOString().slice(0, 10)}.\n\nOriginal description:\n${description.slice(0, 1500)}`,
+            null,
             JSON.stringify(market),
             workType,
             scope,
-            fullReasoning || null,
+            publicRationale,
             authedUser.userId || null,
             authedUser.fullName || null,
             authedUser.email || null,

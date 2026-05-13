@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import PlanBuilderPanel from './PlanBuilderPanel'
 import ServiceTiersPanel from './ServiceTiersPanel'
 import OperatorProgramPanel from './OperatorProgramPanel'
 import BuildBucketsPanel from './BuildBucketsPanel'
@@ -19,7 +20,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; hint: string }> = 
   { key: 'buckets',  label: 'Build Catalog',   icon: '📦', hint: 'Fixed-price buckets for new work' },
   { key: 'bundles',  label: 'Bundles',         icon: '🎁', hint: 'The deals — bundle savings' },
   { key: 'forecast', label: 'Annual Forecast', icon: '📈', hint: 'Predicted Year-1 spend' },
-  { key: 'explore',  label: 'Custom Asks',     icon: '🧞', hint: 'AI scope-it · roadmap · individual COs' },
+  { key: 'explore',  label: 'Custom Asks',     icon: '🧭', hint: 'AI scope-it · roadmap · individual COs' },
 ]
 
 export default function CatalogTabs({ exploreContent }: { exploreContent: React.ReactNode }) {

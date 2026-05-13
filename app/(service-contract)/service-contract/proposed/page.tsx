@@ -424,7 +424,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   const [liveStatus, setLiveStatus] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
-  // ANC mode = uses project context + relationship discount.
+  // ANC mode = uses project context + comparable prior work.
   // Greenfield mode = market rate, no platform context (portfolio-friendly).
   // Persisted per-browser in localStorage so the choice sticks.
   const [scopeMode, setScopeMode] = useState<'anc' | 'greenfield'>('anc')
@@ -440,8 +440,8 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
     try { localStorage.setItem('scopeItMode', m) } catch {}
   }
 
-  // Stream the scope-it endpoint. The reasoning IS the loader — it appears
-  // live as the model thinks, then collapses into the final card on 'done'.
+  // Stream the scope-it endpoint. The modal is just progress UI; private
+  // model reasoning is not streamed or displayed on stakeholder pages.
   // Switches to multipart/form-data when files are attached so the parser
   // can extract spreadsheet content + factor it into the proposal.
   const streamScope = async (payload: { description: string; refine_from?: string; files?: File[]; mode: 'anc' | 'greenfield' }) => {
@@ -491,8 +491,6 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
           try { parsed = JSON.parse(dataLine) } catch { continue }
           if (event === 'status') {
             setLiveStatus(parsed.message || parsed.stage || '…')
-          } else if (event === 'reasoning') {
-            setLiveReasoning((prev) => prev + (parsed.delta || ''))
           } else if (event === 'done') {
             setDraft(parsed.draft)
             setLiveStatus(null)
@@ -576,7 +574,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
                 ? 'bg-[#0A52EF] text-white shadow-sm'
                 : 'text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40'
             }`}
-            title="Uses ANC project context + relationship pricing"
+            title="Uses ANC platform context and similar past work"
           >
             ANC project
           </button>
@@ -605,11 +603,11 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
       }`}>
         {scopeMode === 'anc' ? (
           <>
-            <strong>ANC project mode:</strong> AI checks the four live platforms, pulls past change-order pricing as the anchor, and factors in our long-term partnership. Use this for ideas that build on what is already running — Service Dashboard, Proposal Engine, CRM, or Operator Docs. Ahmad still confirms final scope and price before work starts.
+            <strong>ANC project mode:</strong> AI checks the four live platforms and similar past work as the anchor. Use this for ideas that build on what is already running — Service Dashboard, Proposal Engine, CRM, or Operator Docs. Final scope and price are confirmed before work starts.
           </>
         ) : (
           <>
-            <strong>New project mode:</strong> AI has no knowledge of or access to current projects. Scope is built from the description alone — plus company website / brief / attached files if you provide them — and current market rates. Use this when the idea is not tied to anything already running. Ahmad still confirms final scope and price before work starts.
+            <strong>New project mode:</strong> AI has no access to current project context. Scope is built from the description alone — plus company website / brief / attached files if you provide them — and current market rates. Use this when the idea is not tied to anything already running. Final scope and price are confirmed before work starts.
           </>
         )}
       </div>
@@ -784,7 +782,7 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
         </div>
       )}
 
-      {/* Reasoning modal — pops the moment Scope-it / Refine fires.
+      {/* Progress modal — pops the moment Scope-it / Refine fires.
           Closes on user dismiss after 'done', or on Escape (when not busy). */}
       <ReasoningModal
         open={busy || !!liveReasoning}
@@ -943,16 +941,6 @@ function Drawer({
               <option value="in_progress">In progress (work starting)</option>
               <option value="won">Won (promoted to a real CO)</option>
             </select>
-          </Field>
-
-          <Field label="Notes (internal)">
-            <textarea
-              value={d.notes || ''}
-              onChange={e => onChange({ notes: e.target.value })}
-              rows={2}
-              placeholder="Anything you want to remember about this card."
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-md text-sm"
-            />
           </Field>
 
           <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">

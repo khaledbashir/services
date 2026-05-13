@@ -64,12 +64,17 @@ const PAGES: PageNav[] = [
   },
 ]
 
+const PUBLIC_TRANSPARENCY_PAGES = PAGES.filter((p) => p.href === '/transparency')
+
 const STORAGE_KEY = 'anc-service-contract-sidebar-collapsed'
 
 export default function ServiceContractShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? ''
   const [collapsed, setCollapsed] = useState<boolean>(false)
   const [hydrated, setHydrated] = useState<boolean>(false)
+  const pages = pathname === '/transparency' || pathname.startsWith('/transparency/')
+    ? PUBLIC_TRANSPARENCY_PAGES
+    : PAGES
 
   useEffect(() => {
     try {
@@ -138,7 +143,7 @@ export default function ServiceContractShell({ children }: { children: React.Rea
                 Pages
               </div>
             )}
-            {PAGES.map((p) => {
+            {pages.map((p) => {
               const isActive = p.match(pathname)
               if (collapsed) {
                 return (
@@ -212,7 +217,7 @@ export default function ServiceContractShell({ children }: { children: React.Rea
             <Link href="/" className="text-[11px] text-gray-500">← App</Link>
           </div>
           <div className="flex gap-1.5 overflow-x-auto -my-1 py-1">
-            {PAGES.map((p) => {
+            {pages.map((p) => {
               const isActive = p.match(pathname)
               return (
                 <Link

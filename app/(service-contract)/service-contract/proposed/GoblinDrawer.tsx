@@ -1,8 +1,8 @@
 'use client'
 
-// Goblin Drawer — streams a plan-mode breakdown of a single proposed CO
-// from the Advisor (AnythingLLM glm-5.1) so users can see exactly what it
-// would take to ship the idea, grounded in ANC's live state.
+// Planning drawer — streams a plan-mode breakdown of a single proposed CO
+// from the Advisor so users can see exactly what it would take to ship the
+// idea, grounded in ANC's live state.
 
 import { useEffect, useRef, useState } from 'react'
 
@@ -141,7 +141,7 @@ export default function GoblinDrawer({ co, onClose }: { co: ProposedCO; onClose:
       if (upstreamError && !acc) {
         setError(upstreamError)
       } else if (!acc) {
-        setError('Advisor returned an empty response. Embed may be misconfigured — ping Ahmad.')
+        setError('Advisor returned an empty response. Please try again or ask for a manual scope review.')
       }
       setStreaming(false)
     }).catch((err) => {
@@ -160,9 +160,8 @@ export default function GoblinDrawer({ co, onClose }: { co: ProposedCO; onClose:
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">🧞</span>
               <div className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                Goblin breakdown · live from the advisor
+                Planning breakdown
               </div>
             </div>
             <h2 className="text-lg font-bold leading-tight truncate">{co.name}</h2>
@@ -192,7 +191,7 @@ export default function GoblinDrawer({ co, onClose }: { co: ProposedCO; onClose:
 
         <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-3 flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400">
           <span>{streaming ? 'streaming…' : 'complete'}</span>
-          <span>Plan grounded in live ANC operational state</span>
+          <span>Based on current ANC platform context</span>
         </div>
       </div>
     </div>

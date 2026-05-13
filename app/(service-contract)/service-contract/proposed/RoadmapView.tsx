@@ -1,9 +1,9 @@
 'use client'
 
 // Roadmap View — narrates ANC's current state, what's in flight, and the
-// proposed next moves as a single "engineer's roadmap" rather than a flat
-// list of cards. Each next-move card has a 🧞 goblin button that streams a
-// plan-mode breakdown from the Advisor.
+// proposed next moves as a single roadmap rather than a flat list of cards.
+// Each next-move card has a planning button that streams a breakdown from
+// the Advisor.
 
 import { useEffect, useMemo, useState } from 'react'
 import GoblinDrawer from './GoblinDrawer'
@@ -217,7 +217,6 @@ function RoadmapCard({ co, accent, onGoblin }: { co: ProposedCO; accent: 'indigo
           className="text-xs px-2.5 py-1 rounded-md bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-semibold hover:opacity-90 shrink-0 inline-flex items-center gap-1"
           title="Plan this out with the advisor"
         >
-          <span>🧞</span>
           <span>Plan it</span>
         </button>
       </div>

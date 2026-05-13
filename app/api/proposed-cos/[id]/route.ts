@@ -19,7 +19,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       )
     } catch {}
   })()
-  const r = await query(`SELECT * FROM proposed_change_orders WHERE id = $1`, [id])
+  const r = await query(
+    `SELECT id, name, pitch, bullets, price_usd, timeline_label, benefit,
+            category, target_project, status, pitched_to, promoted_request_id,
+            is_placeholder, sort_order, market_breakdown, work_type, scope_band,
+            ai_reasoning, created_at, updated_at, view_count, last_viewed_at
+       FROM proposed_change_orders
+      WHERE id = $1`,
+    [id],
+  )
   if (r.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(r.rows[0])
 }
@@ -53,12 +61,19 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   if (Array.isArray(body.pitched_to)) push('pitched_to', body.pitched_to.map((p: unknown) => String(p)))
   if (typeof body.is_placeholder === 'boolean') push('is_placeholder', body.is_placeholder)
   if (Number.isFinite(Number(body.sort_order))) push('sort_order', Number(body.sort_order))
-  if (typeof body.notes === 'string') push('notes', body.notes)
 
   if (sets.length === 0) return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
   sets.push('updated_at = NOW()')
   await query(`UPDATE proposed_change_orders SET ${sets.join(', ')} WHERE id = $1`, params)
-  const r = await query(`SELECT * FROM proposed_change_orders WHERE id = $1`, [id])
+  const r = await query(
+    `SELECT id, name, pitch, bullets, price_usd, timeline_label, benefit,
+            category, target_project, status, pitched_to, promoted_request_id,
+            is_placeholder, sort_order, market_breakdown, work_type, scope_band,
+            ai_reasoning, created_at, updated_at, view_count, last_viewed_at
+       FROM proposed_change_orders
+      WHERE id = $1`,
+    [id],
+  )
   return NextResponse.json(r.rows[0])
 }
 
@@ -110,7 +125,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
              NULL, NULL, $3, false, 'quoted',
              $4::numeric, $4::numeric, $5, $6)
      RETURNING id`,
-    [rawText, summary, project, p.price_usd, requester, p.notes],
+    [rawText, summary, project, p.price_usd, requester, null],
   )
   const newId = newRow.rows[0].id
 
