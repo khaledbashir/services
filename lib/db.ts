@@ -720,6 +720,25 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_infra_receipt_comments_receipt ON infra_receipt_comments(receipt_id, created_at ASC)`)
 
+    // AI-generated dashboards — the Advisor's anc-dashboard-builder agent
+    // skill POSTs a spec here and gets back a public token URL it can drop
+    // into the chat. Public (no-auth) on purpose so embedded-chat readers
+    // can click through.
+    await client.query(`CREATE TABLE IF NOT EXISTS ai_dashboards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      token TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      spec JSONB NOT NULL,
+      created_by TEXT,
+      view_count INTEGER NOT NULL DEFAULT 0,
+      last_viewed_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_dashboards_token ON ai_dashboards(token)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_dashboards_created ON ai_dashboards(created_at DESC)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
