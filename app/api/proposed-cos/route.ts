@@ -8,14 +8,28 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
+  const url = new URL(request.url)
+  const workType = url.searchParams.get('work_type')
+  const excludeId = url.searchParams.get('exclude_id')
+  const params: any[] = []
+  const where: string[] = [`status <> 'archived'`]
+  if (workType) {
+    params.push(workType)
+    where.push(`work_type = $${params.length}`)
+  }
+  if (excludeId) {
+    params.push(excludeId)
+    where.push(`id <> $${params.length}`)
+  }
   const r = await query(
     `SELECT id, name, pitch, bullets, price_usd, timeline_label, benefit,
             category, target_project, status, pitched_to, promoted_request_id,
-            is_placeholder, sort_order, created_at, updated_at
+            is_placeholder, sort_order, work_type, scope_band, created_at, updated_at
        FROM proposed_change_orders
-      WHERE status <> 'archived'
+      WHERE ${where.join(' AND ')}
       ORDER BY is_placeholder ASC, sort_order ASC, created_at DESC
       LIMIT 100`,
+    params,
   )
   return NextResponse.json({ items: r.rows })
 }

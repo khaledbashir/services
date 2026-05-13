@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import { estimate as marketEstimate, classifyWorkType, type WorkType } from '@/lib/market-rate'
+import { estimate as marketEstimate, classifyWorkType, detectSizingFloor, applySizingFloor, type WorkType } from '@/lib/market-rate'
 import { buildProjectContext } from '@/lib/project-intelligence'
 import { parseUploadedFile, formatFilesForPrompt } from '@/lib/parse-uploaded-file'
 
@@ -26,7 +26,8 @@ interface ScopedDraft {
 const PROMPT_SYSTEM_ANC = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea (and may attach reference documents), you turn it into a structured proposal card.
 
 You have READ ACCESS (below) to a live snapshot of all four ANC platforms — what's already built, what data is in the CRM, what change orders shipped recently. USE it:
-  - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
+  - If the description is a SINGLE-feature extension of an existing surface (one new field, one new view, one new filter), frame as extending it — smaller scope, lower price. Don't propose rebuilding what's live.
+  - If the description is a MULTI-FEATURE BUNDLE, a WHITELABEL / PER-TENANT version of an existing surface, PER-CLIENT data isolation, a NEW PRODUCT LINE, or a SAAS-style productization of internal tooling, scope it as new_module or new_integration at the HIGH band — NOT a "small extension". Reusing the engine still requires per-tenant routing, branded views, data isolation, billing wiring, admin tooling, and delivery infrastructure. That's a multi-week build, not a single ticket. Anchor at the HIGH end of the comparable range.
   - If the request touches a custom object already in the CRM, lean on it instead of scoping a parallel object.
   - Anchor pricing against the "Recently shipped change orders" section.
   - target_project should match where the work would naturally land based on the surfaces inventory.
@@ -75,8 +76,10 @@ Output ONLY valid JSON in .content matching this schema. Do not include private 
 
 Rules:
 - "category"="bundle" when multi-feature OR cross-platform; else "individual".
-- Pick the workType that BEST matches; if unsure, lean smaller.
-- "scope": low = extends existing surface, mid = standard, high = ambitious / greenfield.
+- Pick the workType that BEST matches.
+  - For a single-feature ask in unclear territory, lean smaller.
+  - For a multi-feature bundle, whitelabel work, per-tenant isolation, new product line, or any "X for clients / per-venue / per-tenant" reframing of an internal surface — workType MUST be new_module or new_integration, and scope MUST be "high". Never new_feature_medium / mid for these.
+- "scope": low = extends existing surface, mid = standard, high = ambitious / greenfield / productized bundle.
 - Names: no vendor SKUs. No "Twenty" / "Ollama" / etc.
 - Bullets: what gets delivered. Benefit: what the stakeholder gains.
 `
@@ -121,7 +124,9 @@ Output ONLY valid JSON in .content matching this schema. Do not include private 
 Rules:
 - "category"="bundle" when multi-feature; else "individual".
 - target_project is always "greenfield" in this mode.
-- Pick the workType that BEST matches; if unsure, lean smaller.
+- Pick the workType that BEST matches.
+  - For a single-feature ask, lean smaller.
+  - For a multi-feature bundle, whitelabel platform, multi-tenant product, or new product line — workType MUST be new_module or new_integration, and scope MUST be "high".
 - Names: clean, product-y. No vendor SKUs.
 - Bullets: what gets delivered. Benefit: what the user gains from the project.
 `
@@ -342,13 +347,30 @@ export async function POST(request: NextRequest) {
           workType = workType || heuristic.workType
           scope = scope || heuristic.scope
         }
+
+        // Apply sizing floor — productization / bundle / whitelabel /
+        // size-up refinement cues override the AI's pick when it under-scopes.
+        // Scans the FULL prompt context (original description + any refinement
+        // instruction) so refinements like "make it bigger" land.
+        const floorText = priorContext ? `${description} ${priorContext}` : description
+        const floor = detectSizingFloor(floorText)
+        let upgraded = false
+        if (floor) {
+          const adjusted = applySizingFloor({ workType, scope }, floor)
+          workType = adjusted.workType
+          scope = adjusted.scope
+          upgraded = adjusted.upgraded
+        }
+
         const market = marketEstimate(workType, scope)
         const publicRationale = [
           `Planning estimate based on ${market.finalHours} hours for ${workType.replace(/_/g, ' ')} work.`,
           `Scope band: ${scope}.`,
-          mode === 'anc'
-            ? 'Comparable ANC work and current platform context were used as calibration points.'
-            : 'Current market-rate references were used as the primary pricing anchor.',
+          upgraded
+            ? 'Scope adjusted upward because the request describes a multi-feature or productized bundle that requires per-tenant infrastructure beyond a simple extension.'
+            : mode === 'anc'
+              ? 'Comparable ANC work and current platform context were used as calibration points.'
+              : 'Current market-rate references were used as the primary pricing anchor.',
           'Final scope and price should be confirmed before work starts.',
         ].join(' ')
 

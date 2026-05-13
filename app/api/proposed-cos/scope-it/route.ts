@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
-import { estimate as marketEstimate, classifyWorkType, type WorkType } from '@/lib/market-rate'
+import { estimate as marketEstimate, classifyWorkType, detectSizingFloor, applySizingFloor, type WorkType } from '@/lib/market-rate'
 import { buildProjectContext } from '@/lib/project-intelligence'
 
 const AI_API_KEY = process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY || ''
@@ -62,7 +62,8 @@ interface ScopedDraft {
 const PROMPT_SYSTEM = `You are a scope drafter for ANC Sports's service-contract platform. A stakeholder describes an idea, and you turn it into a structured proposal card.
 
 You have READ ACCESS (below) to a live snapshot of all four ANC platforms — what's already built, what data exists, what changes recently shipped, what change orders historically priced at. USE this snapshot:
-  - If the description maps to a surface that ALREADY EXISTS, frame the work as extending it (smaller scope, lower price). Don't propose rebuilding what's live.
+  - If the description is a SINGLE-feature extension of an existing surface, frame as extending it — smaller scope, lower price. Don't propose rebuilding what's live.
+  - If the description is a MULTI-FEATURE BUNDLE, a WHITELABEL / PER-TENANT version of an existing surface, PER-CLIENT data isolation, a NEW PRODUCT LINE, or a SAAS-style productization of internal tooling, scope it as new_module or new_integration at the HIGH band. Reusing the engine still requires per-tenant routing, branded views, data isolation, billing wiring, admin tooling — multi-week build, not a single ticket.
   - If the request touches a custom object already in the CRM, lean on it instead of scoping a parallel object.
   - Anchor pricing against the "Recently shipped change orders" section — your number should sit in the same range as comparable past work.
   - target_project should match where the work would naturally land based on the surfaces inventory.
@@ -82,8 +83,10 @@ Output ONLY valid JSON matching this schema (no markdown, no commentary):
 
 Rules:
 - "category" is "bundle" when it's multi-feature OR cross-platform; otherwise "individual".
-- Pick the workType that BEST matches what's described. If unsure, lean smaller.
-- "scope" reflects complexity within that workType: low = simple version (extends existing surface), mid = standard, high = ambitious / greenfield.
+- Pick the workType that BEST matches what's described.
+  - For a single-feature ask in unclear territory, lean smaller.
+  - For a multi-feature bundle, whitelabel work, per-tenant isolation, new product line, or any "X for clients / per-venue / per-tenant" reframing of an internal surface — workType MUST be new_module or new_integration, and scope MUST be "high". Never new_feature_medium / mid for these.
+- "scope" reflects complexity within that workType: low = simple version (extends existing surface), mid = standard, high = ambitious / greenfield / productized bundle.
 - Names should not include the word "Twenty" or any vendor SKU. Stay platform-neutral in the user's language.
 - Bullets describe what gets delivered, not how it's built.
 - Benefit answers "what does the stakeholder gain" — never "what we build".
@@ -212,27 +215,56 @@ export async function POST(request: NextRequest) {
     workType = workType || heuristic.workType
     scope = scope || heuristic.scope
   }
+
+  // Productization / bundle / whitelabel / size-up cues override the AI's
+  // pick when it under-scopes.
+  const floorText = priorContext ? `${description} ${priorContext}` : description
+  const floor = detectSizingFloor(floorText)
+  let upgraded = false
+  if (floor) {
+    const adjusted = applySizingFloor({ workType, scope }, floor)
+    workType = adjusted.workType
+    scope = adjusted.scope
+    upgraded = adjusted.upgraded
+  }
+
   const market = marketEstimate(workType, scope)
 
-  // Pull comparable past work — change orders of the same workType that
-  // already shipped or were paid. Gives the stakeholder real history to
-  // anchor against, not just AI's guess.
+  // Pull comparable past work — proposed_change_orders match workType first
+  // (real anchor for like-for-like comparisons), then shipped service_requests
+  // fall back to recent regardless of workType (service_requests doesn't
+  // carry work_type today). Ensures the user always sees a calibration point.
   const comparablesRes = await query(
-    `SELECT summary, COALESCE(paid_amount, quote_amount, estimated_usd, 0)::float8 AS usd, shipped_at
-       FROM service_requests
-      WHERE retainer_covered = false
-        AND status IN ('shipped', 'paid')
-        AND source <> 'auto-push'
-      ORDER BY received_at DESC
-      LIMIT 6`,
+    `(SELECT name AS summary, COALESCE(price_usd, 0)::float8 AS usd, NULL::timestamptz AS shipped_at, 1 AS rank
+        FROM proposed_change_orders
+       WHERE status IN ('available', 'pitched', 'in_progress', 'won')
+         AND work_type = $1
+         AND price_usd > 0
+         AND is_placeholder = false
+       ORDER BY updated_at DESC
+       LIMIT 6)
+     UNION ALL
+     (SELECT summary, COALESCE(paid_amount, quote_amount, estimated_usd, 0)::float8 AS usd, shipped_at, 2 AS rank
+        FROM service_requests
+       WHERE retainer_covered = false
+         AND status IN ('shipped', 'paid')
+         AND source <> 'auto-push'
+         AND COALESCE(paid_amount, quote_amount, estimated_usd, 0) > 0
+       ORDER BY received_at DESC
+       LIMIT 6)
+     ORDER BY rank, shipped_at DESC NULLS LAST
+     LIMIT 6`,
+    [workType],
   ).catch(() => ({ rows: [] }))
 
   const publicRationale = [
     `Planning estimate based on ${market.finalHours} hours for ${workType.replace(/_/g, ' ')} work.`,
     `Scope band: ${scope}.`,
-    comparablesRes.rows.length > 0
-      ? `Comparable prior work was used as a calibration point.`
-      : `No close comparable change order was available, so the estimate leans on the standard market-rate table.`,
+    upgraded
+      ? `Scope adjusted upward because the request describes a multi-feature or productized bundle that requires per-tenant infrastructure beyond a simple extension.`
+      : comparablesRes.rows.length > 0
+        ? `Comparable prior work was used as a calibration point.`
+        : `No close comparable change order was available, so the estimate leans on the standard market-rate table.`,
     `Final scope and price should be confirmed before work starts.`,
   ].join(' ')
 

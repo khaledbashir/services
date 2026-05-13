@@ -229,6 +229,55 @@ export function estimate(workType: WorkType, scope: ScopeBand = 'mid'): MarketEs
   }
 }
 
+// Productization / whitelabel / multi-tenant cues. When these fire, the ask
+// is structurally a new product line — per-tenant routing, branded views,
+// data isolation, billing, admin tooling make it a multi-week module-class
+// build even when reusing existing surfaces. Floor catches cases where the
+// AI under-scopes a bundle ask. Returns null when no cues fire.
+export function detectSizingFloor(text: string): { workType: WorkType; scope: ScopeBand } | null {
+  const t = (text || '').toLowerCase()
+
+  const productize = /\b(whitelabel|white-label|white label|per[ -]?(client|tenant|venue|customer)|multi[ -]?(tenant|client)|productize|product[ -]?line|saas[ -]?(version|wrap|product)|each (client|venue|tenant|customer)|tenant isolation|data isolation|bundle|end[ -]?to[ -]?end|integrated (suite|platform)|for (their|its) (clients|customers|venues|tenants))/.test(t)
+
+  const sizeUpRefine = /\b(bigger|wider|larger|more (ambitious|comprehensive|complete|aggressive)|expand|broader|fuller|don't (cut|skimp)|go (big|hard|wide)|raise (the )?(scope|price)|increase (the )?(scope|price))/.test(t)
+
+  if (!productize && !sizeUpRefine) return null
+
+  const multiSurface = /\b(across|cross[ -]platform|multi[ -]platform|all surfaces|every (client|tenant|venue)|portal|dashboard|platform|suite|admin|billing|isolation)/.test(t)
+
+  return {
+    workType: multiSurface ? 'new_module' : 'new_feature_large',
+    scope: 'high',
+  }
+}
+
+const WORKTYPE_RANK: Record<WorkType, number> = {
+  fix: 0,
+  new_feature_small: 1,
+  new_report: 2,
+  new_automation: 3,
+  new_feature_medium: 4,
+  new_dashboard: 5,
+  new_ai_agent: 6,
+  new_feature_large: 7,
+  new_module: 8,
+  new_integration: 9,
+  data_migration: 10,
+}
+
+const SCOPE_RANK: Record<ScopeBand, number> = { low: 0, mid: 1, high: 2 }
+
+// If current pick is smaller than the floor, upgrade. Otherwise no-op.
+export function applySizingFloor(
+  current: { workType: WorkType; scope: ScopeBand },
+  floor: { workType: WorkType; scope: ScopeBand },
+): { workType: WorkType; scope: ScopeBand; upgraded: boolean } {
+  const currentRank = WORKTYPE_RANK[current.workType] + SCOPE_RANK[current.scope] * 100
+  const floorRank = WORKTYPE_RANK[floor.workType] + SCOPE_RANK[floor.scope] * 100
+  if (currentRank >= floorRank) return { ...current, upgraded: false }
+  return { ...floor, upgraded: true }
+}
+
 // Heuristic: pick a workType from the freeform request text. Falls back to
 // new_feature_medium when nothing matches. Used by the triage flow when
 // classification is NEW and we want a market-grounded estimate.
