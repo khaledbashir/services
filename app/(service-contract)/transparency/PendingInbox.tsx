@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface InboxRow {
   id: string
@@ -68,6 +69,7 @@ function fmtDate(iso: string | null) {
 }
 
 export default function PendingInbox() {
+  const router = useRouter()
   const [rows, setRows] = useState<InboxRow[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -114,6 +116,11 @@ export default function PendingInbox() {
       return
     }
     setRows((prev) => (prev ? prev.filter((r) => r.id !== id) : prev))
+    // Approve/skip changes the meter, coverage strip, timeline, burndown — all
+    // server-rendered. router.refresh() re-runs the page's server components
+    // without a full reload so the dashboard reflects the new total immediately
+    // instead of waiting for the 5-minute auto-refresh tick.
+    router.refresh()
   }
 
   if (rows === null) {
