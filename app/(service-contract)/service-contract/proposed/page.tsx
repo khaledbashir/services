@@ -6,6 +6,10 @@ import ReasoningPanel, { ReasoningModal } from './ReasoningPanel'
 import { ConfirmModal, PromptModal, SuccessModal } from '../../Modal'
 import RoadmapView from './RoadmapView'
 import CatalogTabs from './CatalogTabs'
+import IdeaSuggestions from './IdeaSuggestions'
+import ClarifyingQuestions from './ClarifyingQuestions'
+import IdeaResultDashboard from './IdeaResultDashboard'
+import { detectClarifyQuestions, type IdeaSeed } from './catalog-data'
 
 interface ProposedCO {
   id: string
@@ -428,6 +432,8 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   // Greenfield mode = market rate, no platform context (portfolio-friendly).
   // Persisted per-browser in localStorage so the choice sticks.
   const [scopeMode, setScopeMode] = useState<'anc' | 'greenfield'>('anc')
+  const [pendingQuestions, setPendingQuestions] = useState<string[]>([])
+  const [pendingAnswers, setPendingAnswers] = useState<{ question: string; answer: string }[]>([])
 
   useEffect(() => {
     try {
@@ -508,8 +514,41 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
   }
 
   const generate = () => {
+    // Check for clarifying questions BEFORE firing the scope endpoint.
+    // Better answers up front = tighter quote and plan.
+    const qs = detectClarifyQuestions(description)
+    if (qs.length > 0) {
+      setPendingQuestions(qs)
+      return
+    }
     streamScope({ description, files: files.length ? files : undefined, mode: scopeMode })
     setFiles([]) // clear after submit so the next scope starts fresh
+  }
+
+  const submitClarifications = (answers: string[]) => {
+    const qa = pendingQuestions.map((q, i) => ({ question: q, answer: answers[i] || '' }))
+    setPendingAnswers(qa)
+    const clarificationBlock = qa
+      .filter(x => x.answer.trim().length > 0)
+      .map(x => `Q: ${x.question}\nA: ${x.answer}`)
+      .join('\n\n')
+    const combined = clarificationBlock
+      ? `${description}\n\n--- Clarifications ---\n${clarificationBlock}`
+      : description
+    setPendingQuestions([])
+    streamScope({ description: combined, files: files.length ? files : undefined, mode: scopeMode })
+    setFiles([])
+  }
+
+  const skipClarifications = () => {
+    setPendingQuestions([])
+    setPendingAnswers([])
+    streamScope({ description, files: files.length ? files : undefined, mode: scopeMode })
+    setFiles([])
+  }
+
+  const pickIdea = (seed: IdeaSeed) => {
+    setDescription(`${seed.title}\n\n${seed.description}`)
   }
 
   const refine = () => {
@@ -612,7 +651,14 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
         )}
       </div>
 
-      {!draft ? (
+      {pendingQuestions.length > 0 ? (
+        <ClarifyingQuestions
+          questions={pendingQuestions}
+          onSubmit={submitClarifications}
+          onSkip={skipClarifications}
+          busy={busy}
+        />
+      ) : !draft ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
           onDragLeave={() => setDragActive(false)}
@@ -632,6 +678,11 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
           }}
           className={dragActive ? 'rounded-md ring-2 ring-blue-500 ring-offset-2' : ''}
         >
+          {/* Starter ideas — filter as the user types, click to fill */}
+          <div className="mb-4">
+            <IdeaSuggestions query={description} onPick={pickIdea} />
+          </div>
+
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -699,85 +750,20 @@ function ScopeItHero({ onCreated }: { onCreated: () => Promise<void> }) {
         </div>
       ) : (
         <div>
-          <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-900 p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-gray-100 text-gray-600">
-                    AI draft
-                  </span>
-                  {draft.category === 'bundle' && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-purple-100 text-purple-800">
-                      bundle
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{draft.name}</h3>
-              </div>
-              <div className="flex flex-col items-end flex-shrink-0">
-                <div className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                  {fmtUSD(draft.price_usd) || '—'}
-                </div>
-                {draft.timeline_label && <div className="text-[10px] text-gray-500">{draft.timeline_label}</div>}
-              </div>
-            </div>
-            {draft.pitch && <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">{draft.pitch}</p>}
-            {draft.bullets.length > 0 && (
-              <ul className="space-y-1 mb-3">
-                {draft.bullets.map((b, i) => (
-                  <li key={i} className="text-[12px] text-gray-600 dark:text-gray-400 flex gap-2">
-                    <span className="text-gray-400">·</span>
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {draft.benefit && (
-              <div className="text-xs px-2 py-1.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300">
-                <strong>Benefit:</strong> {draft.benefit}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4">
-            <div className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">Iterate (optional)</div>
-            <div className="flex gap-2">
-              <input
-                value={refining}
-                onChange={(e) => setRefining(e.target.value)}
-                placeholder='e.g. "Make it cheaper", "add region filtering", "drop the email part"'
-                disabled={busy}
-                className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800/60 bg-white dark:bg-gray-900 rounded-md text-sm disabled:opacity-60"
-              />
-              <button
-                onClick={refine}
-                disabled={busy || !refining.trim()}
-                className="px-3 py-2 text-sm bg-[#0A52EF] text-white rounded-md hover:bg-[#0840C0] disabled:opacity-50"
-              >
-                {busy ? '…' : 'Refine'}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-blue-200 dark:border-blue-800/60">
-            <div className="text-[11px] text-blue-700 dark:text-blue-400">
-              Saved as <strong>draft</strong> in the catalog below — flip to <strong>available</strong> when you&apos;re ready to pitch.
-            </div>
-            <div className="flex gap-2">
-              <Link
-                href={`/service-contract/proposed/${draft.id}`}
-                className="px-3 py-2 text-sm bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-md hover:opacity-90"
-              >
-                Open detail →
-              </Link>
-              <button
-                onClick={reset}
-                className="px-3 py-2 text-sm border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-300 rounded-md hover:bg-blue-100/50 dark:hover:bg-blue-950/40"
-              >
-                Start over
-              </button>
-            </div>
-          </div>
+          <IdeaResultDashboard
+            draft={draft}
+            context={{
+              attachments: files.length > 0 ? files.map(f => f.name) : undefined,
+              answers: pendingAnswers.length > 0 ? pendingAnswers : undefined,
+            }}
+            onRefine={(instruction) => {
+              setRefining(instruction)
+              streamScope({ description: instruction, refine_from: draft.id, files: files.length ? files : undefined, mode: scopeMode })
+              setFiles([])
+            }}
+            onReset={reset}
+            busy={busy}
+          />
           {error && <div className="text-xs text-rose-600 mt-2">{error}</div>}
         </div>
       )}
