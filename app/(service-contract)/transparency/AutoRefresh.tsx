@@ -1,43 +1,65 @@
 'use client'
 
 // Replaces the old `<meta httpEquiv="refresh" content="60" />` hard reload
-// that was blowing away iframe state on this page every minute (Ahmad
-// 5/13 — working in an embedded surface meant the page nuked the inner
-// state every 60s).
+// that was blowing away iframe state on this page every minute.
 //
-// New behavior:
-//   * 5-minute interval (was 1 minute)
-//   * Uses Next.js router.refresh() — refetches server components, keeps
-//     iframe/scroll/form state intact, no browser reload
-//   * Pauses while the tab is hidden
-//   * Pauses for 2 minutes after any user interaction (typing, scrolling,
-//     clicking) so it never fires while Ahmad is mid-action
+// Behavior:
+//   * Polls every 60s while the tab is visible
+//   * On visibilitychange → visible (tab refocus), fires an immediate refresh
+//     so Ahmad/Charlie don't see stale meter values after switching back from
+//     another tab
+//   * Pauses for 30s after typing INSIDE the dashboard (so an input edit
+//     doesn't get wiped mid-keystroke). Scrolling / focus-switching no longer
+//     pause anything.
+//   * Skips while the tab is hidden (no point burning CPU)
+//
+// Uses Next.js router.refresh() — refetches server components, keeps
+// iframe/scroll/form state intact, no browser reload.
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000     // 5 minutes
-const INTERACTION_PAUSE_MS = 2 * 60 * 1000    // pause 2 min after last interaction
+const REFRESH_INTERVAL_MS = 60 * 1000          // 1 minute
+const TYPING_PAUSE_MS = 30 * 1000              // 30 seconds after last keystroke
 
 export default function AutoRefresh() {
   const router = useRouter()
-  const lastInteractionRef = useRef<number>(Date.now())
+  const lastTypeRef = useRef<number>(0)
 
   useEffect(() => {
-    const bumpInteraction = () => { lastInteractionRef.current = Date.now() }
-    const events: Array<keyof WindowEventMap> = ['keydown', 'mousedown', 'touchstart', 'scroll', 'focus']
-    for (const e of events) window.addEventListener(e, bumpInteraction, { passive: true })
+    const bumpType = () => { lastTypeRef.current = Date.now() }
+    // Only `keydown` pauses the loop — and only when typing in a form field.
+    // Click/scroll/focus do NOT pause; those happen constantly and shouldn't
+    // block a 60-second freshness loop.
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      const tag = target.tagName
+      const editable = target.isContentEditable
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable) {
+        bumpType()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, { passive: true })
 
     const tick = () => {
       if (document.hidden) return
-      if (Date.now() - lastInteractionRef.current < INTERACTION_PAUSE_MS) return
+      if (Date.now() - lastTypeRef.current < TYPING_PAUSE_MS) return
       router.refresh()
     }
     const interval = setInterval(tick, REFRESH_INTERVAL_MS)
 
+    // Immediate refresh when the tab comes back to visible — covers the
+    // "I switched back from Slack and the meter is stale" case.
+    const onVisChange = () => {
+      if (!document.hidden) router.refresh()
+    }
+    document.addEventListener('visibilitychange', onVisChange)
+
     return () => {
       clearInterval(interval)
-      for (const e of events) window.removeEventListener(e, bumpInteraction)
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('visibilitychange', onVisChange)
     }
   }, [router])
 
