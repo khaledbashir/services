@@ -7,7 +7,7 @@
 //
 // Pair with <DataGrid> by passing `onOpenRecord` to expand a row into here.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { ColumnConfig } from './types'
 import { GridCell } from './cells'
 
@@ -19,10 +19,14 @@ interface Props<TRow extends { id: string }> {
   onUpdate?: (rowId: string, columnId: string, value: any, patch: Record<string, any>) => Promise<void>
   onDelete?: (rowId: string) => Promise<void>
   title?: (row: TRow) => string
+  // Optional custom content rendered above the field grid (e.g. cross-record
+  // navigation like "View history at this venue"). Receives the current row
+  // so callers can compute links / counts without re-fetching.
+  extraContent?: (row: TRow) => ReactNode
 }
 
 export function RecordDrawer<TRow extends { id: string }>({
-  open, row, columns, onClose, onUpdate, onDelete, title,
+  open, row, columns, onClose, onUpdate, onDelete, title, extraContent,
 }: Props<TRow>) {
   const [local, setLocal] = useState<TRow | null>(row)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -82,6 +86,9 @@ export function RecordDrawer<TRow extends { id: string }>({
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {extraContent && (
+            <div className="-mx-1 mb-3">{extraContent(local)}</div>
+          )}
           {columns.map(col => (
             <div key={col.id} className="grid grid-cols-[180px_1fr] items-start gap-3">
               <label className="text-[11px] font-medium uppercase tracking-[0.1em] text-zinc-500 pt-1.5">{col.header}</label>

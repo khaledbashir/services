@@ -207,6 +207,46 @@ export default function WalkthroughsPage() {
           onClose={() => setDrawerRow(null)}
           onUpdate={updateCell}
           title={r => `${r.log_id || 'Walkthrough'}${r.venue_name ? ' · ' + r.venue_name : ''}`}
+          extraContent={(r) => {
+            // Nick parity 5/13 — historic walkthrough history at this venue or
+            // location. Server resolves venue/location IDs by display name
+            // (NocoDB Link fields filter by display title), so we pass the
+            // name as a `label=` hint and let the history page render the
+            // header from the URL.
+            const venueQs = r.venue_name ? `label=${encodeURIComponent(r.venue_name)}&venue_name=${encodeURIComponent(r.venue_name)}` : ''
+            // Click-through is by name for now — the list view doesn't surface
+            // venue_id (NocoDB Link fields return name+Id only when expanded).
+            // The history endpoint accepts venue_id; we'll need to resolve it.
+            // Quick win: link by name via a separate resolver query param.
+            return (
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs">
+                <div className="font-semibold text-zinc-700 mb-2">Walkthrough history</div>
+                <div className="flex flex-wrap gap-2">
+                  {r.venue_name && r.venue_name !== '—' && (
+                    <button
+                      onClick={() => router.push(`/walkthroughs/history?venue_name=${encodeURIComponent(r.venue_name)}&label=${encodeURIComponent(r.venue_name)}`)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 rounded text-zinc-700 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
+                    >
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                      All walkthroughs at {r.venue_name}
+                    </button>
+                  )}
+                  {r.locations_visited && (
+                    r.locations_visited.split(',').map(l => l.trim()).filter(Boolean).slice(0, 4).map(locName => (
+                      <button
+                        key={locName}
+                        onClick={() => router.push(`/walkthroughs/history?location_name=${encodeURIComponent(locName)}&label=${encodeURIComponent(locName)}`)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 rounded text-zinc-700 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
+                      >
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L3 7v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7l-9-5z" /></svg>
+                        {locName}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )
+          }}
         />
       </div>
     </DashboardLayout>

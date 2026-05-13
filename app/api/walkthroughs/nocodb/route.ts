@@ -70,13 +70,25 @@ export async function GET(request: NextRequest) {
     if (action === 'locations') {
       const venueId = Number(searchParams.get('venue_id'))
       if (!venueId) return NextResponse.json({ error: 'venue_id required' }, { status: 400 })
-      // Filter the Display Locations by Venue NAME — NocoDB matches Link
-      // fields against the linked record's display title, not its row id.
-      const venueName = await resolveVenueName(venueId)
-      if (!venueName) return NextResponse.json({ locations: [] })
+      // Walk the Venue → Display Locations link directly. Previous impl
+      // filtered Display Locations by Venue NAME string match, which leaked
+      // locations across venues when the linked Venue title wasn't an exact
+      // match (Nick saw Pier 17 / World Trade Center locations under
+      // Moynihan). Two-step: pull linked Display Location IDs from the
+      // venue row, then fetch the full rows with the fields we need.
+      const linkedRows = await NocoOps.listLinks(
+        TABLES.venues,
+        VENUE_COLS.displayLocationsLink,
+        venueId,
+        { limit: 500 }
+      )
+      const linkedIds = linkedRows
+        .map((r) => Number((r as any).Id))
+        .filter((n) => Number.isFinite(n) && n > 0)
+      if (!linkedIds.length) return NextResponse.json({ locations: [] })
       const { records } = await NocoOps.listRecords(TABLES.displayLocations, {
-        where: `(Venue,eq,${venueName})`,
-        limit: 200,
+        where: `(Id,in,${linkedIds.join(',')})`,
+        limit: 500,
       })
       const locations = records
         .map((r) => ({
@@ -85,6 +97,7 @@ export async function GET(request: NextRequest) {
           three_letter_code: String((r as any)['Three Letter Code'] || '').trim() || null,
           location_abbreviation: String((r as any)['Location Abbreviation'] || '').trim() || null,
         }))
+        .filter((l) => Number.isFinite(l.id))
         .sort((a, b) => a.name.localeCompare(b.name))
       return NextResponse.json({ locations })
     }
@@ -148,6 +161,99 @@ export async function GET(request: NextRequest) {
         }
       })
       return NextResponse.json({ issues })
+    }
+
+    if (action === 'projected-log-id') {
+      // Show the tech the next Log ID at form open — Nick's parity ask
+      // from the 5/13 call: "previously on airtable, when we started a
+      // ticket, it already created a ticket ID number... like 26-1595".
+      // The actual Log ID is stamped server-side after the row insert
+      // (using the auto-incremented NocoDB row Id, no race), so this is
+      // an informational projection. Surfaces the most-recent row's
+      // numeric Id + 1, year-prefixed.
+      const { records } = await NocoOps.listRecords(TABLES.walkthroughLog, {
+        sort: '-Id',
+        fields: 'Id',
+        limit: 1,
+      })
+      const lastId = Number((records[0] as any)?.Id || 0)
+      const projectedId = lastId + 1
+      const year2 = String(new Date().getFullYear()).slice(2)
+      return NextResponse.json({
+        projected: `${year2}-${projectedId}`,
+        year: year2,
+        next_id: projectedId,
+      })
+    }
+
+    if (action === 'history') {
+      // Historical walkthroughs at a given venue or location — Nick's
+      // 5/13 ask: "if I go into something, I can see all the historic
+      // issues, and I can pop into this ticket". Filter by venue_id /
+      // venue_name / location_id / location_name; returns the same row
+      // shape as ?action=list so the existing grid card can render it
+      // directly. Name params let the drawer link without round-tripping
+      // for the row Id.
+      const venueIdRaw = searchParams.get('venue_id')
+      const locationIdRaw = searchParams.get('location_id')
+      const venueNameRaw = searchParams.get('venue_name')
+      const locationNameRaw = searchParams.get('location_name')
+      const limit = Math.min(Number(searchParams.get('limit') || 100), 500)
+      let where = ''
+      if (venueIdRaw) {
+        const venueName = await resolveVenueName(Number(venueIdRaw))
+        if (!venueName) return NextResponse.json({ walkthroughs: [], total: 0 })
+        where = `(Venue,eq,${venueName})`
+      } else if (venueNameRaw) {
+        const trimmed = venueNameRaw.trim()
+        if (!trimmed) return NextResponse.json({ walkthroughs: [], total: 0 })
+        where = `(Venue,eq,${trimmed})`
+      } else if (locationIdRaw) {
+        // Filter by linked Display Location title. Look up the name first
+        // because NocoDB filters Link fields by display title, not Id.
+        const { records: locRow } = await NocoOps.listRecords(TABLES.displayLocations, {
+          where: `(Id,eq,${Number(locationIdRaw)})`,
+          fields: 'Id,Name',
+          limit: 1,
+        })
+        const locName = String((locRow[0] as any)?.['Name'] || '').trim()
+        if (!locName) return NextResponse.json({ walkthroughs: [], total: 0 })
+        where = `(Locations Visited,eq,${locName})`
+      } else if (locationNameRaw) {
+        const trimmed = locationNameRaw.trim()
+        if (!trimmed) return NextResponse.json({ walkthroughs: [], total: 0 })
+        where = `(Locations Visited,eq,${trimmed})`
+      } else {
+        return NextResponse.json({ error: 'venue_id, venue_name, location_id, or location_name required' }, { status: 400 })
+      }
+      const { records, pageInfo } = await NocoOps.listRecords(TABLES.walkthroughLog, {
+        where,
+        sort: '-CreatedAt',
+        limit,
+      })
+      const walkthroughs = records.map((r: any) => {
+        const venueLink = Array.isArray(r['Venue']) ? r['Venue'] : []
+        const venueName = venueLink[0]?.['Venue Name'] || venueLink[0]?.['name'] || ''
+        const locsLink = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
+        const locationsLabel = locsLink.map((l: any) => l['Name'] || l['name']).filter(Boolean).join(', ')
+        const probLink = Array.isArray(r['Problem Detected']) ? r['Problem Detected'] : []
+        const issuesLabel = probLink.map((i: any) => i['Issue ID'] || i['name']).filter(Boolean).join(', ')
+        const rawDate = r['Log Date Dt'] || r['Log Date'] || r['CreatedAt']
+        const log_date = rawDate ? String(rawDate).slice(0, 10) : null
+        return {
+          id: String(r['Id']),
+          log_id: String(r['Log ID'] || '').trim() || `#${r['Id']}`,
+          venue_name: String(venueName).trim() || '—',
+          technician_name: String(r['Technician'] || r['Logged By'] || '').trim() || null,
+          log_date,
+          type: r['Type'] || null,
+          result: r['Result'] || null,
+          locations_visited: locationsLabel || null,
+          issues_found: issuesLabel || null,
+          comments: r['Comments (log issues above)'] || null,
+        }
+      })
+      return NextResponse.json({ walkthroughs, total: pageInfo?.totalRows || walkthroughs.length })
     }
 
     if (action === 'logged-by-options') {
@@ -315,7 +421,13 @@ export async function POST(request: NextRequest) {
     const venueName = String(venueRow?.['Venue Name'] || '').trim() || `Venue #${venueId}`
     const venueAbbr = String(venueRow?.['Abbreviation'] || '').trim() || ''
 
-    const logId = `${dateStr} [${venueAbbr || venueName.slice(0, 4).toUpperCase()}]`
+    // Provisional Log ID — gets overwritten after insert with the actual
+    // sequential format `YY-<rowId> [ABBR]` (Nick parity, 5/13). We can't
+    // know the row Id until NocoDB returns it, so write a placeholder
+    // first and patch immediately. The provisional uses the legacy
+    // `YY-MM-DD [ABBR]` shape so the row isn't blank if the patch fails.
+    const tagAbbr = venueAbbr || venueName.slice(0, 4).toUpperCase()
+    const provisionalLogId = `${dateStr} [${tagAbbr}]`
     const failureSummary = summarizeAssetFindings(assetFindings)
 
     // Compose the Comments body. Includes asset-level fail summary so
@@ -328,7 +440,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1 — create the Walkthrough Log row.
     const newRow: Record<string, any> = {
-      'Log ID': logId,
+      'Log ID': provisionalLogId,
       'Technician': user.fullName || user.email,
       'Log Date': isoDate,
       'Log Date Dt': dtForNoco,
@@ -342,6 +454,20 @@ export async function POST(request: NextRequest) {
     const created = await NocoOps.createRecords(TABLES.walkthroughLog, [newRow])
     const newRowId = Number((created[0] as any)?.Id)
     if (!newRowId) throw new Error('NocoDB did not return an Id for the new walkthrough')
+
+    // Stamp the sequential Log ID now that we have the row Id. Format
+    // mirrors the Issues table convention (`26-1595 [VENUE]`) — the
+    // running counter Nick referenced on 5/13.
+    const year2 = isoDate.slice(2, 4) // "26" from "26-05-04"
+    const logId = `${year2}-${newRowId} [${tagAbbr}]`
+    await NocoOps.updateRecords(TABLES.walkthroughLog, [{
+      Id: newRowId,
+      'Log ID': logId,
+    }]).catch((e) => {
+      // Non-fatal — the row still has the provisional ID which is also
+      // human-readable. Log so we catch any auth/permission flakiness.
+      console.warn('[walkthroughs/nocodb] Log ID restamp failed:', e)
+    })
 
     // Step 2 — link the venue.
     await NocoOps.addLinks(TABLES.walkthroughLog, WALK_COLS.venueLink, newRowId, [venueId]).catch((e) => {

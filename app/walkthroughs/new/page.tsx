@@ -42,6 +42,18 @@ export default function NewWalkthroughPage() {
   const [techName, setTechName] = useState<string>('')
   const [loggedByOptions, setLoggedByOptions] = useState<string[]>([])
   const [loggedBy, setLoggedBy] = useState<string>('')
+  // Whether the auth-detected tech name maps to a known "Logged By" option.
+  // When true, we silently use the match and hide the dropdown — Nick parity
+  // ask (5/13): the form should "automatically know it's me" with no extra
+  // step. The dropdown only appears if the tech needs to override (no match).
+  const [loggedByAutoMatched, setLoggedByAutoMatched] = useState(false)
+  // Projected Log ID — Nick parity (5/13): "previously on airtable, when we
+  // started a ticket, it already created a ticket ID number". Fetched once
+  // on mount, displayed prominently as `YY-NNNN`. Final ID is stamped by
+  // the server after insert (atomic, no race) and shown in the success
+  // banner, so a stale projection here just means the displayed number
+  // may bump up by 1-2 if another tech submitted in the same minute.
+  const [projectedLogId, setProjectedLogId] = useState<string>('')
   const [venues, setVenues] = useState<VenueOption[]>([])
   const [venueId, setVenueId] = useState<number | ''>('')
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -72,7 +84,7 @@ export default function NewWalkthroughPage() {
     }
   }, [])
 
-  // Load venues + Logged By dropdown options on mount.
+  // Load venues + Logged By dropdown options + projected Log ID on mount.
   useEffect(() => {
     fetch('/api/walkthroughs/nocodb?action=venues').then((r) => r.ok ? r.json() : null).then((d) => {
       if (d?.venues) setVenues(d.venues)
@@ -80,14 +92,21 @@ export default function NewWalkthroughPage() {
     fetch('/api/walkthroughs/nocodb?action=logged-by-options').then((r) => r.ok ? r.json() : null).then((d) => {
       if (Array.isArray(d?.options)) setLoggedByOptions(d.options)
     })
+    fetch('/api/walkthroughs/nocodb?action=projected-log-id').then((r) => r.ok ? r.json() : null).then((d) => {
+      if (d?.projected) setProjectedLogId(String(d.projected))
+    })
   }, [])
 
   // Auto-default the submitter to whichever option matches the current
   // tech's name — saves a click for the tech logging their own walkthrough.
+  // When matched, hide the dropdown entirely (Nick parity 5/13).
   useEffect(() => {
     if (!techName || !loggedByOptions.length || loggedBy) return
     const match = loggedByOptions.find(o => o.toLowerCase() === techName.trim().toLowerCase())
-    if (match) setLoggedBy(match)
+    if (match) {
+      setLoggedBy(match)
+      setLoggedByAutoMatched(true)
+    }
   }, [techName, loggedByOptions, loggedBy])
 
   // When venue changes, fetch its Display Locations and auto-check them all.
@@ -277,26 +296,33 @@ export default function NewWalkthroughPage() {
           <p className="text-sm text-zinc-500 mt-1">Date, time, and tech are auto-captured. Pick a venue and the asset checklist loads automatically. Uncheck any dimension that failed — the rest stay checked.</p>
         </div>
 
-        {/* Tech / Date strip — read-only, auto */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm">
+        {/* Log ID / Tech / Date / Time strip — all auto-captured, read-only.
+            Log ID is a projection (Nick parity 5/13); the server stamps the
+            final ID after insert using the row's auto-increment Id. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm">
+          <div>
+            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Log ID</div>
+            <div className="font-mono font-semibold text-[#0A52EF] mt-0.5">{projectedLogId || '—'}</div>
+          </div>
           <div>
             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Technician</div>
-            <div className="font-medium text-zinc-900 mt-0.5">{techName || '— recognizing —'}</div>
+            <div className="font-medium text-zinc-900 mt-0.5 truncate">{techName || '— recognizing —'}</div>
           </div>
           <div>
             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Date</div>
-            <div className="font-medium text-zinc-900 mt-0.5">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+            <div className="font-medium text-zinc-900 mt-0.5">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
           </div>
           <div>
-            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Time (auto on submit)</div>
+            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Time</div>
             <div className="font-medium text-zinc-900 mt-0.5">{new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</div>
           </div>
         </div>
 
-        {/* Submitter dropdown — Nick's "who is logging this" tag (Slack 5/4).
-            Defaults to whoever's logged in if their name matches a NocoDB
-            option; tech can override to log on behalf of someone else. */}
-        {loggedByOptions.length > 0 && (
+        {/* Submitter dropdown — only shown if the auth-detected tech doesn't
+            match a known "Logged By" option, OR if the tech explicitly opens
+            the override. Nick parity 5/13: should "automatically know it's
+            me" without an extra step. */}
+        {loggedByOptions.length > 0 && !loggedByAutoMatched && (
           <div className="rounded-2xl border border-[#E8E8E8] bg-zinc-50 p-3">
             <label className="text-xs font-semibold text-zinc-600 block mb-1.5">Who is logging this walkthrough?</label>
             <select
@@ -307,6 +333,14 @@ export default function NewWalkthroughPage() {
               <option value="">— Pick submitter —</option>
               {loggedByOptions.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
+          </div>
+        )}
+        {loggedByAutoMatched && (
+          <div className="text-[11px] text-zinc-400 -mt-3">
+            Logging as <span className="text-zinc-600 font-medium">{loggedBy}</span>.{' '}
+            <button type="button" className="underline hover:text-zinc-700" onClick={() => setLoggedByAutoMatched(false)}>
+              Log on behalf of someone else
+            </button>
           </div>
         )}
 

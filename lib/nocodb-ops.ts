@@ -192,6 +192,29 @@ export const NocoOps = {
     })
   },
 
+  // Read child rows linked to a parent row through a LinkToAnotherRecord
+  // column. Returns the linked records (with whatever fields NocoDB
+  // surfaces by default — Id + primary display column). Used to walk the
+  // Venue → Display Locations chain without falling back to fragile
+  // name-based filters (which leak across venues when a location's Venue
+  // string isn't a perfect match).
+  async listLinks(
+    tableId: string,
+    linkColumnId: string,
+    parentRowId: number | string,
+    opts: { limit?: number; offset?: number; fields?: string } = {}
+  ): Promise<Record<string, unknown>[]> {
+    const qs = new URLSearchParams()
+    qs.set('limit', String(Math.min(opts.limit ?? 200, 1000)))
+    if (opts.offset != null) qs.set('offset', String(opts.offset))
+    if (opts.fields) qs.set('fields', opts.fields)
+    const r = await noco<{ list?: Record<string, unknown>[] } | Record<string, unknown>[]>(
+      `/api/v2/tables/${tableId}/links/${linkColumnId}/records/${parentRowId}?${qs.toString()}`
+    )
+    if (Array.isArray(r)) return r
+    return (r as { list?: Record<string, unknown>[] }).list || []
+  },
+
   // ---- Storage / attachments ----
   // NocoDB attachments live in /api/v2/storage/upload as multipart. Returns
   // an array of file metadata objects ({ url, title, mimetype, size, ... })
