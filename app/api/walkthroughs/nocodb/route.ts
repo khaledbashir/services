@@ -779,11 +779,14 @@ function summarizeAssetFindings(findings: Array<{
     ['Pixel Outages', 'pixel_outages'],
     ['Cleanliness', 'cleanliness'],
   ]
+  // Field semantics flipped 5/14: `true` = problem flagged on that
+  // dimension, `false` = no problem. Summarize the dimensions that were
+  // explicitly flagged.
   const lines: string[] = []
   for (const f of findings) {
-    const fails = dimensions.filter(([_, k]) => f[k] === false).map(([label]) => label)
+    const fails = dimensions.filter(([_, k]) => f[k] === true).map(([label]) => label)
     if (fails.length) {
-      lines.push(`• ${f.display_name}: failed — ${fails.join(', ')}`)
+      lines.push(`• ${f.display_name}: problem — ${fails.join(', ')}`)
     }
   }
   return lines.join('\n')

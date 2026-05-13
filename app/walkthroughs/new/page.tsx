@@ -152,19 +152,21 @@ export default function NewWalkthroughPage() {
     fetch(`/api/walkthroughs/nocodb?action=displays&location_names=${encodeURIComponent(namesParam)}`).then((r) => r.ok ? r.json() : null).then((d) => {
       const ds: DisplayOption[] = d?.displays || []
       setDisplays(ds)
-      // Default-pass every dimension. Tech un-checks any failing dimension —
-      // matches the Moynihan paper checklist semantics ("checked = passed").
+      // Default to "no problem" on every dimension (all unchecked). Tech
+      // CHECKS only the dimensions where they spotted an issue. Field
+      // semantics: `image_quality: true` = "image quality problem flagged",
+      // `false` = "no problem on that dimension" (Nick parity 5/14).
       setFindings((prev) => {
         const next: Record<number, AssetFinding> = {}
         for (const dsp of ds) {
           next[dsp.id] = prev[dsp.id] || {
             display_id: dsp.id,
             display_name: dsp.name,
-            image_quality: true,
-            av_rotation: true,
-            physical_damage: true,
-            pixel_outages: true,
-            cleanliness: true,
+            image_quality: false,
+            av_rotation: false,
+            physical_damage: false,
+            pixel_outages: false,
+            cleanliness: false,
           }
         }
         return next
@@ -201,7 +203,7 @@ export default function NewWalkthroughPage() {
   const failingCount = useMemo(() => {
     let c = 0
     for (const f of Object.values(findings)) {
-      if (!f.image_quality || !f.av_rotation || !f.physical_damage || !f.pixel_outages || !f.cleanliness) c++
+      if (f.image_quality || f.av_rotation || f.physical_damage || f.pixel_outages || f.cleanliness) c++
     }
     return c
   }, [findings])
@@ -306,7 +308,7 @@ export default function NewWalkthroughPage() {
       <div className="max-w-5xl mx-auto py-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">New Walkthrough</h1>
-          <p className="text-sm text-zinc-500 mt-1">Date, time, and tech are auto-captured. Pick a venue and the asset checklist loads automatically. Uncheck any dimension that failed — the rest stay checked.</p>
+          <p className="text-sm text-zinc-500 mt-1">Date, time, and tech are auto-captured. Pick a venue and the asset checklist loads automatically. Check any dimension where you found a problem — leave the rest blank.</p>
         </div>
 
         {/* Log ID / Tech / Date / Time strip — all auto-captured, read-only.
@@ -463,7 +465,7 @@ export default function NewWalkthroughPage() {
               <p className="text-xs text-zinc-500">
                 {failingCount > 0
                   ? `${failingCount} asset${failingCount === 1 ? '' : 's'} flagged — result auto-set to "New Issue Detected"`
-                  : 'Uncheck a box to flag an issue on that asset'}
+                  : 'Check a box to flag a problem on that asset'}
               </p>
             </div>
 
@@ -491,13 +493,13 @@ export default function NewWalkthroughPage() {
                           <tr key={dsp.id}>
                             <td className="py-2 px-3 text-zinc-700">{dsp.name}</td>
                             {DIMENSIONS.map((dim) => {
-                              const checked = f[dim.key]
+                              const flagged = f[dim.key]
                               return (
                                 <td key={dim.key} className="py-2 px-2 text-center">
                                   <button type="button" onClick={() => toggleDimension(dsp.id, dim.key)}
-                                    className={`w-6 h-6 rounded border-2 inline-flex items-center justify-center transition-colors ${checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-zinc-300 text-zinc-300 hover:border-rose-400'}`}
-                                    title={checked ? `${dim.label}: passing — click to flag` : `${dim.label}: flagged — click to clear`}>
-                                    {checked ? '✓' : '!'}
+                                    className={`w-6 h-6 rounded border-2 inline-flex items-center justify-center transition-colors ${flagged ? 'bg-rose-500 border-rose-500 text-white' : 'bg-white border-zinc-300 text-zinc-400 hover:border-rose-400'}`}
+                                    title={flagged ? `${dim.label}: problem flagged — click to clear` : `${dim.label}: no problem — click to flag`}>
+                                    {flagged ? '!' : ''}
                                   </button>
                                 </td>
                               )

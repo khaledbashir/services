@@ -48,8 +48,11 @@ export function buildWalkthroughHtml(w: WalkthroughForPdf): string {
   const sections = w.locations.map((loc) => {
     const rows = loc.findings.map((f) => {
       const cells = DIM_LABELS.map((d) => {
-        const passed = f[d.key]
-        return `<td style="padding:4px 6px;text-align:center;border:1px solid #cbd5e1;background:${passed ? '#fff' : '#fee2e2'};font-weight:${passed ? '400' : '700'};color:${passed ? '#475569' : '#b91c1c'}">${passed ? '✓' : 'FAIL'}</td>`
+        // Field semantics flipped 5/14: `true` = problem flagged, `false`
+        // (default) = no problem on that dimension. Cell renders FAIL/red
+        // when flagged, blank/white when not.
+        const flagged = f[d.key]
+        return `<td style="padding:4px 6px;text-align:center;border:1px solid #cbd5e1;background:${flagged ? '#fee2e2' : '#fff'};font-weight:${flagged ? '700' : '400'};color:${flagged ? '#b91c1c' : '#475569'}">${flagged ? 'FAIL' : ''}</td>`
       }).join('')
       return `<tr><td style="padding:4px 8px;border:1px solid #cbd5e1;font-size:9px">${esc(f.display_name)}</td>${cells}</tr>`
     }).join('')

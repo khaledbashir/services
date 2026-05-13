@@ -237,11 +237,13 @@ async function processRow(id: number, row: any) {
           const dlArr = (d as any)['Display Location']
           const loc = Array.isArray(dlArr) && dlArr[0]?.Id ? Number(dlArr[0].Id) : 0
           if (!byLoc.has(loc)) byLoc.set(loc, [])
-          // Native-form path has no per-dimension data — render passing.
+          // Native-form path has no per-dimension data — render with no
+          // problems flagged (post-5/14 flip: `false` = no problem on
+          // that dimension, `true` = problem flagged).
           byLoc.get(loc)!.push({
             display_id: did, display_name: dname,
-            image_quality: true, av_rotation: true,
-            physical_damage: true, pixel_outages: true, cleanliness: true,
+            image_quality: false, av_rotation: false,
+            physical_damage: false, pixel_outages: false, cleanliness: false,
           })
         }
         for (const lid of locationIds) {
