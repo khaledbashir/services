@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ReasoningPanel, { ReasoningModal } from './ReasoningPanel'
 import { ConfirmModal, PromptModal, SuccessModal } from '../../Modal'
 import RoadmapView from './RoadmapView'
+import CatalogTabs from './CatalogTabs'
 
 interface ProposedCO {
   id: string
@@ -148,16 +149,15 @@ export default function ProposedCOsPage() {
     if (data.request_id) setPostPromote({ requestId: data.request_id })
   }
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
+  const exploreContent = (
+    <>
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">Explore · before you commit</div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Have an idea? See what it would take.</h1>
+          <div className="text-xs uppercase tracking-widest text-gray-500 mb-1">Custom asks · before you commit</div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Have an idea outside the catalog? See what it would take.</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Browse scoped ideas, or describe a new request in plain words. You&apos;ll see a planning
-            estimate with scope, timeline, pricing logic, and what you&apos;d get before anything becomes
-            a change order. Nothing is ordered or billed until the final scope is confirmed.
+            Describe a new request in plain words and get a planning estimate with scope, timeline,
+            and pricing logic. Use this for one-offs that don&apos;t fit a standard build bucket.
           </p>
         </div>
         <button
@@ -252,6 +252,12 @@ export default function ProposedCOsPage() {
           </p>
         </div>
       )}
+    </>
+  )
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <CatalogTabs exploreContent={exploreContent} />
 
       {drawer && (
         <Drawer
