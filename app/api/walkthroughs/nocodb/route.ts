@@ -98,6 +98,9 @@ export async function GET(request: NextRequest) {
           location_abbreviation: String((r as any)['Location Abbreviation'] || '').trim() || null,
         }))
         .filter((l) => Number.isFinite(l.id))
+        // Hide archived rows from the picker — Nick parity 5/13 (he asked
+        // to clean up extras). [ARCHIVED] prefix is the soft-delete marker.
+        .filter((l) => !l.name.startsWith('[ARCHIVED]'))
         .sort((a, b) => a.name.localeCompare(b.name))
       return NextResponse.json({ locations })
     }
@@ -161,6 +164,44 @@ export async function GET(request: NextRequest) {
         }
       })
       return NextResponse.json({ issues })
+    }
+
+    if (action === 'row') {
+      // Single walkthrough by Id — used by the /walkthroughs/[id]/checklist
+      // page (Nick parity 5/13: "Maintain Checklist" per-row button).
+      const rowId = searchParams.get('id')
+      if (!rowId) return NextResponse.json({ error: 'id required' }, { status: 400 })
+      const { records } = await NocoOps.listRecords(TABLES.walkthroughLog, {
+        where: `(Id,eq,${Number(rowId)})`,
+        limit: 1,
+      })
+      const r: any = records[0]
+      if (!r) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const venueLink = Array.isArray(r['Venue']) ? r['Venue'] : []
+      const venueRow = venueLink[0] || null
+      const venueName = venueRow?.['Venue Name'] || venueRow?.['name'] || ''
+      const venueId = venueRow?.Id ? Number(venueRow.Id) : null
+      const locsLink = Array.isArray(r['Locations Visited']) ? r['Locations Visited'] : []
+      const locationsLabel = locsLink.map((l: any) => l['Name'] || l['name']).filter(Boolean).join(', ')
+      const probLink = Array.isArray(r['Problem Detected']) ? r['Problem Detected'] : []
+      const issuesLabel = probLink.map((i: any) => i['Issue ID'] || i['name']).filter(Boolean).join(', ')
+      const rawDate = r['Log Date Dt'] || r['Log Date'] || r['CreatedAt']
+      const log_date = rawDate ? String(rawDate).slice(0, 10) : null
+      return NextResponse.json({
+        walkthrough: {
+          id: String(r['Id']),
+          log_id: String(r['Log ID'] || '').trim() || `#${r['Id']}`,
+          venue_name: String(venueName).trim() || '—',
+          technician_name: String(r['Technician'] || r['Logged By'] || '').trim() || null,
+          log_date,
+          type: r['Type'] || null,
+          result: r['Result'] || null,
+          locations_visited: locationsLabel || null,
+          issues_found: issuesLabel || null,
+          comments: r['Comments (log issues above)'] || null,
+        },
+        venue_id: venueId,
+      })
     }
 
     if (action === 'projected-log-id') {
@@ -302,6 +343,23 @@ export async function GET(request: NextRequest) {
         // renders a blank cell. Source data has many partially-filled records
         // (interrupted form submissions) and blanks make the grid look broken.
         const rawLogId = String(r['Log ID'] || '').trim()
+        const comments = r['Comments (log issues above)'] || null
+        const result = r['Result'] || null
+        // Walkthrough Guide — ports Nick's Airtable formula
+        // (`fld5Y69VxnEMaZxX5` Walkthrough Guide column). Computes a
+        // workflow status pill per row that tells the tech the next step.
+        const hasVenue = !!String(venueName).trim()
+        const hasLocations = locsLink.length > 0
+        const hasIssues = probLink.length > 0
+        const ticketLinked = typeof comments === 'string' && /Linked ticket: ?#/i.test(comments)
+        let walkthrough_guide: string
+        if (!hasVenue) walkthrough_guide = '🛑 Choose Venue'
+        else if (!hasLocations) walkthrough_guide = '🔄 Autofilling Location'
+        else if (!result && !hasIssues) walkthrough_guide = '🔄 Autofilling Open Issues'
+        else if (!result && !hasIssues) walkthrough_guide = '✔ No Open Issues · Select Result'
+        else if (!result && hasIssues) walkthrough_guide = '✔ Issues Found · Select Result'
+        else if (result === 'New Issue Detected' && !ticketLinked) walkthrough_guide = '🛑 Create Issue'
+        else walkthrough_guide = '✅ Good Walkthrough'
         return {
           id: String(r['Id']),
           log_id: rawLogId || `#${r['Id']}`,
@@ -311,10 +369,11 @@ export async function GET(request: NextRequest) {
           log_date,
           log_time,
           type: r['Type'] || null,
-          result: r['Result'] || null,
+          result,
           locations_visited: locationsLabel || null,
           issues_found: issuesLabel || null,
-          comments: r['Comments (log issues above)'] || null,
+          comments,
+          walkthrough_guide,
           three_letter_code: r['Three Letter Code'] || null,
           created_at: r['CreatedAt'] || null,
         }
@@ -412,9 +471,32 @@ export async function POST(request: NextRequest) {
     const venueName = String(venueRow?.['Venue Name'] || '').trim() || `Venue #${venueId}`
     const venueAbbr = String(venueRow?.['Abbreviation'] || '').trim() || ''
 
-    // Log ID format `YY-MM-DD [TAG]` — matches Nick's Airtable exactly
-    // (5/13 video). Date prefix + venue (or venue+location) abbreviation.
-    const tagAbbr = venueAbbr || venueName.slice(0, 4).toUpperCase()
+    // Log ID format `YY-MM-DD [LOC1, LOC2]` — matches Nick's Airtable
+    // formula exactly (`fldIkCUVUiDV41VOO` AutoFill Component (Code)
+    // wrapped in brackets). The TAG is the joined three_letter_code of
+    // every Display Location the tech checked off, comma-separated.
+    // Falls back to venue abbr if no locations were selected (interrupted
+    // submission), matching the existing legacy rows that lack codes.
+    let locationCodes: string[] = []
+    if (locationIds.length) {
+      try {
+        const { records: locRows } = await NocoOps.listRecords(TABLES.displayLocations, {
+          where: `(Id,in,${locationIds.join(',')})`,
+          limit: 500,
+        })
+        locationCodes = locRows
+          .map((r) => {
+            const code = String((r as any)['Three Letter Code'] || (r as any)['Location Abbreviation'] || '').trim()
+            return code
+          })
+          .filter(Boolean)
+      } catch (e) {
+        console.warn('[walkthroughs/nocodb] location-code lookup failed (Log ID falls back to venue abbr):', e)
+      }
+    }
+    const tagAbbr = locationCodes.length
+      ? locationCodes.join(', ')
+      : (venueAbbr || venueName.slice(0, 4).toUpperCase())
     const logId = `${dateStr} [${tagAbbr}]`
     const failureSummary = summarizeAssetFindings(assetFindings)
 

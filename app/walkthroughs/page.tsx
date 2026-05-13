@@ -23,6 +23,7 @@ interface Walk {
   locations_visited: string | null
   issues_found: string | null
   comments: string | null
+  walkthrough_guide: string | null
   three_letter_code: string | null
   created_at: string | null
 }
@@ -39,6 +40,18 @@ const RESULT_OPTIONS = [
   { value: 'New Issue Detected',    label: 'New Issue Detected',    color: 'rose' },
 ]
 
+// Walkthrough Guide pill colors — keyed by the prefix emoji of the
+// computed status string (server-side in /api/walkthroughs/nocodb).
+const GUIDE_OPTIONS = [
+  { value: '🛑 Choose Venue',                     label: '🛑 Choose Venue',                     color: 'rose' },
+  { value: '🔄 Autofilling Location',             label: '🔄 Autofilling Location',             color: 'sky' },
+  { value: '🔄 Autofilling Open Issues',          label: '🔄 Autofilling Open Issues',          color: 'sky' },
+  { value: '✔ No Open Issues · Select Result',    label: '✔ No Open Issues · Select Result',    color: 'amber' },
+  { value: '✔ Issues Found · Select Result',      label: '✔ Issues Found · Select Result',      color: 'amber' },
+  { value: '🛑 Create Issue',                     label: '🛑 Create Issue',                     color: 'rose' },
+  { value: '✅ Good Walkthrough',                  label: '✅ Good Walkthrough',                  color: 'emerald' },
+]
+
 // Today's-Walkthroughs view filter — rolls forward daily per Nick 5/4.
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -52,16 +65,17 @@ const VIEWS: ViewConfig<Walk>[] = [
 ]
 
 const COLUMNS: ColumnConfig<Walk>[] = [
-  { id: 'log_id',             header: 'Log ID',     type: 'text',         width: 130, primary: true, editable: false },
-  { id: 'log_date',           header: 'Date',       type: 'date',         width: 120 },
-  { id: 'venue_name',         header: 'Venue',      type: 'text',         width: 180, editable: false },
-  { id: 'technician_name',    header: 'Technician', type: 'text',         width: 160, editable: false },
-  { id: 'type',               header: 'Type',       type: 'singleSelect', width: 130, options: TYPE_OPTIONS },
-  { id: 'result',             header: 'Result',     type: 'singleSelect', width: 200, options: RESULT_OPTIONS },
-  { id: 'locations_visited',  header: 'Locations',  type: 'text',         width: 280, editable: false },
-  { id: 'issues_found',       header: 'Issues',     type: 'text',         width: 260, editable: false },
-  { id: 'comments',           header: 'Comments',   type: 'longText',     width: 320 },
-  { id: 'three_letter_code',  header: 'Code',       type: 'text',         width: 80,  editable: false },
+  { id: 'log_id',             header: 'Log ID',           type: 'text',         width: 160, primary: true, editable: false },
+  { id: 'log_date',           header: 'Date',             type: 'date',         width: 120 },
+  { id: 'venue_name',         header: 'Venue',            type: 'text',         width: 180, editable: false },
+  { id: 'technician_name',    header: 'Technician',       type: 'text',         width: 160, editable: false },
+  { id: 'type',               header: 'Type',             type: 'singleSelect', width: 130, options: TYPE_OPTIONS },
+  { id: 'result',             header: 'Result',           type: 'singleSelect', width: 200, options: RESULT_OPTIONS },
+  { id: 'walkthrough_guide',  header: 'Walkthrough Guide', type: 'singleSelect', width: 240, options: GUIDE_OPTIONS, editable: false },
+  { id: 'locations_visited',  header: 'Locations',        type: 'text',         width: 280, editable: false },
+  { id: 'issues_found',       header: 'Issues',           type: 'text',         width: 260, editable: false },
+  { id: 'comments',           header: 'Comments',         type: 'longText',     width: 320 },
+  { id: 'three_letter_code',  header: 'Code',             type: 'text',         width: 80,  editable: false },
 ]
 
 // Map DataGrid column ids → NocoDB column titles (what PATCH expects).
@@ -208,41 +222,47 @@ export default function WalkthroughsPage() {
           onUpdate={updateCell}
           title={r => `${r.log_id || 'Walkthrough'}${r.venue_name ? ' · ' + r.venue_name : ''}`}
           extraContent={(r) => {
-            // Nick parity 5/13 — historic walkthrough history at this venue or
-            // location. Server resolves venue/location IDs by display name
-            // (NocoDB Link fields filter by display title), so we pass the
-            // name as a `label=` hint and let the history page render the
-            // header from the URL.
-            const venueQs = r.venue_name ? `label=${encodeURIComponent(r.venue_name)}&venue_name=${encodeURIComponent(r.venue_name)}` : ''
-            // Click-through is by name for now — the list view doesn't surface
-            // venue_id (NocoDB Link fields return name+Id only when expanded).
-            // The history endpoint accepts venue_id; we'll need to resolve it.
-            // Quick win: link by name via a separate resolver query param.
+            // Drawer actions — Nick parity 5/13:
+            //  • "Maintain Checklist" → /walkthroughs/[id]/checklist (mirrors
+            //    Airtable's "Open Checklist" button per row)
+            //  • Walkthrough history chips → /walkthroughs/history filtered
+            //    by venue or location
             return (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs">
-                <div className="font-semibold text-zinc-700 mb-2">Walkthrough history</div>
-                <div className="flex flex-wrap gap-2">
-                  {r.venue_name && r.venue_name !== '—' && (
-                    <button
-                      onClick={() => router.push(`/walkthroughs/history?venue_name=${encodeURIComponent(r.venue_name)}&label=${encodeURIComponent(r.venue_name)}`)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 rounded text-zinc-700 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
-                    >
-                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
-                      All walkthroughs at {r.venue_name}
-                    </button>
-                  )}
-                  {r.locations_visited && (
-                    r.locations_visited.split(',').map(l => l.trim()).filter(Boolean).slice(0, 4).map(locName => (
+              <div className="space-y-3">
+                <div>
+                  <button
+                    onClick={() => router.push(`/walkthroughs/${r.id}/checklist`)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded font-semibold text-xs uppercase tracking-wider transition-colors"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                    Maintain Checklist
+                  </button>
+                </div>
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs">
+                  <div className="font-semibold text-zinc-700 mb-2">Walkthrough history</div>
+                  <div className="flex flex-wrap gap-2">
+                    {r.venue_name && r.venue_name !== '—' && (
                       <button
-                        key={locName}
-                        onClick={() => router.push(`/walkthroughs/history?location_name=${encodeURIComponent(locName)}&label=${encodeURIComponent(locName)}`)}
+                        onClick={() => router.push(`/walkthroughs/history?venue_name=${encodeURIComponent(r.venue_name)}&label=${encodeURIComponent(r.venue_name)}`)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 rounded text-zinc-700 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
                       >
-                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L3 7v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7l-9-5z" /></svg>
-                        {locName}
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                        All walkthroughs at {r.venue_name}
                       </button>
-                    ))
-                  )}
+                    )}
+                    {r.locations_visited && (
+                      r.locations_visited.split(',').map(l => l.trim()).filter(Boolean).slice(0, 4).map(locName => (
+                        <button
+                          key={locName}
+                          onClick={() => router.push(`/walkthroughs/history?location_name=${encodeURIComponent(locName)}&label=${encodeURIComponent(locName)}`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-zinc-300 rounded text-zinc-700 hover:border-[#0A52EF] hover:text-[#0A52EF] transition-colors"
+                        >
+                          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L3 7v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V7l-9-5z" /></svg>
+                          {locName}
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )

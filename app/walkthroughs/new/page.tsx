@@ -95,13 +95,19 @@ export default function NewWalkthroughPage() {
     })
   }, [])
 
-  // Compose the projected Log ID as the venue selection changes — mirrors
-  // the Airtable form behaviour (`YY-MM-DD [ABBR]`).
+  // Compose the projected Log ID as venue+location selection changes —
+  // mirrors Nick's Airtable formula `YY-MM-DD [<loc codes joined>]`. Falls
+  // back to venue abbr if no locations are checked yet.
   const projectedLogId = (() => {
     if (!logDatePrefix) return '—'
     const v = venues.find((x) => x.id === venueId)
-    const tag = v?.abbreviation || (v?.name ? v.name.slice(0, 4).toUpperCase() : '')
-    return tag ? `${logDatePrefix} [${tag}]` : `${logDatePrefix} [ ]`
+    const codes = locations
+      .filter((l) => selectedLocationIds.has(l.id))
+      .map((l) => l.three_letter_code || l.location_abbreviation || '')
+      .filter(Boolean)
+    if (codes.length) return `${logDatePrefix} [${codes.join(', ')}]`
+    const fallback = v?.abbreviation || (v?.name ? v.name.slice(0, 4).toUpperCase() : '')
+    return fallback ? `${logDatePrefix} [${fallback}]` : `${logDatePrefix} [ ]`
   })()
 
   // Auto-default the submitter to whichever option matches the current
