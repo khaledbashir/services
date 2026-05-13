@@ -13,6 +13,12 @@ import { sendSlackMessage } from '@/lib/slack'
 
 const DEDUP_WINDOW_MS = 2 * 3600000 // 2 hours — don't re-remind within this window
 
+// Slack `<@U…>` pings the user; plain text doesn't. Falls back to the name when no Slack ID is on file.
+function staffMention(fullName: string, slackUserIds: string[] | null | undefined): string {
+  const id = (slackUserIds || []).find((v) => typeof v === 'string' && v.trim().length > 0)
+  return id ? `<@${id}>` : fullName
+}
+
 export async function GET() {
   try {
     // Check if tech-reminders automation is enabled
@@ -33,7 +39,7 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary, e.start_time,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
-              s.id as staff_id, s.full_name, s.email,
+              s.id as staff_id, s.full_name, s.email, s.slack_user_ids,
               ea.id as assignment_id, ea.last_reminder_sent_at
        FROM events e
        JOIN venues v ON e.venue_id = v.id
@@ -75,7 +81,7 @@ export async function GET() {
               // URL-button gets replaced by "selected by @user" for everyone
               // else as soon as anyone clicks, which looked to Joe like the
               // link was disappearing.
-              text: `👋 *Reminder for ${row.full_name}*\n\nYou're assigned to *${row.summary}* at *${row.venue_name}* tonight at *${row.start_time_et} ET*.\n\nPlease check in when you arrive on site.\n\n📋 <${workflowUrl}|Open Workflow>`,
+              text: `👋 *Reminder for ${staffMention(row.full_name, row.slack_user_ids)}*\n\nYou're assigned to *${row.summary}* at *${row.venue_name}* tonight at *${row.start_time_et} ET*.\n\nPlease check in when you arrive on site.\n\n📋 <${workflowUrl}|Open Workflow>`,
             },
           },
           {
@@ -104,7 +110,7 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary, e.last_escalation_sent_at,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
-              string_agg(s.full_name, ', ') as missing_techs,
+              json_agg(json_build_object('name', s.full_name, 'slack_ids', s.slack_user_ids)) as missing_staff,
               count(s.id) as missing_count
        FROM events e
        JOIN venues v ON e.venue_id = v.id
@@ -134,6 +140,9 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
+      const missingMentions = (row.missing_staff || [])
+        .map((m: { name: string; slack_ids: string[] | null }) => staffMention(m.name, m.slack_ids))
+        .join(', ')
       const sent = await sendSlackMessage({
         channel,
         text: `🚨 ESCALATION: ${row.missing_count} tech(s) not checked in — ${row.summary} at ${row.venue_name}`,
@@ -142,7 +151,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🚨 *ESCALATION — No Check-in*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET* — that's less than 1 hour away.\n\n*Missing check-in from:* ${row.missing_techs}\n\n_This requires manager attention._`,
+              text: `🚨 *ESCALATION — No Check-in*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET* — that's less than 1 hour away.\n\n*Missing check-in from:* ${missingMentions}\n\n_This requires manager attention._`,
             },
           },
         ],
@@ -159,7 +168,7 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary, e.last_escalation_sent_at,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
-              string_agg(s.full_name, ', ') as missing_techs,
+              json_agg(json_build_object('name', s.full_name, 'slack_ids', s.slack_user_ids)) as missing_staff,
               count(s.id) as missing_count
        FROM events e
        JOIN venues v ON e.venue_id = v.id
@@ -189,6 +198,9 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
+      const missingMentions = (row.missing_staff || [])
+        .map((m: { name: string; slack_ids: string[] | null }) => staffMention(m.name, m.slack_ids))
+        .join(', ')
       const sent = await sendSlackMessage({
         channel,
         text: `🔴 CRITICAL: Game started, no check-in — ${row.summary} at ${row.venue_name}`,
@@ -197,7 +209,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `🔴 *CRITICAL — Game Started, No Check-in*\n\n*${row.summary}* at *${row.venue_name}* started at *${row.start_time_et} ET* and nobody has checked in.\n\n*Missing:* ${row.missing_techs}\n\n_Immediate action required._`,
+              text: `🔴 *CRITICAL — Game Started, No Check-in*\n\n*${row.summary}* at *${row.venue_name}* started at *${row.start_time_et} ET* and nobody has checked in.\n\n*Missing:* ${missingMentions}\n\n_Immediate action required._`,
             },
           },
         ],
@@ -216,7 +228,7 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time_et,
               v.name as venue_name, v.slack_channel_id,
-              s.id as staff_id, s.full_name,
+              s.id as staff_id, s.full_name, s.slack_user_ids,
               ea.id as assignment_id, ea.last_game_ready_reminder_at
        FROM events e
        JOIN venues v ON e.venue_id = v.id
@@ -255,7 +267,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `⏰ *Game Ready check for ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET*.\n\nPlease submit your *Game Ready* confirmation (equipment check, crew ready, comms test).\n\n✅ <${workflowUrl}|Submit Game Ready>`,
+              text: `⏰ *Game Ready check for ${staffMention(row.full_name, row.slack_user_ids)}*\n\n*${row.summary}* at *${row.venue_name}* starts at *${row.start_time_et} ET*.\n\nPlease submit your *Game Ready* confirmation (equipment check, crew ready, comms test).\n\n✅ <${workflowUrl}|Submit Game Ready>`,
             },
           },
           {
@@ -285,7 +297,7 @@ export async function GET() {
       `SELECT e.id as event_id, e.summary,
               TO_CHAR(e.end_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as end_time_et,
               v.name as venue_name, v.slack_channel_id,
-              s.id as staff_id, s.full_name,
+              s.id as staff_id, s.full_name, s.slack_user_ids,
               ea.id as assignment_id, ea.last_post_game_reminder_at
        FROM events e
        JOIN venues v ON e.venue_id = v.id
@@ -324,7 +336,7 @@ export async function GET() {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `📝 *Post-Game Ops Report needed from ${row.full_name}*\n\n*${row.summary}* at *${row.venue_name}* ended at *${row.end_time_et} ET*.\n\nPlease submit the *Post-Game Ops Report* (notes + incidents) to close out the workflow.\n\n📝 <${workflowUrl}|Submit Post-Game>`,
+              text: `📝 *Post-Game Ops Report needed from ${staffMention(row.full_name, row.slack_user_ids)}*\n\n*${row.summary}* at *${row.venue_name}* ended at *${row.end_time_et} ET*.\n\nPlease submit the *Post-Game Ops Report* (notes + incidents) to close out the workflow.\n\n📝 <${workflowUrl}|Submit Post-Game>`,
             },
           },
           {
