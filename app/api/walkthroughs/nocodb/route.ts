@@ -650,14 +650,22 @@ async function buildPdfLocationGroups(locationIds: number[], findings: Array<any
   const { records } = await NocoOps.listRecords(TABLES.displayLocations, { where, limit: 200 })
   // Map DL id → name.
   const idToName = new Map<number, string>()
+  const locationNames: string[] = []
   for (const r of records) {
     const id = Number((r as any).Id)
     const name = String((r as any).Name || `Location #${id}`).trim()
     idToName.set(id, name)
+    if (name) locationNames.push(name)
   }
-  // Map display id → location id (best effort) by re-fetching displays.
-  const displayWhere = `(Display Location,in,${locationIds.join(',')})`
-  const { records: dRows } = await NocoOps.listRecords(TABLES.displays, { where: displayWhere, limit: 500 })
+  // Map display id → location id by re-fetching displays. NocoDB filters
+  // Link fields by the linked record's display title (Name), not its row
+  // Id, so we build an or-chained eq on the location names — same approach
+  // the GET-displays action uses. The earlier `(Display Location,in,IDs)`
+  // form silently returned zero rows, which caused the PDF to render
+  // "No assets recorded" under every location header.
+  const dRows = locationNames.length
+    ? (await NocoOps.listRecords(TABLES.displays, { where: orChainEq('Display Location', locationNames), limit: 500 })).records
+    : []
   const displayToLoc = new Map<number, number>()
   for (const r of dRows) {
     const did = Number((r as any).Id)
@@ -668,10 +676,15 @@ async function buildPdfLocationGroups(locationIds: number[], findings: Array<any
   }
   // Group findings by their Display Location.
   const byLoc = new Map<number, any[]>()
+  const orphans: any[] = []
   for (const f of findings) {
-    const loc = displayToLoc.get(Number(f.display_id)) || 0
-    if (!byLoc.has(loc)) byLoc.set(loc, [])
-    byLoc.get(loc)!.push(f)
+    const loc = displayToLoc.get(Number(f.display_id))
+    if (loc) {
+      if (!byLoc.has(loc)) byLoc.set(loc, [])
+      byLoc.get(loc)!.push(f)
+    } else {
+      orphans.push(f)
+    }
   }
   // Materialize in the order of the original locationIds.
   const out: Array<{ name: string; findings: any[] }> = []
@@ -680,6 +693,12 @@ async function buildPdfLocationGroups(locationIds: number[], findings: Array<any
       name: idToName.get(lid) || `Location #${lid}`,
       findings: byLoc.get(lid) || [],
     })
+  }
+  // Orphan safety net: if a finding's display didn't map (display archived
+  // between form load and submit, name mismatch, etc.), surface it under
+  // the first selected location rather than silently dropping it.
+  if (orphans.length && out.length) {
+    out[0].findings = [...out[0].findings, ...orphans]
   }
   return out
 }
