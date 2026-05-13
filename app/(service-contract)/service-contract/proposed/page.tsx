@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import ReasoningPanel, { ReasoningModal } from './ReasoningPanel'
 import { ConfirmModal, PromptModal, SuccessModal } from '../../Modal'
+import RoadmapView from './RoadmapView'
 
 interface ProposedCO {
   id: string
@@ -69,6 +70,7 @@ export default function ProposedCOsPage() {
   const [loading, setLoading] = useState(true)
   const [drawer, setDrawer] = useState<{ mode: 'new' | 'edit'; data: Partial<ProposedCO> & { id?: string } } | null>(null)
   const [filter, setFilter] = useState<'all' | 'bundle' | 'individual'>('all')
+  const [viewMode, setViewMode] = useState<'list' | 'roadmap'>('roadmap')
   const [savingId, setSavingId] = useState<string | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<ProposedCO | null>(null)
   const [promotePrompt, setPromotePrompt] = useState<ProposedCO | null>(null)
@@ -169,27 +171,47 @@ export default function ProposedCOsPage() {
       {/* AI scope generator — top of page, the hero */}
       <ScopeItHero onCreated={refresh} />
 
-      <div className="flex gap-2 mb-4 text-xs">
-        {(['all', 'bundle', 'individual'] as const).map(f => (
+      <div className="flex items-center justify-between gap-3 mb-4 text-xs flex-wrap">
+        <div className="flex gap-2">
+          {(['all', 'bundle', 'individual'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-md border ${
+                filter === f
+                  ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                  : 'border-gray-300 text-gray-700 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'bundle' ? 'Bundles' : 'Individual features'}
+            </button>
+          ))}
+        </div>
+        <div className="flex rounded-md border border-gray-300 dark:border-gray-700 overflow-hidden">
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md border ${
-              filter === f
-                ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
-                : 'border-gray-300 text-gray-700 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
+            onClick={() => setViewMode('roadmap')}
+            className={`px-3 py-1.5 ${viewMode === 'roadmap' ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
           >
-            {f === 'all' ? 'All' : f === 'bundle' ? 'Bundles' : 'Individual features'}
+            🗺️ Roadmap
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 ${viewMode === 'list' ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+          >
+            ☰ List
+          </button>
+        </div>
       </div>
 
       {loading && (
         <div className="text-sm text-gray-400 text-center py-12">Loading…</div>
       )}
 
-      {!loading && bundles.length > 0 && (
+      {!loading && viewMode === 'roadmap' && (
+        <RoadmapView items={visible} />
+      )}
+
+      {!loading && viewMode === 'list' && bundles.length > 0 && (
         <section className="mb-8">
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Bundles · multi-feature ideas</h2>
           <div className="grid md:grid-cols-2 gap-3">
@@ -205,7 +227,7 @@ export default function ProposedCOsPage() {
         </section>
       )}
 
-      {!loading && individuals.length > 0 && (
+      {!loading && viewMode === 'list' && individuals.length > 0 && (
         <section>
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">Individual features · single ideas</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -221,7 +243,7 @@ export default function ProposedCOsPage() {
         </section>
       )}
 
-      {!loading && visible.length === 0 && (
+      {!loading && viewMode === 'list' && visible.length === 0 && (
         <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-12 text-center">
           <div className="text-3xl mb-3">💡</div>
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">No proposed COs yet</p>
