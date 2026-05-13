@@ -49,7 +49,7 @@ function genUUID(): string {
   })
 }
 
-export default function GoblinDrawer({ co, onClose }: { co: ProposedCO; onClose: () => void }) {
+export default function ScopeBreakdownDrawer({ co, onClose }: { co: ProposedCO; onClose: () => void }) {
   const [text, setText] = useState('')
   const [streaming, setStreaming] = useState(true)
   const [error, setError] = useState<string | null>(null)

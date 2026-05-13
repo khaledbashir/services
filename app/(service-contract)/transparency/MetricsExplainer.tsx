@@ -19,7 +19,7 @@ const METRICS: Array<{ name: string; tone: 'blue' | 'emerald' | 'amber'; how: st
     name: 'Change Orders dollars',
     tone: 'amber',
     how:
-      'Sum of estimated_usd across every NEW or MIXED request. Open-status rows are quotes awaiting approval; shipped rows are closed-out CO work. The number derives from a 4-step chain — US-market median → AI-assisted delivery efficiency → ANC contract rate → long-term-partner adjustment — visible per row in the rationale block.',
+      'Sum of estimated_usd across every NEW or MIXED request. Open-status rows are quotes awaiting approval; shipped rows are closed-out CO work. The number uses the current scope band, comparable prior work, platform context, and the standard change-order pricing table.',
   },
   {
     name: '▲ / ▼ vs last month',
@@ -37,7 +37,7 @@ const METRICS: Array<{ name: string; tone: 'blue' | 'emerald' | 'amber'; how: st
     name: 'Per-platform numbers',
     tone: 'amber',
     how:
-      'Same retainer / warranty / CO logic as the headline strip, but grouped by the request\'s repo field. Tags: anc-services = Service Dashboard, rag2 = Proposal Engine, twenty-crm = CRM, openclaw = Slack Bot, anc-kb = Operator Docs.',
+      'Same retainer / warranty / CO logic as the headline strip, grouped by the affected ANC platform.',
   },
 ]
 

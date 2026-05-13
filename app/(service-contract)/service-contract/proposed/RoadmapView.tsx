@@ -6,7 +6,7 @@
 // the Advisor.
 
 import { useEffect, useMemo, useState } from 'react'
-import GoblinDrawer from './GoblinDrawer'
+import ScopeBreakdownDrawer from './ScopeBreakdownDrawer'
 
 interface ProposedCO {
   id: string
@@ -58,7 +58,7 @@ function fmtUSD(n: number | null): string {
 
 export default function RoadmapView({ items }: { items: ProposedCO[] }) {
   const [now, setNow] = useState<CurrentState | null>(null)
-  const [openGoblin, setOpenGoblin] = useState<ProposedCO | null>(null)
+  const [openScopeBreakdown, setOpenScopeBreakdown] = useState<ProposedCO | null>(null)
 
   useEffect(() => {
     fetch('/api/roadmap/now', { cache: 'no-store' })
@@ -117,7 +117,7 @@ export default function RoadmapView({ items }: { items: ProposedCO[] }) {
           </header>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {inFlight.map((co) => (
-              <RoadmapCard key={co.id} co={co} accent="indigo" onGoblin={() => setOpenGoblin(co)} />
+              <RoadmapCard key={co.id} co={co} accent="indigo" onScopeBreakdown={() => setOpenScopeBreakdown(co)} />
             ))}
           </div>
         </section>
@@ -146,7 +146,7 @@ export default function RoadmapView({ items }: { items: ProposedCO[] }) {
                 </div>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {cos.map((co) => (
-                    <RoadmapCard key={co.id} co={co} accent="blue" onGoblin={() => setOpenGoblin(co)} />
+                    <RoadmapCard key={co.id} co={co} accent="blue" onScopeBreakdown={() => setOpenScopeBreakdown(co)} />
                   ))}
                 </div>
               </div>
@@ -178,7 +178,7 @@ export default function RoadmapView({ items }: { items: ProposedCO[] }) {
         </section>
       )}
 
-      {openGoblin && <GoblinDrawer co={openGoblin} onClose={() => setOpenGoblin(null)} />}
+      {openScopeBreakdown && <ScopeBreakdownDrawer co={openScopeBreakdown} onClose={() => setOpenScopeBreakdown(null)} />}
     </div>
   )
 }
@@ -194,7 +194,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'gr
   )
 }
 
-function RoadmapCard({ co, accent, onGoblin }: { co: ProposedCO; accent: 'indigo' | 'blue'; onGoblin: () => void }) {
+function RoadmapCard({ co, accent, onScopeBreakdown }: { co: ProposedCO; accent: 'indigo' | 'blue'; onScopeBreakdown: () => void }) {
   const accentLine = accent === 'indigo' ? 'border-l-indigo-500' : 'border-l-blue-500'
   return (
     <div className={`rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 border-l-4 ${accentLine} p-4 shadow-sm flex flex-col gap-3`}>
@@ -213,7 +213,7 @@ function RoadmapCard({ co, accent, onGoblin }: { co: ProposedCO; accent: 'indigo
           {co.timeline_label ? <span className="truncate">· {co.timeline_label}</span> : null}
         </div>
         <button
-          onClick={onGoblin}
+          onClick={onScopeBreakdown}
           className="text-xs px-2.5 py-1 rounded-md bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-semibold hover:opacity-90 shrink-0 inline-flex items-center gap-1"
           title="Plan this out with the advisor"
         >

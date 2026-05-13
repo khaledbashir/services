@@ -187,6 +187,58 @@ export const NOT_COVERED_CLAUSES: Array<{ title: string; detail: string }> = [
 
 const RETAINER_CAP_HOURS = parseInt(process.env.RETAINER_CAP_HOURS || '12', 10)
 
+const PUBLIC_PLATFORM_LABELS: Record<string, string> = {
+  'anc-services': 'Services Dashboard',
+  rag2: 'Proposal Engine',
+  'twenty-crm': 'CRM',
+  openclaw: 'Slack Bot',
+  'anc-kb': 'Operator Docs',
+  crmdocs: 'Operator Docs',
+  other: 'General platform work',
+}
+
+function publicPlatform(value: unknown): string | null {
+  const key = String(value || '').trim()
+  if (!key) return null
+  return PUBLIC_PLATFORM_LABELS[key] || key
+}
+
+function publicRequester(value: unknown): string | null {
+  const text = String(value || '').trim()
+  if (!text) return null
+  if (/\bahmad\b/i.test(text)) return 'ANC team'
+  return text.replace(/@/g, '').replace(/\s+/g, ' ')
+}
+
+function publicSummary(value: unknown): string {
+  return String(value || '')
+    .replace(/<https?:\/\/[^|>]+(?:\|([^>]+))?>/g, '$1')
+    .replace(/https?:\/\/\S+/g, 'linked item')
+    .replace(/@Ahmad\s+Basheer/gi, 'the team')
+    .replace(/@Ahmad\b/gi, 'the team')
+    .replace(/\bAhmad\s+Basheer\b/gi, 'the team')
+    .replace(/\bAhmad\b/gi, 'the team')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function publicClassificationBasis(classification: 'FIX' | 'NEW' | 'MIXED', retainerCovered: boolean): string {
+  if (classification === 'MIXED') {
+    return 'This includes existing-platform support plus new scope; the new-scope portion is tracked separately.'
+  }
+  if (classification === 'NEW' || !retainerCovered) {
+    return 'This adds a new capability, workflow, integration, dashboard, or automation, so it is tracked as a change order.'
+  }
+  return 'This supports or fixes already-delivered functionality, so it is covered by the monthly service contract.'
+}
+
+function publicEstimateBasis(classification: 'FIX' | 'NEW' | 'MIXED', retainerCovered: boolean): string {
+  if (classification === 'NEW' || classification === 'MIXED' || !retainerCovered) {
+    return 'Estimate based on the selected scope band, current platform context, comparable prior work, and the standard change-order pricing table.'
+  }
+  return 'Estimate based on comparable support work, current platform context, and logged delivery history.'
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   const meter = await hoursThisMonth().catch(() => ({
     month: new Date().toISOString().slice(0, 7),
@@ -224,12 +276,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     const daysRemaining = Math.max(0, Math.ceil((expiresMs - now) / (24 * 60 * 60 * 1000)))
     return {
       id: String(r.id),
-      summary: String(r.summary || ''),
+      summary: publicSummary(r.summary),
       shipped_at: shippedAtIso,
       warranty_expires: new Date(expiresMs).toISOString(),
       days_remaining: daysRemaining,
-      repo: (r.repo as string) || null,
-      area: (r.area as string) || null,
+      repo: publicPlatform(r.repo),
+      area: null,
     }
   })
 
@@ -246,10 +298,10 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const recently_shipped: RecentlyShipped[] = shippedRes.rows.map((r) => ({
     id: String(r.id),
-    summary: String(r.summary || ''),
+    summary: publicSummary(r.summary),
     shipped_at: new Date(r.shipped_at as string).toISOString(),
     actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
-    repo: (r.repo as string) || null,
+    repo: publicPlatform(r.repo),
   }))
 
   // Recent triaged requests (last 60 days, capped) — feeds the timeline
@@ -268,32 +320,36 @@ export async function getDashboardData(): Promise<DashboardData> {
       LIMIT 25`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
 
-  const triaged_requests: TriagedRequest[] = triagedRes.rows.map((r) => ({
-    id: String(r.id),
-    received_at: new Date(r.received_at as string).toISOString(),
-    requester: (r.requester as string) || null,
-    summary: String(r.summary || ''),
-    classification: r.classification as 'FIX' | 'NEW' | 'MIXED',
-    classification_confidence: r.classification_confidence == null ? null : Number(r.classification_confidence),
-    classification_basis: (r.classification_basis as string) || null,
-    status: String(r.status || 'open'),
-    retainer_covered: Boolean(r.retainer_covered),
-    estimated_hours: r.estimated_hours == null ? null : Number(r.estimated_hours),
-    estimate_basis: (r.estimate_basis as string) || null,
-    estimated_usd: r.estimated_usd == null ? null : Number(r.estimated_usd),
-    market_breakdown: r.market_breakdown || null,
-    shipped_at: r.shipped_at ? new Date(r.shipped_at as string).toISOString() : null,
-    actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
-    shipped_commit_sha: (r.shipped_commit_sha as string) || null,
-    repo: (r.repo as string) || null,
-    area: (r.area as string) || null,
-  }))
+  const triaged_requests: TriagedRequest[] = triagedRes.rows.map((r) => {
+    const classification = r.classification as 'FIX' | 'NEW' | 'MIXED'
+    const retainerCovered = Boolean(r.retainer_covered)
+    return {
+      id: String(r.id),
+      received_at: new Date(r.received_at as string).toISOString(),
+      requester: publicRequester(r.requester),
+      summary: publicSummary(r.summary),
+      classification,
+      classification_confidence: r.classification_confidence == null ? null : Number(r.classification_confidence),
+      classification_basis: publicClassificationBasis(classification, retainerCovered),
+      status: String(r.status || 'open'),
+      retainer_covered: retainerCovered,
+      estimated_hours: r.estimated_hours == null ? null : Number(r.estimated_hours),
+      estimate_basis: publicEstimateBasis(classification, retainerCovered),
+      estimated_usd: r.estimated_usd == null ? null : Number(r.estimated_usd),
+      market_breakdown: null,
+      shipped_at: r.shipped_at ? new Date(r.shipped_at as string).toISOString() : null,
+      actual_hours: r.actual_hours == null ? null : Number(r.actual_hours),
+      shipped_commit_sha: null,
+      repo: publicPlatform(r.repo),
+      area: null,
+    }
+  })
 
   // Coverage-strip aggregates — three numbers above the meter.
   // CRITICAL: every retainer-math filter excludes source='auto-push'. Auto-push rows
-  // are Ahmad's own pushes (his workflow improvements) — they live in the ledger/
-  // kanban for visibility but must never count against the 12-hr/month stakeholder
-  // retainer or the warranty roster. Stakeholder sources only.
+  // are internal workflow improvements — they live in the ledger for ops visibility
+  // but must never count against the 12-hr/month stakeholder retainer or the
+  // warranty roster. Stakeholder sources only.
   const coverageRes = await query(
     `SELECT
        COALESCE(SUM(actual_hours) FILTER (
@@ -500,7 +556,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
 
   const platforms: PlatformBreakdown[] = platformRes.rows.map((r) => ({
-    platform: String(r.platform || 'other'),
+    platform: publicPlatform(r.platform) || 'General platform work',
     fixes_shipped: Number(r.fixes_shipped) || 0,
     hours_used: Number(r.hours_used) || 0,
     active_warranties: Number(r.active_warranties) || 0,
@@ -531,8 +587,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     ts: new Date(r.ts as string).toISOString(),
     kind: r.kind as ActivityEvent['kind'],
     classification: r.classification as 'FIX' | 'NEW' | 'MIXED',
-    requester: (r.requester as string) || null,
-    summary: String(r.summary || ''),
+    requester: publicRequester(r.requester),
+    summary: publicSummary(r.summary),
     hours:
       r.kind === 'shipped' && r.actual_hours != null
         ? Number(r.actual_hours)

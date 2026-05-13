@@ -96,7 +96,7 @@ export default function ChangeOrdersKanbanPage() {
     setLoading(true)
     // Per-tab data fetch:
     //   inbox     -> only inbox=true rows
-    //   internal  -> project=internal (Ahmad's auto-push rows; inbox=false default)
+    //   internal  -> project=internal (auto-push rows; inbox=false default)
     //   all       -> stakeholder COs across all projects
     //   <project> -> stakeholder COs filtered to one project
     const params = new URLSearchParams({ limit: '300' })
@@ -117,7 +117,7 @@ export default function ChangeOrdersKanbanPage() {
     ])
     setOrders(boardRes.requests || [])
     const counts: Record<string, number> = { all: 0, inbox: 0 }
-    // "Active" for the headline count = needs attention from Ahmad. That means
+    // "Active" for the headline count = needs service-team attention. That means
     // open / quoted / approved / in_progress. Shipped items are delivered and
     // sit awaiting payment — they shouldn't count as "things to deal with."
     const ACTIVE_STAGES = new Set(['open', 'quoted', 'approved', 'in_progress'])
@@ -248,7 +248,7 @@ export default function ChangeOrdersKanbanPage() {
               {isInbox
                 ? 'Slack messages captured by reaction (📥) or DM to the bot. Approve to route to the right project board, reject to archive.'
                 : isInternal
-                ? "Ahmad's own pushes captured automatically by the pre-push ledger. These are workflow improvements, not stakeholder asks — they don't count against the 12-hr retainer or show up on the stakeholder boards."
+                ? "Internal pushes captured automatically by the pre-push ledger. These are workflow improvements, not stakeholder asks — they don't count against the 12-hr retainer or show up on the stakeholder boards."
                 : 'NEW work outside the 12-hr/month retainer. Each one needs a separate quote. Drag work through the stages — Requested → Quoted → Approved → In Progress → Shipped → Paid.'}
             </p>
           </div>
@@ -646,7 +646,7 @@ function CardDetailDrawer({
               onChange={e => setNotes(e.target.value)}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              placeholder="Internal notes — link to proposal, payment refs, decisions..."
+              placeholder="Admin notes — link to proposal, payment refs, decisions..."
             />
             <button
               onClick={() => onUpdateNote(notes)}
