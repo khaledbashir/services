@@ -53,6 +53,31 @@ function PaymentBadge({ payment }: { payment: { status: string; amount: number |
 export default async function TransparencyDashboard() {
   const tenant = await getTenantFromHost()
   const tenantId = tenant?.id || null
+  const session = await getSession()
+  const isAdminEarly = session?.role === 'admin'
+  const underMaintenance = Boolean(tenant?.page_maintenance?.transparency)
+
+  // Maintenance lock — non-admins see the maintenance card, admins
+  // continue to the live dashboard so work can keep moving.
+  if (underMaintenance && !isAdminEarly) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-24 w-full">
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 p-10 text-center shadow-sm">
+          <div className="text-5xl mb-4">🛠️</div>
+          <h1 className="text-2xl font-bold text-amber-900 dark:text-amber-100 mb-2">
+            Under maintenance
+          </h1>
+          <p className="text-sm text-amber-700 dark:text-amber-200 max-w-md mx-auto">
+            The transparency dashboard is briefly offline for an update. It will be back shortly — your retainer balance and warranty timers are still being tracked in the background.
+          </p>
+          <div className="text-[11px] text-amber-600 dark:text-amber-400/70 mt-6">
+            {tenant?.brand_name || tenant?.name || 'ANC Sports'}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const data = await getDashboardData(tenantId)
   const meter = data.meter
   // Per-tenant Payoneer URLs override the global defaults when set.
@@ -62,8 +87,7 @@ export default async function TransparencyDashboard() {
     topup: tenant?.payoneer_topup_url || payoneerDefaults.topup,
     rate: tenant?.hourly_rate_usd || payoneerDefaults.rate,
   }
-  const session = await getSession()
-  const isAdmin = session?.role === 'admin'
+  const isAdmin = isAdminEarly
   const pendingCheck = await query(
     `SELECT 1 FROM service_requests
       WHERE retainer_covered = false
@@ -101,6 +125,19 @@ export default async function TransparencyDashboard() {
             <PrintButton />
           </div>
         </div>
+
+        {/* Admin notice when maintenance is on — you still see the live page,
+            but get a visible banner that visitors are seeing the lock screen. */}
+        {isAdmin && underMaintenance && (
+          <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="text-sm text-amber-900 dark:text-amber-100">
+              🛠️ <strong>Maintenance lock is ON.</strong> Visitors see a maintenance card. You see the live dashboard.
+            </div>
+            <a href="/admin/tenants" className="text-xs px-3 py-1 rounded bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 font-semibold hover:bg-amber-300 dark:hover:bg-amber-800">
+              Toggle in admin →
+            </a>
+          </div>
+        )}
 
         {/* Headline numbers — three buckets at a glance, top of the page */}
         <div id="overview" className="rounded-xl mb-6">

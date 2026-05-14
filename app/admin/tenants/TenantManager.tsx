@@ -19,6 +19,7 @@ interface Tenant {
   contract_summary: string | null
   is_active: boolean
   features: Record<string, boolean>
+  page_maintenance: Record<string, boolean>
 }
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -166,6 +167,25 @@ export default function TenantManager() {
     })
   }
 
+  async function toggleMaintenance(t: Tenant, key: string, underMaintenance: boolean) {
+    const res = await fetch(`/api/admin/tenants/${t.id}/maintenance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feature_key: key, under_maintenance: underMaintenance }),
+    })
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      setError(`Maintenance toggle failed: ${j.error || res.status}`)
+      return
+    }
+    setTenants((prev) => {
+      if (!prev) return prev
+      return prev.map((x) =>
+        x.id === t.id ? { ...x, page_maintenance: { ...x.page_maintenance, [key]: underMaintenance } } : x,
+      )
+    })
+  }
+
   async function archive(t: Tenant) {
     if (!confirm(`Archive ${t.name}? It will stop appearing on its subdomain.`)) return
     const res = await fetch(`/api/admin/tenants/${t.id}`, { method: 'DELETE' })
@@ -241,22 +261,41 @@ export default function TenantManager() {
 
                 {isOpen ? (
                   <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-5">
-                    {/* Feature toggles */}
+                    {/* Features + maintenance locks — one row per page,
+                        feature toggle on the left, maintenance lock on the right. */}
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">Features</div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">Features &amp; maintenance</div>
+                      <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
                         {featureKeys.map((k) => {
-                          const on = !!t.features[k]
+                          const enabled = !!t.features[k]
+                          const maint = !!t.page_maintenance?.[k]
                           return (
-                            <button
-                              key={k}
-                              onClick={() => toggleFeature(t, k, !on)}
-                              className={`text-xs px-3 py-1.5 rounded-full border ${on ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                            >
-                              {on ? '✓ ' : '○ '}{FEATURE_LABELS[k] || k}
-                            </button>
+                            <div key={k} className="flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-950/40">
+                              <div className="text-sm font-medium text-gray-800 dark:text-gray-200 min-w-0">
+                                {FEATURE_LABELS[k] || k}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  onClick={() => toggleFeature(t, k, !enabled)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full border font-semibold ${enabled ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
+                                  title={enabled ? 'Enabled — tenant sees this page' : 'Disabled — tenant cannot access this page'}
+                                >
+                                  {enabled ? '✓ Enabled' : '○ Disabled'}
+                                </button>
+                                <button
+                                  onClick={() => toggleMaintenance(t, k, !maint)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full border font-semibold ${maint ? 'bg-amber-500 text-white border-amber-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500 border-gray-300 dark:border-gray-700'}`}
+                                  title={maint ? 'Locked — non-admin viewers see a maintenance card' : 'Live — visitors see the normal page'}
+                                >
+                                  {maint ? '🛠️ Maintenance' : '🔓 Live'}
+                                </button>
+                              </div>
+                            </div>
                           )
                         })}
+                      </div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-500 mt-1.5">
+                        <strong>Enabled</strong> = tenant has access. <strong>Maintenance</strong> = the page is temporarily locked behind a “back soon” card for non-admins; admins still see the live page.
                       </div>
                     </div>
 

@@ -17,6 +17,7 @@ export interface Tenant {
   payoneer_topup_url: string | null
   contract_summary: string | null
   is_active: boolean
+  page_maintenance: Record<string, boolean>
 }
 
 export const FEATURE_KEYS = [
@@ -48,6 +49,7 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     payoneer_topup_url: (row.payoneer_topup_url as string) ?? null,
     contract_summary: (row.contract_summary as string) ?? null,
     is_active: Boolean(row.is_active),
+    page_maintenance: (row.page_maintenance as Record<string, boolean>) || {},
   }
 }
 
@@ -120,5 +122,22 @@ export async function setFeature(
        ON CONFLICT (tenant_id, feature_key)
        DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = NOW()`,
     [tenantId, key, enabled],
+  )
+}
+
+// setMaintenance flips the per-page maintenance lock for a tenant. When
+// true, non-admin viewers of that page see a maintenance card; admins
+// still see the live page.
+export async function setMaintenance(
+  tenantId: string,
+  key: FeatureKey,
+  underMaintenance: boolean,
+): Promise<void> {
+  await query(
+    `UPDATE tenants
+        SET page_maintenance = COALESCE(page_maintenance, '{}'::jsonb) || jsonb_build_object($2::text, $3::boolean),
+            updated_at = NOW()
+      WHERE id = $1`,
+    [tenantId, key, underMaintenance],
   )
 }

@@ -815,6 +815,13 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tenants_subdomain ON tenants(subdomain) WHERE is_active = true`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tenants_active ON tenants(is_active)`)
 
+    // page_maintenance is a per-page lock map: { feature_key: true } means
+    // that page is in maintenance for this tenant. Non-admin viewers see a
+    // maintenance card; admins still see the live page so work continues.
+    // Separate from tenant_features.enabled — "disabled" means the page
+    // doesn't exist for this tenant, "maintenance" means temporarily down.
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS page_maintenance JSONB NOT NULL DEFAULT '{}'::jsonb`)
+
     await client.query(`CREATE TABLE IF NOT EXISTS tenant_features (
       tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
       feature_key TEXT NOT NULL,
