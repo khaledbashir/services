@@ -296,8 +296,21 @@ function fmtUsdShort(n: number): string {
   return n >= 1000 ? '$' + (n / 1000).toFixed(1) + 'k' : '$' + Math.round(n).toLocaleString('en-US')
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
-  const meter = await hoursThisMonth().catch(() => ({
+export async function getDashboardData(tenantId?: string | null): Promise<DashboardData> {
+  // tenantFilter is appended to every service_requests WHERE clause so the
+  // dashboard scopes to a single tenant. When tenantId is null/undefined
+  // (back-compat: callers that pre-date the tenant column), all rows are
+  // included.
+  //
+  // We validate tenantId is a UUID before interpolation. The value originates
+  // from our own tenants table (looked up by subdomain in lib/tenants.ts), so
+  // it's controlled input, but the regex is a belt-and-suspenders guard
+  // against ever being called with anything else.
+  const safeTenantId = tenantId && /^[0-9a-f-]{36}$/i.test(tenantId) ? tenantId : null
+  const tenantFilter = safeTenantId ? ` AND tenant_id = '${safeTenantId}'::uuid ` : ''
+  // Same filter without leading AND for use as the FIRST predicate.
+  const tenantWhere = safeTenantId ? ` tenant_id = '${safeTenantId}'::uuid AND ` : ''
+  const meter = await hoursThisMonth(safeTenantId).catch(() => ({
     month: new Date().toISOString().slice(0, 7),
     hours_used: 0,
     hours_estimated_open: 0,
@@ -322,6 +335,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         AND shipped_at IS NOT NULL
         AND shipped_at >= NOW() - INTERVAL '30 days'
         AND source <> 'auto-push'
+        ${tenantFilter}
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -351,6 +365,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
         AND COALESCE(bucket, 'service_contract') = 'service_contract'
         AND COALESCE(bucket_confirmed, false) = true
+        ${tenantFilter}
       ORDER BY shipped_at DESC
       LIMIT 50`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -377,6 +392,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         AND status <> 'cancelled'
         AND COALESCE(bucket, 'service_contract') <> 'not_billable'
         AND COALESCE(bucket_confirmed, false) = true
+        ${tenantFilter}
       ORDER BY received_at DESC
       LIMIT 25`
   ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }))
@@ -477,7 +493,8 @@ export async function getDashboardData(): Promise<DashboardData> {
            AND COALESCE(shipped_at, paid_at) IS NOT NULL
            AND COALESCE(shipped_at, paid_at) >= DATE_TRUNC('month', NOW())
        ), 0)::numeric AS change_order_shipped_usd
-     FROM service_requests`
+     FROM service_requests
+     ${safeTenantId ? `WHERE tenant_id = '${safeTenantId}'::uuid` : ''}`
   ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
 
   const coverageRow = coverageRes.rows[0] || {}
@@ -531,7 +548,8 @@ export async function getDashboardData(): Promise<DashboardData> {
      FROM service_requests
      WHERE received_at >= NOW() - INTERVAL '60 days'
        AND status <> 'cancelled'
-       AND source <> 'auto-push'`
+       AND source <> 'auto-push'
+       ${tenantFilter}`
   ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
 
   const intelPlatformRes = await query(
@@ -546,6 +564,7 @@ export async function getDashboardData(): Promise<DashboardData> {
      WHERE received_at >= NOW() - INTERVAL '60 days'
        AND status <> 'cancelled'
        AND source <> 'auto-push'
+       ${tenantFilter}
      GROUP BY COALESCE(repo, 'other')
      ORDER BY inputs DESC, opportunity_usd DESC
      LIMIT 4`
@@ -645,7 +664,8 @@ export async function getDashboardData(): Promise<DashboardData> {
            AND shipped_at >= ctx.prev_month_start
            AND shipped_at <= ctx.prev_cutoff
        )::int AS prev_shipped_count
-     FROM service_requests, ctx`
+     FROM service_requests, ctx
+     ${safeTenantId ? `WHERE service_requests.tenant_id = '${safeTenantId}'::uuid` : ''}`
   ).catch(() => ({ rows: [{}] as Array<Record<string, unknown>> }))
 
   const prevRow = prevRes.rows[0] || {}
@@ -678,6 +698,7 @@ export async function getDashboardData(): Promise<DashboardData> {
          AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
          AND COALESCE(bucket, 'service_contract') = 'service_contract'
          AND COALESCE(bucket_confirmed, false) = true
+         ${tenantFilter}
        GROUP BY shipped_at::date
      )
      SELECT days.d AS day,
@@ -726,6 +747,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             ), 0)::numeric AS open_co_usd
      FROM service_requests
      WHERE status <> 'cancelled'
+       ${tenantFilter}
      GROUP BY COALESCE(repo, 'other')
      HAVING COUNT(*) > 0
      ORDER BY fixes_shipped DESC, hours_used DESC`
@@ -745,11 +767,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     `WITH events AS (
        SELECT id, classification, requester, summary, estimated_hours, estimated_usd, actual_hours,
               received_at AS ts, 'triaged'::text AS kind FROM service_requests
-         WHERE source <> 'auto-push'
+         WHERE source <> 'auto-push' ${tenantFilter}
        UNION ALL
        SELECT id, classification, requester, summary, estimated_hours, estimated_usd, actual_hours,
               shipped_at AS ts, 'shipped'::text AS kind FROM service_requests
-         WHERE shipped_at IS NOT NULL AND source <> 'auto-push'
+         WHERE shipped_at IS NOT NULL AND source <> 'auto-push' ${tenantFilter}
      )
      SELECT id, ts, kind, classification, requester, summary, estimated_hours, estimated_usd, actual_hours
      FROM events

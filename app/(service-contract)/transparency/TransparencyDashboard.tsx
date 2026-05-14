@@ -2,6 +2,7 @@ import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES, GRAY_AREA_CLAUS
 import { getPublicPayoneerLinks } from '@/lib/retainer-alerts'
 import { query } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getTenantFromHost } from '@/lib/tenants'
 import WarrantyCountdown from './WarrantyCountdown'
 import CoverageStrip from './CoverageStrip'
 import TransparencyTabs from './TransparencyTabs'
@@ -51,15 +52,24 @@ function PaymentBadge({ payment }: { payment: { status: string; amount: number |
 }
 
 export default async function TransparencyDashboard() {
-  const data = await getDashboardData()
+  const tenant = await getTenantFromHost()
+  const tenantId = tenant?.id || null
+  const data = await getDashboardData(tenantId)
   const meter = data.meter
-  const payoneer = getPublicPayoneerLinks()
+  // Per-tenant Payoneer URLs override the global defaults when set.
+  const payoneerDefaults = getPublicPayoneerLinks()
+  const payoneer = {
+    pending: tenant?.payoneer_pending_url || payoneerDefaults.pending,
+    topup: tenant?.payoneer_topup_url || payoneerDefaults.topup,
+    rate: tenant?.hourly_rate_usd || payoneerDefaults.rate,
+  }
   const session = await getSession()
   const isAdmin = session?.role === 'admin'
   const pendingCheck = await query(
     `SELECT 1 FROM service_requests
       WHERE retainer_covered = false
         AND status = 'shipped'
+        ${tenantId && /^[0-9a-f-]{36}$/i.test(tenantId) ? `AND tenant_id = '${tenantId}'::uuid` : ''}
       LIMIT 1`,
   ).catch(() => ({ rows: [] }))
   const hasPendingChangeOrder = pendingCheck.rows.length > 0
@@ -180,7 +190,7 @@ export default async function TransparencyDashboard() {
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Monthly retainer</span>
-                <span className="text-sm font-semibold tabular-nums">$1,500</span>
+                <span className="text-sm font-semibold tabular-nums">${(tenant?.monthly_retainer_usd ?? 1500).toLocaleString('en-US')}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Hours included</span>
@@ -188,11 +198,11 @@ export default async function TransparencyDashboard() {
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Overage rate</span>
-                <span className="text-sm font-semibold tabular-nums">$90/hr</span>
+                <span className="text-sm font-semibold tabular-nums">${tenant?.hourly_rate_usd ?? 90}/hr</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Warranty</span>
-                <span className="text-sm font-semibold tabular-nums">30 days on shipped work</span>
+                <span className="text-sm font-semibold tabular-nums">{tenant?.warranty_days ?? 30} days on shipped work</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Used so far this month</span>
@@ -377,7 +387,7 @@ export default async function TransparencyDashboard() {
         </section>
 
         <footer className="text-center text-[11px] text-gray-400 dark:text-gray-500 mt-12">
-          ANC Sports · Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage<br />
+          {tenant?.contract_summary || `${tenant?.brand_name || tenant?.name || 'ANC Sports'} · Standard service contract · $${(tenant?.monthly_retainer_usd ?? 1500).toLocaleString('en-US')}/mo · ${tenant?.retainer_cap_hours ?? 12} hrs included · ${tenant?.warranty_days ?? 30}-day post-delivery warranty per project · $${tenant?.hourly_rate_usd ?? 90}/hr overage`}<br />
           Quotes for new work use the current scope band, comparable prior work, platform context, and the standard change-order pricing table.
         </footer>
     </div>

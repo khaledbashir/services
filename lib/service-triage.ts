@@ -657,13 +657,30 @@ export async function revertStage(id: string): Promise<void> {
 //
 // hours_used uses actual_hours (real billed time), NOT estimates. Auto-push
 // rows have actual_hours = NULL until a human confirms in the inbox.
-export async function hoursThisMonth(): Promise<{
+export async function hoursThisMonth(tenantId?: string | null): Promise<{
   month: string
   hours_used: number
   hours_estimated_open: number
   cap_hours: number
   overage_hours: number
 }> {
+  // UUID guard before interpolation — tenantId originates from our own
+  // tenants table but we double-check format here for defense in depth.
+  const safeTenantId = tenantId && /^[0-9a-f-]{36}$/i.test(tenantId) ? tenantId : null
+  const tenantFilter = safeTenantId ? ` AND tenant_id = '${safeTenantId}'::uuid` : ''
+
+  // Pull the tenant's retainer cap so per-tenant config drives the math.
+  let cap = 12
+  if (safeTenantId) {
+    const capRes = await query(
+      `SELECT retainer_cap_hours FROM tenants WHERE id = $1`,
+      [safeTenantId],
+    )
+    if (capRes.rows[0]?.retainer_cap_hours != null) {
+      cap = Number(capRes.rows[0].retainer_cap_hours) || 12
+    }
+  }
+
   const r = await query(
     `SELECT
        COALESCE(SUM(CASE
@@ -677,11 +694,11 @@ export async function hoursThisMonth(): Promise<{
      WHERE classification = 'FIX'
        AND retainer_covered = true
        AND COALESCE(bucket, 'service_contract') = 'service_contract'
-       AND COALESCE(bucket_confirmed, false) = true`,
+       AND COALESCE(bucket_confirmed, false) = true
+       ${tenantFilter}`,
   )
   const used = Number(r.rows[0].used)
   const openEst = Number(r.rows[0].open_est)
-  const cap = 12
   return {
     month: new Date().toISOString().slice(0, 7),
     hours_used: Math.round(used * 10) / 10,

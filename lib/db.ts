@@ -780,6 +780,83 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_dashboards_token ON ai_dashboards(token)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ai_dashboards_created ON ai_dashboards(created_at DESC)`)
 
+    // ---- Tenants: Ahmad's multi-client foundation. -------------------------
+    // tenants holds each independent client of Ahmad's freelance practice
+    // (ANC, hypothetical Acme Sports, etc). Distinct from the existing
+    // `clients` table which is ANC's CRM clients (sports orgs / venues).
+    //
+    // tenant_features is a per-tenant feature toggle so Ahmad can decide
+    // from /admin which capability each client gets (transparency on,
+    // advisor off, etc).
+    //
+    // service_requests.tenant_id ties every ledger row to a tenant so the
+    // /transparency dashboard scopes correctly. Existing rows backfill to
+    // the ANC tenant (slug='anc') seeded below.
+    await client.query(`CREATE TABLE IF NOT EXISTS tenants (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      slug TEXT UNIQUE NOT NULL,
+      subdomain TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      brand_name TEXT,
+      logo_url TEXT,
+      primary_color TEXT,
+      retainer_cap_hours NUMERIC(6,2) NOT NULL DEFAULT 12,
+      hourly_rate_usd NUMERIC(8,2) NOT NULL DEFAULT 90,
+      monthly_retainer_usd NUMERIC(10,2) NOT NULL DEFAULT 1500,
+      warranty_days INTEGER NOT NULL DEFAULT 30,
+      payoneer_pending_url TEXT,
+      payoneer_topup_url TEXT,
+      contract_summary TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archived_at TIMESTAMPTZ
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tenants_subdomain ON tenants(subdomain) WHERE is_active = true`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tenants_active ON tenants(is_active)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS tenant_features (
+      tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      feature_key TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (tenant_id, feature_key)
+    )`)
+
+    // Seed the ANC tenant if it doesn't exist yet. Pre-existing service_requests
+    // get backfilled to this tenant.
+    await client.query(`INSERT INTO tenants
+      (slug, subdomain, name, brand_name, retainer_cap_hours, hourly_rate_usd, monthly_retainer_usd, warranty_days, contract_summary)
+      VALUES ('anc', 'anc', 'ANC Sports', 'ANC Sports',
+              12, 90, 1500, 30,
+              'Standard service contract · $1,500/mo · 12 hrs included · 30-day post-delivery warranty per project · $90/hr overage')
+      ON CONFLICT (slug) DO NOTHING`)
+
+    // Default-on feature set for the ANC tenant (all known capabilities).
+    await client.query(`INSERT INTO tenant_features (tenant_id, feature_key, enabled)
+      SELECT t.id, f.key, true
+        FROM tenants t
+       CROSS JOIN (VALUES
+         ('transparency'),
+         ('change_orders'),
+         ('explore'),
+         ('morning_brief'),
+         ('service_log'),
+         ('expenses'),
+         ('advisor')
+       ) AS f(key)
+      WHERE t.slug = 'anc'
+      ON CONFLICT (tenant_id, feature_key) DO NOTHING`)
+
+    await client.query(`ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_service_requests_tenant ON service_requests(tenant_id)`)
+
+    // Backfill: every existing ledger row predates multi-tenant — assign to ANC.
+    await client.query(`UPDATE service_requests sr
+       SET tenant_id = t.id
+       FROM tenants t
+       WHERE sr.tenant_id IS NULL AND t.slug = 'anc'`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
