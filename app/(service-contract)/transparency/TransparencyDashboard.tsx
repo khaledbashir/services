@@ -17,6 +17,7 @@ import CoverageModel from './CoverageModel'
 import WarrantyTimers from './WarrantyTimers'
 import RequestIntelligence from './RequestIntelligence'
 import PendingInbox from './PendingInbox'
+import ManagedItems from './ManagedItems'
 import { ThemeToggle } from '@/components/theme-toggle'
 import './print.css'
 
@@ -104,6 +105,10 @@ export default async function TransparencyDashboard() {
         {/* Admin-only inbox: pending auto-pushed rows that haven't been
             confirmed into a bucket yet. Hidden for non-admin viewers. */}
         {isAdmin && <PendingInbox />}
+
+        {/* Admin-only management of already-approved rows — edit hours,
+            reclassify, unapprove, or hard-delete. */}
+        {isAdmin && <ManagedItems />}
 
         {/* Live warranty countdown — every platform gets its own d/h/m/s timer */}
         <WarrantyTimers />

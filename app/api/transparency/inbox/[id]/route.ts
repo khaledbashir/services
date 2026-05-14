@@ -6,15 +6,20 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 
 // POST /api/transparency/inbox/:id
-// Admin-only. One of three actions:
+// Admin-only. One of five actions:
 //   { action: 'approve', hours?: number, bucket?: 'service_contract'|'warranty'|'change_order'|'not_billable' }
 //     → flips bucket_confirmed = true, promotes hours into actual_hours
 //     → if bucket is service_contract: retainer_covered = true, classification = 'FIX' (unless overridden)
 //     → if bucket is not_billable: retainer_covered = false, row stays in ledger but never counts
 //   { action: 'skip' }
 //     → soft-cancel: status='cancelled' so the row never appears on /transparency
-//   { action: 'edit', hours?: number, bucket?: ..., classification?: ... }
-//     → adjusts proposed values before approval; does NOT flip bucket_confirmed
+//   { action: 'edit', hours?: number, actual_hours?: number, bucket?: ..., classification?: ..., summary?: string }
+//     → adjusts values; if row is already bucket_confirmed, updates actual_hours so the
+//       meter reflects the change immediately
+//   { action: 'unapprove' }
+//     → flips bucket_confirmed = false so the row returns to the pending inbox
+//   { action: 'delete' }
+//     → hard DELETE the row from the ledger (irreversible — use skip for soft-cancel)
 export async function POST(
   request: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -26,8 +31,8 @@ export async function POST(
   const body = await request.json().catch(() => ({}))
   const action = String(body.action || '').toLowerCase()
 
-  if (!['approve', 'skip', 'edit'].includes(action)) {
-    return NextResponse.json({ error: 'action must be approve|skip|edit' }, { status: 400 })
+  if (!['approve', 'skip', 'edit', 'unapprove', 'delete'].includes(action)) {
+    return NextResponse.json({ error: 'action must be approve|skip|edit|unapprove|delete' }, { status: 400 })
   }
 
   const validBuckets = ['service_contract', 'warranty', 'change_order', 'not_billable']
@@ -38,9 +43,24 @@ export async function POST(
       ? String(body.classification).toUpperCase()
       : null
   const hours = Number.isFinite(Number(body.hours)) ? Number(body.hours) : null
+  const actualHours = Number.isFinite(Number(body.actual_hours)) ? Number(body.actual_hours) : null
+  const summary = typeof body.summary === 'string' && body.summary.trim() ? String(body.summary).trim() : null
 
   try {
-    if (action === 'skip') {
+    if (action === 'delete') {
+      await query(`DELETE FROM service_requests WHERE id = $1`, [id])
+      return NextResponse.json({ deleted: true })
+    }
+    if (action === 'unapprove') {
+      await query(
+        `UPDATE service_requests
+            SET bucket_confirmed = false,
+                actual_hours = NULL,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [id],
+      )
+    } else if (action === 'skip') {
       await query(
         `UPDATE service_requests
             SET status = 'cancelled', bucket_confirmed = true, updated_at = NOW()
@@ -54,13 +74,23 @@ export async function POST(
         params.push(hours)
         sets.push(`estimated_hours = $${params.length}`)
       }
+      if (actualHours != null && actualHours >= 0) {
+        params.push(actualHours)
+        sets.push(`actual_hours = $${params.length}`)
+      }
       if (bucket) {
         params.push(bucket)
         sets.push(`bucket = $${params.length}`)
+        params.push(bucket === 'service_contract')
+        sets.push(`retainer_covered = $${params.length}`)
       }
       if (classification) {
         params.push(classification)
         sets.push(`classification = $${params.length}`)
+      }
+      if (summary) {
+        params.push(summary)
+        sets.push(`summary = $${params.length}`)
       }
       if (sets.length === 0) {
         return NextResponse.json({ error: 'nothing to edit' }, { status: 400 })
