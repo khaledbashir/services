@@ -93,17 +93,17 @@ export default async function TransparencyDashboard() {
           </div>
         </div>
 
+        {/* Headline numbers — three buckets at a glance, top of the page */}
+        <div id="overview" className="rounded-xl mb-6">
+          <CoverageStrip coverage={data.coverage} />
+        </div>
+
         {/* Hero — auto-narrated month story */}
         <StoryHero story={data.story} />
 
         {/* Admin-only inbox: pending auto-pushed rows that haven't been
             confirmed into a bucket yet. Hidden for non-admin viewers. */}
         {isAdmin && <PendingInbox />}
-
-        {/* Coverage strip — three buckets at a glance */}
-        <div id="overview" className="rounded-xl mb-4">
-          <CoverageStrip coverage={data.coverage} />
-        </div>
 
         {/* Live warranty countdown — every platform gets its own d/h/m/s timer */}
         <WarrantyTimers />

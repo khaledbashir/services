@@ -75,6 +75,7 @@ export default function PendingInbox() {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [editing, setEditing] = useState<Record<string, { hours: string; bucket: string }>>({})
+  const [collapsed, setCollapsed] = useState(true)
 
   async function load() {
     setLoading(true)
@@ -124,40 +125,47 @@ export default function PendingInbox() {
   }
 
   if (rows === null) {
-    return (
-      <section className="mt-12 mb-12 border border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/20 rounded-lg p-6">
-        <div className="text-sm text-amber-700 dark:text-amber-300">Loading pending pushes…</div>
-      </section>
-    )
+    return null
   }
   if (rows.length === 0) return null
 
   return (
-    <section className="mt-12 mb-12 border border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 rounded-lg p-6 shadow-sm" data-admin-only>
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h2 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-1">
-            Pending pushes — review before they count
-          </h2>
-          <p className="text-xs text-amber-700 dark:text-amber-300 max-w-2xl">
-            Each row is a commit the auto-publisher classified but hasn’t added to the public meter yet.
-            Hours come from the same DB-priors formula as manual triage (median of past similar deliveries).
-            Approve to count it. Skip if it shouldn’t appear at all. Reclassify if the bucket is wrong.
-          </p>
+    <section className="mb-6 border border-amber-300 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 rounded-2xl shadow-sm overflow-hidden" data-admin-only>
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full flex items-center justify-between gap-4 px-5 py-3 text-left hover:bg-amber-100/50 dark:hover:bg-amber-950/40 transition-colors"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 text-[11px] font-bold tabular-nums">
+            {rows.length}
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              Pending pushes — admin only
+            </div>
+            <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate">
+              Commits the auto-publisher classified but you haven&apos;t approved yet.
+            </div>
+          </div>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="text-xs px-3 py-1.5 rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900 disabled:opacity-50"
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); load() }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); load() } }}
+            className="text-[11px] px-2.5 py-1 rounded border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900 disabled:opacity-50"
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </span>
+          <span className="text-amber-700 dark:text-amber-400 text-xs font-semibold">
+            {collapsed ? 'Show ▾' : 'Hide ▴'}
+          </span>
+        </div>
+      </button>
 
-      <div className="text-xs text-amber-700 dark:text-amber-300 mb-3">
-        {rows.length} push{rows.length === 1 ? '' : 'es'} pending
-      </div>
-
+      {collapsed ? null : (
+      <div className="px-5 pb-5 pt-1">
       {error && (
         <div className="text-xs text-rose-700 dark:text-rose-300 mb-3 px-3 py-2 bg-rose-50 dark:bg-rose-950 rounded">
           {error}
@@ -302,6 +310,8 @@ export default function PendingInbox() {
           )
         })}
       </div>
+      </div>
+      )}
     </section>
   )
 }
