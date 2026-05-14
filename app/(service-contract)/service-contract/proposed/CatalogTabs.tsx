@@ -14,6 +14,8 @@ import {
 
 type TabKey = 'build' | 'tiers' | 'operator' | 'buckets' | 'bundles' | 'forecast' | 'explore'
 
+// Custom Asks lives outside this list — it's promoted to a hero CTA above
+// the tab strip so it stops getting buried.
 const TABS: Array<{ key: TabKey; label: string; icon: string; hint: string }> = [
   { key: 'build',    label: 'Build Your Plan', icon: '🎮', hint: 'Slide hours, unlock perks' },
   { key: 'tiers',    label: 'Service Tiers',   icon: '🎯', hint: 'Monthly retainer ladder' },
@@ -21,7 +23,6 @@ const TABS: Array<{ key: TabKey; label: string; icon: string; hint: string }> = 
   { key: 'buckets',  label: 'Build Catalog',   icon: '📦', hint: 'Fixed-price buckets for new work' },
   { key: 'bundles',  label: 'Bundles',         icon: '🎁', hint: 'The deals — bundle savings' },
   { key: 'forecast', label: 'Annual Forecast', icon: '📈', hint: 'Predicted Year-1 spend' },
-  { key: 'explore',  label: 'Custom Asks',     icon: '🧭', hint: 'AI scope-it · roadmap · individual COs' },
 ]
 
 export default function CatalogTabs({ exploreContent }: { exploreContent: React.ReactNode }) {
@@ -63,6 +64,43 @@ export default function CatalogTabs({ exploreContent }: { exploreContent: React.
           Each step up cuts your effective hourly rate. Bundle to save another $6K–$18K.
         </p>
       </div>
+
+      {/* Custom Asks — promoted hero CTA, was previously buried as the
+          last tab. Clicking activates the explore panel below. */}
+      <button
+        onClick={() => setTab('explore')}
+        className={`w-full text-left mb-4 rounded-2xl p-5 transition shadow-sm hover:shadow-lg group relative overflow-hidden ${
+          tab === 'explore'
+            ? 'bg-gradient-to-br from-[#0A52EF] via-violet-600 to-fuchsia-600 ring-2 ring-violet-400 dark:ring-violet-500'
+            : 'bg-gradient-to-br from-[#0A52EF]/95 via-violet-600/95 to-fuchsia-600/95 hover:from-[#0A52EF] hover:via-violet-600 hover:to-fuchsia-600'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-4 flex-wrap relative z-10">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/90 bg-white/15 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                ✨ AI · custom quote
+              </span>
+              {tab === 'explore' && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white bg-emerald-500 px-2 py-0.5 rounded-full">
+                  Open
+                </span>
+              )}
+            </div>
+            <div className="text-xl md:text-2xl font-bold text-white leading-tight">
+              Don&apos;t see it? Ask for anything custom.
+            </div>
+            <div className="text-sm text-white/85 mt-0.5">
+              Describe what you want — AI scopes it, prices it, and gives you a Year-1 path. Not limited to the catalog.
+            </div>
+          </div>
+          <div className="flex-shrink-0 inline-flex items-center gap-2 bg-white text-[#0A52EF] text-sm font-bold px-5 py-2.5 rounded-full shadow-md group-hover:scale-105 transition">
+            {tab === 'explore' ? 'You are here ↓' : 'Start a custom ask →'}
+          </div>
+        </div>
+        {/* decorative glow */}
+        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+      </button>
 
       {/* Tab strip */}
       <div className="border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto">
