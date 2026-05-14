@@ -32,6 +32,7 @@ interface Props {
   estimated_hours: number | null
   actual_hours: number | null
   status: string
+  isAdmin?: boolean
 }
 
 function ConfidenceBar({ score }: { score: number }) {
@@ -68,6 +69,7 @@ export default function Rationale({
   estimated_hours,
   actual_hours,
   status,
+  isAdmin = false,
 }: Props) {
   const [open, setOpen] = useState(false)
   const isCO = classification === 'NEW' || classification === 'MIXED' || !retainer_covered
@@ -81,12 +83,12 @@ export default function Rationale({
       >
         <div className="flex items-center gap-2 flex-wrap text-[11px]">
           <span className="font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            Classification note
+            How this is counted
           </span>
-          {confidence != null ? <ConfidenceBar score={confidence} /> : null}
+          {isAdmin && confidence != null ? <ConfidenceBar score={confidence} /> : null}
           <span className="text-gray-400 dark:text-gray-600">·</span>
           <span className="text-gray-600 dark:text-gray-400">
-            classified as <strong className={isCO ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}>{isCO ? 'change order' : 'service contract'}</strong>
+            counted as <strong className={isCO ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}>{isCO ? 'change order' : 'service contract'}</strong>
           </span>
           {area ? (
             <>
@@ -171,7 +173,7 @@ export default function Rationale({
             </div>
           </div>
 
-          {confidence != null && confidence < 5 ? (
+          {isAdmin && confidence != null && confidence < 5 ? (
             <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/40 px-2 py-1.5 text-[10px] text-amber-800 dark:text-amber-300">
               <strong>Needs human review.</strong> The AI flagged this as a judgment call — say <em>reclassify as fix</em> or <em>reclassify as change order</em> if you disagree.
             </div>

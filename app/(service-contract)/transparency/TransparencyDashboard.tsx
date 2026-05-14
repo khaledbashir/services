@@ -1,6 +1,7 @@
 import { getDashboardData, COVERED_CLAUSES, NOT_COVERED_CLAUSES, GRAY_AREA_CLAUSES } from '@/lib/transparency-data'
 import { getPublicPayoneerLinks } from '@/lib/retainer-alerts'
 import { query } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 import WarrantyCountdown from './WarrantyCountdown'
 import CoverageStrip from './CoverageStrip'
 import TransparencyTabs from './TransparencyTabs'
@@ -52,6 +53,8 @@ export default async function TransparencyDashboard() {
   const data = await getDashboardData()
   const meter = data.meter
   const payoneer = getPublicPayoneerLinks()
+  const session = await getSession()
+  const isAdmin = session?.role === 'admin'
   const pendingCheck = await query(
     `SELECT 1 FROM service_requests
       WHERE retainer_covered = false
@@ -95,7 +98,7 @@ export default async function TransparencyDashboard() {
 
         {/* Admin-only inbox: pending auto-pushed rows that haven't been
             confirmed into a bucket yet. Hidden for non-admin viewers. */}
-        <PendingInbox />
+        {isAdmin && <PendingInbox />}
 
         {/* Coverage strip — three buckets at a glance */}
         <div id="overview" className="rounded-xl mb-4">
@@ -312,7 +315,7 @@ export default async function TransparencyDashboard() {
 
         {/* Row 4: tabbed views — Overview / Kanban / List / By stakeholder */}
         <div id="queue" className="scroll-mt-32">
-          <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} />
+          <TransparencyTabs triaged={data.triaged_requests} changeOrderQueue={data.change_order_queue} isAdmin={isAdmin} />
         </div>
 
         {/* What's covered each month — collapsed by default to save vertical space */}

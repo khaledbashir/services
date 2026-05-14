@@ -19,6 +19,7 @@ interface TriagedRequest {
 
 interface Props {
   requests: TriagedRequest[]
+  isAdmin?: boolean
 }
 
 const COLUMNS: Array<{ key: string; label: string; hint: string }> = [
@@ -57,7 +58,7 @@ function transitionAction(from: string, to: string): { action: string; needsHour
   return null
 }
 
-export default function KanbanView({ requests }: Props) {
+export default function KanbanView({ requests, isAdmin = false }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [optimistic, setOptimistic] = useState<Record<string, string>>({})
@@ -160,10 +161,10 @@ export default function KanbanView({ requests }: Props) {
           return (
             <div
               key={col.key}
-              onDragOver={(e) => onDragOver(e, col.key)}
-              onDrop={(e) => onDrop(e, col.key)}
+              onDragOver={isAdmin ? (e) => onDragOver(e, col.key) : undefined}
+              onDrop={isAdmin ? (e) => onDrop(e, col.key) : undefined}
               className={`rounded-xl border p-3 transition-colors min-h-[200px] ${
-                isDropTarget
+                isAdmin && isDropTarget
                   ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30'
                   : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/40'
               }`}
@@ -188,10 +189,10 @@ export default function KanbanView({ requests }: Props) {
                   return (
                     <div
                       key={r.id}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, r.id)}
-                      onDragEnd={onDragEnd}
-                      className={`bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 border-l-4 ${stripe} ${dim} p-2.5 cursor-grab active:cursor-grabbing shadow-sm hover:shadow transition-shadow`}
+                      draggable={isAdmin}
+                      onDragStart={isAdmin ? (e) => onDragStart(e, r.id) : undefined}
+                      onDragEnd={isAdmin ? onDragEnd : undefined}
+                      className={`bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 border-l-4 ${stripe} ${dim} p-2.5 ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''} shadow-sm hover:shadow transition-shadow`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span
@@ -236,7 +237,7 @@ export default function KanbanView({ requests }: Props) {
                 })}
                 {cards.length === 0 ? (
                   <div className="text-[11px] text-gray-400 dark:text-gray-500 italic px-1 py-3 text-center">
-                    drop here
+                    {isAdmin ? 'drop here' : 'no items'}
                   </div>
                 ) : null}
               </div>

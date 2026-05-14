@@ -33,13 +33,14 @@ interface TriagedRequest {
 interface Props {
   triaged: TriagedRequest[]
   changeOrderQueue: TriagedRequest[]
+  isAdmin?: boolean
 }
 
 type ViewKey = 'overview' | 'kanban' | 'list' | 'stakeholder'
 
-const TABS: Array<{ key: ViewKey; label: string; hint: string }> = [
+const TABS: Array<{ key: ViewKey; label: string; hint: string; adminHint?: string }> = [
   { key: 'overview',    label: 'Overview',       hint: 'CO queue + timeline' },
-  { key: 'kanban',      label: 'Kanban',         hint: 'drag between status columns' },
+  { key: 'kanban',      label: 'Kanban',         hint: 'requests by status', adminHint: 'drag between status columns' },
   { key: 'list',        label: 'List',           hint: 'sortable dense table' },
   { key: 'stakeholder', label: 'By stakeholder', hint: 'grouped by requester' },
 ]
@@ -89,7 +90,7 @@ function sortRows<T extends {
   }
 }
 
-export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
+export default function TransparencyTabs({ triaged, changeOrderQueue, isAdmin = false }: Props) {
   const [view, setView] = useState<ViewKey>('overview')
   const [sort, setSort] = useState<SortKey>('newest')
   const searchParams = useSearchParams()
@@ -171,7 +172,11 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
           )
         })}
         <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 hidden md:inline pr-2">
-          {TABS.find((t) => t.key === view)?.hint}
+          {(() => {
+            const tab = TABS.find((t) => t.key === view)
+            if (!tab) return ''
+            return isAdmin && tab.adminHint ? tab.adminHint : tab.hint
+          })()}
         </span>
       </div>
 
@@ -199,11 +204,11 @@ export default function TransparencyTabs({ triaged, changeOrderQueue }: Props) {
                 click any row for the why
               </span>
             </div>
-            <RequestTimeline requests={filteredTriaged} />
+            <RequestTimeline requests={filteredTriaged} isAdmin={isAdmin} />
           </section>
         </div>
       ) : view === 'kanban' ? (
-        <KanbanView requests={filteredTriaged} />
+        <KanbanView requests={filteredTriaged} isAdmin={isAdmin} />
       ) : view === 'list' ? (
         <ListView requests={filteredTriaged} />
       ) : (

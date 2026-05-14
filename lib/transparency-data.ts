@@ -348,7 +348,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       WHERE status = 'shipped'
         AND shipped_at IS NOT NULL
         AND shipped_at >= DATE_TRUNC('month', NOW())
-        AND source <> 'auto-push'
+        AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
         AND COALESCE(bucket, 'service_contract') = 'service_contract'
         AND COALESCE(bucket_confirmed, false) = true
       ORDER BY shipped_at DESC
@@ -423,7 +423,7 @@ export async function getDashboardData(): Promise<DashboardData> {
        COALESCE(SUM(actual_hours) FILTER (
          WHERE classification = 'FIX'
            AND retainer_covered = true
-           AND source <> 'auto-push'
+           AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
            AND COALESCE(bucket, 'service_contract') = 'service_contract'
            AND COALESCE(bucket_confirmed, false) = true
            AND status = 'shipped'
@@ -618,13 +618,15 @@ export async function getDashboardData(): Promise<DashboardData> {
      )
      SELECT
        COALESCE(SUM(actual_hours) FILTER (
-         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+         WHERE classification = 'FIX' AND retainer_covered = true
+           AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
            AND status = 'shipped' AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_month_start
            AND shipped_at <= ctx.prev_cutoff
        ), 0)::numeric AS prev_service_contract_hours,
        COUNT(*) FILTER (
-         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+         WHERE classification = 'FIX' AND retainer_covered = true
+           AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_cutoff - INTERVAL '30 days'
@@ -636,7 +638,8 @@ export async function getDashboardData(): Promise<DashboardData> {
            AND received_at <= ctx.prev_cutoff
        ), 0)::numeric AS prev_change_order_total_usd,
        COUNT(*) FILTER (
-         WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+         WHERE classification = 'FIX' AND retainer_covered = true
+           AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
            AND status = 'shipped'
            AND shipped_at IS NOT NULL
            AND shipped_at >= ctx.prev_month_start
@@ -663,7 +666,8 @@ export async function getDashboardData(): Promise<DashboardData> {
      daily AS (
        SELECT shipped_at::date AS d,
               COALESCE(SUM(actual_hours) FILTER (
-                WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push'
+                WHERE classification = 'FIX' AND retainer_covered = true
+                  AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
                   AND COALESCE(bucket, 'service_contract') = 'service_contract'
                   AND COALESCE(bucket_confirmed, false) = true
               ), 0)::numeric AS hrs
@@ -671,7 +675,7 @@ export async function getDashboardData(): Promise<DashboardData> {
        WHERE status = 'shipped'
          AND shipped_at IS NOT NULL
          AND shipped_at >= DATE_TRUNC('month', NOW())
-         AND source <> 'auto-push'
+         AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
          AND COALESCE(bucket, 'service_contract') = 'service_contract'
          AND COALESCE(bucket_confirmed, false) = true
        GROUP BY shipped_at::date
@@ -700,11 +704,14 @@ export async function getDashboardData(): Promise<DashboardData> {
   const platformRes = await query(
     `SELECT COALESCE(repo, 'other') AS platform,
             COUNT(*) FILTER (
-              WHERE classification = 'FIX' AND status = 'shipped' AND source <> 'auto-push'
+              WHERE classification = 'FIX' AND status = 'shipped'
+                AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
                 AND shipped_at >= DATE_TRUNC('month', NOW())
             )::int AS fixes_shipped,
             COALESCE(SUM(actual_hours) FILTER (
-              WHERE classification = 'FIX' AND retainer_covered = true AND source <> 'auto-push' AND status = 'shipped'
+              WHERE classification = 'FIX' AND retainer_covered = true
+                AND (source <> 'auto-push' OR COALESCE(bucket_confirmed, false) = true)
+                AND status = 'shipped'
                 AND shipped_at >= DATE_TRUNC('month', NOW())
             ), 0)::numeric AS hours_used,
             COUNT(*) FILTER (

@@ -82,6 +82,7 @@ function daysSince(iso: string): number {
 
 interface Props {
   requests: TriagedRequest[]
+  isAdmin?: boolean
 }
 
 function fmtDate(iso: string): string {
@@ -124,7 +125,7 @@ const STATUS_TONE: Record<string, string> = {
   cancelled:   'bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-500',
 }
 
-export default function RequestTimeline({ requests }: Props) {
+export default function RequestTimeline({ requests, isAdmin = false }: Props) {
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (requests.length === 0) {
@@ -210,6 +211,7 @@ export default function RequestTimeline({ requests }: Props) {
                     estimated_hours={r.estimated_hours}
                     actual_hours={r.actual_hours}
                     status={r.status}
+                    isAdmin={isAdmin}
                   />
                 </div>
               </div>
