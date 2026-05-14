@@ -19,7 +19,6 @@ import WarrantyTimers from './WarrantyTimers'
 import RequestIntelligence from './RequestIntelligence'
 import PendingInbox from './PendingInbox'
 import ManagedItems from './ManagedItems'
-import { ThemeToggle } from '@/components/theme-toggle'
 import './print.css'
 
 const PAYMENT_TONE: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -99,7 +98,6 @@ export default async function TransparencyDashboard() {
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               live · {fmtTime(data.generated_at)}
             </span>
-            <ThemeToggle />
             <PrintButton />
           </div>
         </div>
