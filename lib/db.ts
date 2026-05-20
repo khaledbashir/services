@@ -1032,6 +1032,7 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_staff ON gamification_points(staff_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_earned ON gamification_points(earned_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_team ON gamification_points(team)`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_gam_points_once ON gamification_points(staff_id, action_type, (metadata->>'event_key')) WHERE metadata ? 'event_key'`)
 
     await client.query(`CREATE TABLE IF NOT EXISTS gamification_badges (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
