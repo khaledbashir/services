@@ -49,15 +49,15 @@
 - [x] 4.3 `GET /api/gamification?action=feed&limit=20`
 - [x] 4.4 `GET /api/gamification?action=badges`
 - [x] 4.5 `GET /api/gamification?action=team-standings`
-- [ ] 4.6 Cron: daily leaderboard snapshot at midnight
+- [x] 4.6 Cron: daily leaderboard snapshot at midnight (`/api/cron/gamification-snapshot`)
 
 ## Phase 5 — Slack Celebrations
-- [ ] 5.1 Badge earned → post to configurable channel (emoji + name + badge + what they did)
-- [ ] 5.2 Streak milestone (5/10/25/50) → fire emoji post
-- [ ] 5.3 Weekly leaderboard → Monday 9 AM post (top 5 per team)
-- [ ] 5.4 Monthly MVP → 1st of month post (#1 per team)
-- [ ] 5.5 Team achievement → team shoutout when collective target hit
-- [ ] 5.6 Format: Slack Block Kit with badges as emoji, clean tables, links to profiles
+- [x] 5.1 Badge earned → post to configurable channel (emoji + name + badge + what they did)
+- [x] 5.2 Streak milestone (5/10/25/50/100) → fire emoji post
+- [x] 5.3 Weekly leaderboard → Monday 9 AM post (top 5 per team) (`/api/cron/gamification-weekly`)
+- [x] 5.4 Monthly MVP → 1st of month post (#1 per team) (`/api/cron/gamification-monthly`)
+- [x] 5.5 Team achievement → team shoutout when collective target hit
+- [x] 5.6 Format: Slack Block Kit with badges as emoji, clean tables, links to profiles
 
 ## Phase 6 — Dashboard UI (services dashboard `/gamification`)
 - [x] 6.1 Leaderboard page with period toggle (day/week/month/all-time) + team filter
@@ -92,7 +92,7 @@
 
 ---
 
-**Current status:** Phases 0-4, 6 complete. Next: Slack celebrations (Phase 5), Twenty CRM app (Phase 7)
+**Current status:** Phases 0-6 complete. Next: Twenty CRM app (Phase 7), then tuning
 **Last updated:** 2026-05-21
 
 ### Completed so far:
@@ -100,9 +100,9 @@
 - [x] Phase 1 — 5 gamification tables created + 20 badge definitions
 - [x] Phase 2 — Full rules engine in lib/gamification.ts (12 action types, badge/streak logic)
 - [x] Phase 3 — 7 event hooks wired (workflow, tickets, design, walkthroughs, checklists, parts-orders, RMA) — all idempotent via awardPointsOnce
-- [x] Phase 4 — 5 API endpoints live at /api/gamification/*
+- [x] Phase 4 — 5 API endpoints + daily snapshot cron
+- [x] Phase 5 — Slack celebrations: badge/streak auto-post, weekly leaderboard cron, monthly MVP cron, team achievements
 - [x] Phase 6 — 3 UI pages live (leaderboard, badges, feed) + sidebar nav
-- [ ] Phase 5 — Slack celebration posts
 - [ ] Phase 7 — Twenty CRM app (front components)
 - [ ] Phase 8 — Tuning
 - [ ] Phase 9 — Production migration

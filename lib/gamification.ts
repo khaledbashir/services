@@ -48,6 +48,18 @@ export async function awardPoints(
   const streakUpdate = await updateStreak(staffId, actionType)
   const newBadges = await checkBadges(staffId, staffName)
 
+  // Fire-and-forget Slack celebrations
+  if (newBadges.length > 0 || (streakUpdate && [5, 10, 25, 50, 100].includes(streakUpdate.current_count))) {
+    import('./gamification-slack').then(({ notifyBadgeEarned, notifyStreakMilestone }) => {
+      for (const badge of newBadges) {
+        notifyBadgeEarned(staffName, team, badge, actionType).catch(() => {})
+      }
+      if (streakUpdate && [5, 10, 25, 50, 100].includes(streakUpdate.current_count)) {
+        notifyStreakMilestone(staffName, team, streakUpdate).catch(() => {})
+      }
+    }).catch(() => {})
+  }
+
   return { points, newBadges, streakUpdate }
 }
 
