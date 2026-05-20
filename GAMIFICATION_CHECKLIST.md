@@ -61,7 +61,7 @@
 
 ## Phase 6 — Dashboard UI (services dashboard `/gamification`)
 - [x] 6.1 Leaderboard page with period toggle (day/week/month/all-time) + team filter
-- [ ] 6.2 Per-user profile card (points, badges, streaks, rank, sparkline)
+- [x] 6.2 Per-user profile card at `/gamification/profile/[staffId]` (points, badges, streaks, rank, recent activity)
 - [x] 6.3 Team comparison cards (field ops vs design vs support) with points + MVP
 - [x] 6.4 Badge gallery (/gamification/badges) with category filter, tier colors, earned counts
 - [x] 6.5 Live activity feed (/gamification/feed) with action emojis, team badges, time-ago

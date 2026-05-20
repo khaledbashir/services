@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 
 type Period = 'day' | 'week' | 'month' | 'all'
@@ -193,7 +194,7 @@ export default function GamificationPage() {
                         {entry.rank <= 3 ? RANK_ICONS[entry.rank - 1] : entry.rank}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">{entry.staff_name}</span>
+                        <Link href={`/gamification/profile/${entry.staff_id}`} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">{entry.staff_name}</Link>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors.badge}`}>
