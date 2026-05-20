@@ -76,7 +76,7 @@ export default function ProfilePage() {
   useEffect(() => {
     fetch(`/api/gamification/profile?staffId=${staffId}`)
       .then(r => r.json())
-      .then(setProfile)
+      .then(d => setProfile(d.data || d))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [staffId])
