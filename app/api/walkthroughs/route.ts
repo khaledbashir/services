@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { Walkthroughs, isTwentyBackedEnabled, twentyVenueToDashboard, type TwentyWalkthroughLog } from '@/lib/twenty-ops'
+import { awardPointsOnce } from '@/lib/gamification'
 
 // Legacy response shape the /walkthroughs page consumes:
 //   { walkthroughs: [ { id, venue_id, venue_name, technician_id, technician_name,
@@ -124,7 +125,6 @@ export async function POST(request: NextRequest) {
         result,
       })
       if (technician_id && technician_name) {
-        const { awardPointsOnce } = await import('@/lib/gamification')
         awardPointsOnce(technician_id, technician_name, 'WALKTHROUGH_COMPLETED', `walkthrough:${created.id}`, { venue_id, walkthrough_id: created.id }).catch(() => {})
       }
       return NextResponse.json({ walkthrough: { id: created.id, ...body } })
@@ -145,7 +145,6 @@ export async function POST(request: NextRequest) {
 
   // Gamification: award points for walkthrough completion
   if (technician_id && technician_name) {
-    const { awardPointsOnce } = await import('@/lib/gamification')
     awardPointsOnce(technician_id, technician_name, 'WALKTHROUGH_COMPLETED', `walkthrough:${r.rows[0]?.id}`, { venue_id, walkthrough_id: r.rows[0]?.id }).catch(() => {})
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { awardPointsOnce } from '@/lib/gamification'
 
 const EDITABLE = ['venue_id','days_out','league','team_name','task_description','prompt',
   'assignee_id','due_date','status']
@@ -26,7 +27,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const staff = await query('SELECT full_name FROM staff WHERE id = $1', [item.assignee_id])
       const staffName = staff.rows[0]?.full_name
       if (staffName) {
-        const { awardPointsOnce } = await import('@/lib/gamification')
         awardPointsOnce(item.assignee_id, staffName, 'CHECKLIST_ON_TIME', `checklist:${params.id}`, { checklist_item_id: params.id }).catch(() => {})
       }
     }

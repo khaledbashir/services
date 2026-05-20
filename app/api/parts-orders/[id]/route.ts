@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireRole, isAuthError } from "@/lib/rbac"
 import { PartsOrders, isTwentyBackedEnabled } from "@/lib/twenty-ops"
 import { sendEmail } from "@/lib/email"
+import { query } from "@/lib/db"
+import { awardPointsOnce } from "@/lib/gamification"
 
 function formatEmailHtml(title: string, message: string, tracking?: string | null) {
   return `
@@ -46,12 +48,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
       }
 
-      // Gamification: award points when parts order fulfilled
+      // Gamification: award points once when parts order is fulfilled.
       if (body.status === 'received' || body.status === 'complete' || body.status === 'completed') {
         const requesterName = updated.requestorName || updated.requesterName
         if (requesterName) {
-          const { awardPointsOnce } = await import('@/lib/gamification')
-          const staffRes = await (await import('@/lib/db')).query('SELECT id FROM staff WHERE full_name = $1', [requesterName])
+          const staffRes = await query('SELECT id FROM staff WHERE full_name = $1', [requesterName])
           if (staffRes.rows[0]) {
             awardPointsOnce(staffRes.rows[0].id, requesterName, 'PARTS_ORDER_FULFILLED', `parts-order:${params.id}`, { parts_order_id: params.id }).catch(() => {})
           }

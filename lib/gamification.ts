@@ -51,6 +51,35 @@ export async function awardPoints(
   return { points, newBadges, streakUpdate }
 }
 
+export async function awardPointsOnce(
+  staffId: string,
+  staffName: string,
+  actionType: string,
+  eventKey: string,
+  metadata: Record<string, unknown> = {}
+): Promise<{ points: number; newBadges: Badge[]; streakUpdate: StreakInfo | null; skipped: boolean }> {
+  const existing = await query(
+    `SELECT id
+     FROM gamification_points
+     WHERE staff_id = $1
+       AND action_type = $2
+       AND metadata->>'event_key' = $3
+     LIMIT 1`,
+    [staffId, actionType, eventKey]
+  )
+
+  if (existing.rows.length > 0) {
+    return { points: 0, newBadges: [], streakUpdate: null, skipped: true }
+  }
+
+  const result = await awardPoints(staffId, staffName, actionType, {
+    ...metadata,
+    event_key: eventKey,
+  })
+
+  return { ...result, skipped: false }
+}
+
 export interface Badge {
   id: string
   name: string
