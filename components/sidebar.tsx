@@ -243,6 +243,7 @@ export function Sidebar() {
         { href: '/cg-designs', label: 'CG Designs' },
         { href: '/reports/designs-by-client', label: 'Requests by Client' },
         { href: '/content-schedules', label: 'Content Schedule' },
+        { href: '/marketing-hub', label: 'Marketing Hub', role: 'manager' },
         { href: '/print-requests', label: 'Print Requests', role: 'manager' },
         { href: '/gallery', label: 'Visual Gallery' },
         { href: '/time-entries', label: 'Time Entries' },
@@ -286,6 +287,16 @@ export function Sidebar() {
       ],
     },
     {
+      key: 'gamification',
+      label: 'Leaderboard',
+      icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" d="M16 4v6l-4 2-4-2V4M6 20h12M8 20v-4h8v4M12 12v4" /></Icon>,
+      links: [
+        { href: '/gamification', label: 'Leaderboard' },
+        { href: '/gamification/badges', label: 'Badges' },
+        { href: '/gamification/feed', label: 'Activity Feed' },
+      ],
+    },
+    {
       key: 'admin',
       label: 'Admin',
       icon: <Icon>{IC.system}</Icon>,
@@ -293,6 +304,7 @@ export function Sidebar() {
       links: [
         { href: '/staff', label: 'Staff', role: 'admin' },
         { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
+        { href: '/admin/tenants', label: 'Client Switchboard', role: 'admin' },
         { href: '/expenses', label: 'Expenses', role: 'admin' },
         { href: '/settings', label: 'Settings', role: 'admin' },
         { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },

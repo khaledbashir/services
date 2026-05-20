@@ -864,6 +864,218 @@ async function runMigrations() {
        FROM tenants t
        WHERE sr.tenant_id IS NULL AND t.slug = 'anc'`)
 
+    // ---- Marketing Hub: HubSpot replacement surface for Media & Partnerships.
+    // Audiences, newsletter campaigns, tracking events, form routing, and social
+    // queue metadata live here so the marketing workflow does not depend on
+    // HubSpot while still linking back to CRM records when available.
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_audiences (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_contacts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      crm_person_id TEXT,
+      crm_company_id TEXT,
+      email TEXT UNIQUE NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      company_name TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      subscription_status TEXT NOT NULL DEFAULT 'subscribed',
+      unsubscribe_reason TEXT,
+      bounced_at TIMESTAMPTZ,
+      unsubscribed_at TIMESTAMPTZ,
+      last_synced_at TIMESTAMPTZ,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_contacts_status ON marketing_contacts(subscription_status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_contacts_company ON marketing_contacts(company_name)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_audience_members (
+      audience_id UUID NOT NULL REFERENCES marketing_audiences(id) ON DELETE CASCADE,
+      contact_id UUID NOT NULL REFERENCES marketing_contacts(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'active',
+      added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (audience_id, contact_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_audience_members_contact ON marketing_audience_members(contact_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS newsletter_campaigns (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      audience_id UUID REFERENCES marketing_audiences(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      preview_text TEXT,
+      from_name TEXT NOT NULL DEFAULT 'ANC Sports',
+      from_email TEXT NOT NULL DEFAULT 'notifications@ancsports.net',
+      reply_to TEXT,
+      body_html TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      scheduled_at TIMESTAMPTZ,
+      sent_at TIMESTAMPTZ,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_status ON newsletter_campaigns(status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_audience ON newsletter_campaigns(audience_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS newsletter_campaign_recipients (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID NOT NULL REFERENCES newsletter_campaigns(id) ON DELETE CASCADE,
+      contact_id UUID REFERENCES marketing_contacts(id) ON DELETE SET NULL,
+      email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      sent_at TIMESTAMPTZ,
+      opened_at TIMESTAMPTZ,
+      first_clicked_at TIMESTAMPTZ,
+      unsubscribed_at TIMESTAMPTZ,
+      bounced_at TIMESTAMPTZ,
+      error_text TEXT,
+      open_count INTEGER NOT NULL DEFAULT 0,
+      click_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (campaign_id, email)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_recipients_campaign ON newsletter_campaign_recipients(campaign_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_recipients_contact ON newsletter_campaign_recipients(contact_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS newsletter_campaign_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID REFERENCES newsletter_campaigns(id) ON DELETE CASCADE,
+      recipient_id UUID REFERENCES newsletter_campaign_recipients(id) ON DELETE SET NULL,
+      contact_id UUID REFERENCES marketing_contacts(id) ON DELETE SET NULL,
+      event_type TEXT NOT NULL,
+      event_url TEXT,
+      user_agent TEXT,
+      ip_address TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_events_campaign ON newsletter_campaign_events(campaign_id, created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_events_type ON newsletter_campaign_events(event_type)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_form_routing_rules (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      form_id TEXT NOT NULL,
+      form_title TEXT NOT NULL,
+      inquiry_type TEXT,
+      route_to_name TEXT NOT NULL,
+      route_to_email TEXT NOT NULL,
+      slack_channel TEXT,
+      crm_target TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_form_routes_form ON marketing_form_routing_rules(form_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_social_posts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id UUID REFERENCES newsletter_campaigns(id) ON DELETE SET NULL,
+      platform TEXT NOT NULL,
+      integration_id TEXT,
+      channel_name TEXT,
+      content TEXT NOT NULL,
+      media_url TEXT,
+      scheduled_at TIMESTAMPTZ,
+      postiz_post_id TEXT,
+      release_url TEXT,
+      state TEXT NOT NULL DEFAULT 'draft',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_social_posts_state ON marketing_social_posts(state)`)
+
+    await client.query(`INSERT INTO marketing_audiences (name, description, source)
+      VALUES (
+        'Media & Partnerships Newsletter',
+        'Default audience for Alison''s monthly Media & Partnerships newsletter, seeded for the HubSpot replacement workflow.',
+        'crm'
+      )
+      ON CONFLICT (name) DO NOTHING`)
+
+    await client.query(`WITH defaults(form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target) AS (
+        VALUES
+          ('contact-inquiry', 'Contact Inquiry Form', 'general', 'Alison', 'alison@anc.com', NULL, NULL),
+          ('design-request', 'ANC Design Request', 'design', 'Design Division Lead', 'design@anc.com', NULL, 'designRequests'),
+          ('content-schedule', 'ANC Content Schedule', 'content', 'Media & Partnerships', 'media@anc.com', NULL, 'contentSchedules')
+      )
+      INSERT INTO marketing_form_routing_rules
+        (form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target)
+      SELECT d.form_id, d.form_title, d.inquiry_type, d.route_to_name, d.route_to_email, d.slack_channel, d.crm_target
+      FROM defaults d
+      WHERE NOT EXISTS (
+        SELECT 1 FROM marketing_form_routing_rules r
+        WHERE r.form_id = d.form_id
+          AND COALESCE(r.inquiry_type, '') = COALESCE(d.inquiry_type, '')
+          AND r.route_to_email = d.route_to_email
+      )`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS gamification_points (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL DEFAULT '',
+      team TEXT NOT NULL DEFAULT 'general',
+      action_type TEXT NOT NULL,
+      points INTEGER NOT NULL,
+      metadata JSONB DEFAULT '{}',
+      earned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_staff ON gamification_points(staff_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_earned ON gamification_points(earned_at)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_points_team ON gamification_points(team)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS gamification_badges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT '🏆',
+      tier TEXT NOT NULL DEFAULT 'bronze',
+      category TEXT NOT NULL DEFAULT 'volume',
+      criteria JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS gamification_user_badges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id TEXT NOT NULL,
+      badge_id UUID NOT NULL REFERENCES gamification_badges(id) ON DELETE CASCADE,
+      earned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      context JSONB DEFAULT '{}',
+      UNIQUE(staff_id, badge_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_ubadges_staff ON gamification_user_badges(staff_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS gamification_streaks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id TEXT NOT NULL,
+      streak_type TEXT NOT NULL,
+      current_count INTEGER NOT NULL DEFAULT 0,
+      best_count INTEGER NOT NULL DEFAULT 0,
+      last_activity_at TIMESTAMPTZ,
+      started_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(staff_id, streak_type)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_streaks_staff ON gamification_streaks(staff_id)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS gamification_leaderboard_snapshots (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      period TEXT NOT NULL,
+      team TEXT,
+      rankings JSONB NOT NULL DEFAULT '[]',
+      snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_lb_period ON gamification_leaderboard_snapshots(period, snapshot_at)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
