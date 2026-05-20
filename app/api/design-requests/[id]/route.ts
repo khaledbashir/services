@@ -7,6 +7,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
+import { awardPointsOnce } from '@/lib/gamification'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -224,6 +225,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
       const updated = await Designs.update(params.id, patch)
 
+      if ((body.status === 'done' || body.status === 'approved') && priorStatusDashboard !== body.status) {
+        const designerId = (updated as any).designAssigneeId || (prior as any)?.designAssigneeId
+        const designerName = (updated as any).designAssignee
+          ? `${(updated as any).designAssignee.name?.firstName || ''} ${(updated as any).designAssignee.name?.lastName || ''}`.trim()
+          : ''
+        if (designerId && designerName) {
+          awardPointsOnce(designerId, designerName, 'DESIGN_COMPLETED', `design:${params.id}:completed`, { design_request_id: params.id, job_title: (updated as any).name || (prior as any)?.name || params.id }).catch(() => {})
+        }
+      }
+
       let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null
       if (transitioningToClientReview) {
         try {
@@ -297,6 +308,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
        RETURNING id, job_title, status, ftp_proof_link, updated_at`,
       values,
     )
+
+    // Gamification: award points once when design work reaches approved/done.
+    if ((body.status === 'done' || body.status === 'approved') && access.record.status !== body.status) {
+      const designerId = access.record.designer_id
+      if (designerId) {
+        const dStaff = await query('SELECT full_name FROM staff WHERE id = $1', [designerId])
+        const designerName = dStaff.rows[0]?.full_name
+        if (designerName) {
+          awardPointsOnce(designerId, designerName, 'DESIGN_COMPLETED', `design:${params.id}:completed`, { design_request_id: params.id, job_title: access.record.job_title }).catch(() => {})
+          const spent = Number(nextHoursSpent || 0)
+          const estimated = Number(nextHoursEstimated || 0)
+          if (estimated > 0 && spent <= estimated) {
+            awardPointsOnce(designerId, designerName, 'DESIGN_UNDER_BUDGET', `design:${params.id}:under-budget`, { design_request_id: params.id, hours_spent: spent, hours_estimated: estimated }).catch(() => {})
+          }
+        }
+      }
+    }
 
     // When a designer moves the card into Client Review, auto-mint a public
     // proof link and email the client. Idempotent: if a live share already

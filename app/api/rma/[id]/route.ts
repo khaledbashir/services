@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { Rma, isTwentyBackedEnabled } from '@/lib/twenty-ops'
+import { awardPointsOnce } from '@/lib/gamification'
 
 const EDITABLE = ['venue_id','company_name','client_name','submission_contact','date_received',
   'project_code','part_number','part_name','model_number','led_manufacturer','description',
@@ -24,12 +25,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('submission_contact' in body) patch.submissionContact = body.submission_contact
       if ('remit_to_stock' in body) patch.remitToStock = Boolean(body.remit_to_stock)
       const updated = await Rma.update(params.id, patch)
+
+      // Gamification: award points once when RMA is closed (Twenty-backed)
+      if (body.status === 'closed' || body.status === 'completed') {
+        const submitter = (updated as any).submissionContact || body.submission_contact
+        if (submitter) {
+          const staffRes = await query('SELECT id, full_name FROM staff WHERE full_name = $1', [submitter])
+          if (staffRes.rows[0]) {
+            awardPointsOnce(staffRes.rows[0].id, staffRes.rows[0].full_name, 'RMA_CLOSED', `rma:${params.id}:twenty`, { rma_id: params.id }).catch(() => {})
+          }
+        }
+      }
+
       return NextResponse.json({ rma: { id: updated.id, ...body } })
     } catch (err) {
       console.error('[rma PATCH twenty-backed] error:', err)
       return NextResponse.json({ error: 'Failed to update RMA in Twenty' }, { status: 500 })
     }
   }
+
+  const previous = await query('SELECT status FROM rma_trackers WHERE id = $1', [params.id])
+  const previousStatus = previous.rows[0]?.status || null
 
   const sets: string[] = []
   const values: unknown[] = []
@@ -39,6 +55,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (!sets.length) return NextResponse.json({ error: 'no fields' }, { status: 400 })
   values.push(params.id)
   const r = await query(`UPDATE rma_trackers SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`, values)
+
+  // Gamification: award points once when RMA is closed
+  if ((body.status === 'closed' || body.status === 'completed') && previousStatus !== body.status) {
+    const submitter = r.rows[0]?.submission_contact
+    if (submitter) {
+      const staffRes = await query('SELECT id, full_name FROM staff WHERE full_name = $1', [submitter])
+      if (staffRes.rows[0]) {
+        awardPointsOnce(staffRes.rows[0].id, staffRes.rows[0].full_name, 'RMA_CLOSED', `rma:${params.id}`, { rma_id: params.id }).catch(() => {})
+      }
+    }
+  }
+
   return NextResponse.json({ rma: r.rows[0] })
 }
 

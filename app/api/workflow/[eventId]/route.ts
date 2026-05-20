@@ -8,6 +8,7 @@ import { appendFile } from 'fs/promises'
 import { resolve } from 'path'
 import { getAuthUser } from '@/lib/rbac'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
+import { awardPointsOnce } from '@/lib/gamification'
 
 const workflowLabels: Record<string, { label: string; emoji: string }> = {
   check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
@@ -319,6 +320,19 @@ export async function POST(
       )
     } catch (logErr) {
       console.error('Failed to write notification log:', logErr)
+    }
+
+    // Gamification: award points once for each real workflow milestone.
+    // The workflow form uses UPSERT, so resubmissions must not farm points.
+    if (staffName !== 'Unknown') {
+      const actionMap: Record<string, string> = { check_in: 'CHECKIN_ON_TIME', game_ready: 'GAME_READY', post_game_report: 'POST_GAME_REPORT' }
+      const gamAction = actionMap[submissionType]
+      if (gamAction) {
+        awardPointsOnce(effectiveStaffId, staffName, gamAction, `workflow:${eventId}:${submissionType}`, { event_id: eventId, event_name: eventName }).catch(() => {})
+        if (workflow.checked_in && workflow.game_ready && workflow.post_game_submitted) {
+          awardPointsOnce(effectiveStaffId, staffName, 'FULL_WORKFLOW', `workflow:${eventId}:full`, { event_id: eventId, event_name: eventName }).catch(() => {})
+        }
+      }
     }
 
     // Slack notification for workflow step.

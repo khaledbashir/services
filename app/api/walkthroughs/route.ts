@@ -123,6 +123,10 @@ export async function POST(request: NextRequest) {
         notes: notes ? { markdown: notes } : null,
         result,
       })
+      if (technician_id && technician_name) {
+        const { awardPointsOnce } = await import('@/lib/gamification')
+        awardPointsOnce(technician_id, technician_name, 'WALKTHROUGH_COMPLETED', `walkthrough:${created.id}`, { venue_id, walkthrough_id: created.id }).catch(() => {})
+      }
       return NextResponse.json({ walkthrough: { id: created.id, ...body } })
     } catch (err) {
       console.error('[walkthroughs POST twenty-backed] error:', err)
@@ -138,5 +142,12 @@ export async function POST(request: NextRequest) {
     [venue_id, technician_id, log_date, log_time, locations_visited, issues_found,
      result, in_person, technician_name, three_letter_code, notes]
   )
+
+  // Gamification: award points for walkthrough completion
+  if (technician_id && technician_name) {
+    const { awardPointsOnce } = await import('@/lib/gamification')
+    awardPointsOnce(technician_id, technician_name, 'WALKTHROUGH_COMPLETED', `walkthrough:${r.rows[0]?.id}`, { venue_id, walkthrough_id: r.rows[0]?.id }).catch(() => {})
+  }
+
   return NextResponse.json({ walkthrough: r.rows[0] })
 }

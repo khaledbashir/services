@@ -8,6 +8,7 @@ import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { syncTicketsToTwenty } from '@/lib/twenty-sync'
+import { awardPointsOnce } from '@/lib/gamification'
 
 const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
@@ -198,6 +199,19 @@ export async function PATCH(
           new_status: status,
         })]
       )
+
+      // Gamification: award points once when a ticket is first closed.
+      if (status === 'closed' && oldTicket.assigned_to) {
+        const assignedStaff = await query('SELECT full_name FROM staff WHERE id = $1', [oldTicket.assigned_to])
+        const resolverName = assignedStaff.rows[0]?.full_name
+        if (resolverName) {
+          awardPointsOnce(oldTicket.assigned_to, resolverName, 'TICKET_RESOLVED', `ticket:${params.id}:resolved`, { ticket_id: params.id, title: oldTicket.title }).catch(() => {})
+          const slaCheck = await query('SELECT sla_resolution_met FROM tickets WHERE id = $1', [params.id])
+          if (slaCheck.rows[0]?.sla_resolution_met === true) {
+            awardPointsOnce(oldTicket.assigned_to, resolverName, 'TICKET_SLA_MET', `ticket:${params.id}:sla`, { ticket_id: params.id, title: oldTicket.title }).catch(() => {})
+          }
+        }
+      }
 
       // Write notification log
       const caseNum = String(oldTicket.ticket_number).padStart(8, '0')
