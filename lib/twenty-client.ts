@@ -399,9 +399,9 @@ export class TwentyClient {
 
   async createNoteTarget(input: { noteId: string; companyId?: string; personId?: string; opportunityId?: string }): Promise<unknown> {
     const body: Record<string, unknown> = { noteId: input.noteId }
-    if (input.companyId) body.companyId = input.companyId
-    if (input.personId) body.personId = input.personId
-    if (input.opportunityId) body.opportunityId = input.opportunityId
+    if (input.companyId) body.targetCompanyId = input.companyId
+    if (input.personId) body.targetPersonId = input.personId
+    if (input.opportunityId) body.targetOpportunityId = input.opportunityId
     const res = await twentyMutation('POST', 'noteTargets', body)
     if (!res.ok) throw new Error(`createNoteTarget failed (${res.status}): ${(await res.text()).slice(0, 200)}`)
     return res.json()
