@@ -286,16 +286,16 @@ export function Sidebar() {
         ...(SHOW_VOICE_AGENT_DEMO ? [{ href: '/voice-agent-demo', label: 'Voice Agent Demo' }] : []),
       ],
     },
-    {
-      key: 'gamification',
-      label: 'Leaderboard',
-      icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" d="M16 4v6l-4 2-4-2V4M6 20h12M8 20v-4h8v4M12 12v4" /></Icon>,
-      links: [
-        { href: '/gamification', label: 'Leaderboard' },
-        { href: '/gamification/badges', label: 'Badges' },
-        { href: '/gamification/feed', label: 'Activity Feed' },
-      ],
-    },
+    // {
+    //   key: 'gamification',
+    //   label: 'Leaderboard',
+    //   icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" d="M16 4v6l-4 2-4-2V4M6 20h12M8 20v-4h8v4M12 12v4" /></Icon>,
+    //   links: [
+    //     { href: '/gamification', label: 'Leaderboard' },
+    //     { href: '/gamification/badges', label: 'Badges' },
+    //     { href: '/gamification/feed', label: 'Activity Feed' },
+    //   ],
+    // },
     {
       key: 'admin',
       label: 'Admin',
