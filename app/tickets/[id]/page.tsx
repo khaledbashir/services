@@ -1216,49 +1216,77 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   <div>
                     <div className="p-6 space-y-5 bg-zinc-50/40">
                       {!isVoicemailTicket && (
-                        <form onSubmit={sendEmailReply} className="border border-zinc-200 rounded-xl bg-white p-4 shadow-sm">
-                          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                            <div>
-                              <h3 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full bg-[#0A52EF]"></span>
-                                Reply by Email
-                              </h3>
-                              <p className="text-xs text-zinc-500 mt-0.5">Sends from support@anc.com and keeps the reply on this ticket.</p>
+                        <form onSubmit={sendEmailReply} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]">
+                          <div className="border-b border-zinc-100 bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-5 py-4 text-white">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-blue-200">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                  </span>
+                                  <div>
+                                    <h3 className="text-sm font-semibold tracking-tight">Support Email</h3>
+                                    <p className="mt-0.5 text-[11px] text-slate-300">Case {caseNum} · {ticket.venue_name || 'ANC Support'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-100">
+                                Microsoft mailbox
+                              </div>
                             </div>
+                          </div>
+                          <div className="space-y-4 p-5">
+                            <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
+                              <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">From</span>
+                                <p className="mt-1 truncate text-sm font-semibold text-zinc-950">support@anc.com</p>
+                              </div>
+                              <div className="hidden items-center text-zinc-300 lg:flex">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                              </div>
+                              <div className={`rounded-xl border px-4 py-3 ${replyTarget ? 'border-blue-200 bg-blue-50/70' : 'border-amber-200 bg-amber-50'}`}>
+                                <span className={`text-[10px] font-bold uppercase tracking-[0.18em] ${replyTarget ? 'text-blue-500' : 'text-amber-600'}`}>
+                                  {replyTarget ? replyTarget.source : 'Recipient needed'}
+                                </span>
+                                <p className={`mt-1 truncate text-sm font-semibold ${replyTarget ? 'text-zinc-950' : 'text-amber-800'}`}>
+                                  {replyTarget ? replyTarget.email : 'No contact email found'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl border border-zinc-200 bg-white">
+                              <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3 text-xs">
+                                <span className="font-semibold text-zinc-400">Subject</span>
+                                <span className="min-w-0 truncate font-semibold text-zinc-800">Re: Case {String(ticket.ticket_number).padStart(8, '0')} - {ticket.title}</span>
+                              </div>
+                              <textarea
+                                value={emailReply}
+                                onChange={(e) => setEmailReply(e.target.value)}
+                                placeholder="Write a clear client-facing reply..."
+                                rows={7}
+                                className="min-h-[178px] w-full resize-none border-0 bg-transparent px-4 py-4 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0"
+                              />
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/80 px-4 py-3">
+                                <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                                  <span className={`h-2 w-2 rounded-full ${replyTarget ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                                  {replyTarget ? 'Reply will be logged on this ticket after send.' : 'Add a contact email before sending.'}
+                                </div>
+                                <button
+                                  type="submit"
+                                  disabled={sendingEmail || !emailReply.trim() || !replyTarget}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-[#0A52EF] px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-35"
+                                >
+                                  {sendingEmail && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>}
+                                  {sendingEmail ? 'Sending' : 'Send Reply'}
+                                </button>
+                              </div>
+                            </div>
+
                             {emailStatus && (
-                              <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${emailStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                              <div className={`rounded-xl border px-4 py-3 text-xs font-medium ${emailStatus.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
                                 {emailStatus.message}
-                              </span>
+                              </div>
                             )}
-                          </div>
-                          <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-3 items-stretch">
-                            <div className={`rounded-lg border px-3 py-2.5 ${replyTarget ? 'border-blue-100 bg-blue-50/60' : 'border-amber-200 bg-amber-50'}`}>
-                              <span className={`text-[10px] font-semibold uppercase tracking-wider ${replyTarget ? 'text-blue-500' : 'text-amber-600'}`}>
-                                {replyTarget ? replyTarget.source : 'Recipient needed'}
-                              </span>
-                              <p className={`mt-1 text-sm font-semibold break-all ${replyTarget ? 'text-zinc-900' : 'text-amber-800'}`}>
-                                {replyTarget ? replyTarget.email : 'No email found on this ticket'}
-                              </p>
-                            </div>
-                            <textarea
-                              value={emailReply}
-                              onChange={(e) => setEmailReply(e.target.value)}
-                              placeholder="Write the email reply..."
-                              rows={4}
-                              className="min-h-[104px] border border-zinc-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-white resize-none"
-                            />
-                          </div>
-                          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                            <p className="text-[11px] text-zinc-400">
-                              {replyTarget ? 'Client-facing replies use the shared ANC Support mailbox; the ticket records who sent it.' : 'Add a contact email in Details before sending a reply.'}
-                            </p>
-                            <button
-                              type="submit"
-                              disabled={sendingEmail || !emailReply.trim() || !replyTarget}
-                              className="bg-[#0A52EF] text-white px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#0840C0] disabled:opacity-30 transition-all"
-                            >
-                              {sendingEmail ? 'Sending...' : 'Send Email'}
-                            </button>
                           </div>
                         </form>
                       )}
@@ -1285,18 +1313,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         )}
                         {/* Original message from ticket creation */}
                         {ticket.original_message && (
-                          <div className="border border-zinc-200 rounded-xl bg-white shadow-sm overflow-hidden">
-                            <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 bg-white">
-                              <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0A52EF] flex items-center justify-center text-[10px] font-semibold border border-blue-100">
+                          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.06)]">
+                            <div className="flex items-center gap-3 border-b border-zinc-100 bg-zinc-50/80 px-5 py-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-[10px] font-semibold text-[#0A52EF]">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={isVoicemailTicket ? 'M12 18.75a6 6 0 006-6V10.5a6 6 0 10-12 0v2.25a6 6 0 006 6zm0 0v2.25m-4.5 0h9' : 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'} /></svg>
                               </div>
-                              <div>
+                              <div className="min-w-0">
                                 <span className="text-xs font-semibold text-zinc-900">{isVoicemailTicket ? 'Voicemail Transcript' : 'Original Email'}</span>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">{ticket.contact_email || ticket.contact_name || ticket.created_by_name}</p>
+                                <p className="mt-0.5 truncate text-[11px] text-zinc-400">{ticket.contact_email || ticket.contact_name || ticket.created_by_name}</p>
                               </div>
-                              <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{ticket.created_date}</span>
+                              <span className="ml-auto whitespace-nowrap text-[10px] tabular-nums text-zinc-300">{ticket.created_date}</span>
                             </div>
-                            <div className="px-5 py-4 max-w-none overflow-hidden"><TicketContent content={ticket.original_message} variant="email" /></div>
+                            <div className="max-w-none overflow-hidden px-5 py-4"><TicketContent content={ticket.original_message} variant="email" /></div>
                           </div>
                         )}
                         {/* Email comments from timeline */}
@@ -1304,16 +1332,16 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           const comment = item.data as Comment
                           const timeStr = item.time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
                           return (
-                            <div key={idx} className="border border-zinc-200 rounded-xl bg-white shadow-sm overflow-hidden">
-                              <div className="flex items-center gap-3 px-5 py-3 border-b border-zinc-100 bg-white">
-                                <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0A52EF] flex items-center justify-center text-[10px] font-semibold border border-blue-100">{getInitials(comment.author_name)}</div>
-                                <div>
+                            <div key={idx} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.06)]">
+                              <div className="flex items-center gap-3 border-b border-zinc-100 bg-white px-5 py-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-[10px] font-semibold text-[#0A52EF]">{getInitials(comment.author_name)}</div>
+                                <div className="min-w-0">
                                   <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
-                                  <p className="text-[11px] text-zinc-400 mt-0.5">{isTicketEmailComment(comment) ? 'Email message' : 'Message'}</p>
+                                  <p className="mt-0.5 text-[11px] text-zinc-400">{isTicketEmailComment(comment) ? 'Email message' : 'Message'}</p>
                                 </div>
-                                <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
+                                <span className="ml-auto whitespace-nowrap text-[10px] tabular-nums text-zinc-300">{timeStr}</span>
                               </div>
-                              <div className="px-5 py-4 max-w-none overflow-hidden"><TicketContent content={comment.body} variant="email" /></div>
+                              <div className="max-w-none overflow-hidden px-5 py-4"><TicketContent content={comment.body} variant="email" /></div>
                             </div>
                           )
                         })}
