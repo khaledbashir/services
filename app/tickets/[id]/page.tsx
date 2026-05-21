@@ -126,6 +126,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
   const [mentionHighlight, setMentionHighlight] = useState(0)
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
   const [activeTab, setActiveTab] = useState<ContentTab>('timeline')
+  const [casePanelOpen, setCasePanelOpen] = useState(false)
+  const [relatedPanelOpen, setRelatedPanelOpen] = useState(false)
   const [venueOptions, setVenueOptions] = useState<Array<{ id: string; name: string; client_name?: string | null }>>([])
   const [editingVenue, setEditingVenue] = useState(false)
   const [venueQuery, setVenueQuery] = useState('')
@@ -621,11 +623,42 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         </div>
         </div>
 
-        {/* ── Three Column Layout ── */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setCasePanelOpen(open => !open)}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors ${
+              casePanelOpen
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-800'
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h16" />
+            </svg>
+            Case Panel
+          </button>
+          <button
+            type="button"
+            onClick={() => setRelatedPanelOpen(open => !open)}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors ${
+              relatedPanelOpen
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-800'
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h8M8 12h8M8 17h8M4 7h.01M4 12h.01M4 17h.01" />
+            </svg>
+            Related Panel
+          </button>
+        </div>
+
+        {/* ── Focusable Ticket Workspace ── */}
         <div className="flex flex-col lg:flex-row gap-5">
 
           {/* ── LEFT SIDEBAR ── */}
-          <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
+          {casePanelOpen && <div className="w-full lg:w-72 lg:min-w-[272px] flex-shrink-0 space-y-6 lg:sticky lg:top-4 self-start bg-white rounded-xl border border-zinc-200 p-5 shadow-sm">
 
             {/* Details */}
             <div className="space-y-5">
@@ -844,7 +877,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* ── RIGHT: Tabbed Content Card ── */}
           <div className="flex-1 min-w-0">
@@ -1216,65 +1249,50 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   <div>
                     <div className="p-6 space-y-5 bg-zinc-50/40">
                       {!isVoicemailTicket && (
-                        <form onSubmit={sendEmailReply} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.08)]">
-                          <div className="border-b border-zinc-100 bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-5 py-4 text-white">
-                            <div className="flex flex-wrap items-start justify-between gap-4">
+                        <form onSubmit={sendEmailReply} className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 bg-white px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-2 text-xs">
+                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-blue-50 text-[#0A52EF]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                              </span>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-blue-200">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <span className="font-semibold text-zinc-900">Reply</span>
+                                  <span className="text-zinc-300">from</span>
+                                  <span className="font-medium text-zinc-700">support@anc.com</span>
+                                  <span className="text-zinc-300">to</span>
+                                  <span className={`truncate font-semibold ${replyTarget ? 'text-zinc-900' : 'text-amber-700'}`}>
+                                    {replyTarget ? replyTarget.email : 'No contact email'}
                                   </span>
-                                  <div>
-                                    <h3 className="text-sm font-semibold tracking-tight">Support Email</h3>
-                                    <p className="mt-0.5 text-[11px] text-slate-300">Case {caseNum} · {ticket.venue_name || 'ANC Support'}</p>
-                                  </div>
                                 </div>
+                                <p className="mt-0.5 truncate text-[11px] text-zinc-400">Case {caseNum} · {ticket.venue_name || 'ANC Support'}</p>
                               </div>
-                              <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-100">
-                                Microsoft mailbox
-                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">Microsoft</span>
+                              <span className={`h-2 w-2 rounded-full ${replyTarget ? 'bg-emerald-500' : 'bg-amber-500'}`} title={replyTarget ? 'Ready to send' : 'Recipient needed'}></span>
                             </div>
                           </div>
-                          <div className="space-y-4 p-5">
-                            <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
-                              <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">From</span>
-                                <p className="mt-1 truncate text-sm font-semibold text-zinc-950">support@anc.com</p>
-                              </div>
-                              <div className="hidden items-center text-zinc-300 lg:flex">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
-                              </div>
-                              <div className={`rounded-xl border px-4 py-3 ${replyTarget ? 'border-blue-200 bg-blue-50/70' : 'border-amber-200 bg-amber-50'}`}>
-                                <span className={`text-[10px] font-bold uppercase tracking-[0.18em] ${replyTarget ? 'text-blue-500' : 'text-amber-600'}`}>
-                                  {replyTarget ? replyTarget.source : 'Recipient needed'}
-                                </span>
-                                <p className={`mt-1 truncate text-sm font-semibold ${replyTarget ? 'text-zinc-950' : 'text-amber-800'}`}>
-                                  {replyTarget ? replyTarget.email : 'No contact email found'}
-                                </p>
-                              </div>
-                            </div>
+                          <div className="space-y-3 p-4">
 
-                            <div className="rounded-xl border border-zinc-200 bg-white">
-                              <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3 text-xs">
+                            <div className="rounded-lg border border-zinc-200 bg-white">
+                              <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2 text-xs">
                                 <span className="font-semibold text-zinc-400">Subject</span>
-                                <span className="min-w-0 truncate font-semibold text-zinc-800">Re: Case {String(ticket.ticket_number).padStart(8, '0')} - {ticket.title}</span>
+                                <span className="min-w-0 truncate font-medium text-zinc-800">Re: Case {String(ticket.ticket_number).padStart(8, '0')} - {ticket.title}</span>
                               </div>
                               <textarea
                                 value={emailReply}
                                 onChange={(e) => setEmailReply(e.target.value)}
                                 placeholder="Write a clear client-facing reply..."
-                                rows={7}
-                                className="min-h-[178px] w-full resize-none border-0 bg-transparent px-4 py-4 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0"
+                                rows={8}
+                                className="min-h-[230px] w-full resize-none border-0 bg-transparent px-3 py-3 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0"
                               />
-                              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/80 px-4 py-3">
-                                <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                                  <span className={`h-2 w-2 rounded-full ${replyTarget ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                                  {replyTarget ? 'Reply will be logged on this ticket after send.' : 'Add a contact email before sending.'}
-                                </div>
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+                                <div className="text-[11px] text-zinc-500">{replyTarget ? `Route: ${replyTarget.source}` : 'Add a contact email before sending.'}</div>
                                 <button
                                   type="submit"
                                   disabled={sendingEmail || !emailReply.trim() || !replyTarget}
-                                  className="inline-flex items-center gap-2 rounded-lg bg-[#0A52EF] px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-35"
+                                  className="inline-flex items-center gap-2 rounded-md bg-[#0A52EF] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-35"
                                 >
                                   {sendingEmail && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>}
                                   {sendingEmail ? 'Sending' : 'Send Reply'}
@@ -1525,7 +1543,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* ── RIGHT SIDEBAR: Related Objects (SF-style) ── */}
-          <div className="w-full lg:w-64 lg:min-w-[256px] flex-shrink-0 space-y-3">
+          {relatedPanelOpen && <div className="w-full lg:w-64 lg:min-w-[256px] flex-shrink-0 space-y-3">
             {[
               {
                 title: 'Related Cases',
@@ -1609,7 +1627,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 <p className="text-[11px] text-zinc-400 text-center py-3">None</p>
               </div>
             </details>
-          </div>
+          </div>}
         </div>
       </div>
 
