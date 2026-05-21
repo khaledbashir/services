@@ -97,20 +97,39 @@ export async function POST(request: NextRequest) {
         }
 
         const existingRes = await query(
-          `SELECT crm_note_id FROM marketing_form_submissions WHERE source_id = $1 LIMIT 1`,
+          `SELECT crm_person_id, crm_note_id FROM marketing_form_submissions WHERE source_id = $1 LIMIT 1`,
           [raw.conversionId],
         )
+        const existingCrmPersonId = existingRes.rows[0]?.crm_person_id || null
         const existingNoteId = existingRes.rows[0]?.crm_note_id || null
         const contactRes = await query(`SELECT id, crm_person_id FROM marketing_contacts WHERE email = $1 LIMIT 1`, [email])
         const contact = contactRes.rows[0] || null
+        let crmPersonId: string | null = contact?.crm_person_id || existingCrmPersonId || null
         let noteId: string | null = existingNoteId
         let timelineStatus = 'archived'
 
+        if (attachNotes && !crmPersonId && twentyClient.isConfigured()) {
+          try {
+            const person = await twentyClient.findPersonByEmail(email)
+            crmPersonId = person?.id || null
+            if (crmPersonId && contact?.id) {
+              await query(
+                `UPDATE marketing_contacts
+                 SET crm_person_id = $2, updated_at = NOW()
+                 WHERE id = $1 AND crm_person_id IS NULL`,
+                [contact.id, crmPersonId],
+              )
+            }
+          } catch (err) {
+            console.error('HubSpot form submission CRM person lookup failed:', err)
+          }
+        }
+
         if (existingNoteId) {
           timelineStatus = 'crm_note_created'
-        } else if (attachNotes && contact?.crm_person_id) {
+        } else if (attachNotes && crmPersonId) {
           try {
-            noteId = await attachTwentyNote(contact, {
+            noteId = await attachTwentyNote({ crm_person_id: crmPersonId }, {
               formTitle: form.name,
               submittedAt: submittedAt(raw.submittedAt),
               pageUrl: raw.pageUrl || null,
@@ -149,7 +168,7 @@ export async function POST(request: NextRequest) {
             fields.company || fields.company_name || null,
             raw.pageUrl || null,
             contact?.id || null,
-            contact?.crm_person_id || null,
+            crmPersonId,
             noteId,
             timelineStatus,
             JSON.stringify(fields),

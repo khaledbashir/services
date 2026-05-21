@@ -153,6 +153,10 @@ function invalidateCache(prefix: string): void {
   }
 }
 
+function escapeFilterValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 async function fetchList<T>(endpoint: string, objectKey: string, filter?: string): Promise<T[]> {
   const cacheKey = `${endpoint}:${filter || 'all'}`
   const cached = getCached<T[]>(cacheKey)
@@ -219,6 +223,13 @@ export class TwentyClient {
 
   async getPeople(filter?: string): Promise<TwentyPerson[]> {
     return fetchList<TwentyPerson>('people', 'people', filter)
+  }
+
+  async findPersonByEmail(email: string): Promise<TwentyPerson | null> {
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) return null
+    const people = await this.getPeople(`emails.primaryEmail[eq]:"${escapeFilterValue(normalized)}"`)
+    return people.find(person => person.emails?.primaryEmail?.toLowerCase() === normalized) || people[0] || null
   }
 
   async getServices(filter?: string): Promise<TwentyService[]> {
