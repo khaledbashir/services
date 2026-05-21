@@ -228,7 +228,14 @@ export class TwentyClient {
   async findPersonByEmail(email: string): Promise<TwentyPerson | null> {
     const normalized = email.trim().toLowerCase()
     if (!normalized) return null
-    const people = await this.getPeople(`emails.primaryEmail[eq]:"${escapeFilterValue(normalized)}"`)
+    const params = new URLSearchParams({
+      limit: '1',
+      filter: `emails.primaryEmail[eq]:"${escapeFilterValue(normalized)}"`,
+    })
+    const res = await twentyGet(`people?${params.toString()}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const people = (data?.data?.people || []) as TwentyPerson[]
     return people.find(person => person.emails?.primaryEmail?.toLowerCase() === normalized) || people[0] || null
   }
 
