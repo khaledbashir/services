@@ -36,11 +36,12 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO marketing_social_posts
-        (campaign_id, platform, integration_id, channel_name, content, media_url, scheduled_at, state)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (campaign_id, template_id, platform, integration_id, channel_name, content, media_url, scheduled_at, state)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         body.campaignId || null,
+        body.templateId || null,
         platform,
         body.integrationId || null,
         body.channelName || null,

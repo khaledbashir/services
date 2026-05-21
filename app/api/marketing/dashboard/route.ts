@@ -6,7 +6,7 @@ import { query } from '@/lib/db'
 
 export async function GET() {
   try {
-    const [audiences, contacts, campaigns, events, recentCampaigns, routes, social] = await Promise.all([
+    const [audiences, contacts, campaigns, events, recentCampaigns, routes, social, templates, approvals, submissions] = await Promise.all([
       query(`SELECT COUNT(*)::int AS total FROM marketing_audiences WHERE is_active = true`),
       query(`SELECT
           COUNT(*)::int AS total,
@@ -49,6 +49,23 @@ export async function GET() {
           COUNT(*) FILTER (WHERE state = 'scheduled')::int AS scheduled,
           COUNT(*) FILTER (WHERE state = 'published')::int AS published
         FROM marketing_social_posts`),
+      query(`SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE template_type = 'newsletter')::int AS newsletters,
+          COUNT(*) FILTER (WHERE template_type = 'social')::int AS social
+        FROM marketing_templates
+        WHERE is_active = true`),
+      query(`SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+          COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,
+          COUNT(*) FILTER (WHERE status = 'changes_requested')::int AS changes_requested
+        FROM marketing_approval_requests`),
+      query(`SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE source = 'hubspot')::int AS hubspot,
+          COUNT(*) FILTER (WHERE timeline_status = 'crm_note_created')::int AS crm_notes
+        FROM marketing_form_submissions`),
     ])
 
     return NextResponse.json({
@@ -59,6 +76,9 @@ export async function GET() {
         events: events.rows[0],
         formRoutes: routes.rows[0],
         social: social.rows[0],
+        templates: templates.rows[0],
+        approvals: approvals.rows[0],
+        formSubmissions: submissions.rows[0],
         postiz: {
           baseUrl: process.env.POSTIZ_API_URL || process.env.POSTIZ_URL || 'https://abc-postiz.izcgmb.easypanel.host',
           connectedChannels: ['Slack'],

@@ -1,6 +1,6 @@
 # Alison Media & Partnerships Build Checklist
 
-Updated: 2026-05-21
+Updated: 2026-05-22
 
 Goal: track what is actually ready for the HubSpot retirement and Alison's marketing workflow, without overstating what still needs build/configuration.
 
@@ -25,9 +25,14 @@ Goal: track what is actually ready for the HubSpot retirement and Alison's marke
 - [x] Salesforce/new CRM automatic marketing eligibility sync implemented locally
 - [x] Bounce webhook/provider suppression tracking implemented locally
 - [x] Forms app division-lead notification helper implemented locally
+- [x] Reusable Alison newsletter/social template library implemented locally
+- [x] Formal newsletter/social approval workflow implemented locally
+- [x] HubSpot form submission history import/timeline archive implemented locally
+- [x] Dashboard imported-bucket patch is committed on `codex/option-b-client-model`
 - [ ] Marketing eligibility sync deployed, scheduled, and verified in production
 - [ ] Bounce webhook endpoint configured in provider and verified in production
 - [ ] Forms app division-lead notifications verified with live submissions
+- [ ] Template library/approval workflow/form history deployed and verified in production
 
 ## HubSpot Backup And Import
 
@@ -115,9 +120,10 @@ Not done:
 - [x] Bounce/complaint/unsubscribe webhook handler is implemented locally at `/api/webhooks/marketing-email-events`
 - [ ] Bounce webhook is not configured in the provider dashboard yet
 - [ ] Bounce webhook is not verified with a live provider event yet
-- [ ] Alison-facing reusable template library is not rebuilt yet
+- [x] Alison-facing reusable template library is implemented locally
 - [ ] Imported historical HubSpot email performance metrics are not fully recreated in the new dashboard yet
-- [ ] Local dashboard patch for imported/suppressed/non-marketing/candidate buckets is not committed/deployed yet
+- [x] Local dashboard patch for imported/suppressed/non-marketing/candidate buckets is committed
+- [ ] Dashboard patch is not deployed/verified in production yet
 
 Demo-safe claim:
 
@@ -145,7 +151,8 @@ Not done:
 - [ ] Live form submission notification test is not verified yet
 - [ ] Division lead owner map is not finalized
 - [ ] Salesforce write-back from form submission is not verified
-- [ ] HubSpot submission history is not imported into CRM activity/timeline
+- [x] HubSpot submission history import route and Marketing Hub timeline/archive are implemented locally
+- [ ] HubSpot submission history is not deployed/imported/verified in production yet
 
 Demo-safe claim:
 
@@ -192,9 +199,10 @@ Checked:
 
 Not done:
 
-- [ ] Formal approval step is not implemented in Marketing Hub
-- [ ] Social approval queue/status workflow is not implemented
-- [ ] Approver list is not stored as reusable config
+- [x] Formal approval step is implemented locally in Marketing Hub
+- [x] Social approval queue/status workflow is implemented locally
+- [x] Default approver group is stored on approval requests: Jerry, Kirsten, Joe, Jireh, John
+- [ ] Approval workflow is not deployed/verified in production yet
 
 Demo-safe claim:
 
@@ -219,8 +227,8 @@ Checked:
 
 Not done:
 
-- [ ] Reusable native newsletter templates are not rebuilt yet
-- [ ] Reusable social templates are not built yet
+- [x] Reusable native newsletter templates are implemented locally
+- [x] Reusable social templates are implemented locally
 - [ ] Brand asset library is not curated into the new UI yet
 - [ ] Alison has not reviewed/approved updated template direction
 
@@ -275,13 +283,12 @@ Not done:
 
 ## Next Systematic Steps
 
-1. Commit/deploy the Marketing Hub dashboard imported-bucket patch and new marketing automation routes.
+1. Deploy the Marketing Hub commits to the production branch/service.
 2. Add production cron for `/api/cron/marketing-eligibility-sync`.
 3. Configure provider webhook to call `/api/webhooks/marketing-email-events`.
-4. Live-test Forms app notifications with one design/print/parts submission.
-5. Rebuild active website forms from HubSpot definitions.
-6. Rebuild reusable newsletter/template library.
-7. Connect LinkedIn, X, and Instagram in Postiz.
-8. Verify one scheduled draft per social platform.
-9. Decide and implement approval flow.
-10. Optionally import HubSpot form submission history into CRM timeline/activity.
+4. Run HubSpot submission import from Marketing Hub or `/api/marketing/forms/submissions/import-hubspot`.
+5. Live-test Forms app notifications with one design/print/parts submission.
+6. Verify template create/use, approval request/approve, and approved newsletter scheduling in production.
+7. Rebuild active website forms from HubSpot definitions.
+8. Connect LinkedIn, X, and Instagram in Postiz.
+9. Verify one scheduled draft per social platform.

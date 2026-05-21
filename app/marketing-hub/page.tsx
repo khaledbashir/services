@@ -23,6 +23,38 @@ type Campaign = {
 }
 type FormRoute = { id: string; form_title: string; inquiry_type?: string; route_to_name: string; route_to_email: string; crm_target?: string; is_active: boolean }
 type SocialPost = { id: string; platform: string; channel_name?: string; content: string; state: string; scheduled_at?: string }
+type Template = {
+  id: string
+  template_type: 'newsletter' | 'social'
+  name: string
+  category?: string
+  subject?: string
+  preview_text?: string
+  body_html?: string
+  content?: string
+  platform?: string
+}
+type ApprovalRequest = {
+  id: string
+  item_type: 'newsletter' | 'social'
+  item_id: string
+  status: string
+  approver_group: string
+  notes?: string
+  requested_at: string
+  decided_at?: string
+}
+type FormSubmission = {
+  id: string
+  form_title: string
+  submitted_at?: string
+  email?: string
+  first_name?: string
+  last_name?: string
+  company_name?: string
+  page_url?: string
+  timeline_status: string
+}
 
 const inputClass = 'w-full rounded border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#0A52EF] focus:ring-2 focus:ring-[#0A52EF]/15'
 const buttonClass = 'rounded bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-50'
@@ -50,7 +82,7 @@ function StatusPill({ value }: { value: string }) {
 }
 
 export default function MarketingHubPage() {
-  const [tab, setTab] = useState<'overview' | 'audiences' | 'campaigns' | 'forms' | 'social'>('overview')
+  const [tab, setTab] = useState<'overview' | 'audiences' | 'campaigns' | 'templates' | 'approvals' | 'forms' | 'social'>('overview')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
@@ -60,6 +92,9 @@ export default function MarketingHubPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [formRoutes, setFormRoutes] = useState<FormRoute[]>([])
   const [socialPosts, setSocialPosts] = useState<SocialPost[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([])
+  const [formSubmissions, setFormSubmissions] = useState<FormSubmission[]>([])
 
   const defaultAudienceId = audiences[0]?.id || ''
   const [contactForm, setContactForm] = useState({ name: '', email: '', companyName: '', audienceId: '' })
@@ -68,13 +103,15 @@ export default function MarketingHubPage() {
     subject: 'ANC Sports Media & Partnerships Update',
     previewText: 'Latest ANC media, venue, and partnership updates.',
     audienceId: '',
+    templateId: '',
     bodyHtml: '<h2 style="margin:0 0 12px">Media & Partnerships Update</h2><p>Replace this with the month’s highlights, partner news, venue updates, and calls to action.</p>',
   })
   const [testEmail, setTestEmail] = useState('')
   const [selectedCampaignId, setSelectedCampaignId] = useState('')
   const [scheduleAt, setScheduleAt] = useState('')
   const [routeForm, setRouteForm] = useState({ formId: '', formTitle: '', inquiryType: '', routeToName: '', routeToEmail: '', crmTarget: '' })
-  const [socialForm, setSocialForm] = useState({ platform: 'slack', channelName: 'test', content: '', scheduledAt: '' })
+  const [templateForm, setTemplateForm] = useState({ templateType: 'newsletter', name: '', category: '', subject: '', previewText: '', bodyHtml: '', content: '', platform: 'linkedin' })
+  const [socialForm, setSocialForm] = useState({ platform: 'slack', channelName: 'test', content: '', scheduledAt: '', templateId: '' })
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedCampaignId) || campaigns[0],
@@ -91,13 +128,16 @@ export default function MarketingHubPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [dashboard, audienceData, contactData, campaignData, routeData, socialData] = await Promise.all([
+      const [dashboard, audienceData, contactData, campaignData, routeData, socialData, templateData, approvalData, submissionData] = await Promise.all([
         fetchJson('/api/marketing/dashboard'),
         fetchJson('/api/marketing/audiences'),
         fetchJson('/api/marketing/contacts'),
         fetchJson('/api/marketing/campaigns'),
         fetchJson('/api/marketing/forms/routing'),
         fetchJson('/api/marketing/social'),
+        fetchJson('/api/marketing/templates'),
+        fetchJson('/api/marketing/approvals'),
+        fetchJson('/api/marketing/forms/submissions'),
       ])
       setSummary(dashboard.summary)
       setAudiences(audienceData.audiences)
@@ -105,6 +145,9 @@ export default function MarketingHubPage() {
       setCampaigns(campaignData.campaigns)
       setFormRoutes(routeData.routes)
       setSocialPosts(socialData.posts)
+      setTemplates(templateData.templates)
+      setApprovals(approvalData.approvals)
+      setFormSubmissions(submissionData.submissions)
       const firstAudience = audienceData.audiences[0]?.id || ''
       setContactForm((prev) => ({ ...prev, audienceId: prev.audienceId || firstAudience }))
       setCampaignForm((prev) => ({ ...prev, audienceId: prev.audienceId || firstAudience }))
@@ -196,6 +239,104 @@ export default function MarketingHubPage() {
     }
   }
 
+  async function requestApproval(itemType: 'newsletter' | 'social', itemId: string) {
+    setBusy(`approval-${itemId}`)
+    setMessage('')
+    try {
+      await fetchJson('/api/marketing/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemType, itemId, action: 'request' }),
+      })
+      setMessage('Approval requested.')
+      await loadAll()
+    } catch (err: any) {
+      setMessage(err.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function decideApproval(itemType: 'newsletter' | 'social', itemId: string, action: 'approve' | 'reject' | 'changes_requested') {
+    setBusy(`approval-${itemId}`)
+    setMessage('')
+    try {
+      await fetchJson('/api/marketing/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemType, itemId, action }),
+      })
+      setMessage(action === 'approve' ? 'Approved.' : action === 'reject' ? 'Rejected.' : 'Changes requested.')
+      await loadAll()
+    } catch (err: any) {
+      setMessage(err.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function submitTemplate(e: FormEvent) {
+    e.preventDefault()
+    setBusy('template')
+    setMessage('')
+    try {
+      await fetchJson('/api/marketing/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateForm),
+      })
+      setTemplateForm({ templateType: 'newsletter', name: '', category: '', subject: '', previewText: '', bodyHtml: '', content: '', platform: 'linkedin' })
+      setMessage('Template saved.')
+      await loadAll()
+    } catch (err: any) {
+      setMessage(err.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  function applyNewsletterTemplate(template: Template) {
+    setCampaignForm((prev) => ({
+      ...prev,
+      templateId: template.id,
+      name: template.name || prev.name,
+      subject: template.subject || prev.subject,
+      previewText: template.preview_text || prev.previewText,
+      bodyHtml: template.body_html || prev.bodyHtml,
+    }))
+    setTab('campaigns')
+    setMessage(`Loaded template: ${template.name}`)
+  }
+
+  function applySocialTemplate(template: Template) {
+    setSocialForm((prev) => ({
+      ...prev,
+      templateId: template.id,
+      platform: template.platform || prev.platform,
+      content: template.content || prev.content,
+    }))
+    setTab('social')
+    setMessage(`Loaded template: ${template.name}`)
+  }
+
+  async function importHubSpotSubmissions() {
+    setBusy('hubspot-submissions')
+    setMessage('')
+    try {
+      const data = await fetchJson('/api/marketing/forms/submissions/import-hubspot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 1000, attachNotes: true }),
+      })
+      setMessage(`Imported ${data.imported} HubSpot form submissions; CRM notes created: ${data.notesCreated}.`)
+      await loadAll()
+    } catch (err: any) {
+      setMessage(err.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
   async function submitRoute(e: FormEvent) {
     e.preventDefault()
     setBusy('route')
@@ -226,7 +367,7 @@ export default function MarketingHubPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(socialForm),
       })
-      setSocialForm({ platform: 'slack', channelName: 'test', content: '', scheduledAt: '' })
+      setSocialForm({ platform: 'slack', channelName: 'test', content: '', scheduledAt: '', templateId: '' })
       setMessage('Social draft saved.')
       await loadAll()
     } catch (err: any) {
@@ -240,6 +381,8 @@ export default function MarketingHubPage() {
     ['overview', 'Overview'],
     ['audiences', 'Audiences'],
     ['campaigns', 'Newsletters'],
+    ['templates', 'Templates'],
+    ['approvals', 'Approvals'],
     ['forms', 'Forms'],
     ['social', 'Social'],
   ] as const
@@ -286,6 +429,12 @@ export default function MarketingHubPage() {
                   <Stat label="Non-Marketing" value={summary?.contacts?.non_marketing || 0} />
                   <Stat label="Review Candidates" value={summary?.contacts?.candidate || 0} />
                   <Stat label="Imported Emails" value={summary?.campaigns?.hubspot_imported_reference || 0} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Stat label="Templates" value={summary?.templates?.total || 0} />
+                  <Stat label="Pending Approval" value={summary?.approvals?.pending || 0} tone={summary?.approvals?.pending ? 'warn' : 'default'} />
+                  <Stat label="Form Submissions" value={summary?.formSubmissions?.total || 0} />
+                  <Stat label="CRM Notes" value={summary?.formSubmissions?.crm_notes || 0} />
                 </div>
                 <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                   <section className="border border-zinc-200 bg-white">
@@ -361,6 +510,14 @@ export default function MarketingHubPage() {
                   <h2 className="text-sm font-semibold text-zinc-900">Newsletter Draft</h2>
                   <div className="mt-4 grid gap-3">
                     <input className={inputClass} value={campaignForm.name} onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })} />
+                    <select className={inputClass} value={campaignForm.templateId} onChange={(e) => {
+                      const template = templates.find((item) => item.id === e.target.value)
+                      if (template) applyNewsletterTemplate(template)
+                      else setCampaignForm({ ...campaignForm, templateId: '' })
+                    }}>
+                      <option value="">No template</option>
+                      {templates.filter((item) => item.template_type === 'newsletter').map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+                    </select>
                     <input className={inputClass} value={campaignForm.subject} onChange={(e) => setCampaignForm({ ...campaignForm, subject: e.target.value })} />
                     <input className={inputClass} value={campaignForm.previewText} onChange={(e) => setCampaignForm({ ...campaignForm, previewText: e.target.value })} />
                     <select className={inputClass} value={campaignForm.audienceId || defaultAudienceId} onChange={(e) => setCampaignForm({ ...campaignForm, audienceId: e.target.value })}>
@@ -377,13 +534,20 @@ export default function MarketingHubPage() {
                       <select className={inputClass} value={selectedCampaign?.id || ''} onChange={(e) => setSelectedCampaignId(e.target.value)}>
                         {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
                       </select>
+                      {selectedCampaign && (
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => requestApproval('newsletter', selectedCampaign.id)}>Request Approval</button>
+                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'approve')}>Approve</button>
+                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'changes_requested')}>Changes</button>
+                        </div>
+                      )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         <input className={inputClass} placeholder="Test email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} />
                         <button type="button" className={secondaryButton} disabled={!selectedCampaign || busy === 'test'} onClick={sendTest}>Send Test</button>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         <input className={inputClass} type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
-                        <button type="button" className={buttonClass} disabled={!selectedCampaign || busy === 'schedule'} onClick={scheduleCampaign}>Schedule</button>
+                        <button type="button" className={buttonClass} disabled={!selectedCampaign || busy === 'schedule' || selectedCampaign.status !== 'approved'} onClick={scheduleCampaign}>Schedule</button>
                       </div>
                     </div>
                   </div>
@@ -408,6 +572,82 @@ export default function MarketingHubPage() {
               </div>
             )}
 
+            {tab === 'templates' && (
+              <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <form onSubmit={submitTemplate} className="border border-zinc-200 bg-white p-4">
+                  <h2 className="text-sm font-semibold text-zinc-900">Template Library</h2>
+                  <div className="mt-4 grid gap-3">
+                    <select className={inputClass} value={templateForm.templateType} onChange={(e) => setTemplateForm({ ...templateForm, templateType: e.target.value })}>
+                      <option value="newsletter">Newsletter</option>
+                      <option value="social">Social</option>
+                    </select>
+                    <input className={inputClass} placeholder="Template name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} />
+                    <input className={inputClass} placeholder="Category" value={templateForm.category} onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value })} />
+                    {templateForm.templateType === 'newsletter' ? (
+                      <>
+                        <input className={inputClass} placeholder="Subject" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} />
+                        <input className={inputClass} placeholder="Preview text" value={templateForm.previewText} onChange={(e) => setTemplateForm({ ...templateForm, previewText: e.target.value })} />
+                        <textarea className={`${inputClass} min-h-[180px] font-mono text-xs`} placeholder="Email HTML" value={templateForm.bodyHtml} onChange={(e) => setTemplateForm({ ...templateForm, bodyHtml: e.target.value })} />
+                      </>
+                    ) : (
+                      <>
+                        <select className={inputClass} value={templateForm.platform} onChange={(e) => setTemplateForm({ ...templateForm, platform: e.target.value })}>
+                          <option value="linkedin">LinkedIn</option>
+                          <option value="x">X</option>
+                          <option value="instagram">Instagram</option>
+                          <option value="slack">Slack</option>
+                        </select>
+                        <textarea className={`${inputClass} min-h-[160px]`} placeholder="Post copy" value={templateForm.content} onChange={(e) => setTemplateForm({ ...templateForm, content: e.target.value })} />
+                      </>
+                    )}
+                    <button className={buttonClass} disabled={busy === 'template'}>Save Template</button>
+                  </div>
+                </form>
+                <section className="border border-zinc-200 bg-white">
+                  <div className="border-b border-zinc-200 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-zinc-900">Reusable Templates</h2>
+                  </div>
+                  <div className="divide-y divide-zinc-100">
+                    {templates.map((template) => (
+                      <div key={template.id} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                        <div>
+                          <div className="font-medium text-zinc-900">{template.name}</div>
+                          <div className="text-xs text-zinc-500 capitalize">{template.template_type}{template.category ? ` · ${template.category}` : ''}{template.platform ? ` · ${template.platform}` : ''}</div>
+                        </div>
+                        <button type="button" className={secondaryButton} onClick={() => template.template_type === 'newsletter' ? applyNewsletterTemplate(template) : applySocialTemplate(template)}>Use</button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {tab === 'approvals' && (
+              <section className="border border-zinc-200 bg-white">
+                <div className="border-b border-zinc-200 px-4 py-3">
+                  <h2 className="text-sm font-semibold text-zinc-900">Approval Queue</h2>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  {approvals.map((approval) => (
+                    <div key={approval.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1fr_auto] lg:items-center">
+                      <div>
+                        <div className="font-medium capitalize text-zinc-900">{approval.item_type} approval</div>
+                        <div className="text-xs text-zinc-500">Approvers: {approval.approver_group} · {new Date(approval.requested_at).toLocaleString()}</div>
+                        {approval.notes && <div className="mt-1 text-xs text-zinc-500">{approval.notes}</div>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusPill value={approval.status} />
+                        <button type="button" className={secondaryButton} disabled={busy === `approval-${approval.item_id}`} onClick={() => decideApproval(approval.item_type, approval.item_id, 'approve')}>Approve</button>
+                        <button type="button" className={secondaryButton} disabled={busy === `approval-${approval.item_id}`} onClick={() => decideApproval(approval.item_type, approval.item_id, 'changes_requested')}>Changes</button>
+                        <button type="button" className={secondaryButton} disabled={busy === `approval-${approval.item_id}`} onClick={() => decideApproval(approval.item_type, approval.item_id, 'reject')}>Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                  {approvals.length === 0 && <div className="px-4 py-8 text-sm text-zinc-500">No approval requests yet.</div>}
+                </div>
+              </section>
+            )}
+
             {tab === 'forms' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
                 <form onSubmit={submitRoute} className="border border-zinc-200 bg-white p-4">
@@ -423,8 +663,9 @@ export default function MarketingHubPage() {
                   </div>
                 </form>
                 <section className="border border-zinc-200 bg-white">
-                  <div className="border-b border-zinc-200 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
                     <h2 className="text-sm font-semibold text-zinc-900">Active Routes</h2>
+                    <button type="button" className={secondaryButton} disabled={busy === 'hubspot-submissions'} onClick={importHubSpotSubmissions}>Import HubSpot History</button>
                   </div>
                   <div className="divide-y divide-zinc-100">
                     {formRoutes.map((route) => (
@@ -437,6 +678,26 @@ export default function MarketingHubPage() {
                       </div>
                     ))}
                   </div>
+                  <div className="border-t border-zinc-200 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-zinc-900">Submission History</h2>
+                  </div>
+                  <div className="max-h-[360px] divide-y divide-zinc-100 overflow-auto">
+                    {formSubmissions.map((submission) => (
+                      <div key={submission.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+                        <div>
+                          <div className="font-medium text-zinc-900">{submission.form_title}</div>
+                          <div className="text-xs text-zinc-500">
+                            {[submission.first_name, submission.last_name].filter(Boolean).join(' ') || submission.email || 'Unknown'}
+                            {submission.company_name ? ` · ${submission.company_name}` : ''}
+                            {submission.submitted_at ? ` · ${new Date(submission.submitted_at).toLocaleDateString()}` : ''}
+                          </div>
+                          {submission.page_url && <div className="mt-1 truncate text-xs text-zinc-400">{submission.page_url}</div>}
+                        </div>
+                        <StatusPill value={submission.timeline_status} />
+                      </div>
+                    ))}
+                    {formSubmissions.length === 0 && <div className="px-4 py-8 text-sm text-zinc-500">No imported submissions yet.</div>}
+                  </div>
                 </section>
               </div>
             )}
@@ -446,6 +707,14 @@ export default function MarketingHubPage() {
                 <form onSubmit={submitSocial} className="border border-zinc-200 bg-white p-4">
                   <h2 className="text-sm font-semibold text-zinc-900">Social Draft</h2>
                   <div className="mt-4 grid gap-3">
+                    <select className={inputClass} value={socialForm.templateId} onChange={(e) => {
+                      const template = templates.find((item) => item.id === e.target.value)
+                      if (template) applySocialTemplate(template)
+                      else setSocialForm({ ...socialForm, templateId: '' })
+                    }}>
+                      <option value="">No template</option>
+                      {templates.filter((item) => item.template_type === 'social').map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+                    </select>
                     <select className={inputClass} value={socialForm.platform} onChange={(e) => setSocialForm({ ...socialForm, platform: e.target.value })}>
                       <option value="slack">Slack</option>
                       <option value="linkedin">LinkedIn</option>
@@ -471,7 +740,11 @@ export default function MarketingHubPage() {
                             <div className="font-medium capitalize text-zinc-900">{post.platform}{post.channel_name ? ` · ${post.channel_name}` : ''}</div>
                             <div className="text-xs text-zinc-500 line-clamp-2">{post.content}</div>
                           </div>
-                          <StatusPill value={post.state} />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusPill value={post.state} />
+                            <button type="button" className={secondaryButton} disabled={busy === `approval-${post.id}`} onClick={() => requestApproval('social', post.id)}>Approval</button>
+                            <button type="button" className={secondaryButton} disabled={busy === `approval-${post.id}`} onClick={() => decideApproval('social', post.id, 'approve')}>Approve</button>
+                          </div>
                         </div>
                       ))}
                       {socialPosts.length === 0 && <div className="px-3 py-8 text-sm text-zinc-500">No social drafts yet.</div>}

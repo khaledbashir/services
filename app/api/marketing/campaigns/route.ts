@@ -37,11 +37,12 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO newsletter_campaigns
-        (audience_id, name, subject, preview_text, from_name, from_email, reply_to, body_html, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft')
+        (audience_id, template_id, name, subject, preview_text, from_name, from_email, reply_to, body_html, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft')
        RETURNING *`,
       [
         body.audienceId || null,
+        body.templateId || null,
         name,
         subject,
         body.previewText || null,

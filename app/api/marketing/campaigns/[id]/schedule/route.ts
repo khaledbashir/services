@@ -14,6 +14,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const campaign = campaignRes.rows[0]
     if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     if (!campaign.audience_id) return NextResponse.json({ error: 'Campaign needs an audience first' }, { status: 400 })
+    if (campaign.status !== 'approved' && campaign.status !== 'scheduled') {
+      return NextResponse.json({ error: 'Campaign must be approved before scheduling' }, { status: 409 })
+    }
 
     const prepared = await query(
       `INSERT INTO newsletter_campaign_recipients (campaign_id, contact_id, email, status)

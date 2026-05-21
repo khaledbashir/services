@@ -921,6 +921,7 @@ async function runMigrations() {
     await client.query(`CREATE TABLE IF NOT EXISTS newsletter_campaigns (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       audience_id UUID REFERENCES marketing_audiences(id) ON DELETE SET NULL,
+      template_id UUID,
       name TEXT NOT NULL,
       subject TEXT NOT NULL,
       preview_text TEXT,
@@ -935,6 +936,7 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`ALTER TABLE newsletter_campaigns ADD COLUMN IF NOT EXISTS template_id UUID`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_status ON newsletter_campaigns(status)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_audience ON newsletter_campaigns(audience_id)`)
 
@@ -997,9 +999,70 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_form_routes_form ON marketing_form_routing_rules(form_id)`)
 
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT,
+      subject TEXT,
+      preview_text TEXT,
+      body_html TEXT,
+      content TEXT,
+      platform TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(template_type, name)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_templates_type ON marketing_templates(template_type, is_active)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_approval_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      item_type TEXT NOT NULL,
+      item_id UUID NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_by TEXT,
+      approver_group TEXT NOT NULL DEFAULT 'Jerry, Kirsten, Joe, Jireh, John',
+      notes TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      decided_by TEXT,
+      decided_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_approvals_item ON marketing_approval_requests(item_type, item_id, requested_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_approvals_status ON marketing_approval_requests(status, requested_at DESC)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_form_submissions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source TEXT NOT NULL DEFAULT 'hubspot',
+      source_id TEXT UNIQUE,
+      form_id TEXT NOT NULL,
+      form_title TEXT NOT NULL,
+      submitted_at TIMESTAMPTZ,
+      email TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      company_name TEXT,
+      page_url TEXT,
+      contact_id UUID REFERENCES marketing_contacts(id) ON DELETE SET NULL,
+      crm_person_id TEXT,
+      crm_note_id TEXT,
+      timeline_status TEXT NOT NULL DEFAULT 'archived',
+      fields JSONB NOT NULL DEFAULT '{}'::jsonb,
+      raw JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_form_submissions_form ON marketing_form_submissions(form_id, submitted_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_form_submissions_email ON marketing_form_submissions(email)`)
+
     await client.query(`CREATE TABLE IF NOT EXISTS marketing_social_posts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       campaign_id UUID REFERENCES newsletter_campaigns(id) ON DELETE SET NULL,
+      template_id UUID,
       platform TEXT NOT NULL,
       integration_id TEXT,
       channel_name TEXT,
@@ -1012,6 +1075,7 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`ALTER TABLE marketing_social_posts ADD COLUMN IF NOT EXISTS template_id UUID`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_social_posts_state ON marketing_social_posts(state)`)
 
     await client.query(`INSERT INTO marketing_audiences (name, description, source)
@@ -1063,6 +1127,72 @@ async function runMigrations() {
         SET description = EXCLUDED.description,
             schedule = EXCLUDED.schedule,
             updated_at = NOW()
+    `)
+
+    await client.query(`
+      WITH templates(template_type, name, category, subject, preview_text, body_html, content, platform, metadata) AS (
+        VALUES
+          (
+            'newsletter',
+            'Monthly Media & Partnerships Newsletter',
+            'newsletter',
+            'ANC Sports Media & Partnerships Update',
+            'Latest ANC media, venue, and partnership updates.',
+            '<h2 style="margin:0 0 12px">Media & Partnerships Update</h2><p>Lead with the month''s strongest venue, partner, or project update.</p><h3>Highlights</h3><ul><li>Partner or venue highlight</li><li>Project/update worth sharing</li><li>Call to action</li></ul>',
+            NULL,
+            NULL,
+            '{"source":"hubspot_retirement_default"}'::jsonb
+          ),
+          (
+            'newsletter',
+            'Event Announcement',
+            'announcement',
+            'ANC Sports Event Update',
+            'A quick update from ANC Sports.',
+            '<h2 style="margin:0 0 12px">Event Announcement</h2><p>Share the event, venue, date, and why it matters.</p><p><strong>Next step:</strong> Add the link or contact path here.</p>',
+            NULL,
+            NULL,
+            '{"source":"hubspot_retirement_default"}'::jsonb
+          ),
+          (
+            'social',
+            'Partner Highlight',
+            'partner',
+            NULL,
+            NULL,
+            NULL,
+            'Proud to highlight [partner/client] and the work behind [venue/project]. [One concrete outcome].',
+            'linkedin',
+            '{"source":"hubspot_retirement_default"}'::jsonb
+          ),
+          (
+            'social',
+            'Newsletter Promo',
+            'newsletter_promo',
+            NULL,
+            NULL,
+            NULL,
+            'The latest ANC Sports Media & Partnerships update is ready: [headline]. Read more: [link]',
+            'linkedin',
+            '{"source":"hubspot_retirement_default"}'::jsonb
+          ),
+          (
+            'social',
+            'Hiring / Team Post',
+            'hiring',
+            NULL,
+            NULL,
+            NULL,
+            'ANC Sports is growing our team. We are looking for [role/team] to support [venue/work type]. Details: [link]',
+            'linkedin',
+            '{"source":"hubspot_retirement_default"}'::jsonb
+          )
+      )
+      INSERT INTO marketing_templates
+        (template_type, name, category, subject, preview_text, body_html, content, platform, metadata)
+      SELECT template_type, name, category, subject, preview_text, body_html, content, platform, metadata
+      FROM templates
+      ON CONFLICT (template_type, name) DO NOTHING
     `)
 
     await client.query(`CREATE TABLE IF NOT EXISTS gamification_points (
