@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { twentyCreate, requireFields, str } from '../_helpers'
+import { notifyMarketingFormSubmission } from '@/lib/marketing-form-notifications'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +47,27 @@ export async function POST(request: NextRequest) {
     }
 
     const created = result.data.data.createPrintRequest
+    await notifyMarketingFormSubmission({
+      formId: 'print-request',
+      formTitle: 'ANC Print Request',
+      inquiryType: 'print',
+      submitterName: str(body.submittedBy) || null,
+      submitterEmail: str(body.requesterEmail) || null,
+      companyName: str(body.clientName) || null,
+      subject: `[ANC Forms] New print request: ${created.name}`,
+      crmTargetUrl: `${APP_URL}/prints/${created.id}`,
+      sourceUrl: `${APP_URL}/forms/print-request`,
+      summaryFields: {
+        clientName: str(body.clientName),
+        dueDate: str(body.dueDate),
+        sfNumber: str(body.sfNumber),
+        rushRequest: Boolean(body.rushRequest),
+        reprint: Boolean(body.reprint),
+        shippingAddress: str(body.shippingAddress, 1000),
+      },
+      rawSubmission: { ...body, crmRecordId: created.id, crmObject: 'printRequests' },
+    }).catch((err) => console.error('Print request form notification failed:', err))
+
     return NextResponse.json({ id: created.id, name: created.name })
   } catch (err: any) {
     return NextResponse.json(

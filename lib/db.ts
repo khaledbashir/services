@@ -502,6 +502,16 @@ async function runMigrations() {
         AND e.client_id IS NULL
     `)
 
+    await client.query(`CREATE TABLE IF NOT EXISTS automation_jobs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      schedule TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+
     // Toggle for the synchronous workflow-success Slack blasts. Joe asked
     // 2026-04-29 to silence venue-channel pings on completed check-ins /
     // game-ready / post-game and only get pinged on misses (handled by the
@@ -961,6 +971,16 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_events_campaign ON newsletter_campaign_events(campaign_id, created_at DESC)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_events_type ON newsletter_campaign_events(event_type)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_events_recipient ON newsletter_campaign_events(recipient_id, created_at DESC)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_sync_runs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      sync_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'success',
+      result JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_sync_runs_type ON marketing_sync_runs(sync_type, created_at DESC)`)
 
     await client.query(`CREATE TABLE IF NOT EXISTS marketing_form_routing_rules (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1005,8 +1025,11 @@ async function runMigrations() {
     await client.query(`WITH defaults(form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target) AS (
         VALUES
           ('contact-inquiry', 'Contact Inquiry Form', 'general', 'Alison', 'alison@anc.com', NULL, NULL),
-          ('design-request', 'ANC Design Request', 'design', 'Design Division Lead', 'design@anc.com', NULL, 'designRequests'),
-          ('content-schedule', 'ANC Content Schedule', 'content', 'Media & Partnerships', 'media@anc.com', NULL, 'contentSchedules')
+          ('design-request', 'ANC Design Request', 'design', 'Alison', 'alison@anc.com', NULL, 'designRequests'),
+          ('print-request', 'ANC Print Request', 'print', 'Alison', 'alison@anc.com', NULL, 'printRequests'),
+          ('parts-order', 'ANC Parts Order', 'parts', 'Alison', 'alison@anc.com', NULL, 'partsOrders'),
+          ('content-schedule', 'ANC Content Schedule', 'content', 'Alison', 'alison@anc.com', NULL, 'contentSchedules'),
+          ('hubspot-contact-form-2026', 'Contact Form 2026', 'general', 'Alison', 'alison@anc.com', NULL, NULL)
       )
       INSERT INTO marketing_form_routing_rules
         (form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target)
@@ -1018,6 +1041,29 @@ async function runMigrations() {
           AND COALESCE(r.inquiry_type, '') = COALESCE(d.inquiry_type, '')
           AND r.route_to_email = d.route_to_email
       )`)
+
+    await client.query(`
+      INSERT INTO automation_jobs (id, name, description, schedule, enabled)
+      VALUES
+        (
+          'marketing-eligibility-sync',
+          'Marketing Eligibility Sync',
+          'Sync new/updated Twenty CRM people into Marketing Hub newsletter eligibility and suppression state.',
+          'every-15-minutes',
+          true
+        ),
+        (
+          'marketing-newsletter-sender',
+          'Marketing Newsletter Sender',
+          'Sends due Marketing Hub newsletter campaigns whose status is scheduled.',
+          'every-5-minutes',
+          true
+        )
+      ON CONFLICT (id) DO UPDATE
+        SET description = EXCLUDED.description,
+            schedule = EXCLUDED.schedule,
+            updated_at = NOW()
+    `)
 
     await client.query(`CREATE TABLE IF NOT EXISTS gamification_points (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

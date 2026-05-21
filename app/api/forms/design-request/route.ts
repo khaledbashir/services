@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { twentyCreate, requireFields, str } from '../_helpers'
+import { notifyMarketingFormSubmission } from '@/lib/marketing-form-notifications'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,6 +55,27 @@ export async function POST(request: NextRequest) {
     }
 
     const created = result.data.data.createDesignRequest
+    await notifyMarketingFormSubmission({
+      formId: 'design-request',
+      formTitle: 'ANC Design Request',
+      inquiryType: 'design',
+      submitterName: str(body.requesterName) || null,
+      submitterEmail: str(body.requesterEmail) || null,
+      companyName: str(body.clientName) || null,
+      subject: `[ANC Forms] New design request: ${created.name}`,
+      crmTargetUrl: `${APP_URL}/designs/${created.id}`,
+      sourceUrl: `${APP_URL}/forms/design-request`,
+      summaryFields: {
+        clientName: str(body.clientName),
+        dueDate: str(body.dueDate),
+        deliverableType: deliverable,
+        venueName: str(body.venueName),
+        rushRequest: Boolean(body.rushRequest),
+        sport: str(body.sport),
+      },
+      rawSubmission: { ...body, crmRecordId: created.id, crmObject: 'designRequests' },
+    }).catch((err) => console.error('Design request form notification failed:', err))
+
     return NextResponse.json({ id: created.id, name: created.name })
   } catch (err: any) {
     return NextResponse.json(

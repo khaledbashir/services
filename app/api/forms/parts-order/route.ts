@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { twentyCreate, requireFields, str } from '../_helpers'
 import { notifyOps } from '@/lib/slack'
 import { sendEmail } from '@/lib/email'
+import { notifyMarketingFormSubmission } from '@/lib/marketing-form-notifications'
 
 const SLACK_PARTS_CHANNEL = process.env.SLACK_PARTS_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || '#ops-parts'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,6 +83,26 @@ export async function POST(request: NextRequest) {
         html
       ).catch(console.error)
     }
+
+    await notifyMarketingFormSubmission({
+      formId: 'parts-order',
+      formTitle: 'ANC Parts Order',
+      inquiryType: 'parts',
+      submitterName: str(body.requestorName) || null,
+      submitterEmail: str(body.requestorEmail) || null,
+      companyName: str(body.venueName) || null,
+      subject: `[ANC Forms] New parts order: ${created.name}`,
+      crmTargetUrl: `${APP_URL}/parts-orders/${created.id}`,
+      sourceUrl: `${APP_URL}/forms/parts-order`,
+      summaryFields: {
+        venueName: str(body.venueName),
+        urgency: urgency || 'Normal',
+        quantity: Number(body.quantity) || 1,
+        shippingAddress: str(body.shippingAddress, 1000),
+        partsNeeded: str(body.partsNeeded, 1000),
+      },
+      rawSubmission: { ...body, crmRecordId: created.id, crmObject: 'partsOrders' },
+    }).catch((err) => console.error('Parts order form notification failed:', err))
 
     return NextResponse.json({ id: created.id, name: created.name })
   } catch (err: any) {
