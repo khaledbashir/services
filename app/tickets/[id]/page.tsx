@@ -304,7 +304,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
       const data = await res.json().catch(() => null)
       if (res.ok) {
         setEmailReply('')
-        setEmailStatus({ type: 'success', message: `Email sent to ${data?.to || 'the ticket contact'}` })
+        setEmailStatus({ type: 'success', message: `Email sent from ${data?.from || 'support@anc.com'} to ${data?.to || 'the ticket contact'}` })
         await fetchData()
       } else {
         setEmailStatus({ type: 'error', message: data?.error || 'Email could not be sent' })
@@ -1223,7 +1223,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                 <span className="h-2 w-2 rounded-full bg-[#0A52EF]"></span>
                                 Reply by Email
                               </h3>
-                              <p className="text-xs text-zinc-500 mt-0.5">Client replies come back into this same ticket thread.</p>
+                              <p className="text-xs text-zinc-500 mt-0.5">Sends from support@anc.com and keeps the reply on this ticket.</p>
                             </div>
                             {emailStatus && (
                               <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${emailStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
@@ -1250,7 +1250,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                             <p className="text-[11px] text-zinc-400">
-                              {replyTarget ? 'Sent from the ANC service mailbox. Customer replies come back into this ticket.' : 'Add a contact email in Details before sending a reply.'}
+                              {replyTarget ? 'Client-facing replies use the shared ANC Support mailbox; the ticket records who sent it.' : 'Add a contact email in Details before sending a reply.'}
                             </p>
                             <button
                               type="submit"

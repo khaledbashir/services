@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
       ${whereClause || venueFilter || assignmentFilter ? 'AND' : 'WHERE'}
       NOT (
         COALESCE(v.venue_type, 'sports') <> 'sports'
-        AND COALESCE(e.event_type, 'event') = 'game'
+        AND e.source IS NOT NULL
       )
       GROUP BY
         e.id,

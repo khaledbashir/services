@@ -26,10 +26,12 @@ interface Ticket {
   source?: string
   contact_phone?: string | null
   contact_name?: string | null
+  venue_type?: string | null
 }
 
 type SortField = 'ticket_number' | 'title' | 'venue_name' | 'category' | 'priority' | 'status' | 'assigned_to_name' | 'created_at'
 type SortDir = 'asc' | 'desc'
+type TicketBucket = 'all' | 'sports' | 'wmata' | 'ooh'
 
 // Custom orderings — alphabetical sort doesn't make sense for these.
 const priorityRank: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 }
@@ -61,6 +63,21 @@ const categoryLabels: Record<string, string> = {
   operational: 'Operational',
   general: 'General',
   voicemail: 'Voicemail',
+}
+
+const ticketBucketTabs: Array<{ key: TicketBucket; label: string }> = [
+  { key: 'all', label: 'All Work' },
+  { key: 'sports', label: 'Sports' },
+  { key: 'wmata', label: 'WMATA' },
+  { key: 'ooh', label: 'Out of Home' },
+]
+
+function ticketBucket(ticket: Ticket): Exclude<TicketBucket, 'all'> | 'other' {
+  const haystack = `${ticket.venue_name || ''} ${ticket.title || ''} ${ticket.description || ''}`.toLowerCase()
+  if (haystack.includes('wmata') || haystack.includes('washington metropolitan')) return 'wmata'
+  if ((ticket.venue_type || '').toLowerCase() === 'ooh') return 'ooh'
+  if ((ticket.venue_type || 'sports').toLowerCase() === 'sports') return 'sports'
+  return 'other'
 }
 
 function SortHeader({
@@ -111,6 +128,7 @@ export default function TicketsPage() {
   // requirement that breaks the Next.js build for this page.
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [bucketFilter, setBucketFilter] = useState<TicketBucket>('all')
   const [assignedToFilter, setAssignedToFilter] = useState<string>('')
   const [venueFilter, setVenueFilter] = useState<string>('')
   const [fromFilter, setFromFilter] = useState<string>('')
@@ -358,7 +376,9 @@ export default function TicketsPage() {
     const created = (t as any).created_at ? String((t as any).created_at).slice(0, 10) : ''
     const matchesFrom = !fromFilter || created >= fromFilter
     const matchesTo = !toFilter || created <= toFilter
-    return matchesSearch && matchesStatus && matchesAssignee && matchesVenue && matchesFrom && matchesTo
+    const bucket = ticketBucket(t)
+    const matchesBucket = bucketFilter === 'all' || bucket === bucketFilter
+    return matchesSearch && matchesStatus && matchesBucket && matchesAssignee && matchesVenue && matchesFrom && matchesTo
   })
 
   const sortedTickets = [...filteredTickets].sort((a, b) => {
@@ -402,6 +422,23 @@ export default function TicketsPage() {
     escalated: tickets.filter(t => t.status === 'escalated').length,
     closed: tickets.filter(t => t.status === 'closed').length,
     all: tickets.length,
+  }
+
+  const statusScopedTickets = tickets.filter(t => {
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' && t.status !== 'closed') || t.status === statusFilter
+    const matchesAssignee = !assignedToFilter || (t as any).assigned_to === assignedToFilter
+    const matchesVenue = !venueFilter || (t as any).venue_id === venueFilter
+    const created = (t as any).created_at ? String((t as any).created_at).slice(0, 10) : ''
+    const matchesFrom = !fromFilter || created >= fromFilter
+    const matchesTo = !toFilter || created <= toFilter
+    return matchesStatus && matchesAssignee && matchesVenue && matchesFrom && matchesTo
+  })
+
+  const bucketCounts: Record<TicketBucket, number> = {
+    all: statusScopedTickets.length,
+    sports: statusScopedTickets.filter(t => ticketBucket(t) === 'sports').length,
+    wmata: statusScopedTickets.filter(t => ticketBucket(t) === 'wmata').length,
+    ooh: statusScopedTickets.filter(t => ticketBucket(t) === 'ooh').length,
   }
 
   const getInitials = (name: string) => {
@@ -596,49 +633,74 @@ export default function TicketsPage() {
         )}
 
         {/* Filters bar */}
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-200">
-          <div className="flex items-center gap-0 -mb-px overflow-x-auto">
-            {filterTabs.map(tab => {
-              const isActive = statusFilter === tab.key
-              return (
-                <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
-                  className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                    isActive
-                      ? 'border-zinc-900 text-zinc-900'
-                      : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
-                  }`}>
-                  {tab.label}
-                  <span className={`ml-1.5 text-xs tabular-nums ${isActive ? 'text-zinc-900' : 'text-zinc-400'}`}>
-                    {counts[tab.key]}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-2 pb-2">
-            <div className="relative">
-              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input type="text" placeholder="Search..."
-                value={search} onChange={e => setSearch(e.target.value)}
-                className="w-52 pl-8 pr-3 py-1.5 border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400 text-zinc-900 placeholder:text-zinc-400 bg-white" />
+        <div className="space-y-3 border-b border-zinc-200 pb-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-0 -mb-px overflow-x-auto">
+              {filterTabs.map(tab => {
+                const isActive = statusFilter === tab.key
+                return (
+                  <button key={tab.key} onClick={() => { setStatusFilter(tab.key); clearSelection() }}
+                    className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                      isActive
+                        ? 'border-zinc-900 text-zinc-900'
+                        : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
+                    }`}>
+                    {tab.label}
+                    <span className={`ml-1.5 text-xs tabular-nums ${isActive ? 'text-zinc-900' : 'text-zinc-400'}`}>
+                      {counts[tab.key]}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
-            <div className="flex border border-zinc-200">
-              <button onClick={() => setViewPersisted('cards')}
-                className={`px-2.5 py-1.5 transition-colors ${view === 'cards' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
-                title="Card view">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-              </button>
-              <button onClick={() => setViewPersisted('list')}
-                className={`px-2.5 py-1.5 transition-colors border-l border-zinc-200 ${view === 'list' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
-                title="List view">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
+                <input type="text" placeholder="Search..."
+                  value={search} onChange={e => setSearch(e.target.value)}
+                  className="w-52 pl-8 pr-3 py-1.5 border border-zinc-200 text-sm focus:outline-none focus:border-zinc-400 text-zinc-900 placeholder:text-zinc-400 bg-white" />
+              </div>
+              <div className="flex border border-zinc-200">
+                <button onClick={() => setViewPersisted('cards')}
+                  className={`px-2.5 py-1.5 transition-colors ${view === 'cards' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
+                  title="Card view">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </button>
+                <button onClick={() => setViewPersisted('list')}
+                  className={`px-2.5 py-1.5 transition-colors border-l border-zinc-200 ${view === 'list' ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 hover:text-zinc-700'}`}
+                  title="List view">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {ticketBucketTabs.map(tab => {
+                const isActive = bucketFilter === tab.key
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => { setBucketFilter(tab.key); clearSelection() }}
+                    className={`px-3 py-1.5 text-xs font-semibold whitespace-nowrap border transition-colors ${
+                      isActive
+                        ? 'border-zinc-900 bg-zinc-900 text-white'
+                        : 'border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800 hover:border-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`ml-1.5 tabular-nums ${isActive ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                      {bucketCounts[tab.key]}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>

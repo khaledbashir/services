@@ -1063,6 +1063,7 @@ export async function getActiveDiscoveryVenues(): Promise<DiscoveryVenue[]> {
      LEFT JOIN service_types st ON st.id = vs.service_type_id
      LEFT JOIN events e ON e.venue_id = v.id AND e.league IS NOT NULL
      WHERE COALESCE(v.is_active, true) = true
+       AND COALESCE(v.venue_type, 'sports') = 'sports'
      GROUP BY v.id, m.name
      ORDER BY
        CASE
@@ -1099,7 +1100,10 @@ export async function importDiscoveryEvents(
       automationByVenue.set(venueId, await getVenueAutomationInfo(venueId))
     }
     const automation = automationByVenue.get(venueId)!
-    if ((automation.venue_type || 'sports') !== 'sports' && event.event_type === 'game') {
+    // Joe 2026-05-21: OOH/facility venue schedules should not auto-populate
+    // the Events calendar. Support does not change based on those public
+    // schedules; managers can still create specific OOH events manually.
+    if ((automation.venue_type || 'sports') !== 'sports') {
       skipped++
       continue
     }

@@ -48,6 +48,11 @@ function htmlEscape(s: string) {
   )
 }
 
+function parseCaseNumber(subject: string | null | undefined): number | null {
+  const match = (subject || '').match(/\bCase\s*#?\s*0*(\d+)\b/i)
+  return match ? Number(match[1]) : null
+}
+
 /**
  * Convert plain text → TipTap doc (Twenty's native rich-text format).
  * Splits on blank lines into paragraphs, hard-break inside paragraphs.
@@ -162,6 +167,30 @@ async function addDashboardEmailComment(params: {
   return comment.rows[0]
 }
 
+async function addTwentyEmailReplyToDashboardTicket(params: {
+  ticketNumber: number
+  body: string
+  senderName: string
+  senderEmail: string
+}) {
+  const ticket = await query(
+    `SELECT id, twenty_ticket_id FROM tickets WHERE ticket_number = $1 LIMIT 1`,
+    [params.ticketNumber],
+  )
+  const localTicket = ticket.rows[0]
+  if (!localTicket || !params.body.trim()) return null
+
+  const commentBody = `Email from ${params.senderName} (${params.senderEmail}):\n\n${params.body.slice(0, 5000)}`
+  const comment = await query(
+    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
+     VALUES ($1, $2, $3, false, NOW())
+     RETURNING id`,
+    [localTicket.id, CLAW_STAFF_ID, commentBody],
+  )
+  await query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [localTicket.id])
+  return { comment: comment.rows[0], twentyTicketId: localTicket.twenty_ticket_id || null }
+}
+
 /**
  * Twenty workflow trigger sends us the message after a `message.created` event.
  * We look at the message's thread:
@@ -217,6 +246,7 @@ export async function POST(request: NextRequest) {
     const sender = participants.find((p) => p.role === 'FROM')
     const senderEmail = sender?.handle || ''
     const senderName = sender?.displayName || senderEmail.split('@')[0] || 'Unknown'
+    const subjectCaseNumber = parseCaseNumber(msg.subject)
 
     // 2. Look up the thread to see if it's already linked to a ticket
     const threadData = await gql<{ messageThread: any }>(
@@ -229,6 +259,47 @@ export async function POST(request: NextRequest) {
     )
     const thread = threadData.messageThread
     const linkedTicketId = thread?.messageThreadServiceTicketId
+
+    // 3a. Services-sent support replies use the visible support@anc.com mailbox.
+    // Their client replies may arrive as a fresh CRM thread, so route by Case number.
+    if (!linkedTicketId && subjectCaseNumber) {
+      const dashboardComment = await addTwentyEmailReplyToDashboardTicket({
+        ticketNumber: subjectCaseNumber,
+        body: msg.text || '',
+        senderName,
+        senderEmail,
+      }).catch((e) => ({ error: String(e) }))
+
+      if (dashboardComment && !('error' in dashboardComment) && dashboardComment.twentyTicketId) {
+        const tipTapBody = textToTipTap(msg.text || '')
+        await tw('POST', '/rest/ticketComments', {
+          name: `Reply from ${senderName}`,
+          body: { blocknote: tipTapBody, markdown: (msg.text || '').slice(0, 5000) },
+          commentType: 'CLIENT_VISIBLE',
+          isInternal: false,
+          authorName: `${senderName} <${senderEmail}>`,
+          serviceTicketId: dashboardComment.twentyTicketId,
+        }).catch((e) => console.error('[email-to-ticket] subject case CRM comment failed:', e))
+
+        await gql(
+          `mutation($id: UUID!, $ticketId: UUID!){
+            updateMessageThread(id:$id, data:{messageThreadServiceTicketId:$ticketId}){id}
+          }`,
+          { id: msg.messageThreadId, ticketId: dashboardComment.twentyTicketId },
+        ).catch((e) => console.error('[email-to-ticket] subject case thread link failed:', e))
+
+        return NextResponse.json({
+          action: 'comment_created_from_case_subject',
+          ticketNumber: subjectCaseNumber,
+          ticketId: dashboardComment.twentyTicketId,
+          dashboardComment,
+        })
+      }
+
+      if (dashboardComment && 'error' in dashboardComment) {
+        console.warn('[email-to-ticket] subject case dashboard comment failed:', dashboardComment.error)
+      }
+    }
 
     // 3a. Reply path — add a comment to the existing ticket
     if (linkedTicketId) {

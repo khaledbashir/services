@@ -1,4 +1,5 @@
 import { query } from '@/lib/db'
+import { sendSupportMailboxEmail } from '@/lib/crm-support-email'
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 
@@ -163,6 +164,36 @@ export async function sendTicketDistributionEmail(opts: {
 }
 
 export async function sendTicketReplyEmail(opts: {
+  to: string
+  ticketTitle: string
+  ticketNumber: number
+  venueName: string
+  body: string
+  authorName: string
+}): Promise<{ sent: boolean; from?: string; provider?: string; error?: string }> {
+  const caseNum = String(opts.ticketNumber).padStart(8, '0')
+  const bodyContent = `
+    <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
+    <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
+  `
+
+  try {
+    const result = await sendSupportMailboxEmail({
+      to: [opts.to],
+      subject: `Re: Case ${caseNum} — ${opts.ticketTitle}`,
+      html: ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
+    })
+    return { sent: true, from: result.from, provider: result.provider }
+  } catch (err) {
+    console.error('[email] Failed to send ticket reply through CRM support mailbox:', err)
+    return {
+      sent: false,
+      error: err instanceof Error ? err.message : 'CRM support mailbox send failed',
+    }
+  }
+}
+
+export async function sendTicketReplyEmailViaResend(opts: {
   to: string
   ticketTitle: string
   ticketNumber: number

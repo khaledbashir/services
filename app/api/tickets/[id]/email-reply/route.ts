@@ -145,7 +145,7 @@ export async function POST(
     }
 
     const authorName = user.fullName || user.userName || 'ANC Support'
-    const sent = await sendTicketReplyEmail({
+    const emailResult = await sendTicketReplyEmail({
       to: recipient,
       ticketTitle: ticket.title,
       ticketNumber: ticket.ticket_number,
@@ -154,11 +154,12 @@ export async function POST(
       authorName,
     })
 
-    if (!sent) {
-      return NextResponse.json({ error: 'Email could not be sent' }, { status: 502 })
+    if (!emailResult.sent) {
+      return NextResponse.json({ error: emailResult.error || 'Email could not be sent' }, { status: 502 })
     }
 
-    const commentBody = `Email sent to ${recipient} by ${authorName}:\n\n${replyBody}`
+    const sentFrom = emailResult.from || 'support@anc.com'
+    const commentBody = `Email sent to ${recipient} from ${sentFrom} by ${authorName}:\n\n${replyBody}`
     const commentResult = await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
        VALUES ($1, $2, $3, false, NOW())
@@ -182,6 +183,8 @@ export async function POST(
         entity_name: ticket.title,
         venue_name: ticket.venue_name,
         to: recipient,
+        from: sentFrom,
+        provider: emailResult.provider,
       })]
     )
 
@@ -194,7 +197,13 @@ export async function POST(
       }).catch(() => {})
     }
 
-    return NextResponse.json({ ok: true, comment: commentResult.rows[0], to: recipient })
+    return NextResponse.json({
+      ok: true,
+      comment: commentResult.rows[0],
+      to: recipient,
+      from: sentFrom,
+      provider: emailResult.provider,
+    })
   } catch (err) {
     console.error('Error sending ticket email reply:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

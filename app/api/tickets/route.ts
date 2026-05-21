@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
               COALESCE(t.source, 'web') as source,
               t.contact_phone, t.contact_name,
               v.name as venue_name,
+              COALESCE(v.venue_type, 'sports') as venue_type,
               e.summary as event_name,
               s1.full_name as created_by_name,
               s2.full_name as assigned_to_name,

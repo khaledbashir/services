@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       WHERE e.event_date BETWEEN $1 AND $2
         AND NOT (
           COALESCE(v.venue_type, 'sports') <> 'sports'
-          AND COALESCE(e.event_type, 'event') = 'game'
+          AND e.source IS NOT NULL
         )
       ORDER BY e.start_time`,
       [start, end]
