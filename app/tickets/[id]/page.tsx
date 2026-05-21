@@ -26,6 +26,7 @@ interface TicketDetail {
   source: string; ticket_type: string
   contact_name: string | null; contact_email: string | null; contact_phone: string | null
   venue_contact_email: string | null
+  venue_distribution_emails: string[]
   parent_ticket_id: string | null; parent_ticket_number: number | null; parent_ticket_title: string | null
   sf_case_number: string | null
   image_url: string | null
@@ -435,15 +436,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     .reverse()
     .map(extractInboundEmail)
     .find(Boolean) || null
+  const venueDistributionEmail = Array.isArray(ticket.venue_distribution_emails)
+    ? ticket.venue_distribution_emails.find(email => email && email.includes('@'))
+    : null
   const replyTarget = ticket.contact_email
     ? { email: ticket.contact_email, source: 'Ticket contact' }
     : latestInboundEmail
       ? { email: latestInboundEmail, source: 'Latest inbound email' }
-      : extractEmail(ticket.original_message) || extractEmail(ticket.description)
-        ? { email: extractEmail(ticket.original_message) || extractEmail(ticket.description)!, source: 'Original message' }
-        : ticket.venue_contact_email
-          ? { email: ticket.venue_contact_email, source: 'Venue contact' }
-          : null
+      : ticket.venue_contact_email
+        ? { email: ticket.venue_contact_email, source: 'Venue primary contact' }
+        : venueDistributionEmail
+          ? { email: venueDistributionEmail, source: 'Venue distribution list' }
+          : extractEmail(ticket.original_message) || extractEmail(ticket.description)
+            ? { email: extractEmail(ticket.original_message) || extractEmail(ticket.description)!, source: 'Original message' }
+            : null
   const displayAttachments: TicketAttachment[] = [
     ...(ticket.image_url ? [{
       id: 'original-ticket-image',

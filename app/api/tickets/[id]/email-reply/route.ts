@@ -109,7 +109,8 @@ export async function POST(
          t.original_message,
          t.twenty_ticket_id,
          v.name as venue_name,
-         v.primary_contact_email
+         v.primary_contact_email,
+         COALESCE(v.distribution_emails, '{}') as distribution_emails
        FROM tickets t
        LEFT JOIN venues v ON v.id = t.venue_id
        WHERE t.id = $1`,
@@ -130,14 +131,18 @@ export async function POST(
     const latestInboundEmail = commentsResult.rows
       .map((row: { body: string | null }) => extractInboundEmail(row.body))
       .find(Boolean)
+    const venueDistributionEmail = Array.isArray(ticket.distribution_emails)
+      ? ticket.distribution_emails.find((email: string) => email && email.includes('@'))
+      : null
 
     const recipient = String(
       to ||
       ticket.contact_email ||
       latestInboundEmail ||
+      ticket.primary_contact_email ||
+      venueDistributionEmail ||
       extractEmail(ticket.original_message) ||
       extractEmail(ticket.description) ||
-      ticket.primary_contact_email ||
       ''
     ).trim()
     if (!recipient || !recipient.includes('@')) {
