@@ -21,7 +21,7 @@ Goal: track what is actually ready for the HubSpot retirement and Alison's marke
 - [ ] LinkedIn account connected in Postiz
 - [ ] X account connected in Postiz
 - [ ] Instagram account connected in Postiz
-- [ ] Website form division-lead notification sender wired into the Forms app
+- [x] Website form division-lead notification sender wired into the Forms app
 - [x] Salesforce/new CRM automatic marketing eligibility sync implemented locally
 - [x] Bounce webhook/provider suppression tracking implemented locally
 - [x] Forms app division-lead notification helper implemented locally
@@ -29,10 +29,12 @@ Goal: track what is actually ready for the HubSpot retirement and Alison's marke
 - [x] Formal newsletter/social approval workflow implemented locally
 - [x] HubSpot form submission history import/timeline archive implemented locally
 - [x] Dashboard imported-bucket patch is committed on `codex/option-b-client-model`
-- [ ] Marketing eligibility sync deployed, scheduled, and verified in production
-- [ ] Bounce webhook endpoint configured in provider and verified in production
+- [x] Marketing eligibility sync deployed and dry-run verified in production
+- [ ] Marketing eligibility sync scheduled in production
+- [x] Bounce webhook endpoint deployed and protected in production
+- [ ] Bounce webhook endpoint configured in provider and verified with a live provider event
 - [ ] Forms app division-lead notifications verified with live submissions
-- [ ] Template library/approval workflow/form history deployed and verified in production
+- [x] Template library/approval workflow/form history deployed and API-smoke-verified in production
 
 ## HubSpot Backup And Import
 
@@ -64,6 +66,7 @@ Checked:
 - [x] Automation v3 workflows exported: 36
 - [x] Migration summary, import status, and crosswalk docs created
 - [x] Pre-import DB backup created: `pre-import-marketinghub-backup-20260521T213635Z.sql`
+- [x] Pre-form-submission import DB backup created: `pre-form-submission-import-20260521T224740Z.sql`
 
 Do not use:
 
@@ -87,8 +90,9 @@ Checked:
 
 Not done:
 
-- [x] New CRM/Twenty eligibility sync route is implemented locally at `/api/cron/marketing-eligibility-sync`
-- [ ] New CRM/Twenty eligibility sync is not deployed/scheduled/verified yet
+- [x] New CRM/Twenty eligibility sync route is deployed at `/api/cron/marketing-eligibility-sync`
+- [x] New CRM/Twenty eligibility sync dry run returned `200` in production
+- [ ] New CRM/Twenty eligibility sync is not scheduled yet
 - [ ] Person/contact-level marketing status field in CRM UI is not verified as a first-class operator control
 - [ ] Candidate review workflow for contacts that can become marketing is not built yet
 
@@ -117,13 +121,14 @@ Checked:
 
 Not done:
 
-- [x] Bounce/complaint/unsubscribe webhook handler is implemented locally at `/api/webhooks/marketing-email-events`
+- [x] Bounce/complaint/unsubscribe webhook handler is deployed at `/api/webhooks/marketing-email-events`
+- [x] Bounce webhook rejects unauthenticated events with `401` in production
 - [ ] Bounce webhook is not configured in the provider dashboard yet
 - [ ] Bounce webhook is not verified with a live provider event yet
 - [x] Alison-facing reusable template library is implemented locally
 - [ ] Imported historical HubSpot email performance metrics are not fully recreated in the new dashboard yet
 - [x] Local dashboard patch for imported/suppressed/non-marketing/candidate buckets is committed
-- [ ] Dashboard patch is not deployed/verified in production yet
+- [x] Dashboard patch is deployed and authenticated API smoke test returned `200`
 
 Demo-safe claim:
 
@@ -147,12 +152,14 @@ Checked:
 Not done:
 
 - [ ] Website embed inventory is not fully mapped against current ANC site pages
-- [x] Shared form notification helper is wired locally into design request, print request, and parts order submissions
+- [x] Shared form notification helper is deployed into design request, print request, and parts order submissions
 - [ ] Live form submission notification test is not verified yet
 - [ ] Division lead owner map is not finalized
 - [ ] Salesforce write-back from form submission is not verified
-- [x] HubSpot submission history import route and Marketing Hub timeline/archive are implemented locally
-- [ ] HubSpot submission history is not deployed/imported/verified in production yet
+- [x] HubSpot submission history import route and Marketing Hub timeline/archive are deployed
+- [x] HubSpot form submission history imported into Marketing Hub archive: 668 submissions with usable email; 82 submissions skipped because HubSpot did not provide usable email
+- [x] Existing Twenty CRM people matched by email and received HubSpot form timeline notes: 96 notes linked
+- [x] Orphan notes from failed attach attempts were soft-deleted; active orphan HubSpot form notes: 0
 
 Demo-safe claim:
 
@@ -202,7 +209,7 @@ Not done:
 - [x] Formal approval step is implemented locally in Marketing Hub
 - [x] Social approval queue/status workflow is implemented locally
 - [x] Default approver group is stored on approval requests: Jerry, Kirsten, Joe, Jireh, John
-- [ ] Approval workflow is not deployed/verified in production yet
+- [x] Approval workflow is deployed and authenticated API smoke test returned `200`
 
 Demo-safe claim:
 
@@ -227,8 +234,8 @@ Checked:
 
 Not done:
 
-- [x] Reusable native newsletter templates are implemented locally
-- [x] Reusable social templates are implemented locally
+- [x] Reusable native newsletter templates are deployed
+- [x] Reusable social templates are deployed
 - [ ] Brand asset library is not curated into the new UI yet
 - [ ] Alison has not reviewed/approved updated template direction
 
