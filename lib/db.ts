@@ -511,6 +511,7 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`ALTER TABLE automation_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`)
 
     // Toggle for the synchronous workflow-success Slack blasts. Joe asked
     // 2026-04-29 to silence venue-channel pings on completed check-ins /
