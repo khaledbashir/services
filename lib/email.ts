@@ -148,17 +148,15 @@ export async function sendTicketDistributionEmail(opts: {
   }
 
   try {
-    const ok = await sendEmail(
-      venue.distribution_emails,
-      subjectMap[opts.type],
-      ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
-      replyTo
-    )
-    if (ok === false) {
-      return { sent: false, recipient_count: venue.distribution_emails.length, reason: 'send_failed' }
-    }
+    await sendSupportMailboxEmail({
+      to: venue.distribution_emails,
+      subject: subjectMap[opts.type],
+      html: ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
+      replyTo,
+    })
     return { sent: true, recipient_count: venue.distribution_emails.length }
   } catch (e) {
+    console.error('[email] Failed to send ticket distribution through CRM support mailbox:', e)
     return { sent: false, recipient_count: venue.distribution_emails.length, reason: 'send_failed' }
   }
 }

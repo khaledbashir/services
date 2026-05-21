@@ -3,7 +3,7 @@ import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { parseTicketReplyAddress } from '@/lib/email'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const RESEND_RECEIVING_API_KEY = process.env.RESEND_RECEIVING_API_KEY || ''
 const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
 
 /**
@@ -36,6 +36,30 @@ function cleanEmailReply(body: string): string {
   return result
 }
 
+function textFromHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function pickEmailBody(data: Record<string, any>): string {
+  const candidates = [
+    data.text,
+    data.text_body,
+    data.plain,
+    data.plainText,
+    data.body,
+    data.html ? textFromHtml(String(data.html)) : '',
+    data.html_body ? textFromHtml(String(data.html_body)) : '',
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+
+  return ''
+}
+
 // Resend inbound email webhook
 // Webhook sends metadata only — we call Resend API to get the full email body
 
@@ -54,20 +78,20 @@ export async function POST(request: NextRequest) {
     const subject = data.subject || 'No subject'
 
     // Webhook payload does NOT include email body — must fetch via Receiving API
-    let emailBody = data.text || data.body || ''
+    let emailBody = pickEmailBody(data)
 
-    if (emailId && RESEND_API_KEY && !emailBody) {
+    if (emailId && RESEND_RECEIVING_API_KEY && !emailBody) {
       try {
         // Use the Receiving API endpoint (not /emails/{id} which is for outbound only)
         const emailRes = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
-          headers: { 'Authorization': `Bearer ${RESEND_API_KEY}` },
+          headers: { 'Authorization': `Bearer ${RESEND_RECEIVING_API_KEY}` },
         })
         if (emailRes.ok) {
           const emailData = await emailRes.json()
-          emailBody = emailData.text || emailData.html?.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || ''
+          emailBody = pickEmailBody(emailData)
           console.log(`[email-webhook] Fetched email body (${emailBody.length} chars) via Receiving API`)
         } else {
-          console.error(`[email-webhook] Receiving API returned ${emailRes.status} for email ${emailId}`)
+          console.warn(`[email-webhook] Receiving API returned ${emailRes.status} for email ${emailId}; continuing with webhook payload only`)
         }
       } catch (e) {
         console.error('[email-webhook] Failed to fetch email body from Resend:', e)
@@ -365,10 +389,11 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
 
     const ticket = ticketRes.rows[0]
     console.log(`[email-webhook] Ticket reply raw body (${emailBody.length} chars): ${emailBody.substring(0, 200)}`)
-    const cleanBody = cleanEmailReply(emailBody || subject)
+    const cleanBody = cleanEmailReply(emailBody)
     console.log(`[email-webhook] Cleaned body (${cleanBody.length} chars): ${cleanBody.substring(0, 200)}`)
 
     if (!cleanBody) {
+      console.warn(`[email-webhook] Empty reply body for ticket #${ticketNumber}; subject was "${subject}"`)
       return NextResponse.json({ ok: true, message: 'Empty reply body after cleanup' })
     }
 

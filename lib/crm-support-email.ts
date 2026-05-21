@@ -126,6 +126,7 @@ export async function sendSupportMailboxEmail(input: {
   to: string[]
   subject: string
   html: string
+  replyTo?: string
   cc?: string[]
   bcc?: string[]
 }): Promise<SupportMailboxSendResult> {
@@ -144,6 +145,7 @@ export async function sendSupportMailboxEmail(input: {
           subject: input.subject,
           body: { contentType: 'HTML', content: input.html },
           toRecipients: input.to.map(recipient),
+          replyTo: input.replyTo ? [recipient(input.replyTo)] : [],
           ccRecipients: input.cc?.map(recipient) || [],
           bccRecipients: input.bcc?.map(recipient) || [],
         },

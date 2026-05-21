@@ -21,6 +21,20 @@ interface SyncResult {
   venueUnmatched: string[]
 }
 
+function formatTicketNumberForTwenty(ticketNumber: string | number | null | undefined): string {
+  const value = String(ticketNumber ?? '').trim()
+  if (!value) return ''
+
+  // Twenty's ServiceTicket ticketNumber is a text field and rejects bare
+  // numeric strings. Preserve imported issue ids, but label native Services
+  // tickets with the T- prefix used in Twenty views.
+  if (/^\d+$/.test(value)) {
+    return `T-${value.padStart(5, '0')}`
+  }
+
+  return value
+}
+
 // --- Rate Limiter ---
 let _reqCount = 0
 let _windowStart = Date.now()
@@ -243,7 +257,7 @@ export async function syncTicketsToTwenty(
   dbTickets: Array<{
     id: string
     title: string
-    ticket_number: string
+    ticket_number: string | number
     status: string
     priority: string
     category?: string
@@ -310,6 +324,7 @@ export async function syncTicketsToTwenty(
 
   for (const ticket of dbTickets) {
     try {
+      const ticketNumber = formatTicketNumberForTwenty(ticket.ticket_number)
       const venueId = resolveVenueId(ticket.venue_name, venueIndex)
       if (venueId) {
         venueMatches++
@@ -320,8 +335,8 @@ export async function syncTicketsToTwenty(
       }
 
       const twentyData: Record<string, unknown> = {
-        name: ticket.title || `Ticket ${ticket.ticket_number}`,
-        ticketNumber: ticket.ticket_number,
+        name: ticket.title || `Ticket ${ticketNumber}`,
+        ticketNumber,
         ticketStatus: statusMap[ticket.status] || 'TICKET_NEW',
         priority: priorityMap[ticket.priority] || null,
         category: categoryMap[ticket.category || ''] || null,
