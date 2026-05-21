@@ -43,6 +43,7 @@ const quickLinks = [
   { label: 'Today dashboard', href: '/dashboard' },
   { label: 'Events', href: '/events' },
   { label: 'Tickets', href: '/tickets' },
+  { label: 'New walkthrough', href: '/walkthroughs/new' },
   { label: 'Design requests', href: '/designs' },
 ]
 

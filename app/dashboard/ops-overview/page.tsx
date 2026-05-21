@@ -14,6 +14,7 @@ type MetricCard = {
   accent: string;
   note: string;
   loading: boolean;
+  linkLabel?: string;
 };
 
 async function readMetric(load: () => Promise<number>): Promise<number | null> {
@@ -47,7 +48,7 @@ function MetricTile({ card }: { card: MetricCard }) {
         )}
       </div>
       <div className="dash-note">{card.note}</div>
-      <div className="dash-link">Open CRM view</div>
+      <div className="dash-link">{card.linkLabel || "Open CRM view"}</div>
     </Link>
   );
 }
@@ -112,9 +113,10 @@ export default async function OpsOverviewIframePage() {
       label: "Problem Walkthroughs",
       value: formatMetricValue(problemWalkthroughs ?? 0),
       loading: problemWalkthroughs == null,
-      href: "https://abc-twenty.izcgmb.easypanel.host/objects/walkthroughLogs",
+      href: "/walkthroughs",
       accent: "#EF9F27",
       note: problemWalkthroughs == null ? "Retrying shortly..." : "Walkthrough logs flagged as problems",
+      linkLabel: "Open Services walkthroughs",
     },
     {
       label: "Active Venues",

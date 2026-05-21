@@ -198,6 +198,7 @@ export function Sidebar() {
       links: [
         { href: '/noco', label: 'All Tables' },
         { href: '/walkthroughs', label: 'Walkthroughs' },
+        { href: '/walkthroughs/new', label: 'New Walkthrough' },
         { href: '/issues', label: 'Issues' },
         { href: '/displays', label: 'Displays' },
         { href: '/display-locations', label: 'Display Locations' },
