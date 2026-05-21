@@ -274,18 +274,19 @@ export function Sidebar() {
     //     { href: '/voice-agents', label: 'All voice agents' },
     //   ],
     // },
-    {
-      key: 'external',
-      label: 'External',
-      icon: <Icon>{IC.people}</Icon>,
-      role: 'manager',
-      links: [
-        { href: '/clients', label: 'Clients' },
-        { href: '/portals', label: 'Client Portals' },
-        { href: '/service-log', label: 'Service Log', role: 'manager' },
-        ...(SHOW_VOICE_AGENT_DEMO ? [{ href: '/voice-agent-demo', label: 'Voice Agent Demo' }] : []),
-      ],
-    },
+    // External section hidden — exposes multi-tenant architecture to ANC staff
+    // {
+    //   key: 'external',
+    //   label: 'External',
+    //   icon: <Icon>{IC.people}</Icon>,
+    //   role: 'manager',
+    //   links: [
+    //     { href: '/clients', label: 'Clients' },
+    //     { href: '/portals', label: 'Client Portals' },
+    //     { href: '/service-log', label: 'Service Log', role: 'manager' },
+    //     ...(SHOW_VOICE_AGENT_DEMO ? [{ href: '/voice-agent-demo', label: 'Voice Agent Demo' }] : []),
+    //   ],
+    // },
     // {
     //   key: 'gamification',
     //   label: 'Leaderboard',
@@ -296,20 +297,22 @@ export function Sidebar() {
     //     { href: '/gamification/feed', label: 'Activity Feed' },
     //   ],
     // },
-    {
-      key: 'admin',
-      label: 'Admin',
-      icon: <Icon>{IC.system}</Icon>,
-      role: 'tech_support',
-      links: [
-        { href: '/staff', label: 'Staff', role: 'admin' },
-        { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
-        // { href: '/admin/tenants', label: 'Client Switchboard', role: 'admin' },
-        { href: '/expenses', label: 'Expenses', role: 'admin' },
-        { href: '/settings', label: 'Settings', role: 'admin' },
-        { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
-      ],
-    },
+    // Admin section hidden from sidebar — pages still accessible by URL.
+    // Prevents ANC admin-role staff from seeing infrastructure tooling.
+    // {
+    //   key: 'admin',
+    //   label: 'Admin',
+    //   icon: <Icon>{IC.system}</Icon>,
+    //   role: 'tech_support',
+    //   links: [
+    //     { href: '/staff', label: 'Staff', role: 'admin' },
+    //     { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
+    //     { href: '/admin/tenants', label: 'Client Switchboard', role: 'admin' },
+    //     { href: '/expenses', label: 'Expenses', role: 'admin' },
+    //     { href: '/settings', label: 'Settings', role: 'admin' },
+    //     { href: '/preview-tech', label: 'Preview Staff View', role: 'manager' },
+    //   ],
+    // },
   ], [userRole, isTechnician, isAdmin, isTechSupport, isDesigner, isDesignContractor])
 
   const isLinkActive = (href: string, exact = false) =>
