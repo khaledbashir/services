@@ -118,26 +118,38 @@ export async function POST(request: NextRequest) {
     const isReplyOrForward = /^(Re|Fwd|Fw)\s*:/i.test(subject)
     const normalizedSubject = subject.replace(/^(Re|Fwd|Fw)\s*:\s*/gi, '').trim()
 
-    if (normalizedSubject) {
-      // Look for an existing open ticket with the same base subject
-      const threadMatch = await query(
-        `SELECT t.id, t.ticket_number, t.title, t.venue_id, v.name as venue_name, v.slack_channel_id
-         FROM tickets t
-         LEFT JOIN venues v ON t.venue_id = v.id
-         WHERE (
-           REPLACE(REPLACE(t.title, 'Re: ', ''), 'Fwd: ', '') ILIKE $1
-           OR t.title ILIKE $2
-         )
-         AND t.status != 'closed'
-         ORDER BY t.created_at DESC
-         LIMIT 1`,
-        [normalizedSubject, normalizedSubject]
-      )
+    if (isReplyOrForward) {
+      // 1. Try extracting ticket number from "Case XXXXXXXX" prefix in subject
+      const caseNumMatch = normalizedSubject.match(/^Case\s+0*(\d+)\s*[—\-–]/i)
+      if (caseNumMatch) {
+        const extractedTicketNum = parseInt(caseNumMatch[1])
+        console.log(`[email-webhook] Extracted ticket #${extractedTicketNum} from subject: "${subject}"`)
+        return await handleTicketReply(extractedTicketNum, senderEmail, senderName, emailBody, subject)
+      }
 
-      if (threadMatch.rows.length > 0) {
-        const existing = threadMatch.rows[0]
-        console.log(`[email-webhook] Thread match — adding reply to ticket #${existing.ticket_number} (subject: "${normalizedSubject}")`)
-        return await handleTicketReply(existing.ticket_number, senderEmail, senderName, emailBody, subject)
+      // 2. Fallback: look for an existing open ticket with the same base subject
+      //    Strip any "Case XXXXXXXX —" prefix to get the bare title for matching
+      const bareSubject = normalizedSubject.replace(/^Case\s+\d+\s*[—\-–]\s*/i, '').trim()
+      if (bareSubject) {
+        const threadMatch = await query(
+          `SELECT t.id, t.ticket_number, t.title, t.venue_id, v.name as venue_name, v.slack_channel_id
+           FROM tickets t
+           LEFT JOIN venues v ON t.venue_id = v.id
+           WHERE (
+             REPLACE(REPLACE(t.title, 'Re: ', ''), 'Fwd: ', '') ILIKE $1
+             OR t.title ILIKE $2
+           )
+           AND t.status != 'closed'
+           ORDER BY t.created_at DESC
+           LIMIT 1`,
+          [bareSubject, bareSubject]
+        )
+
+        if (threadMatch.rows.length > 0) {
+          const existing = threadMatch.rows[0]
+          console.log(`[email-webhook] Thread match — adding reply to ticket #${existing.ticket_number} (subject: "${bareSubject}")`)
+          return await handleTicketReply(existing.ticket_number, senderEmail, senderName, emailBody, subject)
+        }
       }
     }
 

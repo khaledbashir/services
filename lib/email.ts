@@ -170,6 +170,7 @@ export async function sendTicketReplyEmail(opts: {
   authorName: string
 }): Promise<{ sent: boolean; from?: string; provider?: string; error?: string }> {
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
+  const replyTo = ticketReplyAddress(opts.ticketNumber)
   const bodyContent = `
     <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
     <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
@@ -180,6 +181,7 @@ export async function sendTicketReplyEmail(opts: {
       to: [opts.to],
       subject: `Re: Case ${caseNum} — ${opts.ticketTitle}`,
       html: ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
+      replyTo,
     })
     return { sent: true, from: result.from, provider: result.provider }
   } catch (err) {
