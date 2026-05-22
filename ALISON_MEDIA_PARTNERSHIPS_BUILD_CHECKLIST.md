@@ -185,6 +185,9 @@ Checked:
 Not done:
 
 - [ ] LinkedIn is not connected in Postiz
+- [x] LinkedIn OAuth credentials are installed on the running Postiz service; connect flow no longer sends `client_id=undefined`
+- [ ] LinkedIn account/page authorization in Postiz is still pending
+- [ ] LinkedIn Community Management API access is requested but not approved yet
 - [ ] X is not connected in Postiz
 - [ ] Instagram is not connected in Postiz
 - [ ] One scheduled draft per official platform is not verified
@@ -193,6 +196,10 @@ Not done:
 Demo-safe claim:
 
 "Slack is connected in Postiz. LinkedIn, X, and Instagram still need official authorization."
+
+Technical note:
+
+Postiz expects `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET`. The LinkedIn app must allow `https://abc-postiz.izcgmb.easypanel.host/integrations/social/linkedin` and `https://abc-postiz.izcgmb.easypanel.host/integrations/social/linkedin-page` as redirect URLs.
 
 ## Alison Requirement 5: Approval Process
 
