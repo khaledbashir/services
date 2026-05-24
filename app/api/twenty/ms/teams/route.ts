@@ -17,7 +17,7 @@ async function fetchAll(): Promise<CompanyRecord[]> {
   const items: CompanyRecord[] = []
   let cursor: string | null = null
   for (let page = 0; page < 50; page++) {
-    const url = cursor
+    const url: string = cursor
       ? `companies?limit=60&starting_after=${cursor}`
       : 'companies?limit=60'
     const res = await fetch(`${TWENTY_BASE}/rest/${url}`, {
