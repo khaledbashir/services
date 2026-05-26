@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
 import { DiscoveryReviewCard } from '@/components/discovery-review-card'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
+import { todayInOperationsTimeZone } from '@/lib/ops-date'
 
 interface Event {
   id: string
@@ -104,7 +105,7 @@ function EventsPageInner() {
     : 'week'
   const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all' | 'pending_workflow'>(initialFilter)
   const [search, setSearch] = useState('')
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(dateKeyToDate(todayInOperationsTimeZone())))
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
   const [selectedVenues, setSelectedVenues] = useState<Set<string>>(new Set())
@@ -174,9 +175,7 @@ function EventsPageInner() {
     }
 
     if (view === 'calendar') {
-      const [start, end] = getDateRange(filter, currentWeekStart)
-      const startStr = start.toISOString().split('T')[0]
-      const endStr = end.toISOString().split('T')[0]
+      const [startStr, endStr] = getDateRangeKeys(filter, currentWeekStart)
       const calRes = await fetch(`/api/events/calendar?start=${startStr}&end=${endStr}`)
       if (calRes.ok) {
         setCalendarEvents(await calRes.json())
@@ -191,13 +190,22 @@ function EventsPageInner() {
     return new Date(d.setDate(diff))
   }
 
-  function getDateRange(filter: string, weekStart: Date) {
+  function dateKeyToDate(dateKey: string): Date {
+    const [year, month, day] = dateKey.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
+  function dateToKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  function getDateRangeKeys(filter: string, weekStart: Date): [string, string] {
     const start = new Date(weekStart)
     const end = new Date(weekStart)
 
     if (filter === 'today') {
-      const today = new Date()
-      return [today, today]
+      const todayKey = todayInOperationsTimeZone()
+      return [todayKey, todayKey]
     } else if (filter === 'week') {
       end.setDate(end.getDate() + 6)
     } else if (filter === 'month') {
@@ -205,7 +213,7 @@ function EventsPageInner() {
     } else {
       end.setFullYear(end.getFullYear() + 1)
     }
-    return [start, end]
+    return [dateToKey(start), dateToKey(end)]
   }
 
   useEffect(() => {
@@ -652,8 +660,7 @@ function EventsPageInner() {
       weekCells.push(dayDate)
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const todayKey = todayInOperationsTimeZone()
 
     return (
       <div className="space-y-4">
@@ -669,7 +676,7 @@ function EventsPageInner() {
             ← Previous Week
           </button>
           <button
-            onClick={() => setCurrentWeekStart(getWeekStart(new Date()))}
+            onClick={() => setCurrentWeekStart(getWeekStart(dateKeyToDate(todayInOperationsTimeZone())))}
             className="px-3 py-2 text-sm font-medium hover:bg-zinc-100 rounded transition-colors dark:hover:bg-white/5"
           >
             Current Week
@@ -689,7 +696,7 @@ function EventsPageInner() {
         <div className="bg-white rounded border border-[#E8E8E8] shadow-sm overflow-hidden">
           <div className="grid grid-cols-7 border-b border-[#E8E8E8] bg-zinc-50">
             {weekCells.map((date, i) => {
-              const isToday = date.toDateString() === today.toDateString()
+              const isToday = dateToKey(date) === todayKey
               return (
                 <div
                   key={i}
