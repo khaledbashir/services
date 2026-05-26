@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuth } from '@/lib/useAuth'
 import { Skeleton } from '@/components/skeleton'
+import { todayInOperationsTimeZone } from '@/lib/ops-date'
 
 interface MyEvent {
   id: string
@@ -47,7 +48,7 @@ export default function MyEventsPage() {
     fetchEvents()
   }, [])
 
-  const todayKey = new Date().toISOString().split('T')[0]
+  const todayKey = todayInOperationsTimeZone()
   const filteredEvents = useMemo(() => {
     const q = search.trim().toLowerCase()
     return events.filter((event) => {

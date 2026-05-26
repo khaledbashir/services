@@ -1,4 +1,7 @@
-export const OPERATIONS_TIME_ZONE = process.env.OPERATIONS_TIME_ZONE || 'America/New_York'
+export const OPERATIONS_TIME_ZONE =
+  typeof process !== 'undefined'
+    ? process.env.NEXT_PUBLIC_OPERATIONS_TIME_ZONE || process.env.OPERATIONS_TIME_ZONE || 'America/New_York'
+    : 'America/New_York'
 
 type DateLike = Date | string | number
 
