@@ -9,6 +9,7 @@ import { resolve } from 'path'
 import { getAuthUser } from '@/lib/rbac'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
 import { awardPointsOnce } from '@/lib/gamification'
+import { clearPostGameReminderMessages } from '@/lib/workflow-reminder-cleanup'
 
 const workflowLabels: Record<string, { label: string; emoji: string }> = {
   check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
@@ -264,6 +265,12 @@ export async function POST(
       'UPDATE events SET workflow_status = $1 WHERE id = $2',
       [eventStatus, eventId]
     )
+
+    if (submissionType === 'post_game_report') {
+      clearPostGameReminderMessages(eventId).catch((cleanupErr) => {
+        console.error('[workflow] failed to clear post-game Slack reminders:', cleanupErr)
+      })
+    }
 
     // --- CRM SYNC: push workflow status change to Twenty ---
     ;(async () => {

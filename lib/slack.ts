@@ -61,6 +61,27 @@ export async function sendSlackMessageDetailed(msg: SlackMessage & { thread_ts?:
   }
 }
 
+export async function deleteSlackMessage(channel: string, ts: string): Promise<boolean> {
+  if (!SLACK_BOT_TOKEN) {
+    console.warn('SLACK_BOT_TOKEN not set, skipping Slack message delete')
+    return false
+  }
+
+  try {
+    const data = await slackApi('chat.delete', { channel, ts })
+    if (!data.ok) {
+      if (data.error !== 'message_not_found') {
+        console.error('Slack delete API error:', data.error)
+      }
+      return data.error === 'message_not_found'
+    }
+    return true
+  } catch (err) {
+    console.error('Failed to delete Slack message:', err)
+    return false
+  }
+}
+
 const DASHBOARD_URL_BASE = 'https://abc-anc-services.izcgmb.easypanel.host'
 const DEFAULT_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 

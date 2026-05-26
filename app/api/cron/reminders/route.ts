@@ -3,7 +3,8 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { sendSlackMessage } from '@/lib/slack'
+import { sendSlackMessage, sendSlackMessageDetailed } from '@/lib/slack'
+import { ensureWorkflowReminderTracking, recordPostGameReminder } from '@/lib/workflow-reminder-cleanup'
 
 // Called every 15 min by EasyPanel cron or external scheduler
 // Sends reminders to techs who haven't checked in before their events
@@ -21,6 +22,8 @@ function staffMention(fullName: string, slackUserIds: string[] | null | undefine
 
 export async function GET() {
   try {
+    await ensureWorkflowReminderTracking()
+
     // Check if tech-reminders automation is enabled
     const jobResult = await query(`SELECT enabled FROM automation_jobs WHERE id = 'tech-reminders'`)
     if (jobResult.rows.length > 0 && !jobResult.rows[0].enabled) {
@@ -305,10 +308,15 @@ export async function GET() {
        JOIN staff s ON ea.staff_id = s.id
        WHERE e.end_time <= $1
          AND e.end_time >= $2
+         AND COALESCE(e.workflow_status, 'pending') <> 'post_game_submitted'
          AND EXISTS (
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id
              AND ws.type IN ('check_in', 'game_ready')
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM workflow_submissions ws
+           WHERE ws.event_id = e.id AND ws.type = 'post_game_report'
          )
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
@@ -328,7 +336,7 @@ export async function GET() {
       if (!channel) continue
 
       const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
-      const sent = await sendSlackMessage({
+      const sent = await sendSlackMessageDetailed({
         channel,
         text: `📝 Post-Game report pending — ${row.full_name} at ${row.venue_name}`,
         blocks: [
@@ -352,8 +360,12 @@ export async function GET() {
         ],
       })
 
-      if (sent) {
-        await query(`UPDATE event_assignments SET last_post_game_reminder_at = NOW() WHERE id = $1`, [row.assignment_id])
+      if (sent.ok) {
+        if (sent.ts && sent.channel) {
+          await recordPostGameReminder(row.assignment_id, sent.channel, sent.ts)
+        } else {
+          await query(`UPDATE event_assignments SET last_post_game_reminder_at = NOW() WHERE id = $1`, [row.assignment_id])
+        }
         tier5Sent++
       }
     }
