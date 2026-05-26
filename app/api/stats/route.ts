@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
+import { addDaysToDateKey, todayInOperationsTimeZone } from '@/lib/ops-date'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     const af = buildAssignmentFilterClause(userRole, userId, 'e.id', vf.nextIdx)
     const vfTicket = buildVenueFilterClause(venueIds, 't.venue_id', 1)
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayInOperationsTimeZone()
 
     const todaysEventsResult = await query(
       `SELECT COUNT(*) as count FROM events e WHERE e.event_date = $1 ${vf.clause} ${af.clause}`,
@@ -43,9 +44,7 @@ export async function GET(request: NextRequest) {
     )
 
     // Estimated labor hours this week
-    const weekEnd = new Date()
-    weekEnd.setDate(weekEnd.getDate() + 7)
-    const weekEndStr = weekEnd.toISOString().split('T')[0]
+    const weekEndStr = addDaysToDateKey(today, 7)
     const vfLabor = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
     const afLabor = buildAssignmentFilterClause(userRole, userId, 'e.id', vfLabor.nextIdx)
 

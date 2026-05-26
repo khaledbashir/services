@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
+import { addDaysToDateKey, todayInOperationsTimeZone } from '@/lib/ops-date'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const vf = buildVenueFilterClause(venueIds, 'e.venue_id', 2)
     const af = buildAssignmentFilterClause(userRole, userId, 'e.id', vf.nextIdx)
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayInOperationsTimeZone()
     const now = new Date()
     const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000)
 
@@ -87,9 +88,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Overdue post-game reports (events from yesterday that never got post-game submitted)
-    const yesterday = new Date(now)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    const yesterdayStr = addDaysToDateKey(today, -1)
     const vf4 = buildVenueFilterClause(venueIds, 'e.venue_id', 2)
     const af4 = buildAssignmentFilterClause(userRole, userId, 'e.id', vf4.nextIdx)
     const overdueResult = await query(
@@ -111,9 +110,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Events this week with partial assignment (some but not all need techs)
-    const weekEnd = new Date(now)
-    weekEnd.setDate(weekEnd.getDate() + 7)
-    const weekEndStr = weekEnd.toISOString().split('T')[0]
+    const weekEndStr = addDaysToDateKey(today, 7)
     const vf5 = buildVenueFilterClause(venueIds, 'e.venue_id', 3)
     const af5 = buildAssignmentFilterClause(userRole, userId, 'e.id', vf5.nextIdx)
     const partialResult = await query(

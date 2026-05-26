@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { todayInOperationsTimeZone } from '@/lib/ops-date'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayInOperationsTimeZone()
 
     // Get all events for today
     const eventsResult = await query(

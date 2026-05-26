@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
 import { formatVenueEventSummary } from '@/lib/event-display'
+import { addDaysToDateKey, addMonthsToDateKey, todayInOperationsTimeZone } from '@/lib/ops-date'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,23 +32,17 @@ export async function GET(request: NextRequest) {
     let whereClause = ''
     const params: any[] = []
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().split('T')[0]
+    const todayStr = todayInOperationsTimeZone()
 
     if (filter === 'today') {
       whereClause = 'WHERE e.event_date = $1'
       params.push(todayStr)
     } else if (filter === 'week') {
-      const weekFromNow = new Date(today)
-      weekFromNow.setDate(weekFromNow.getDate() + 7)
-      const weekStr = weekFromNow.toISOString().split('T')[0]
+      const weekStr = addDaysToDateKey(todayStr, 7)
       whereClause = 'WHERE e.event_date >= $1 AND e.event_date <= $2'
       params.push(todayStr, weekStr)
     } else if (filter === 'month') {
-      const monthFromNow = new Date(today)
-      monthFromNow.setMonth(monthFromNow.getMonth() + 1)
-      const monthStr = monthFromNow.toISOString().split('T')[0]
+      const monthStr = addMonthsToDateKey(todayStr, 1)
       whereClause = 'WHERE e.event_date >= $1 AND e.event_date <= $2'
       params.push(todayStr, monthStr)
     } else if (filter === 'pending_workflow') {
