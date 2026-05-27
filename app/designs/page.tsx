@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
+import { DashboardLayoutSettings, applyLayoutPrefs, loadLayoutPrefs, DEFAULT_LAYOUT_PREFS, type DashboardLayoutPrefs } from '@/components/dashboard-layout-settings'
 import { Skeleton } from '@/components/skeleton'
 import { formatDate } from '@/lib/format-date'
 import { INTERNAL_CATEGORIES } from '@/lib/design-internal-category'
@@ -130,6 +131,8 @@ export default function DesignsPage() {
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null)
   const [selectedLeague, setSelectedLeague] = useState<LeagueKey | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string>('')
+  const [layoutPrefs, setLayoutPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
+  useEffect(() => { loadLayoutPrefs('designs.kanban').then(setLayoutPrefs) }, [])
   useEffect(() => {
     try {
       const uid = localStorage.getItem('userId') || ''
@@ -455,6 +458,12 @@ export default function DesignsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <DashboardLayoutSettings
+              storageKey="designs.kanban"
+              columns={statusColumns.map(c => ({ key: c.key, label: c.label }))}
+              prefs={layoutPrefs}
+              onChange={setLayoutPrefs}
+            />
             <button
               onClick={() => fetchData()}
               className="h-9 w-9 flex items-center justify-center rounded-lg ring-1 ring-zinc-200 bg-white text-zinc-500 hover:text-zinc-900 hover:ring-zinc-300 transition-colors"
@@ -969,7 +978,8 @@ export default function DesignsPage() {
 
         <KanbanBoard
           items={sortedFiltered}
-          columns={statusColumns as KanbanColumn[]}
+          columns={applyLayoutPrefs(statusColumns, layoutPrefs) as KanbanColumn[]}
+          layout={layoutPrefs.layout}
           statusOf={(item) => item.status}
           keyOf={(item) => item.id}
           onStatusChange={updateStatus}
