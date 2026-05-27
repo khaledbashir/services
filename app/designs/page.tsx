@@ -348,7 +348,10 @@ export default function DesignsPage() {
         item.status === statusFilter
 
       const matchesDesigner =
-        designerFilter === 'all' || (targetDesignerId && item.designer_id === targetDesignerId)
+        designerFilter === 'all' ||
+        (targetDesignerId &&
+          (item.designer_id === targetDesignerId ||
+           item.enterprise_contact_id === targetDesignerId))
 
       const matchesRando =
         randoFilter === 'all' ||
@@ -916,9 +919,9 @@ export default function DesignsPage() {
                 value={designerFilter}
                 onChange={(e) => setDesignerFilter(e.target.value)}
                 className="h-9 pl-3 pr-9 rounded-lg ring-1 ring-zinc-200 bg-white text-sm appearance-none outline-none focus:ring-2 focus:ring-[#0A52EF]/30 transition-shadow"
-                title="Filter to one designer's assignments"
+                title="Filter to one person's assignments (designer or enterprise contact)"
               >
-                <option value="all">All designers</option>
+                <option value="all">All assignees</option>
                 {currentUserId && <option value="mine">My assignments</option>}
                 <option disabled>──────────</option>
                 {staff.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
