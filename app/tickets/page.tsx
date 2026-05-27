@@ -117,6 +117,7 @@ export default function TicketsPage() {
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
@@ -742,12 +743,43 @@ export default function TicketsPage() {
                     {ticket.title}
                   </h3>
 
-                  {/* Full note inline — Tech ask 2026-05-02: read without clicking through */}
-                  {ticket.description && ticket.description.trim() && (
-                    <p className="text-xs text-zinc-600 mb-2 whitespace-pre-wrap break-words leading-relaxed">
-                      {ticket.description}
-                    </p>
-                  )}
+                  {/* Full note inline — Tech ask 2026-05-02: read without clicking through.
+                      Chris 2026-05-27: long email bodies were pushing rows to ~1500px tall.
+                      Default to a 6-line clamp with a per-row Show more / Show less toggle. */}
+                  {ticket.description && ticket.description.trim() && (() => {
+                    const desc = ticket.description.trim()
+                    const expanded = expandedDescriptions.has(ticket.id)
+                    const isLong = desc.length > 400 || desc.split('\n').length > 6
+                    const toggle = (e: React.MouseEvent) => {
+                      e.preventDefault(); e.stopPropagation()
+                      setExpandedDescriptions(prev => {
+                        const next = new Set(prev)
+                        if (next.has(ticket.id)) next.delete(ticket.id)
+                        else next.add(ticket.id)
+                        return next
+                      })
+                    }
+                    return (
+                      <div className="mb-2">
+                        <p
+                          className={`text-xs text-zinc-600 whitespace-pre-wrap break-words leading-relaxed ${
+                            isLong && !expanded ? 'line-clamp-6' : ''
+                          }`}
+                        >
+                          {desc}
+                        </p>
+                        {isLong && (
+                          <button
+                            type="button"
+                            onClick={toggle}
+                            className="mt-1 text-[11px] font-medium text-[#0A52EF] hover:text-[#0840C0]"
+                          >
+                            {expanded ? 'Show less' : 'Show more'}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Voicemail phone number */}
                   {ticket.source === 'voicemail' && ticket.contact_phone && (
