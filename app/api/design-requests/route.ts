@@ -297,6 +297,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Auto-resolve venue from tricode using venues.aliases (Alexis 5/27: try
+    // codes like PACERS-XXX should land on the right venue automatically).
+    let resolvedVenueId = venue_id || null
+    if (!resolvedVenueId && tricode && typeof tricode === 'string' && tricode.trim()) {
+      const code = tricode.trim()
+      const matched = await query(
+        `SELECT id FROM venues WHERE $1 = ANY(COALESCE(aliases, '{}')) LIMIT 1`,
+        [code],
+      )
+      if (matched.rows[0]) resolvedVenueId = matched.rows[0].id
+    }
+
     const result = await query(
       `INSERT INTO design_requests (
         venue_id, company_name, job_title, tricode, ftp_proof_link, ftp_final_link,
@@ -309,7 +321,7 @@ export async function POST(request: NextRequest) {
       )
       RETURNING id, job_title, status, is_rando`,
       [
-        venue_id || null,
+        resolvedVenueId,
         company_name?.trim() || null,
         job_title.trim(),
         tricode?.trim() || null,
