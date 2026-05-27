@@ -148,11 +148,6 @@ export async function sendSupportMailboxEmail(input: {
           replyTo: input.replyTo ? [recipient(input.replyTo)] : [],
           ccRecipients: input.cc?.map(recipient) || [],
           bccRecipients: input.bcc?.map(recipient) || [],
-          ...(input.replyTo ? {
-            internetMessageHeaders: [
-              { name: 'Reply-To', value: input.replyTo },
-            ],
-          } : {}),
         },
         saveToSentItems: true,
       }),

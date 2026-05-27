@@ -286,31 +286,30 @@ export async function syncTicketsToTwenty(
   let synced = 0, updated = 0, errors = 0, venueMatches = 0
   const venueUnmatched: string[] = []
 
-  // Map statuses
   const statusMap: Record<string, string> = {
     'new': 'TICKET_NEW',
-    'open': 'STATUS_OPEN',
-    'in_progress': 'STATUS_PROGRESS',
-    'resolved': 'STATUS_RESOLVED',
-    'closed': 'STATUS_CLOSED',
+    'open': 'TICKET_OPEN',
+    'in_progress': 'TICKET_INPROGRESS',
+    'on_hold': 'TICKET_WAITING',
+    'escalated': 'TICKET_OPEN',
+    'resolved': 'TICKET_RESOLVED',
+    'closed': 'TICKET_CLOSED',
   }
 
-  // Map priorities
   const priorityMap: Record<string, string> = {
-    'low': 'PRI_LOW',
-    'medium': 'PRI_MEDIUM',
-    'high': 'PRI_HIGH',
-    'critical': 'PRI_HIGH',
+    'low': 'PRIORITY_LOW',
+    'medium': 'PRIORITY_MEDIUM',
+    'high': 'PRIORITY_HIGH',
+    'critical': 'PRIORITY_CRITICAL',
   }
 
-  // Map categories
   const categoryMap: Record<string, string> = {
-    'hardware': 'CATEGORY_HARDWARE',
-    'software': 'CATEGORY_SOFTWARE',
-    'general': 'CATEGORY_GENERAL',
-    'content': 'CATEGORY_CONTENT',
-    'operational': 'CATEGORY_GENERAL',
-    'voicemail': 'CATEGORY_GENERAL',
+    'hardware': 'CAT_HARDWARE',
+    'software': 'CAT_SOFTWARE',
+    'content': 'CAT_CONTENT',
+    'general': 'CAT_OTHER',
+    'operational': 'CAT_OTHER',
+    'voicemail': 'CAT_OTHER',
   }
 
   const sourceMap: Record<string, string> = {

@@ -79,7 +79,7 @@ export async function GET() {
 
     // 2. High-Priority Tickets — newly created since last check
     try {
-      const res = await twentyFetch(`serviceTickets?filter=priority[eq]:"PRI_HIGH"&limit=20`)
+      const res = await twentyFetch(`serviceTickets?filter=priority[eq]:"PRIORITY_HIGH"&limit=20`)
       const data = await res.json()
       const highPriTickets = (data?.data?.serviceTickets || []).filter(
         (t: any) => new Date(t.createdAt) > new Date(lastCheck)
