@@ -133,6 +133,49 @@ export default function DesignsPage() {
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const [layoutPrefs, setLayoutPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
   useEffect(() => { loadLayoutPrefs('designs.kanban').then(setLayoutPrefs) }, [])
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkAssignee, setBulkAssignee] = useState<string>('')
+  const [bulkField, setBulkField] = useState<'designer_id' | 'enterprise_contact_id'>('designer_id')
+  const [bulkApplying, setBulkApplying] = useState(false)
+  const toggleBulk = (id: string) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const applyBulkAssign = async () => {
+    if (!bulkSelected.size) return
+    setBulkApplying(true)
+    try {
+      const res = await fetch('/api/design-requests/bulk-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(bulkSelected),
+          field: bulkField,
+          assignee_id: bulkAssignee || null,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      await fetchData()
+      setBulkSelected(new Set())
+      setBulkMode(false)
+      setBulkAssignee('')
+      window.dispatchEvent(new CustomEvent('anc:toast', { detail: { message: `Assigned ${data.updated} job${data.updated === 1 ? '' : 's'}`, kind: 'success' } }))
+    } catch (e) {
+      console.error(e)
+      window.dispatchEvent(new CustomEvent('anc:toast', { detail: { message: e instanceof Error ? e.message : 'Bulk assign failed', kind: 'error' } }))
+    } finally {
+      setBulkApplying(false)
+    }
+  }
   useEffect(() => {
     try {
       const uid = localStorage.getItem('userId') || ''
@@ -461,6 +504,20 @@ export default function DesignsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => { setBulkMode(m => !m); setBulkSelected(new Set()) }}
+              className={`inline-flex items-center gap-2 h-9 px-3 rounded-lg ring-1 text-sm font-medium transition-colors ${
+                bulkMode
+                  ? 'bg-[#0A52EF] text-white ring-[#0A52EF]'
+                  : 'ring-zinc-200 bg-white text-zinc-700 hover:text-zinc-900 hover:ring-zinc-300'
+              }`}
+              title="Select multiple jobs and assign them in one shot"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>{bulkMode ? 'Exit bulk' : 'Bulk assign'}</span>
+            </button>
             <DashboardLayoutSettings
               storageKey="designs.kanban"
               columns={statusColumns.map(c => ({ key: c.key, label: c.label }))}
@@ -1008,9 +1065,32 @@ export default function DesignsPage() {
               ? item.designer_name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
               : null
 
+            const selected = bulkSelected.has(item.id)
             return (
               <div className="relative">
-                <Link href={`/designs/${item.id}`} className="block space-y-3">
+                {bulkMode && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleBulk(item.id) }}
+                    className={`absolute top-1.5 left-1.5 z-10 h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      selected
+                        ? 'bg-[#0A52EF] border-[#0A52EF] text-white'
+                        : 'bg-white border-zinc-300 hover:border-[#0A52EF]'
+                    }`}
+                    title={selected ? 'Deselect' : 'Select'}
+                  >
+                    {selected && (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+                <Link
+                  href={`/designs/${item.id}`}
+                  className={`block space-y-3 ${bulkMode ? 'pl-7' : ''}`}
+                  onClick={(e) => { if (bulkMode) { e.preventDefault(); toggleBulk(item.id) } }}
+                >
                 {/* Header: title + tricode pill (priority bell precedes title) */}
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-[13.5px] font-semibold text-zinc-900 leading-snug line-clamp-2 pr-7 flex items-start gap-1.5">
@@ -1134,6 +1214,41 @@ export default function DesignsPage() {
           </div>
         </div>
       </div>
+      {bulkMode && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl bg-zinc-900 px-4 py-3 text-sm text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.5)]">
+          <span className="font-medium">{bulkSelected.size} selected</span>
+          <span className="text-zinc-500">·</span>
+          <select
+            value={bulkField}
+            onChange={(e) => setBulkField(e.target.value as 'designer_id' | 'enterprise_contact_id')}
+            className="h-8 rounded-md bg-zinc-800 px-2 text-xs text-white ring-1 ring-zinc-700 outline-none focus:ring-2 focus:ring-[#0A52EF]/60"
+          >
+            <option value="designer_id">As Designer</option>
+            <option value="enterprise_contact_id">As Enterprise Contact</option>
+          </select>
+          <select
+            value={bulkAssignee}
+            onChange={(e) => setBulkAssignee(e.target.value)}
+            className="h-8 rounded-md bg-zinc-800 px-2 text-xs text-white ring-1 ring-zinc-700 outline-none focus:ring-2 focus:ring-[#0A52EF]/60"
+          >
+            <option value="">— Unassign —</option>
+            {staff.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+          <button
+            onClick={applyBulkAssign}
+            disabled={bulkApplying || !bulkSelected.size}
+            className="rounded-md bg-[#0A52EF] px-3 py-1.5 text-xs font-semibold hover:bg-[#0840C0] disabled:opacity-50"
+          >
+            {bulkApplying ? 'Applying…' : 'Apply'}
+          </button>
+          <button
+            onClick={() => { setBulkSelected(new Set()); setBulkMode(false) }}
+            className="text-xs text-zinc-400 hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </DashboardLayout>
   )
 }
