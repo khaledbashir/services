@@ -5,6 +5,52 @@ import { parseTicketReplyAddress } from '@/lib/email'
 
 const RESEND_RECEIVING_API_KEY = process.env.RESEND_RECEIVING_API_KEY || ''
 const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
+const TWENTY_API_URL = process.env.TWENTY_API_URL || ''
+const TWENTY_API_KEY = process.env.TWENTY_API_KEY || ''
+
+async function fetchBodyFromTwenty(senderEmail: string, subject: string): Promise<string> {
+  if (!TWENTY_API_URL || !TWENTY_API_KEY || !senderEmail) return ''
+  const normalizedSubject = (subject || '').replace(/^(Re|Fwd|Fw)\s*:\s*/gi, '').trim()
+  if (!normalizedSubject) return ''
+  try {
+    const res = await fetch(`${TWENTY_API_URL}/graphql`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TWENTY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `query($subject: String!){
+          messages(first: 5,
+                   filter: { subject: { ilike: $subject }, direction: { eq: "INCOMING" } },
+                   orderBy: { receivedAt: DescNullsLast }) {
+            edges { node { id text receivedAt messageParticipants { edges { node { role handle } } } } }
+          }
+        }`,
+        variables: { subject: `%${normalizedSubject}%` },
+      }),
+    })
+    if (!res.ok) {
+      console.warn(`[email-webhook] Twenty fallback ${res.status} for "${normalizedSubject}"`)
+      return ''
+    }
+    const json = await res.json()
+    const edges = json?.data?.messages?.edges || []
+    const senderLower = senderEmail.toLowerCase()
+    for (const { node } of edges) {
+      const parts = node?.messageParticipants?.edges || []
+      const from = parts.find((p: any) => p?.node?.role === 'FROM')?.node?.handle?.toLowerCase() || ''
+      if (from === senderLower && typeof node?.text === 'string' && node.text.trim()) {
+        return node.text.trim()
+      }
+    }
+    if (edges[0]?.node?.text) return String(edges[0].node.text).trim()
+    return ''
+  } catch (e) {
+    console.error('[email-webhook] Twenty fallback failed:', e)
+    return ''
+  }
+}
 
 /**
  * Strip quoted reply text and email signatures from an email body.
@@ -98,6 +144,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Microsoft → Twenty CRM is the authoritative inbound. If we still have no
+    // body, pull it from the matching Twenty message (full text incl. quotes).
+    if (!emailBody) {
+      const senderHandle = typeof from === 'string' ? from : (Array.isArray(from) ? from[0] : from?.address || from?.email || '')
+      const fallback = await fetchBodyFromTwenty(senderHandle, subject)
+      if (fallback) {
+        emailBody = fallback
+        console.log(`[email-webhook] Pulled body (${fallback.length} chars) from Twenty for "${subject}"`)
+      }
+    }
+
     // Extract sender info
     const senderEmail = typeof from === 'string' ? from : (Array.isArray(from) ? from[0] : from?.address || from?.email || '')
     const senderName = senderEmail.split('@')[0] || 'Unknown'
@@ -111,7 +168,7 @@ export async function POST(request: NextRequest) {
     const ticketNumber = parseTicketReplyAddress(toAddress)
 
     if (ticketNumber) {
-      return await handleTicketReply(ticketNumber, senderEmail, senderName, emailBody, subject)
+      return await handleTicketReply(ticketNumber, senderEmail, senderName, emailBody || await fetchBodyFromTwenty(senderEmail, subject), subject)
     }
 
     // Subject-line thread detection — "Re:" or "Fwd:" means this is likely a reply to an existing ticket
@@ -124,7 +181,7 @@ export async function POST(request: NextRequest) {
       if (caseNumMatch) {
         const extractedTicketNum = parseInt(caseNumMatch[1])
         console.log(`[email-webhook] Extracted ticket #${extractedTicketNum} from subject: "${subject}"`)
-        return await handleTicketReply(extractedTicketNum, senderEmail, senderName, emailBody, subject)
+        return await handleTicketReply(extractedTicketNum, senderEmail, senderName, emailBody || await fetchBodyFromTwenty(senderEmail, subject), subject)
       }
 
       // 2. Fallback: look for an existing open ticket with the same base subject
@@ -148,7 +205,7 @@ export async function POST(request: NextRequest) {
         if (threadMatch.rows.length > 0) {
           const existing = threadMatch.rows[0]
           console.log(`[email-webhook] Thread match — adding reply to ticket #${existing.ticket_number} (subject: "${bareSubject}")`)
-          return await handleTicketReply(existing.ticket_number, senderEmail, senderName, emailBody, subject)
+          return await handleTicketReply(existing.ticket_number, senderEmail, senderName, emailBody || await fetchBodyFromTwenty(senderEmail, subject), subject)
         }
       }
     }
