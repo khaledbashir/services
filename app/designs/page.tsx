@@ -15,6 +15,7 @@ import {
   newBlankWidget,
 } from '@/lib/dashboard-widgets'
 import { Skeleton } from '@/components/skeleton'
+import { useToast } from '@/components/toast'
 import { formatDate } from '@/lib/format-date'
 import { INTERNAL_CATEGORIES } from '@/lib/design-internal-category'
 
@@ -110,6 +111,7 @@ const statusTone: Record<string, string> = {
 
 export default function DesignsPage() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>([])
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
   const [venues, setVenues] = useState<Venue[]>([])
@@ -171,8 +173,18 @@ export default function DesignsPage() {
     setEditingWidget(null)
   }
   const onWidgetDelete = (id: string) => {
-    if (!confirm('Remove this widget?')) return
+    const idx = widgets.findIndex(w => w.id === id)
+    if (idx < 0) return
+    const removed = widgets[idx]
     persistWidgets(widgets.filter(w => w.id !== id))
+    showToast('Widget removed', 'info', {
+      label: 'Undo',
+      onClick: () => {
+        const next = [...widgets]
+        next.splice(idx, 0, removed)
+        persistWidgets(next)
+      },
+    })
   }
   const onWidgetMove = (id: string, dir: -1 | 1) => {
     const idx = widgets.findIndex(w => w.id === id)
