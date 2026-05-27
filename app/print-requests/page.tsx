@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { useAuth } from '@/lib/useAuth'
+import { PrintRequestCommentThread } from '@/components/print-request-comment-thread'
 
 interface ClientOption {
   id: string
@@ -556,6 +557,12 @@ export default function PrintRequestsPage() {
                     />
                   </div>
                 </div>
+
+                {editingId && (
+                  <div className="border-t border-[#E6ECF5] pt-5">
+                    <PrintRequestCommentThread printRequestId={editingId} />
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-3 border-t border-[#E6ECF5] pt-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
