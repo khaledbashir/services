@@ -88,10 +88,8 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
               </span>
             </div>
             <div className={`p-2 flex-1 bg-zinc-50/40 dark:bg-zinc-900/20 ${
-              layout === 'stacked'
-                ? 'grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-                : 'space-y-2'
-            }`}>
+              layout === 'stacked' ? 'grid gap-2' : 'space-y-2'
+            }`} style={layout === 'stacked' ? { gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' } : undefined}>
               {list.map(item => {
                 const k = keyOf(item)
                 return (
