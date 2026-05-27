@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
 import { DashboardLayoutSettings, applyLayoutPrefs, loadLayoutPrefs, DEFAULT_LAYOUT_PREFS, type DashboardLayoutPrefs } from '@/components/dashboard-layout-settings'
+import { DashboardWidgetCard, WidgetBoardEmptyState } from '@/components/dashboard-widget'
+import { DashboardWidgetConfig } from '@/components/dashboard-widget-config'
+import {
+  DashboardWidget,
+  loadDashboardPage,
+  saveDashboardPage,
+  newBlankWidget,
+} from '@/lib/dashboard-widgets'
 import { Skeleton } from '@/components/skeleton'
 import { formatDate } from '@/lib/format-date'
 import { INTERNAL_CATEGORIES } from '@/lib/design-internal-category'
@@ -133,6 +141,48 @@ export default function DesignsPage() {
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const [layoutPrefs, setLayoutPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
   useEffect(() => { loadLayoutPrefs('designs.kanban').then(setLayoutPrefs) }, [])
+
+  const [viewMode, setViewMode] = useState<'kanban' | 'board'>('kanban')
+  const [widgets, setWidgets] = useState<DashboardWidget[]>([])
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
+  useEffect(() => {
+    loadLayoutPrefs('designs.view').then(p => {
+      const stored = (p as unknown as { layout?: string }).layout
+      if (stored === 'board') setViewMode('board')
+    })
+    loadDashboardPage().then(page => setWidgets(page.widgets))
+  }, [])
+  const persistView = (next: 'kanban' | 'board') => {
+    setViewMode(next)
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'designs.view', value: JSON.stringify({ layout: next, hidden: [], order: [] }) }),
+    }).catch(() => {})
+  }
+  const persistWidgets = (next: DashboardWidget[]) => {
+    setWidgets(next)
+    saveDashboardPage({ version: 1, widgets: next })
+  }
+  const onWidgetSave = (updated: DashboardWidget) => {
+    persistWidgets(widgets.some(w => w.id === updated.id)
+      ? widgets.map(w => w.id === updated.id ? updated : w)
+      : [...widgets, updated])
+    setEditingWidget(null)
+  }
+  const onWidgetDelete = (id: string) => {
+    if (!confirm('Remove this widget?')) return
+    persistWidgets(widgets.filter(w => w.id !== id))
+  }
+  const onWidgetMove = (id: string, dir: -1 | 1) => {
+    const idx = widgets.findIndex(w => w.id === id)
+    if (idx < 0) return
+    const swap = idx + dir
+    if (swap < 0 || swap >= widgets.length) return
+    const next = [...widgets]
+    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    persistWidgets(next)
+  }
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkAssignee, setBulkAssignee] = useState<string>('')
@@ -504,6 +554,24 @@ export default function DesignsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="inline-flex rounded-lg ring-1 ring-zinc-200 bg-white p-0.5">
+              <button
+                onClick={() => persistView('kanban')}
+                className={`px-3 h-8 rounded-md text-xs font-semibold transition-colors ${
+                  viewMode === 'kanban' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                Kanban
+              </button>
+              <button
+                onClick={() => persistView('board')}
+                className={`px-3 h-8 rounded-md text-xs font-semibold transition-colors ${
+                  viewMode === 'board' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                My Board
+              </button>
+            </div>
             <button
               onClick={() => { setBulkMode(m => !m); setBulkSelected(new Set()) }}
               className={`inline-flex items-center gap-2 h-9 px-3 rounded-lg ring-1 text-sm font-medium transition-colors ${
@@ -785,11 +853,32 @@ export default function DesignsPage() {
           </div>
         )}
 
-        {/* Layout: collapsible venue tree on the left, filter bar + kanban on
-            the right. Alexis's left-rail ask from the 2026-04-29 call —
-            buckets venues by league so she can drill into a single venue's
-            history (e.g. all of Heinz Athletic Center's design work) the
-            way Wrike's left tree did. */}
+        {viewMode === 'board' && (
+          <DesignsWidgetBoard
+            designRequests={designRequests}
+            staff={staff}
+            venues={venues}
+            widgets={widgets}
+            currentUserId={currentUserId}
+            todayIso={todayIso}
+            onEditWidget={setEditingWidget}
+            onDeleteWidget={onWidgetDelete}
+            onMoveWidget={onWidgetMove}
+            onAddWidget={() => setEditingWidget(newBlankWidget())}
+          />
+        )}
+
+        {editingWidget && (
+          <DashboardWidgetConfig
+            widget={editingWidget}
+            staff={staff}
+            venues={venues}
+            onClose={() => setEditingWidget(null)}
+            onSave={onWidgetSave}
+          />
+        )}
+
+        {viewMode === 'kanban' && (
         <div className="flex items-start gap-4">
           {venueRailOpen && (
             <aside className="w-60 flex-shrink-0 rounded-xl bg-white ring-1 ring-zinc-200 p-2 max-h-[calc(100vh-13rem)] overflow-y-auto">
@@ -1213,6 +1302,7 @@ export default function DesignsPage() {
         )}
           </div>
         </div>
+        )}
       </div>
       {bulkMode && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl bg-zinc-900 px-4 py-3 text-sm text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.5)]">
@@ -1250,5 +1340,73 @@ export default function DesignsPage() {
         </div>
       )}
     </DashboardLayout>
+  )
+}
+
+interface WidgetBoardProps {
+  designRequests: DesignRequest[]
+  staff: Staff[]
+  venues: Venue[]
+  widgets: DashboardWidget[]
+  currentUserId: string
+  todayIso: string
+  onEditWidget: (w: DashboardWidget) => void
+  onDeleteWidget: (id: string) => void
+  onMoveWidget: (id: string, dir: -1 | 1) => void
+  onAddWidget: () => void
+}
+
+function DesignsWidgetBoard({
+  designRequests,
+  staff,
+  venues,
+  widgets,
+  currentUserId,
+  todayIso,
+  onEditWidget,
+  onDeleteWidget,
+  onMoveWidget,
+  onAddWidget,
+}: WidgetBoardProps) {
+  const staffById: Record<string, string> = {}
+  for (const s of staff) staffById[s.id] = s.full_name
+  const venueById: Record<string, string> = {}
+  for (const v of venues) venueById[v.id] = v.name
+
+  const ctx = { currentUserId, todayIso, staffById, venueById }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-xs text-zinc-500">
+          {widgets.length} widget{widgets.length === 1 ? '' : 's'} · drag, edit, or add to compose your view
+        </p>
+        <button
+          onClick={onAddWidget}
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add widget
+        </button>
+      </div>
+      <div className="grid grid-cols-12 gap-4">
+        {widgets.length === 0 && <WidgetBoardEmptyState onAdd={onAddWidget} />}
+        {widgets.map((widget, idx) => (
+          <DashboardWidgetCard
+            key={widget.id}
+            widget={widget}
+            items={designRequests as any}
+            ctx={ctx}
+            onEdit={() => onEditWidget(widget)}
+            onDelete={() => onDeleteWidget(widget.id)}
+            onMove={(dir) => onMoveWidget(widget.id, dir)}
+            isFirst={idx === 0}
+            isLast={idx === widgets.length - 1}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
