@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { ChannelPill } from '@/components/ui/toggle'
 import { Card } from '@/components/ui/card'
-import { MessageSquare, Mail, Sparkles, Loader2, RotateCcw, Check } from 'lucide-react'
+import { MessageSquare, Mail, Sparkles, Loader2, RotateCcw, Check, Send, AlertCircle } from 'lucide-react'
 import type { ChannelKey } from '@/lib/signal/voice'
 
 function LinkedinIcon({ className }: { className?: string }) {
@@ -40,6 +40,67 @@ interface Generation {
   channel: ChannelKey
   text: string
   status: 'idle' | 'streaming' | 'done' | 'error'
+}
+
+function ComposeCardActions({ channel, text }: { channel: ChannelKey; text: string }) {
+  const [state, setState] = React.useState<'idle' | 'publishing' | 'published' | 'error'>('idle')
+  const [message, setMessage] = React.useState<string>('')
+
+  async function publish() {
+    if (channel !== 'linkedin') {
+      setState('error')
+      setMessage(`${channel} publishing wires in the next phase`)
+      return
+    }
+    setState('publishing')
+    setMessage('')
+    try {
+      const res = await fetch('/api/marketing/social/post/linkedin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setState('error')
+        setMessage(data.error || `HTTP ${res.status}`)
+        return
+      }
+      setState('published')
+      setMessage(`Live on LinkedIn · ${(data.postId || '').slice(-12)}`)
+    } catch (err) {
+      setState('error')
+      setMessage(String(err))
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px]">
+      <span className={cn('text-muted-foreground', state === 'error' && 'text-destructive', state === 'published' && 'text-emerald-400')}>
+        {state === 'idle' && `${text.length} chars · ${text.split(/\s+/).filter(Boolean).length} words`}
+        {state === 'publishing' && (
+          <span className="flex items-center gap-1"><Loader2 className="size-3 animate-spin" /> Posting…</span>
+        )}
+        {state === 'published' && (
+          <span className="flex items-center gap-1"><Check className="size-3" /> {message}</span>
+        )}
+        {state === 'error' && (
+          <span className="flex items-center gap-1"><AlertCircle className="size-3" /> {message}</span>
+        )}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(text)}>Copy</Button>
+        <Button size="sm" variant={state === 'published' ? 'ghost' : 'default'} onClick={publish} disabled={state === 'publishing'}>
+          <Send className="size-3" />
+          {channel === 'linkedin'
+            ? state === 'published'
+              ? 'Posted'
+              : 'Post to LinkedIn'
+            : 'Send for review'}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function ComposeCanvas() {
@@ -187,13 +248,7 @@ export function ComposeCanvas() {
                 {g.text || (g.status === 'streaming' ? <span className="signal-pulse">·</span> : <em>Empty. Write a brief and compose.</em>)}
               </div>
               {g.status === 'done' && g.text && (
-                <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px]">
-                  <span className="text-muted-foreground">{g.text.length} chars · {g.text.split(/\s+/).filter(Boolean).length} words</span>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(g.text)}>Copy</Button>
-                    <Button size="sm" variant="outline">Send for review</Button>
-                  </div>
-                </div>
+                <ComposeCardActions channel={c.key} text={g.text} />
               )}
             </Card>
           )

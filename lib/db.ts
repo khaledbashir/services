@@ -279,6 +279,20 @@ async function runMigrations() {
       PRIMARY KEY (channel_id, thread_ts)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_ticket_threads_ticket ON slack_ticket_threads(ticket_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_worklog_threads (
+      channel_id TEXT NOT NULL,
+      thread_ts TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      created_by_slack_user_id TEXT,
+      created_from TEXT NOT NULL DEFAULT 'manual',
+      source_message_ts TEXT,
+      source_permalink TEXT,
+      summary TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (channel_id, thread_ts, entity_type)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_worklog_threads_entity ON slack_worklog_threads(entity_type, entity_id)`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
@@ -1078,6 +1092,37 @@ async function runMigrations() {
     )`)
     await client.query(`ALTER TABLE marketing_social_posts ADD COLUMN IF NOT EXISTS template_id UUID`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_social_posts_state ON marketing_social_posts(state)`)
+
+    // Signal: native social OAuth + token storage (replaces Postiz)
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_social_accounts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      platform TEXT NOT NULL,
+      account_label TEXT NOT NULL,
+      external_id TEXT,
+      external_urn TEXT,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      expires_at TIMESTAMPTZ,
+      scopes TEXT[] DEFAULT '{}',
+      metadata JSONB NOT NULL DEFAULT '{}',
+      connected_by TEXT,
+      connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_refreshed_at TIMESTAMPTZ,
+      revoked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(platform, external_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_social_accounts_platform ON marketing_social_accounts(platform) WHERE revoked_at IS NULL`)
+
+    // Signal: OAuth state CSRF protection
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_social_oauth_state (
+      state TEXT PRIMARY KEY,
+      platform TEXT NOT NULL,
+      return_to TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`DELETE FROM marketing_social_oauth_state WHERE created_at < NOW() - INTERVAL '1 hour'`)
 
     await client.query(`INSERT INTO marketing_audiences (name, description, source)
       VALUES (
