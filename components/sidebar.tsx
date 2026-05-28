@@ -307,15 +307,23 @@ export function Sidebar() {
     //     { href: '/gamification/feed', label: 'Activity Feed' },
     //   ],
     // },
-    // Admin section hidden from sidebar — pages still accessible by URL.
-    // Prevents ANC admin-role staff from seeing infrastructure tooling.
+    {
+      key: 'team',
+      label: 'Team',
+      icon: <Icon>{IC.people}</Icon>,
+      role: 'admin',
+      links: [
+        { href: '/staff', label: 'Users', role: 'admin' },
+      ],
+    },
+    // Rest of legacy Admin section stays hidden — exposes infrastructure tooling.
+    // Pages still accessible by direct URL.
     // {
     //   key: 'admin',
     //   label: 'Admin',
     //   icon: <Icon>{IC.system}</Icon>,
     //   role: 'tech_support',
     //   links: [
-    //     { href: '/staff', label: 'Staff', role: 'admin' },
     //     { href: '/admin/feed-finder', label: 'Feed URL Finder', role: 'manager' },
     //     { href: '/admin/tenants', label: 'Client Switchboard', role: 'admin' },
     //     { href: '/expenses', label: 'Expenses', role: 'admin' },
