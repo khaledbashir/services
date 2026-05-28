@@ -1124,6 +1124,20 @@ async function runMigrations() {
     )`)
     await client.query(`DELETE FROM marketing_social_oauth_state WHERE created_at < NOW() - INTERVAL '1 hour'`)
 
+    // Signal: signed approval tokens — Slack-DM link decisions without Slack interactivity setup
+    await client.query(`CREATE TABLE IF NOT EXISTS marketing_approval_tokens (
+      token TEXT PRIMARY KEY,
+      approval_id UUID NOT NULL REFERENCES marketing_approval_requests(id) ON DELETE CASCADE,
+      approver_slack_id TEXT NOT NULL,
+      approver_label TEXT,
+      decision TEXT,                    -- 'approve' | 'reject' once clicked
+      decided_at TIMESTAMPTZ,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_approval_tokens_approval ON marketing_approval_tokens(approval_id)`)
+
     await client.query(`INSERT INTO marketing_audiences (name, description, source)
       VALUES (
         'Media & Partnerships Newsletter',
