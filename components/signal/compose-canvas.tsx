@@ -47,15 +47,11 @@ function ComposeCardActions({ channel, text }: { channel: ChannelKey; text: stri
   const [message, setMessage] = React.useState<string>('')
 
   async function publish() {
-    if (channel !== 'linkedin') {
-      setState('error')
-      setMessage(`${channel} publishing wires in the next phase`)
-      return
-    }
     setState('publishing')
     setMessage('')
     try {
-      const res = await fetch('/api/marketing/social/post/linkedin', {
+      const endpoint = `/api/marketing/social/post/${channel}`
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
@@ -67,11 +63,26 @@ function ComposeCardActions({ channel, text }: { channel: ChannelKey; text: stri
         return
       }
       setState('published')
-      setMessage(`Live on LinkedIn · ${(data.postId || '').slice(-12)}`)
+      if (channel === 'linkedin') {
+        setMessage(`Live on LinkedIn · ${(data.postId || '').slice(-12)}`)
+      } else if (channel === 'slack') {
+        setMessage(`Posted to ${data.channel || 'Slack'} · ${(data.ts || '').slice(-6)}`)
+      } else if (channel === 'newsletter') {
+        setMessage(`Draft created — review in Marketing Hub`)
+      } else if (channel === 'x') {
+        setMessage('Done')
+      }
     } catch (err) {
       setState('error')
       setMessage(String(err))
     }
+  }
+
+  const publishLabel: Record<ChannelKey, string> = {
+    linkedin: state === 'published' ? 'Posted' : 'Post to LinkedIn',
+    slack: state === 'published' ? 'Posted' : 'Send to Slack',
+    newsletter: state === 'published' ? 'Drafted' : 'Save newsletter draft',
+    x: state === 'published' ? 'Done' : 'X wires next',
   }
 
   return (
@@ -90,13 +101,9 @@ function ComposeCardActions({ channel, text }: { channel: ChannelKey; text: stri
       </span>
       <div className="flex items-center gap-1">
         <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(text)}>Copy</Button>
-        <Button size="sm" variant={state === 'published' ? 'ghost' : 'default'} onClick={publish} disabled={state === 'publishing'}>
+        <Button size="sm" variant={state === 'published' ? 'ghost' : 'default'} onClick={publish} disabled={state === 'publishing' || channel === 'x'}>
           <Send className="size-3" />
-          {channel === 'linkedin'
-            ? state === 'published'
-              ? 'Posted'
-              : 'Post to LinkedIn'
-            : 'Send for review'}
+          {publishLabel[channel]}
         </Button>
       </div>
     </div>
