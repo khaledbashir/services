@@ -40,7 +40,9 @@ function authorized(request: NextRequest): boolean {
   if (!secret) return process.env.NODE_ENV !== 'production'
   const auth = request.headers.get('authorization') || ''
   const explicit = request.headers.get('x-webhook-secret') || request.headers.get('x-resend-webhook-secret') || ''
-  return auth === `Bearer ${secret}` || explicit === secret
+  // SendGrid's Event Webhook can't send custom headers — allow ?secret= on the URL too.
+  const qp = request.nextUrl.searchParams.get('secret') || ''
+  return auth === `Bearer ${secret}` || explicit === secret || qp === secret
 }
 
 export async function POST(request: NextRequest) {
