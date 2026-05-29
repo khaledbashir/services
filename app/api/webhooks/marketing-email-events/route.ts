@@ -50,48 +50,57 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const type = lower(readPath(body, ['type', 'event', 'event_type', 'data.type']))
-    const reason = eventReason(type)
-    if (!reason) return NextResponse.json({ ignored: true, type })
+    // SendGrid posts a BATCHED ARRAY of events; Resend/others post a single object.
+    // Normalize to an array and process each event.
+    const events: any[] = Array.isArray(body) ? body : [body]
+    const results: any[] = []
 
-    const email = firstEmail(readPath(body, [
-      'data.to',
-      'data.email',
-      'data.recipient',
-      'email',
-      'recipient',
-      'to',
-    ]))
-    if (!email) return NextResponse.json({ error: 'Webhook event did not include an email' }, { status: 400 })
+    for (const evt of events) {
+      const type = lower(readPath(evt, ['type', 'event', 'event_type', 'data.type']))
+      const reason = eventReason(type)
+      if (!reason) { results.push({ ignored: true, type }); continue }
 
-    const recipientId = String(readPath(body, [
-      'data.tags.recipient_id',
-      'data.tags.newsletter_recipient_id',
-      'tags.recipient_id',
-      'recipient_id',
-      'newsletter_recipient_id',
-    ]) || '').trim() || null
-    const campaignId = String(readPath(body, [
-      'data.tags.campaign_id',
-      'data.tags.newsletter_campaign_id',
-      'tags.campaign_id',
-      'campaign_id',
-      'newsletter_campaign_id',
-    ]) || '').trim() || null
+      const email = firstEmail(readPath(evt, [
+        'data.to',
+        'data.email',
+        'data.recipient',
+        'email',
+        'recipient',
+        'to',
+      ]))
+      if (!email) { results.push({ error: 'no email', type }); continue }
 
-    const result = await suppressMarketingEmail({
-      email,
-      reason,
-      recipientId,
-      campaignId,
-      rawEvent: {
-        type,
-        provider_id: readPath(body, ['data.email_id', 'data.id', 'id']),
-        reason: readPath(body, ['data.reason', 'reason']),
-      },
-    })
+      const recipientId = String(readPath(evt, [
+        'data.tags.recipient_id',
+        'data.tags.newsletter_recipient_id',
+        'tags.recipient_id',
+        'recipient_id',
+        'newsletter_recipient_id',
+        'sg_message_id',
+      ]) || '').trim() || null
+      const campaignId = String(readPath(evt, [
+        'data.tags.campaign_id',
+        'data.tags.newsletter_campaign_id',
+        'tags.campaign_id',
+        'campaign_id',
+        'newsletter_campaign_id',
+      ]) || '').trim() || null
 
-    return NextResponse.json({ ok: true, type, reason, email, ...result })
+      const result = await suppressMarketingEmail({
+        email,
+        reason,
+        recipientId,
+        campaignId,
+        rawEvent: {
+          type,
+          provider_id: readPath(evt, ['data.email_id', 'data.id', 'id', 'sg_event_id']),
+          reason: readPath(evt, ['data.reason', 'reason']),
+        },
+      })
+      results.push({ ok: true, type, reason, email, ...result })
+    }
+
+    return NextResponse.json({ ok: true, processed: results.length, results })
   } catch (err) {
     console.error('Error processing marketing email webhook:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
