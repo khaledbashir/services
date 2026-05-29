@@ -1,49 +1,88 @@
 import { query } from '@/lib/db'
 import { sendSupportMailboxEmail } from '@/lib/crm-support-email'
 
-const RESEND_API_URL = 'https://api.resend.com/emails'
+const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
 // Domain config — set EMAIL_DOMAIN env var to change (default: ancsports.net)
 const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'ancsports.net'
-const FROM_ADDRESS = process.env.EMAIL_FROM || `ANC Services <notifications@${EMAIL_DOMAIN}>`
 const REPLY_DOMAIN = EMAIL_DOMAIN
 
 /**
- * Send an email via Resend. Returns true on success, false on failure.
+ * Resolve the From identity from env.
+ * Prefers EMAIL_FROM_ADDRESS / EMAIL_FROM_NAME (current setup); falls back to a
+ * legacy "Name <email>" EMAIL_FROM string, then a sane default.
+ */
+function resolveFrom(): { email: string; name: string } {
+  if (process.env.EMAIL_FROM_ADDRESS) {
+    return { email: process.env.EMAIL_FROM_ADDRESS, name: process.env.EMAIL_FROM_NAME || 'ANC' }
+  }
+  const legacy = process.env.EMAIL_FROM
+  if (legacy) {
+    const m = legacy.match(/^\s*(.*?)\s*<([^>]+)>\s*$/)
+    if (m) return { name: m[1] || 'ANC', email: m[2] }
+    return { email: legacy, name: process.env.EMAIL_FROM_NAME || 'ANC' }
+  }
+  return { email: `notifications@${EMAIL_DOMAIN}`, name: 'ANC' }
+}
+
+/**
+ * Send an email via SendGrid (v3 HTTP API). Returns true on success, false on failure.
+ *
+ * Marketing + transactional mail goes through SendGrid (Resend retired 2026-05).
+ * CRM/support-mailbox + ticket emails go through Microsoft Graph — see lib/crm-support-email.ts.
+ * The SendGrid key is provisioned as the SMTP password (SMTP user is the literal "apikey");
+ * a dedicated SENDGRID_API_KEY is honored first if present. No new dependency — uses fetch.
  */
 export async function sendEmail(
   to: string[],
   subject: string,
   html: string,
   replyTo?: string,
-  opts?: { cc?: string[]; bcc?: string[] }
+  opts?: { cc?: string[]; bcc?: string[]; attachments?: { filename: string; content: string; type?: string }[] }
 ): Promise<boolean> {
-  const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-  if (!RESEND_API_KEY) {
-    console.warn('[email] RESEND_API_KEY not set — skipping email')
+  const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || process.env.EMAIL_SMTP_PASSWORD || ''
+  if (!SENDGRID_API_KEY) {
+    console.warn('[email] SENDGRID_API_KEY / EMAIL_SMTP_PASSWORD not set — skipping email')
     return false
   }
 
   if (!to || to.length === 0) return false
 
-  try {
-    const payload: any = { from: FROM_ADDRESS, to, subject, html }
-    if (replyTo) payload.reply_to = replyTo
-    if (opts?.cc && opts.cc.length > 0) payload.cc = opts.cc
-    if (opts?.bcc && opts.bcc.length > 0) payload.bcc = opts.bcc
+  const from = resolveFrom()
 
-    const res = await fetch(RESEND_API_URL, {
+  const personalization: any = { to: to.map((email) => ({ email })) }
+  if (opts?.cc && opts.cc.length > 0) personalization.cc = opts.cc.map((email) => ({ email }))
+  if (opts?.bcc && opts.bcc.length > 0) personalization.bcc = opts.bcc.map((email) => ({ email }))
+
+  try {
+    const payload: any = {
+      personalizations: [personalization],
+      from: { email: from.email, name: from.name },
+      subject,
+      content: [{ type: 'text/html', value: html }],
+    }
+    if (replyTo) payload.reply_to = { email: replyTo }
+    if (opts?.attachments && opts.attachments.length > 0) {
+      payload.attachments = opts.attachments.map((a) => ({
+        content: a.content,
+        filename: a.filename,
+        type: a.type || 'application/octet-stream',
+        disposition: 'attachment',
+      }))
+    }
+
+    const res = await fetch(SENDGRID_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Authorization': `Bearer ${SENDGRID_API_KEY}`,
       },
       body: JSON.stringify(payload),
     })
 
     if (!res.ok) {
       const body = await res.text()
-      console.error(`[email] Resend API error ${res.status}: ${body}`)
+      console.error(`[email] SendGrid API error ${res.status}: ${body}`)
       return false
     }
     return true

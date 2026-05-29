@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
-    const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-    if (!RESEND_API_KEY) {
-      return NextResponse.json({ error: 'RESEND_API_KEY not configured' }, { status: 500 })
-    }
-
     // Get due schedules
     const now = new Date()
     const result = await query(
@@ -57,24 +53,14 @@ export async function POST(request: NextRequest) {
 
           const filename = `ANC_Report_${venueName.replace(/[^a-zA-Z0-9]/g, '_')}_${period}_${now.toISOString().split('T')[0]}.pdf`
 
-          // Send to all recipients
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${RESEND_API_KEY}`,
-            },
-            body: JSON.stringify({
-              from: 'ANC Services <notifications@ancservices.app>',
-              to: schedule.recipients,
-              subject: `${schedule.frequency === 'monthly' ? 'Monthly' : 'Weekly'} Operations Report — ${venueName}`,
-              html: `<p>Hi,</p><p>Attached is the ${schedule.frequency} operations report for <strong>${venueName}</strong>.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
-              attachments: [{
-                filename,
-                content: Buffer.from(pdfBuffer).toString('base64'),
-              }],
-            }),
-          })
+          // Send to all recipients (SendGrid via shared sendEmail; Resend retired)
+          await sendEmail(
+            schedule.recipients,
+            `${schedule.frequency === 'monthly' ? 'Monthly' : 'Weekly'} Operations Report — ${venueName}`,
+            `<p>Hi,</p><p>Attached is the ${schedule.frequency} operations report for <strong>${venueName}</strong>.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
+            undefined,
+            { attachments: [{ filename, content: Buffer.from(pdfBuffer).toString('base64'), type: 'application/pdf' }] }
+          )
         } catch (err) {
           console.error(`Failed to send report for venue ${venueId}:`, err)
         }

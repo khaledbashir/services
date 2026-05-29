@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { sendEmail } from '@/lib/email'
 
 function fmt(d: string) {
   return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -250,41 +251,25 @@ export async function GET(request: NextRequest) {
 
     const pdfBuffer = await pdfResponse.arrayBuffer()
 
-    // If email action, send via Resend
+    // If email action, send via SendGrid (shared sendEmail; Resend retired)
     if (action === 'email') {
-      const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
       const recipientEmail = searchParams.get('email') || venue.primary_contact_email
 
       if (!recipientEmail) {
         return NextResponse.json({ error: 'No email address provided or configured for this venue' }, { status: 400 })
       }
-      if (!RESEND_API_KEY) {
-        return NextResponse.json({ error: 'Email service not configured' }, { status: 500 })
-      }
 
       const filename = `Staff_Schedule_${venue.name.replace(/[^a-zA-Z0-9]/g, '_')}_${today}.pdf`
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: 'ANC Services <notifications@ancservices.app>',
-          to: [recipientEmail],
-          subject: `Staff Schedule — ${venue.name} (${fmt(today)} – ${fmt(endDate)})`,
-          html: `<p>Hi ${venue.primary_contact_name || 'there'},</p><p>Attached is the staff schedule for <strong>${venue.name}</strong> covering ${fmt(today)} through ${fmt(endDate)}.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
-          attachments: [{
-            filename,
-            content: Buffer.from(pdfBuffer).toString('base64'),
-          }],
-        }),
-      })
+      const ok = await sendEmail(
+        [recipientEmail],
+        `Staff Schedule — ${venue.name} (${fmt(today)} – ${fmt(endDate)})`,
+        `<p>Hi ${venue.primary_contact_name || 'there'},</p><p>Attached is the staff schedule for <strong>${venue.name}</strong> covering ${fmt(today)} through ${fmt(endDate)}.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
+        undefined,
+        { attachments: [{ filename, content: Buffer.from(pdfBuffer).toString('base64'), type: 'application/pdf' }] }
+      )
 
-      if (!emailRes.ok) {
-        const errData = await emailRes.json().catch(() => ({}))
-        console.error('Resend error:', errData)
+      if (!ok) {
         return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
       }
 
