@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
+import { brandedEmail } from '@/lib/email-templates'
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +58,12 @@ export async function POST(request: NextRequest) {
           await sendEmail(
             schedule.recipients,
             `${schedule.frequency === 'monthly' ? 'Monthly' : 'Weekly'} Operations Report — ${venueName}`,
-            `<p>Hi,</p><p>Attached is the ${schedule.frequency} operations report for <strong>${venueName}</strong>.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
+            brandedEmail({
+              title: `${schedule.frequency === 'monthly' ? 'Monthly' : 'Weekly'} Operations Report`,
+              subtitle: `${venueName} · attached as PDF`,
+              bodyHtml: `<p style="margin:0">Attached is the ${schedule.frequency} operations report for <strong>${venueName}</strong>.</p>`,
+              footerNote: 'ANC Sports · scheduled operations report',
+            }),
             undefined,
             { attachments: [{ filename, content: Buffer.from(pdfBuffer).toString('base64'), type: 'application/pdf' }] }
           )

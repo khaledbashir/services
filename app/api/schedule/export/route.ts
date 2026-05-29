@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
+import { brandedEmail } from '@/lib/email-templates'
 
 function fmt(d: string) {
   return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -264,7 +265,12 @@ export async function GET(request: NextRequest) {
       const ok = await sendEmail(
         [recipientEmail],
         `Staff Schedule — ${venue.name} (${fmt(today)} – ${fmt(endDate)})`,
-        `<p>Hi ${venue.primary_contact_name || 'there'},</p><p>Attached is the staff schedule for <strong>${venue.name}</strong> covering ${fmt(today)} through ${fmt(endDate)}.</p><p>Best regards,<br/>ANC Sports Operations</p>`,
+        brandedEmail({
+          title: 'Staff Schedule',
+          subtitle: `${venue.name} · ${fmt(today)} – ${fmt(endDate)}`,
+          bodyHtml: `<p style="margin:0">Hi ${venue.primary_contact_name || 'there'}, the staff schedule for <strong>${venue.name}</strong> covering ${fmt(today)} through ${fmt(endDate)} is attached as a PDF.</p>`,
+          footerNote: 'ANC Sports · staff schedule',
+        }),
         undefined,
         { attachments: [{ filename, content: Buffer.from(pdfBuffer).toString('base64'), type: 'application/pdf' }] }
       )
