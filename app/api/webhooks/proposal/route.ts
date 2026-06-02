@@ -9,7 +9,8 @@ import {
   twentyFetch,
 } from '@/lib/twenty-sync'
 
-// Webhook receiver: when a proposal is won in rag2, auto-create the venue/service account
+// Webhook receiver: when a proposal is won in rag2, create/update the service-side account.
+// CRM record creation stays gated by default so proposal activity cannot create duplicate accounts/opportunities.
 export async function POST(request: NextRequest) {
   try {
     const webhook_secret = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
@@ -110,9 +111,33 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // --- Twenty CRM Integration ---
+    // --- CRM Integration ---
     const TWENTY_API_KEY = process.env.TWENTY_API_KEY || ''
     if (TWENTY_API_KEY) {
+      const createMode = (process.env.TWENTY_PROPOSAL_WEBHOOK_CREATE_MODE || 'review').toLowerCase()
+      if (createMode !== 'auto') {
+        await query(
+          `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+           VALUES ('twenty_crm_review_required', 'proposal', NULL, NULL, $1)`,
+          [JSON.stringify({
+            client: proposal.clientName,
+            venue: proposal.venue,
+            proposalId: proposal.id || null,
+            reason: 'CRM company/opportunity creation is held for review to prevent duplicate records.',
+          })]
+        )
+
+        return NextResponse.json({
+          ok: true,
+          venueId,
+          isNew: existingVenue.rows.length === 0,
+          crmReviewRequired: true,
+          message: existingVenue.rows.length > 0
+            ? `Venue "${proposal.venue}" already exists; CRM review required before creating or linking records`
+            : `New venue "${proposal.venue}" created with service account; CRM review required before creating or linking records`,
+        })
+      }
+
       try {
         const twentyCompanyId = await findOrCreateTwentyCompany(proposal.clientName)
         const twentyVenueId = await findOrCreateTwentyVenue(proposal.venue, venueId, twentyCompanyId)
