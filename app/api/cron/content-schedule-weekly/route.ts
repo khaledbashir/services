@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 
@@ -112,9 +112,15 @@ function formatBlocks(start: string, end: string, changes: WeeklyChange[]) {
   ]
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { start, end } = nextSevenDays()
   try {
+    const dryRun = new URL(request.url).searchParams.get('dry_run') === 'true'
+    const changes = await loadChanges(start, end)
+    if (dryRun) {
+      return NextResponse.json({ ok: true, dry_run: true, start, end, changes: changes.length })
+    }
+
     const channel = targetChannel()
     if (!channel) {
       return NextResponse.json({ ok: false, error: 'No Slack channel configured', start, end }, { status: 500 })
@@ -122,7 +128,6 @@ export async function GET() {
     const sent = await alreadySent(start)
     if (sent) return NextResponse.json({ ok: true, skipped: true, reason: 'weekly reminder already sent', start, end })
 
-    const changes = await loadChanges(start, end)
     const delivered = await sendSlackMessage({
       channel,
       text: `${changes.length} content changes scheduled over the next week`,
