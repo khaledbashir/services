@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import CopilotPanel from './CopilotPanel'
 
 interface Ticket {
   id: string
@@ -272,6 +273,8 @@ export default function CustomerDashboard() {
           </form>
         </div>
       )}
+
+      <CopilotPanel onTicketCreated={loadTickets} />
     </div>
   )
 }
