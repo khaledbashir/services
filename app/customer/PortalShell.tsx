@@ -126,14 +126,14 @@ export default function PortalShell({ children, active }: { children: React.Reac
         <div className="cp-shell-main">
           <div className="cp-topbar">
             <button
-              className="cp-topbar-toggle hidden md:inline-flex"
+              className="cp-topbar-toggle hidden md:inline-flex items-center justify-center"
               onClick={() => setSidebarOpen(o => !o)}
               aria-label="Toggle sidebar"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
             </button>
             <button
-              className="cp-topbar-toggle md:hidden"
+              className="cp-topbar-toggle inline-flex md:hidden items-center justify-center"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
