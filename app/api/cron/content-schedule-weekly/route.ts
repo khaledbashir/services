@@ -84,9 +84,9 @@ async function alreadySent(start: string): Promise<boolean> {
 async function recordSent(start: string) {
   await query(
     `INSERT INTO content_schedule_reminders_log (schedule_id, kind, reminder_for_date)
-     VALUES ($1, 'weekly', $1)
+     VALUES ($1, 'weekly', $2::date)
      ON CONFLICT (schedule_id, kind, reminder_for_date) DO NOTHING`,
-    [start],
+    [`weekly-${start}`, start],
   )
 }
 
