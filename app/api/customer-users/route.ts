@@ -1,0 +1,99 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
+import { requireRole, isAuthError } from '@/lib/rbac'
+import { generateInviteToken } from '@/lib/portal-auth'
+
+// Staff-side management of customer portal accounts.
+
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
+    const result = await query(
+      `SELECT pu.id, pu.email, pu.full_name, pu.client_id, pu.is_active,
+              pu.invite_token, pu.invite_expires_at, pu.last_login_at, pu.created_at,
+              (pu.password_hash IS NOT NULL) AS has_password,
+              c.name AS client_name,
+              (SELECT COUNT(*)::int FROM client_venues cv WHERE cv.client_id = pu.client_id) AS venue_count
+       FROM portal_users pu
+       LEFT JOIN clients c ON c.id = pu.client_id
+       ORDER BY pu.created_at DESC`
+    )
+    return NextResponse.json({ users: result.rows })
+  } catch (err) {
+    console.error('Customer users list error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
+    const { email, full_name, client_id } = await request.json()
+    if (!email || !full_name) {
+      return NextResponse.json({ error: 'Email and full name are required' }, { status: 400 })
+    }
+
+    const inviteToken = generateInviteToken()
+    const result = await query(
+      `INSERT INTO portal_users (email, full_name, client_id, invite_token, invite_expires_at, invited_by)
+       VALUES (LOWER($1), $2, $3, $4, NOW() + INTERVAL '14 days', $5)
+       ON CONFLICT (email) DO UPDATE
+         SET full_name = EXCLUDED.full_name,
+             client_id = EXCLUDED.client_id,
+             invite_token = EXCLUDED.invite_token,
+             invite_expires_at = EXCLUDED.invite_expires_at,
+             is_active = true,
+             updated_at = NOW()
+       RETURNING id, email, full_name, client_id, invite_token`,
+      [email.trim(), full_name.trim(), client_id || null, inviteToken, auth.email]
+    )
+
+    const user = result.rows[0]
+    const origin = request.headers.get('origin') || `https://${request.headers.get('host')}`
+    return NextResponse.json({
+      user,
+      invite_url: `${origin}/customer/invite/${user.invite_token}`,
+    })
+  } catch (err) {
+    console.error('Customer user create error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await requireRole(request, 'manager')
+    if (isAuthError(auth)) return auth
+
+    const { id, is_active, client_id } = await request.json()
+    if (!id) return NextResponse.json({ error: 'User id required' }, { status: 400 })
+
+    const sets: string[] = ['updated_at = NOW()']
+    const params: any[] = [id]
+    if (typeof is_active === 'boolean') {
+      params.push(is_active)
+      sets.push(`is_active = $${params.length}`)
+    }
+    if (client_id !== undefined) {
+      params.push(client_id)
+      sets.push(`client_id = $${params.length}`)
+    }
+
+    const result = await query(
+      `UPDATE portal_users SET ${sets.join(', ')} WHERE id = $1 RETURNING id, email, is_active, client_id`,
+      params
+    )
+    if (result.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    return NextResponse.json({ user: result.rows[0] })
+  } catch (err) {
+    console.error('Customer user update error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

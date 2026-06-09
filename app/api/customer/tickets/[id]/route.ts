@@ -1,0 +1,117 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+import { NextRequest, NextResponse } from 'next/server'
+import { query } from '@/lib/db'
+import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
+import { notifyOps } from '@/lib/slack'
+
+const PORTAL_SERVICE_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
+
+async function loadScopedTicket(ticketId: string, venueIds: string[]) {
+  const result = await query(
+    `SELECT t.id, t.ticket_number, t.title, t.description, t.category, t.priority,
+            t.status, t.resolution_notes, t.image_url, t.created_at, t.updated_at,
+            t.resolved_at, t.venue_id, v.name AS venue_name, v.slack_channel_id
+     FROM tickets t
+     JOIN venues v ON v.id = t.venue_id
+     WHERE t.id = $1 AND t.venue_id = ANY($2::uuid[])`,
+    [ticketId, venueIds]
+  )
+  return result.rows[0] || null
+}
+
+// GET /api/customer/tickets/:id — detail + external thread
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getPortalSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const venueIds = await getPortalUserVenueIds(session)
+    if (venueIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const ticket = await loadScopedTicket(params.id, venueIds)
+    if (!ticket) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const [commentsResult, attachmentsResult] = await Promise.all([
+      query(
+        `SELECT tc.id, tc.body, tc.created_at,
+                COALESCE(tc.author_name, s.full_name, 'ANC Support') AS author,
+                (tc.author_name IS NOT NULL) AS is_customer
+         FROM ticket_comments tc
+         LEFT JOIN staff s ON tc.author_id = s.id
+         WHERE tc.ticket_id = $1 AND tc.is_internal = false
+         ORDER BY tc.created_at ASC`,
+        [params.id]
+      ),
+      query(
+        `SELECT id, comment_id, filename, mime_type, image_url, caption, created_at
+         FROM ticket_attachments
+         WHERE ticket_id = $1 AND is_internal = false
+         ORDER BY created_at ASC`,
+        [params.id]
+      ),
+    ])
+
+    return NextResponse.json({
+      ticket,
+      comments: commentsResult.rows,
+      attachments: attachmentsResult.rows,
+    })
+  } catch (err) {
+    console.error('Customer ticket detail error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// POST /api/customer/tickets/:id — add a reply to the thread
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getPortalSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const venueIds = await getPortalUserVenueIds(session)
+    if (venueIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const ticket = await loadScopedTicket(params.id, venueIds)
+    if (!ticket) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const { body } = await request.json()
+    if (!body || typeof body !== 'string' || !body.trim()) {
+      return NextResponse.json({ error: 'Comment body required' }, { status: 400 })
+    }
+
+    const comment = await query(
+      `INSERT INTO ticket_comments (ticket_id, author_id, author_name, body, is_internal)
+       VALUES ($1, $2, $3, $4, false)
+       RETURNING id, body, created_at`,
+      [params.id, PORTAL_SERVICE_STAFF_ID, `${session.fullName} (${session.clientName || 'Customer'})`, body.trim()]
+    )
+
+    const caseNum = String(ticket.ticket_number).padStart(8, '0')
+    const preview = body.trim()
+    notifyOps(
+      ':speech_balloon:',
+      `*Customer reply* from ${session.fullName} on Case #${caseNum} (${ticket.venue_name}):\n> ${preview.substring(0, 200)}${preview.length > 200 ? '...' : ''}`,
+      { label: 'View Ticket', url: `https://services.ancsports.net/tickets/${ticket.id}` },
+      ticket.slack_channel_id
+    )
+
+    return NextResponse.json({
+      comment: {
+        ...comment.rows[0],
+        author: `${session.fullName} (${session.clientName || 'Customer'})`,
+        is_customer: true,
+      },
+    })
+  } catch (err) {
+    console.error('Customer comment error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

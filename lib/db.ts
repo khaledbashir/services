@@ -461,6 +461,41 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_client_portals_created ON client_portals(created_at DESC)`)
 
     // ============================================================
+    // portal_users — customer accounts for the client-facing portal
+    // (login → see all open/closed tickets across their org's venues,
+    // submit tickets, reply on threads). Access scope = the venues of
+    // their client via client_venues, plus optional direct venue grants.
+    // ============================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS portal_users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL UNIQUE,
+        full_name TEXT NOT NULL,
+        password_hash TEXT,
+        client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        invite_token TEXT UNIQUE,
+        invite_expires_at TIMESTAMPTZ,
+        invited_by TEXT,
+        last_login_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_portal_users_client ON portal_users(client_id)`)
+    // Customer-authored comments carry a display name; author_id stays the
+    // service-account staff row so existing joins keep working.
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS author_name TEXT`)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS portal_user_venues (
+        portal_user_id UUID NOT NULL REFERENCES portal_users(id) ON DELETE CASCADE,
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (portal_user_id, venue_id)
+      )
+    `)
+
+    // ============================================================
     // service_types + venue_services — per-venue contracted services
     // (Joe's Apr 16 list: White Glove, Break/Fix, Event Support, etc.)
     // ============================================================

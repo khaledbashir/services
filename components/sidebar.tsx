@@ -314,6 +314,7 @@ export function Sidebar() {
       role: 'admin',
       links: [
         { href: '/staff', label: 'Users', role: 'admin' },
+        { href: '/admin/portal-users', label: 'Customer Portal Users', role: 'manager' },
       ],
     },
     // Rest of legacy Admin section stays hidden — exposes infrastructure tooling.
