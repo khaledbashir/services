@@ -35,14 +35,20 @@ interface Attachment {
   caption: string | null
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-700',
-  open: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  waiting: 'bg-purple-100 text-purple-700',
-  on_hold: 'bg-slate-100 text-slate-600',
-  resolved: 'bg-green-100 text-green-700',
-  closed: 'bg-slate-100 text-slate-500',
+function ledClass(status: string) {
+  if (status === 'new' || status === 'open') return 'is-open'
+  if (status === 'in_progress') return 'is-work'
+  if (status === 'waiting' || status === 'on_hold' || status === 'pending') return 'is-wait'
+  if (status === 'resolved') return 'is-done'
+  return 'is-closed'
+}
+
+function statusColor(status: string) {
+  if (status === 'new' || status === 'open') return 'var(--cp-blue-bright)'
+  if (status === 'in_progress') return 'var(--cp-amber)'
+  if (status === 'waiting' || status === 'on_hold' || status === 'pending') return 'var(--cp-violet)'
+  if (status === 'resolved') return 'var(--cp-green)'
+  return 'var(--cp-dim)'
 }
 
 function fmtDateTime(value: string) {
@@ -94,105 +100,121 @@ export default function CustomerTicketPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="cp-auth-shell">
         <div className="text-center">
-          <div className="text-slate-400 mb-3">Ticket not found</div>
-          <Link href="/customer" className="text-[#0A52EF] text-sm font-medium">← Back to dashboard</Link>
+          <div className="cp-mono text-sm mb-4" style={{ color: 'var(--cp-dim)' }}>TICKET NOT FOUND</div>
+          <Link href="/customer" className="cp-btn-ghost inline-block">← Back to dashboard</Link>
         </div>
       </div>
     )
   }
 
   if (!ticket) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400">Loading…</div>
+    return (
+      <div className="cp-auth-shell">
+        <div className="cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>LOADING…</div>
+      </div>
+    )
   }
 
   const isClosed = ticket.status === 'closed' || ticket.status === 'resolved'
   const standaloneAttachments = attachments.filter(a => !a.comment_id)
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-[#1B2A4A] text-white">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+    <div className="min-h-screen">
+      <header className="cp-header">
+        <div className="max-w-3xl mx-auto px-5 py-4 flex items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7" />
-          <Link href="/customer" className="text-sm text-blue-200 hover:text-white transition">← All tickets</Link>
+          <div className="hidden sm:block" style={{ width: 1, height: 28, background: 'var(--cp-line-strong)' }} />
+          <Link href="/customer" className="cp-mono text-xs transition-colors" style={{ color: 'var(--cp-muted)' }}>
+            ← ALL REQUESTS
+          </Link>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="text-xs font-mono text-slate-400">#{String(ticket.ticket_number).padStart(8, '0')}</span>
-            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[ticket.status] || 'bg-slate-100 text-slate-600'}`}>
+      <main className="max-w-3xl mx-auto px-5 py-10">
+        <div className="cp-panel p-7 mb-8 cp-stagger">
+          <div className="flex items-center gap-3 flex-wrap mb-3">
+            <span className={`cp-led ${ledClass(ticket.status)}`} />
+            <span className="cp-status-text" style={{ color: statusColor(ticket.status) }}>
               {ticket.status.replace(/_/g, ' ')}
             </span>
-            <span className="text-xs text-slate-400">{ticket.venue_name}</span>
+            <span className="cp-mono text-xs" style={{ color: 'var(--cp-dim)' }}>
+              #{String(ticket.ticket_number).padStart(8, '0')}
+            </span>
+            <span className={`cp-chip p-${['urgent','high','medium','low'].includes(ticket.priority) ? ticket.priority : 'low'}`}>
+              {ticket.priority}
+            </span>
           </div>
-          <h1 className="text-xl font-semibold text-slate-900">{ticket.title}</h1>
-          <div className="text-xs text-slate-500 mt-1">Opened {fmtDateTime(ticket.created_at)}</div>
+          <h1 className="cp-display text-3xl font-bold leading-tight normal-case" style={{ textTransform: 'none', letterSpacing: 0 }}>
+            {ticket.title}
+          </h1>
+          <div className="cp-mono mt-2" style={{ fontSize: 11, color: 'var(--cp-dim)' }}>
+            {ticket.venue_name} · OPENED {fmtDateTime(ticket.created_at).toUpperCase()}
+          </div>
           {ticket.description && (
-            <p className="text-sm text-slate-700 mt-4 whitespace-pre-wrap">{ticket.description}</p>
+            <p className="text-sm mt-5 whitespace-pre-wrap" style={{ color: 'var(--cp-muted)', lineHeight: 1.7 }}>
+              {ticket.description}
+            </p>
           )}
           {ticket.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={ticket.image_url} alt="Ticket attachment" className="mt-4 rounded-lg border border-slate-200 max-h-80" />
+            <img src={ticket.image_url} alt="Ticket attachment" className="mt-5 rounded max-h-80" style={{ border: '1px solid var(--cp-line-strong)' }} />
           )}
           {standaloneAttachments.map(a => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={a.id} src={a.image_url} alt={a.caption || a.filename || 'Attachment'} className="mt-3 rounded-lg border border-slate-200 max-h-80" />
+            <img key={a.id} src={a.image_url} alt={a.caption || a.filename || 'Attachment'} className="mt-4 rounded max-h-80" style={{ border: '1px solid var(--cp-line-strong)' }} />
           ))}
           {isClosed && ticket.resolution_notes && (
-            <div className="mt-4 rounded-lg bg-green-50 border border-green-200 p-3">
-              <div className="text-xs font-semibold text-green-800 mb-1">Resolution</div>
-              <p className="text-sm text-green-900 whitespace-pre-wrap">{ticket.resolution_notes}</p>
+            <div className="cp-resolution mt-6">
+              <div className="cp-mono mb-2" style={{ fontSize: 10, letterSpacing: '0.2em', color: 'var(--cp-green)' }}>RESOLUTION</div>
+              <p className="text-sm whitespace-pre-wrap" style={{ lineHeight: 1.7 }}>{ticket.resolution_notes}</p>
             </div>
           )}
         </div>
 
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">
-          Conversation {comments.length > 0 && `(${comments.length})`}
-        </h2>
-        <div className="space-y-3 mb-6">
+        <div className="cp-divider-label mb-5">
+          Conversation{comments.length > 0 && ` — ${comments.length}`}
+        </div>
+
+        <div className="space-y-4 mb-8 cp-stagger">
           {comments.length === 0 && (
-            <div className="text-sm text-slate-400 bg-white rounded-xl border border-slate-200 p-4">No replies yet.</div>
+            <div className="cp-panel p-5 cp-mono text-xs" style={{ color: 'var(--cp-dim)' }}>NO REPLIES YET</div>
           )}
           {comments.map(c => {
             const commentAttachments = attachments.filter(a => a.comment_id === c.id)
             return (
-              <div
-                key={c.id}
-                className={`rounded-xl border p-4 ${c.is_customer ? 'bg-blue-50/60 border-blue-200 ml-6' : 'bg-white border-slate-200 mr-6'}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-slate-700">{c.author}</span>
-                  <span className="text-xs text-slate-400">{fmtDateTime(c.created_at)}</span>
+              <div key={c.id} className={`cp-msg ${c.is_customer ? 'is-customer' : 'is-anc'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="cp-msg-author" style={{ color: c.is_customer ? 'var(--cp-blue-bright)' : 'var(--cp-green)' }}>
+                    {c.author}
+                  </span>
+                  <span className="cp-mono" style={{ fontSize: 10, color: 'var(--cp-dim)' }}>
+                    {fmtDateTime(c.created_at)}
+                  </span>
                 </div>
-                <p className="text-sm text-slate-800 whitespace-pre-wrap">{c.body}</p>
+                <p className="text-sm whitespace-pre-wrap" style={{ lineHeight: 1.65 }}>{c.body}</p>
                 {commentAttachments.map(a => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={a.id} src={a.image_url} alt={a.caption || 'Attachment'} className="mt-2 rounded-lg border border-slate-200 max-h-64" />
+                  <img key={a.id} src={a.image_url} alt={a.caption || 'Attachment'} className="mt-3 rounded max-h-64" style={{ border: '1px solid var(--cp-line-strong)' }} />
                 ))}
               </div>
             )
           })}
         </div>
 
-        <form onSubmit={sendReply} className="bg-white rounded-xl border border-slate-200 p-4">
+        <form onSubmit={sendReply} className="cp-panel p-5">
           <textarea
             value={reply}
             onChange={e => setReply(e.target.value)}
             rows={3}
-            placeholder={isClosed ? 'This ticket is closed — reply to reopen the conversation.' : 'Write a reply…'}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]"
+            placeholder={isClosed ? 'This request is closed — reply to reopen the conversation.' : 'Write a reply…'}
+            className="cp-input"
           />
-          <div className="flex justify-end mt-3">
-            <button
-              type="submit"
-              disabled={sending || !reply.trim()}
-              className="rounded-lg bg-[#0A52EF] px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
-            >
-              {sending ? 'Sending…' : 'Send reply'}
+          <div className="flex justify-end mt-4">
+            <button type="submit" disabled={sending || !reply.trim()} className="cp-btn">
+              {sending ? 'Sending…' : 'Send Reply'}
             </button>
           </div>
         </form>
