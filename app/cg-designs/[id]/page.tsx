@@ -1,10 +1,11 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { CommentThread } from '@/components/comment-thread'
 
 interface CgDesignRequestDetail {
   id: string
@@ -12,6 +13,7 @@ interface CgDesignRequestDetail {
   venue_name: string | null
   league: string | null
   team_name: string | null
+  tricode: string | null
   job_title: string
   notes: string | null
   designer_id: string | null
@@ -37,20 +39,18 @@ const statusOptions = [
 export default function CgDesignDetailPage({ params }: { params: { id: string } }) {
   const [item, setItem] = useState<CgDesignRequestDetail | null>(null)
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
-  const [finals, setFinals] = useState<{ final_location: string | null; proof_url: string | null }>({ final_location: null, proof_url: null })
-  const [finalsDraft, setFinalsDraft] = useState({ final_location: '', proof_url: '' })
-  const [savingFinals, setSavingFinals] = useState(false)
   const router = useRouter()
 
   const fetchData = async () => {
     try {
-      const [res, staffRes, finalsRes] = await Promise.all([
+      const [res, staffRes] = await Promise.all([
         fetch(`/api/cg-designs/${params.id}`),
         fetch('/api/staff'),
-        fetch(`/api/cg-designs/${params.id}/finals`),
       ])
       if (!res.ok) {
         setLoading(false)
@@ -61,13 +61,6 @@ export default function CgDesignDetailPage({ params }: { params: { id: string } 
       setItem(data.cg_design_request)
       setStaffList(staffData.staff || [])
       setNotesDraft(data.cg_design_request?.notes || '')
-      if (finalsRes.ok) {
-        const fd = await finalsRes.json()
-        const fl = fd.finals?.final_location || null
-        const pu = fd.finals?.proof_url || null
-        setFinals({ final_location: fl, proof_url: pu })
-        setFinalsDraft({ final_location: fl || '', proof_url: pu || '' })
-      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -75,26 +68,11 @@ export default function CgDesignDetailPage({ params }: { params: { id: string } 
     }
   }
 
-  const saveFinals = async (e: FormEvent) => {
-    e.preventDefault()
-    setSavingFinals(true)
-    try {
-      const res = await fetch(`/api/cg-designs/${params.id}/finals`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalsDraft),
-      })
-      if (res.ok) {
-        setFinals({
-          final_location: finalsDraft.final_location.trim() || null,
-          proof_url: finalsDraft.proof_url.trim() || null,
-        })
-      }
-    } catch (err) { console.error(err) }
-    finally { setSavingFinals(false) }
-  }
-
   useEffect(() => {
+    try {
+      setCurrentUserId(localStorage.getItem('userId'))
+      setIsAdmin(localStorage.getItem('userRole') === 'admin')
+    } catch {}
     fetchData()
   }, [params.id])
 
@@ -157,8 +135,12 @@ export default function CgDesignDetailPage({ params }: { params: { id: string } 
               <h1 className="text-xl font-semibold text-zinc-900">{item.job_title}</h1>
               <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
                 <span>{item.team_name || 'No team'}</span>
-                <span>&middot;</span>
-                <span>{item.league || 'No league'}</span>
+                {item.tricode && (
+                  <>
+                    <span>&middot;</span>
+                    <span className="font-mono">{item.tricode}</span>
+                  </>
+                )}
                 {item.venue_name && (
                   <>
                     <span>&middot;</span>
@@ -185,82 +167,220 @@ export default function CgDesignDetailPage({ params }: { params: { id: string } 
               <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={12} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" />
             </form>
 
-            {/* Final Location + Proofs (Alexis 5/6 — CG field parity).
-                Posting here is OUR record — workspace.anc.com is a separate
-                FTP-backed system that we don't auto-push to. Use the
-                /proof/<token> share link from the dashboard for client
-                review going forward. */}
-            <form onSubmit={saveFinals} className="border border-zinc-200 bg-white p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold text-zinc-900">Final Location & Proofs</h2>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">Where the final piece landed + the proof share URL clients see.</p>
-                </div>
-                <button type="submit" disabled={savingFinals} className="px-4 py-2 bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
-                  {savingFinals ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Final Location</label>
-                  <input
-                    type="text"
-                    value={finalsDraft.final_location}
-                    onChange={(e) => setFinalsDraft(prev => ({ ...prev, final_location: e.target.value }))}
-                    placeholder="Server path, drive folder, or URL where the final lives"
-                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Proof Share URL</label>
-                  <input
-                    type="text"
-                    value={finalsDraft.proof_url}
-                    onChange={(e) => setFinalsDraft(prev => ({ ...prev, proof_url: e.target.value }))}
-                    placeholder="https://services.ancsports.net/proof/<token>"
-                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white font-mono text-[12px]"
-                  />
-                </div>
-              </div>
-              {(finals.final_location || finals.proof_url) && (
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {finals.final_location && (
-                    <span className="inline-flex items-center gap-1 bg-zinc-100 text-zinc-700 px-2 py-1 rounded ring-1 ring-zinc-200">
-                      📁 <span className="truncate max-w-[200px]">{finals.final_location}</span>
-                    </span>
-                  )}
-                  {finals.proof_url && (
-                    <a href={finals.proof_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 bg-[#0A52EF]/10 text-[#0A52EF] px-2 py-1 rounded ring-1 ring-[#0A52EF]/20 hover:bg-[#0A52EF]/20">
-                      🔗 Open proof
-                    </a>
-                  )}
-                </div>
-              )}
-            </form>
+            <HoursLog cgDesignRequestId={item.id} staffList={staffList} />
+            <AttachmentPanel cgDesignRequestId={item.id} />
+            <CommentThread
+              baseUrl={`/api/cg-designs/${item.id}/comments`}
+              staff={staffList}
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+            />
           </div>
 
           <div className="space-y-6">
             <div className="border border-zinc-200 bg-zinc-50 p-5">
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">Assignment</h2>
-              <div>
-                <label className="block text-xs font-medium text-zinc-600 mb-1">Designer</label>
-                <select value={item.designer_id || ''} onChange={(e) => updateField({ designer_id: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
-                  <option value="">Unassigned</option>
-                  {staffList.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
-                </select>
-              </div>
+              <CgAssigneePicker cgDesignRequestId={item.id} staffList={staffList} />
             </div>
             <div className="border border-zinc-200 bg-zinc-50 p-5">
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">Request Details</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Due Date</span><span className="text-zinc-900">{item.due_date || '—'}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Team</span><span className="text-zinc-900 text-right">{item.team_name || '—'}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-zinc-500">League</span><span className="text-zinc-900">{item.league || '—'}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-zinc-500">Tri-Code</span><span className="text-zinc-900 font-mono">{item.tricode || '—'}</span></div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+function CgAssigneePicker({ cgDesignRequestId, staffList }: { cgDesignRequestId: string; staffList: Staff[] }) {
+  const [designers, setDesigners] = useState<Array<Staff & { is_primary?: boolean }>>([])
+  const [reps, setReps] = useState<Staff[]>([])
+  const staffById = useMemo(() => {
+    const m = new Map<string, Staff>()
+    staffList.forEach((person) => m.set(person.id, person))
+    return m
+  }, [staffList])
+
+  const load = async () => {
+    const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/assignees`, { cache: 'no-store' })
+    if (!res.ok) return
+    const data = await res.json()
+    setDesigners(data.designers || [])
+    setReps(data.enterprise_contacts || [])
+  }
+  useEffect(() => { load() }, [cgDesignRequestId])
+
+  const designerIds = designers.map((d) => d.id)
+  const repIds = reps.map((r) => r.id)
+  const save = async (next: { designer_ids?: string[]; enterprise_contact_ids?: string[]; primary_designer_id?: string }) => {
+    const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/assignees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        designer_ids: next.designer_ids ?? designerIds,
+        enterprise_contact_ids: next.enterprise_contact_ids ?? repIds,
+        primary_designer_id: next.primary_designer_id,
+      }),
+    })
+    if (res.ok) await load()
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className="block text-xs font-medium text-zinc-600 mb-1">Designers</label>
+        <div className="space-y-2">
+          {designers.map((designer) => (
+            <div key={designer.id} className="flex items-center justify-between gap-2 rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs">
+              <span>{designer.full_name}{designer.is_primary ? ' · primary' : ''}</span>
+              <button type="button" onClick={() => save({ designer_ids: designerIds.filter((id) => id !== designer.id) })} className="text-zinc-400 hover:text-red-600">Remove</button>
+            </div>
+          ))}
+          <select value="" onChange={(e) => e.target.value && save({ designer_ids: [...designerIds, e.target.value] })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+            <option value="">Add designer...</option>
+            {staffList.filter((s) => !designerIds.includes(s.id)).map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-zinc-600 mb-1">Enterprise Leads</label>
+        <div className="space-y-2">
+          {reps.map((rep) => (
+            <div key={rep.id} className="flex items-center justify-between gap-2 rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs">
+              <span>{staffById.get(rep.id)?.full_name || rep.full_name}</span>
+              <button type="button" onClick={() => save({ enterprise_contact_ids: repIds.filter((id) => id !== rep.id) })} className="text-zinc-400 hover:text-red-600">Remove</button>
+            </div>
+          ))}
+          <select value="" onChange={(e) => e.target.value && save({ enterprise_contact_ids: [...repIds, e.target.value] })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+            <option value="">Add enterprise lead...</option>
+            {staffList.filter((s) => !repIds.includes(s.id)).map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HoursLog({ cgDesignRequestId, staffList }: { cgDesignRequestId: string; staffList: Staff[] }) {
+  const [entries, setEntries] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [form, setForm] = useState({ hours: '', entry_date: new Date().toISOString().slice(0, 10), designer_id: '', description: '' })
+  const [saving, setSaving] = useState(false)
+
+  const load = async () => {
+    const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/hours`, { cache: 'no-store' })
+    if (!res.ok) return
+    const data = await res.json()
+    setEntries(data.entries || [])
+    setTotal(Number(data.total_hours || 0))
+  }
+  useEffect(() => { load() }, [cgDesignRequestId])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/hours`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, hours: Number(form.hours), designer_id: form.designer_id || undefined }),
+      })
+      if (res.ok) {
+        setForm((prev) => ({ ...prev, hours: '', description: '' }))
+        await load()
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/hours?entry_id=${id}`, { method: 'DELETE' })
+    if (res.ok) await load()
+  }
+
+  return (
+    <div className="border border-zinc-200 bg-white p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-900">Time Entries</h2>
+        <span className="text-xs font-semibold text-zinc-600">{total.toFixed(2)}h total</span>
+      </div>
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-[90px,150px,1fr,1.4fr,auto] gap-2">
+        <input type="number" step="0.25" min="0" value={form.hours} onChange={(e) => setForm((prev) => ({ ...prev, hours: e.target.value }))} placeholder="Hours" className="border border-zinc-300 px-3 py-2 text-sm outline-none" required />
+        <input type="date" value={form.entry_date} onChange={(e) => setForm((prev) => ({ ...prev, entry_date: e.target.value }))} className="border border-zinc-300 px-3 py-2 text-sm outline-none" />
+        <select value={form.designer_id} onChange={(e) => setForm((prev) => ({ ...prev, designer_id: e.target.value }))} className="border border-zinc-300 px-3 py-2 text-sm outline-none bg-white">
+          <option value="">Me</option>
+          {staffList.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+        </select>
+        <input type="text" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} placeholder="What changed" className="border border-zinc-300 px-3 py-2 text-sm outline-none" />
+        <button type="submit" disabled={saving} className="px-4 py-2 bg-zinc-900 text-white text-xs font-medium disabled:opacity-50">{saving ? 'Saving...' : 'Add'}</button>
+      </form>
+      <div className="space-y-2">
+        {entries.length === 0 ? (
+          <div className="rounded border border-dashed border-zinc-200 px-3 py-5 text-center text-xs text-zinc-400">No time entries yet</div>
+        ) : entries.map((entry) => (
+          <div key={entry.id} className="flex items-center justify-between gap-3 rounded border border-zinc-100 px-3 py-2 text-xs">
+            <div>
+              <span className="font-semibold text-zinc-900">{Number(entry.hours).toFixed(2)}h</span>
+              <span className="ml-2 text-zinc-500">{entry.designer_name || 'Designer'} · {entry.entry_date}</span>
+              {entry.description && <div className="mt-0.5 text-zinc-600">{entry.description}</div>}
+            </div>
+            <button type="button" onClick={() => remove(entry.id)} className="text-zinc-400 hover:text-red-600">Delete</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AttachmentPanel({ cgDesignRequestId }: { cgDesignRequestId: string }) {
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [uploading, setUploading] = useState(false)
+
+  const load = async () => {
+    const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/attachments`, { cache: 'no-store' })
+    if (res.ok) setAttachments((await res.json()).attachments || [])
+  }
+  useEffect(() => { load() }, [cgDesignRequestId])
+
+  const upload = async (file: File | null) => {
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/cg-designs/${cgDesignRequestId}/attachments`, { method: 'POST', body: form })
+      if (res.ok) await load()
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="border border-zinc-200 bg-white p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-900">Attachments</h2>
+        <label className="cursor-pointer px-3 py-1.5 bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800">
+          {uploading ? 'Uploading...' : 'Attach'}
+          <input type="file" className="hidden" onChange={(e) => upload(e.target.files?.[0] || null)} disabled={uploading} />
+        </label>
+      </div>
+      <div className="space-y-2">
+        {attachments.length === 0 ? (
+          <div className="rounded border border-dashed border-zinc-200 px-3 py-5 text-center text-xs text-zinc-400">No attachments yet</div>
+        ) : attachments.map((file) => (
+          <a key={file.id} href={file.download_url} className="flex items-center justify-between gap-3 rounded border border-zinc-100 px-3 py-2 text-xs hover:border-zinc-300">
+            <span className="truncate text-zinc-800">{file.filename}</span>
+            <span className="text-zinc-400">{Math.max(1, Math.round(Number(file.size_bytes || 0) / 1024))} KB</span>
+          </a>
+        ))}
+      </div>
+    </div>
   )
 }

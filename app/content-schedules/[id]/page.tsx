@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -17,6 +17,7 @@ interface ContentScheduleDetail {
   operator_id: string | null
   operator_name: string | null
   files_ready: boolean
+  file_location: string | null
   status: string
   notes: string | null
   created_at: string
@@ -31,6 +32,8 @@ const statusOptions = [
   { value: 'scheduled_to_launch', label: 'Scheduled To Launch' },
   { value: 'content_live', label: 'Content Live' },
   { value: 'confirmed_live', label: 'Confirmed Live with Client' },
+  { value: 'content_removed', label: 'Content Removed' },
+  { value: 'done', label: 'Done' },
 ]
 
 export default function ContentScheduleDetailPage({ params }: { params: { id: string } }) {
@@ -157,10 +160,7 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Operator</label>
-                  <select value={item.operator_id || ''} onChange={(e) => updateField({ operator_id: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
-                    <option value="">Unassigned</option>
-                    {staffList.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
-                  </select>
+                  <ContentAssigneePicker contentScheduleId={item.id} staffList={staffList} />
                 </div>
                 <label className="flex items-center gap-2 text-sm text-zinc-700">
                   <input type="checkbox" checked={item.files_ready} onChange={(e) => updateField({ files_ready: e.target.checked })} />
@@ -170,9 +170,19 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
             </div>
             <div className="border border-zinc-200 bg-zinc-50 p-5">
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">Schedule Details</h2>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between gap-4"><span className="text-zinc-500">Launch Date</span><span className="text-zinc-900">{item.launch_date || '—'}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-zinc-500">End Date</span><span className="text-zinc-900">{item.end_date || '—'}</span></div>
+              <div className="space-y-4 text-sm">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Launch Date</label>
+                  <input type="date" value={item.launch_date || ''} onChange={(e) => updateField({ launch_date: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">End Date</label>
+                  <input type="date" value={item.end_date || ''} onChange={(e) => updateField({ end_date: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">File Location</label>
+                  <input type="text" value={item.file_location || ''} onChange={(e) => updateField({ file_location: e.target.value })} placeholder="Folder, server path, or URL" className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                </div>
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Operator</span><span className="text-zinc-900 text-right">{item.operator_name || '—'}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Files Ready</span><span className="text-zinc-900">{item.files_ready ? 'Yes' : 'No'}</span></div>
               </div>
@@ -181,5 +191,75 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+function ContentAssigneePicker({ contentScheduleId, staffList }: { contentScheduleId: string; staffList: Staff[] }) {
+  const [operators, setOperators] = useState<Array<Staff & { is_primary?: boolean }>>([])
+  const [reps, setReps] = useState<Staff[]>([])
+  const staffById = useMemo(() => {
+    const m = new Map<string, Staff>()
+    staffList.forEach((person) => m.set(person.id, person))
+    return m
+  }, [staffList])
+
+  const load = async () => {
+    const res = await fetch(`/api/content-schedules/${contentScheduleId}/assignees`, { cache: 'no-store' })
+    if (!res.ok) return
+    const data = await res.json()
+    setOperators(data.operators || [])
+    setReps(data.enterprise_contacts || [])
+  }
+  useEffect(() => { load() }, [contentScheduleId])
+
+  const operatorIds = operators.map((operator) => operator.id)
+  const repIds = reps.map((rep) => rep.id)
+  const save = async (next: { operator_ids?: string[]; enterprise_contact_ids?: string[]; primary_operator_id?: string }) => {
+    const res = await fetch(`/api/content-schedules/${contentScheduleId}/assignees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operator_ids: next.operator_ids ?? operatorIds,
+        enterprise_contact_ids: next.enterprise_contact_ids ?? repIds,
+        primary_operator_id: next.primary_operator_id,
+      }),
+    })
+    if (res.ok) await load()
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className="block text-xs font-medium text-zinc-600 mb-1">Operators</label>
+        <div className="space-y-2">
+          {operators.map((operator) => (
+            <div key={operator.id} className="flex items-center justify-between gap-2 rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs">
+              <span>{operator.full_name}{operator.is_primary ? ' · primary' : ''}</span>
+              <button type="button" onClick={() => save({ operator_ids: operatorIds.filter((id) => id !== operator.id) })} className="text-zinc-400 hover:text-red-600">Remove</button>
+            </div>
+          ))}
+          <select value="" onChange={(e) => e.target.value && save({ operator_ids: [...operatorIds, e.target.value] })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+            <option value="">Add operator...</option>
+            {staffList.filter((s) => !operatorIds.includes(s.id)).map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-zinc-600 mb-1">Enterprise Leads</label>
+        <div className="space-y-2">
+          {reps.map((rep) => (
+            <div key={rep.id} className="flex items-center justify-between gap-2 rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs">
+              <span>{staffById.get(rep.id)?.full_name || rep.full_name}</span>
+              <button type="button" onClick={() => save({ enterprise_contact_ids: repIds.filter((id) => id !== rep.id) })} className="text-zinc-400 hover:text-red-600">Remove</button>
+            </div>
+          ))}
+          <select value="" onChange={(e) => e.target.value && save({ enterprise_contact_ids: [...repIds, e.target.value] })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+            <option value="">Add enterprise lead...</option>
+            {staffList.filter((s) => !repIds.includes(s.id)).map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
   )
 }

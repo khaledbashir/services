@@ -13,6 +13,7 @@ interface ContentSchedule {
   launch_date: string | null
   end_date: string | null
   files_ready: boolean
+  file_location: string | null
   status: string
   notes: string | null
   venue_name: string | null
@@ -31,6 +32,8 @@ const statusColumns = [
   { key: 'scheduled_to_launch', label: 'Scheduled To Launch' },
   { key: 'content_live', label: 'Content Live' },
   { key: 'confirmed_live', label: 'Confirmed Live with Client' },
+  { key: 'content_removed', label: 'Content Removed' },
+  { key: 'done', label: 'Done' },
 ] as const
 
 const statusTone: Record<string, string> = {
@@ -39,6 +42,8 @@ const statusTone: Record<string, string> = {
   scheduled_to_launch: 'bg-amber-50 text-amber-700',
   content_live: 'bg-blue-50 text-blue-700',
   confirmed_live: 'bg-emerald-50 text-emerald-700',
+  content_removed: 'bg-rose-50 text-rose-700',
+  done: 'bg-zinc-100 text-zinc-600',
 }
 
 export default function ContentSchedulesPage() {
@@ -60,9 +65,17 @@ export default function ContentSchedulesPage() {
     launch_date: '',
     end_date: '',
     operator_id: '',
+    operator_ids: [] as string[],
+    enterprise_contact_ids: [] as string[],
     files_ready: false,
+    file_location: '',
     notes: '',
   })
+  const staffById = useMemo(() => {
+    const m = new Map<string, Staff>()
+    staff.forEach((person) => m.set(person.id, person))
+    return m
+  }, [staff])
 
   const fetchData = async () => {
     try {
@@ -98,7 +111,9 @@ export default function ContentSchedulesPage() {
           venue_id: formData.venue_id || null,
           launch_date: formData.launch_date || null,
           end_date: formData.end_date || null,
-          operator_id: formData.operator_id || null,
+          operator_id: formData.operator_ids[0] || null,
+          operator_ids: formData.operator_ids,
+          enterprise_contact_ids: formData.enterprise_contact_ids,
         }),
       })
       if (res.ok) {
@@ -109,7 +124,10 @@ export default function ContentSchedulesPage() {
           launch_date: '',
           end_date: '',
           operator_id: '',
+          operator_ids: [],
+          enterprise_contact_ids: [],
           files_ready: false,
+          file_location: '',
           notes: '',
         })
         setShowForm(false)
@@ -218,11 +236,58 @@ export default function ContentSchedulesPage() {
                   <input type="date" value={formData.end_date} onChange={(e) => setFormData((prev) => ({ ...prev, end_date: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Operator</label>
-                  <select value={formData.operator_id} onChange={(e) => setFormData((prev) => ({ ...prev, operator_id: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
-                    <option value="">Unassigned</option>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">File Location</label>
+                  <input type="text" value={formData.file_location} onChange={(e) => setFormData((prev) => ({ ...prev, file_location: e.target.value }))} placeholder="Folder, server path, or URL" className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Operators</label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({ ...prev, operator_ids: prev.operator_ids.includes(id) ? prev.operator_ids : [...prev.operator_ids, id] }))
+                    }}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  >
+                    <option value="">Add operator...</option>
                     {staff.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
                   </select>
+                  {formData.operator_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.operator_ids.map((id) => (
+                        <button key={id} type="button" onClick={() => setFormData((prev) => ({ ...prev, operator_ids: prev.operator_ids.filter((x) => x !== id) }))} className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-200">
+                          {staffById.get(id)?.full_name || 'Operator'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Enterprise Leads</label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({ ...prev, enterprise_contact_ids: prev.enterprise_contact_ids.includes(id) ? prev.enterprise_contact_ids : [...prev.enterprise_contact_ids, id] }))
+                    }}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  >
+                    <option value="">Add enterprise lead...</option>
+                    {staff.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+                  </select>
+                  {formData.enterprise_contact_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.enterprise_contact_ids.map((id) => (
+                        <button key={id} type="button" onClick={() => setFormData((prev) => ({ ...prev, enterprise_contact_ids: prev.enterprise_contact_ids.filter((x) => x !== id) }))} className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-200">
+                          {staffById.get(id)?.full_name || 'Enterprise Lead'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <label className="flex items-center gap-2 text-sm text-zinc-700">
@@ -297,6 +362,7 @@ export default function ContentSchedulesPage() {
                         <p>{item.company_name || 'No company'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.operator_name || 'No operator assigned'}</p>
+                        {item.file_location && <p className="truncate">{item.file_location}</p>}
                         {item.launch_date && <p>Launch {formatDate(item.launch_date)}</p>}
                         <p>{item.files_ready ? 'Files ready' : 'Files pending'}</p>
                       </div>

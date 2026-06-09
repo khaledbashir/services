@@ -359,6 +359,83 @@ async function runMigrations() {
     await client.query(`ALTER TABLE design_request_files ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ`)
     await client.query(`ALTER TABLE design_request_files ADD COLUMN IF NOT EXISTS view_count INTEGER NOT NULL DEFAULT 0`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_files_req_version ON design_request_files(design_request_id, version DESC)`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS tricode TEXT`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_proof_link TEXT`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_final_link TEXT`)
+    await client.query(`CREATE TABLE IF NOT EXISTS design_request_designers (
+      design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      assigned_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (design_request_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_designers_staff ON design_request_designers(staff_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS design_request_enterprise_contacts (
+      design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (design_request_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_enterprise_contacts_staff ON design_request_enterprise_contacts(staff_id)`)
+    await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS tricode TEXT`)
+    await client.query(`CREATE TABLE IF NOT EXISTS cg_design_designers (
+      cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      assigned_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (cg_design_request_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_designers_staff ON cg_design_designers(staff_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS cg_design_enterprise_contacts (
+      cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (cg_design_request_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_enterprise_contacts_staff ON cg_design_enterprise_contacts(staff_id)`)
+    await client.query(`ALTER TABLE designer_time_entries ADD COLUMN IF NOT EXISTS cg_design_request_id UUID REFERENCES cg_design_requests(id) ON DELETE CASCADE`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_designer_time_entries_cg ON designer_time_entries(cg_design_request_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS cg_design_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
+      author_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      author_name TEXT,
+      body TEXT NOT NULL,
+      mentions TEXT[] DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_comments_request ON cg_design_comments(cg_design_request_id, created_at DESC)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS cg_design_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes BIGINT NOT NULL DEFAULT 0,
+      data BYTEA,
+      uploaded_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_attachments_request ON cg_design_attachments(cg_design_request_id, created_at DESC)`)
+    await client.query(`ALTER TABLE content_schedules ADD COLUMN IF NOT EXISTS file_location TEXT`)
+    await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_operators (
+      content_schedule_id UUID NOT NULL REFERENCES content_schedules(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      assigned_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (content_schedule_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_content_schedule_operators_staff ON content_schedule_operators(staff_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_enterprise_contacts (
+      content_schedule_id UUID NOT NULL REFERENCES content_schedules(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (content_schedule_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_content_schedule_enterprise_contacts_staff ON content_schedule_enterprise_contacts(staff_id)`)
 
     // ============================================================
     // client_portals — shareable read-only venue health links

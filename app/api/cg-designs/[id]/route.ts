@@ -11,6 +11,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
   'league',
   'team_name',
+  'tricode',
   'job_title',
   'notes',
   'designer_id',
@@ -34,6 +35,12 @@ function normalizeValue(key: string, value: any) {
   if (['league', 'team_name', 'job_title', 'notes'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
+  if (key === 'tricode') {
+    if (typeof value !== 'string') return null
+    const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+    const normalized = cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+    return /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(normalized) ? normalized : null
+  }
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
   if (key === 'due_date') return value || null
   return value
@@ -48,7 +55,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
   const params: any[] = [id, ...vf.params]
 
   const result = await query(
-    `SELECT cg.id, cg.venue_id, cg.league, cg.team_name, cg.job_title, cg.notes, cg.designer_id, cg.due_date, cg.status,
+    `SELECT cg.id, cg.venue_id, cg.league, cg.team_name, cg.job_title, cg.tricode, cg.notes, cg.designer_id, cg.due_date, cg.status,
             cg.created_at, cg.updated_at, v.name as venue_name, s.full_name as designer_name
      FROM cg_design_requests cg
      LEFT JOIN venues v ON cg.venue_id = v.id
@@ -70,6 +77,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({
         cg_design_request: {
           id: c.id, job_title: c.clientTriCode, team_name: c.teamName, league: c.sport,
+          tricode: c.clientTriCode,
           status: c.status, created_at: c.createdAt, updated_at: c.updatedAt,
           designer_id: c.cgDesignerId,
           designer_name: c.cgDesigner ? `${c.cgDesigner.name.firstName} ${c.cgDesigner.name.lastName}`.trim() : null,
@@ -99,6 +107,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.clientTriCode = body.job_title?.trim() || null
       if ('team_name' in body) patch.teamName = body.team_name?.trim() || null
+      if ('tricode' in body) patch.clientTriCode = normalizeValue('tricode', body.tricode)
       if ('league' in body) patch.sport = body.league?.trim() || null
       if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
       const updated = await CgDesigns.update(params.id, patch)

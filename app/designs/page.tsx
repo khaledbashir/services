@@ -47,6 +47,7 @@ interface Venue {
   name: string
   sports?: string[] | null
   venue_type?: string | null
+  aliases?: string[] | null
 }
 interface Staff { id: string; full_name: string }
 
@@ -87,6 +88,18 @@ function classifyVenue(v: Venue): LeagueKey {
   // No sport association — fall through to the venue's own type.
   if ((v.venue_type || '').toLowerCase() === 'ooh') return 'ooh'
   return 'other'
+}
+
+function normalizeTriCode(value: string): string {
+  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+}
+
+function venueTriCodeOptions(venue: Venue | null | undefined): string[] {
+  const options = (venue?.aliases || [])
+    .map(normalizeTriCode)
+    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
+  return Array.from(new Set(options))
 }
 
 const statusColumns: KanbanColumn[] = [
@@ -299,9 +312,13 @@ export default function DesignsPage() {
     boards_requested: '',
     sizes_requested: '',
     designer_id: '',
+    designer_ids: [] as string[],
     enterprise_contact_id: '',
+    enterprise_contact_ids: [] as string[],
     due_date: '',
     hours_estimated: '',
+    ftp_final_link: '',
+    ftp_proof_link: '',
     notes: '',
     is_rando: false,
   })
@@ -384,10 +401,12 @@ export default function DesignsPage() {
         body: JSON.stringify({
           ...formData,
           venue_id: formData.venue_id || null,
-          designer_id: formData.designer_id || null,
-          enterprise_contact_id: formData.enterprise_contact_id || null,
+          designer_id: formData.designer_ids[0] || null,
+          enterprise_contact_id: formData.enterprise_contact_ids[0] || null,
+          designer_ids: formData.designer_ids,
+          enterprise_contact_ids: formData.enterprise_contact_ids,
           due_date: formData.due_date || null,
-          hours_estimated: formData.hours_estimated ? Number(formData.hours_estimated) : null,
+          hours_estimated: null,
         }),
       })
       if (res.ok) {
@@ -399,9 +418,13 @@ export default function DesignsPage() {
           boards_requested: '',
           sizes_requested: '',
           designer_id: '',
+          designer_ids: [],
           enterprise_contact_id: '',
+          enterprise_contact_ids: [],
           due_date: '',
           hours_estimated: '',
+          ftp_final_link: '',
+          ftp_proof_link: '',
           notes: '',
           is_rando: false,
         })
@@ -423,6 +446,15 @@ export default function DesignsPage() {
     venues.forEach((v) => m.set(v.id, v))
     return m
   }, [venues])
+  const staffById = useMemo(() => {
+    const m = new Map<string, Staff>()
+    staff.forEach((person) => m.set(person.id, person))
+    return m
+  }, [staff])
+  const selectedFormTriCodes = useMemo(() => {
+    const venue = formData.venue_id ? venueById.get(formData.venue_id) : null
+    return venueTriCodeOptions(venue)
+  }, [formData.venue_id, venueById])
   const venueByLowerName = useMemo(() => {
     const m = new Map<string, Venue>()
     venues.forEach((v) => m.set(v.name.toLowerCase(), v))
@@ -703,7 +735,16 @@ export default function DesignsPage() {
                   </label>
                   <select
                     value={formData.venue_id}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, venue_id: e.target.value }))}
+                    onChange={(e) => {
+                      const venueId = e.target.value
+                      const venue = venueId ? venueById.get(venueId) : null
+                      const codes = venueTriCodeOptions(venue)
+                      setFormData((prev) => ({
+                        ...prev,
+                        venue_id: venueId,
+                        tricode: codes.length === 1 ? codes[0] : prev.tricode,
+                      }))
+                    }}
                     className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
                   >
                     <option value="">Not specified</option>
@@ -711,16 +752,6 @@ export default function DesignsPage() {
                       <option key={venue.id} value={venue.id}>{venue.name}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Company</label>
-                  <input
-                    type="text"
-                    value={formData.company_name}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, company_name: e.target.value }))}
-                    placeholder="e.g. Los Angeles Lakers"
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  />
                 </div>
               </div>
 
@@ -740,41 +771,100 @@ export default function DesignsPage() {
 
               <div className="grid md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Tri-Code</label>
-                  <input
-                    type="text"
-                    value={formData.tricode}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value.toUpperCase() }))}
-                    maxLength={3}
-                    placeholder="LAL"
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
-                  />
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
+                    Tri-Code <span className="text-zinc-400 font-normal lowercase tracking-normal">— up to 2 × 3 letters</span>
+                  </label>
+                  {selectedFormTriCodes.length > 0 ? (
+                    <select
+                      value={formData.tricode}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value }))}
+                      className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
+                    >
+                      <option value="">Select code</option>
+                      {selectedFormTriCodes.map((code) => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.tricode}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
+                      maxLength={7}
+                      placeholder="BSX-FEN"
+                      className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
+                    />
+                  )}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Designer</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Designers</label>
                   <select
-                    value={formData.designer_id}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, designer_id: e.target.value }))}
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({
+                        ...prev,
+                        designer_ids: prev.designer_ids.includes(id) ? prev.designer_ids : [...prev.designer_ids, id],
+                      }))
+                    }}
                     className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">Add designer...</option>
                     {staff.map((person) => (
                       <option key={person.id} value={person.id}>{person.full_name}</option>
                     ))}
                   </select>
+                  {formData.designer_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.designer_ids.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, designer_ids: prev.designer_ids.filter((x) => x !== id) }))}
+                          className="rounded-md bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-200"
+                          title="Remove designer"
+                        >
+                          {staffById.get(id)?.full_name || 'Designer'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Enterprise Lead</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Enterprise Leads</label>
                   <select
-                    value={formData.enterprise_contact_id}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, enterprise_contact_id: e.target.value }))}
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({
+                        ...prev,
+                        enterprise_contact_ids: prev.enterprise_contact_ids.includes(id) ? prev.enterprise_contact_ids : [...prev.enterprise_contact_ids, id],
+                      }))
+                    }}
                     className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">Add enterprise lead...</option>
                     {staff.map((person) => (
                       <option key={person.id} value={person.id}>{person.full_name}</option>
                     ))}
                   </select>
+                  {formData.enterprise_contact_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.enterprise_contact_ids.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, enterprise_contact_ids: prev.enterprise_contact_ids.filter((x) => x !== id) }))}
+                          className="rounded-md bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-200"
+                          title="Remove enterprise lead"
+                        >
+                          {staffById.get(id)?.full_name || 'Enterprise Lead'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Due Date</label>
@@ -787,7 +877,7 @@ export default function DesignsPage() {
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Boards</label>
                   <input
@@ -808,15 +898,27 @@ export default function DesignsPage() {
                     className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
                   />
                 </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Est. Hours</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">FTP Location</label>
                   <input
-                    type="number"
-                    step="0.25"
-                    value={formData.hours_estimated}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, hours_estimated: e.target.value }))}
-                    placeholder="0"
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white tabular-nums"
+                    type="text"
+                    value={formData.ftp_final_link}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ftp_final_link: e.target.value }))}
+                    placeholder="FTP path / folder for final files"
+                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Proof Link</label>
+                  <input
+                    type="text"
+                    value={formData.ftp_proof_link}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ftp_proof_link: e.target.value }))}
+                    placeholder="Link to the proof for client review"
+                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
                   />
                 </div>
               </div>

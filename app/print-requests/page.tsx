@@ -342,45 +342,44 @@ export default function PrintRequestsPage() {
               <p className="mt-1 text-sm text-zinc-500">Try another client or create a new print request.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-[#E6ECF5] bg-white shadow-sm">
-              <table className="w-full min-w-[980px] text-sm">
-                <thead>
-                  <tr className="border-b border-[#E6ECF5] bg-[#F8FBFF]">
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Job</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Client</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Status</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice</th>
-                    <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Proofs</th>
-                    <th className="px-5 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecords.map((record) => {
-                    const statusMeta = STATUS_COLUMNS.find((column) => column.key === record.status) || STATUS_COLUMNS[0]
-                    return (
-                      <tr key={record.id} className="cursor-pointer border-b border-[#EEF2F7] transition hover:bg-[#FAFCFF]" onClick={() => openEdit(record)}>
-                        <td className="px-5 py-3.5">
-                          <div className="font-medium text-zinc-950">{record.job_title}</div>
-                          <div className="mt-1 line-clamp-1 text-xs text-zinc-500">{record.shipping_address || 'No shipping address yet'}</div>
-                        </td>
-                        <td className="px-5 py-3.5 text-zinc-700">{record.client_name || 'Unlinked'}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusMeta.tone}`}>
-                            {statusMeta.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
-                        <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
-                        <td className="px-5 py-3.5 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
-                        <td className="px-5 py-3.5 text-zinc-600">{record.proof_links.length}</td>
-                        <td className="px-5 py-3.5 text-right text-zinc-500">{formatShortDate(record.updated_at)}</td>
+            <div className="space-y-5">
+              {grouped.filter((column) => column.items.length > 0).map((column) => (
+                <div key={column.key} className="overflow-hidden rounded-xl border border-[#E6ECF5] bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-[#E6ECF5] bg-[#F8FBFF] px-5 py-3.5">
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${column.tone}`}>{column.label}</span>
+                    <span className="text-xs font-semibold text-zinc-500">{column.items.length} request{column.items.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <table className="w-full min-w-[980px] text-sm">
+                    <thead>
+                      <tr className="border-b border-[#E6ECF5] bg-white">
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Job</th>
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Client</th>
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship</th>
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival</th>
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice</th>
+                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Proofs</th>
+                        <th className="px-5 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Updated</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {column.items.map((record) => (
+                        <tr key={record.id} className="cursor-pointer border-b border-[#EEF2F7] transition hover:bg-[#FAFCFF]" onClick={() => openEdit(record)}>
+                          <td className="px-5 py-3.5">
+                            <div className="font-medium text-zinc-950">{record.job_title}</div>
+                            <div className="mt-1 line-clamp-1 text-xs text-zinc-500">{record.shipping_address || 'No shipping address yet'}</div>
+                          </td>
+                          <td className="px-5 py-3.5 text-zinc-700">{record.client_name || 'Unlinked'}</td>
+                          <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
+                          <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
+                          <td className="px-5 py-3.5 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
+                          <td className="px-5 py-3.5 text-zinc-600">{record.proof_links.length}</td>
+                          <td className="px-5 py-3.5 text-right text-zinc-500">{formatShortDate(record.updated_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
           )
         ) : (

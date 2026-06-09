@@ -19,6 +19,8 @@ const ALLOWED_STATUSES = new Set([
   'scheduled_to_launch',
   'content_live',
   'confirmed_live',
+  'content_removed',
+  'done',
 ])
 
 function normalizeStatus(status: string | null | undefined) {
@@ -43,6 +45,8 @@ function mapContentStatus(raw: string | null | undefined): string {
     confirmed: 'confirmed_live',
     done: 'confirmed_live',
     completed: 'confirmed_live',
+    content_removed: 'content_removed',
+    removed: 'content_removed',
   }
   return map[stripped] || stripped || 'in_queue'
 }
@@ -140,7 +144,7 @@ export async function GET(request: NextRequest) {
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const result = await query(
-      `SELECT cs.id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.files_ready, cs.status, cs.notes,
+      `SELECT cs.id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.files_ready, cs.status, cs.file_location, cs.notes,
               TO_CHAR(cs.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(cs.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
@@ -175,8 +179,11 @@ export async function POST(request: NextRequest) {
       launch_date,
       end_date,
       operator_id,
+      operator_ids,
+      enterprise_contact_ids,
       files_ready,
       status,
+      file_location,
       notes,
     } = body
 
@@ -193,6 +200,7 @@ export async function POST(request: NextRequest) {
           runEndDate: end_date || null,
           status: normalizeStatus(status),
           notes: notes?.trim() || null,
+          ftpLocation: file_location?.trim() || null,
         }
         if (venue_id) {
           const twentyVenueId = await dashboardVenueIdToTwentyId(venue_id)
@@ -221,9 +229,9 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO content_schedules (
-        venue_id, company_name, content_name, launch_date, end_date, operator_id, files_ready, status, notes, updated_at
+        venue_id, company_name, content_name, launch_date, end_date, operator_id, files_ready, status, file_location, notes, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
       )
       RETURNING id, content_name, status`,
       [
@@ -232,14 +240,39 @@ export async function POST(request: NextRequest) {
         content_name.trim(),
         launch_date || null,
         end_date || null,
-        operator_id || null,
+        (Array.isArray(operator_ids) && operator_ids[0]) || operator_id || null,
         Boolean(files_ready),
         normalizeStatus(status),
+        file_location?.trim() || null,
         notes?.trim() || null,
       ],
     )
 
-    return NextResponse.json({ content_schedule: result.rows[0] })
+    const created = result.rows[0]
+    const operatorIds = Array.isArray(operator_ids)
+      ? operator_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : (operator_id ? [operator_id] : [])
+    const enterpriseContactIds = Array.isArray(enterprise_contact_ids)
+      ? enterprise_contact_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : []
+
+    for (const [idx, staffId] of Array.from(new Set(operatorIds)).entries()) {
+      await query(
+        `INSERT INTO content_schedule_operators (content_schedule_id, staff_id, is_primary, assigned_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (content_schedule_id, staff_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
+        [created.id, staffId, idx === 0, auth.userId],
+      )
+    }
+    for (const staffId of Array.from(new Set(enterpriseContactIds))) {
+      await query(
+        `INSERT INTO content_schedule_enterprise_contacts (content_schedule_id, staff_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [created.id, staffId],
+      )
+    }
+
+    return NextResponse.json({ content_schedule: created })
   } catch (err) {
     console.error('Error creating content schedule:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -70,6 +70,13 @@ function normalizeStatus(status: string | null | undefined) {
   return ALLOWED_STATUSES.has(status) ? status : 'request_submitted'
 }
 
+function normalizeTriCode(value: unknown) {
+  if (typeof value !== 'string') return null
+  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+  const normalized = cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+  return /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(normalized) ? normalized : null
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireRole(request, 'technician')
@@ -119,7 +126,7 @@ export async function GET(request: NextRequest) {
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const result = await query(
-      `SELECT cg.id, cg.league, cg.team_name, cg.job_title, cg.notes, cg.due_date, cg.status,
+      `SELECT cg.id, cg.league, cg.team_name, cg.job_title, cg.tricode, cg.notes, cg.due_date, cg.status,
               TO_CHAR(cg.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(cg.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
@@ -149,9 +156,12 @@ export async function POST(request: NextRequest) {
       venue_id,
       league,
       team_name,
+      tricode,
       job_title,
       notes,
       designer_id,
+      designer_ids,
+      enterprise_contact_ids,
       due_date,
       status,
     } = body
@@ -163,9 +173,9 @@ export async function POST(request: NextRequest) {
     if (isTwentyBackedEnabled('CG_DESIGNS')) {
       try {
         const created = await CgDesigns.create({
-          clientTriCode: job_title.trim(),
+          clientTriCode: normalizeTriCode(tricode) || job_title.trim(),
           teamName: team_name?.trim() || null,
-          sport: league?.trim() || null,
+          sport: null,
           status: normalizeStatus(status),
         })
         return NextResponse.json({ cg_design_request: { id: created.id, job_title: created.clientTriCode, status: created.status } })
@@ -182,24 +192,49 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO cg_design_requests (
-        venue_id, league, team_name, job_title, notes, designer_id, due_date, status, updated_at
+        venue_id, league, team_name, job_title, tricode, notes, designer_id, due_date, status, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
       )
       RETURNING id, job_title, status`,
       [
         venue_id || null,
-        league?.trim() || null,
+        null,
         team_name?.trim() || null,
         job_title.trim(),
+        normalizeTriCode(tricode),
         notes?.trim() || null,
-        designer_id || null,
+        (Array.isArray(designer_ids) && designer_ids[0]) || designer_id || null,
         due_date || null,
         normalizeStatus(status),
       ],
     )
 
-    return NextResponse.json({ cg_design_request: result.rows[0] })
+    const created = result.rows[0]
+    const designerIds = Array.isArray(designer_ids)
+      ? designer_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : (designer_id ? [designer_id] : [])
+    const enterpriseContactIds = Array.isArray(enterprise_contact_ids)
+      ? enterprise_contact_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : []
+
+    for (const [idx, staffId] of Array.from(new Set(designerIds)).entries()) {
+      await query(
+        `INSERT INTO cg_design_designers (cg_design_request_id, staff_id, is_primary, assigned_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (cg_design_request_id, staff_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
+        [created.id, staffId, idx === 0, auth.userId],
+      )
+    }
+    for (const staffId of Array.from(new Set(enterpriseContactIds))) {
+      await query(
+        `INSERT INTO cg_design_enterprise_contacts (cg_design_request_id, staff_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [created.id, staffId],
+      )
+    }
+
+    return NextResponse.json({ cg_design_request: created })
   } catch (err) {
     console.error('Error creating CG design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

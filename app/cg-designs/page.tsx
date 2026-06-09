@@ -10,6 +10,7 @@ interface CgDesignRequest {
   id: string
   league: string | null
   team_name: string | null
+  tricode: string | null
   job_title: string
   notes: string | null
   due_date: string | null
@@ -23,6 +24,11 @@ interface CgDesignRequest {
 
 interface Venue { id: string; name: string }
 interface Staff { id: string; full_name: string }
+
+function normalizeTriCode(value: string): string {
+  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+}
 
 const statusColumns = [
   { key: 'request_submitted', label: 'Submitted' },
@@ -62,13 +68,20 @@ export default function CgDesignsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     venue_id: '',
-    league: '',
     team_name: '',
+    tricode: '',
     job_title: '',
     notes: '',
     designer_id: '',
+    designer_ids: [] as string[],
+    enterprise_contact_ids: [] as string[],
     due_date: '',
   })
+  const staffById = useMemo(() => {
+    const m = new Map<string, Staff>()
+    staff.forEach((person) => m.set(person.id, person))
+    return m
+  }, [staff])
 
   const fetchData = async () => {
     try {
@@ -105,18 +118,22 @@ export default function CgDesignsPage() {
         body: JSON.stringify({
           ...formData,
           venue_id: formData.venue_id || null,
-          designer_id: formData.designer_id || null,
+          designer_id: formData.designer_ids[0] || null,
+          designer_ids: formData.designer_ids,
+          enterprise_contact_ids: formData.enterprise_contact_ids,
           due_date: formData.due_date || null,
         }),
       })
       if (res.ok) {
         setFormData({
           venue_id: '',
-          league: '',
           team_name: '',
+          tricode: '',
           job_title: '',
           notes: '',
           designer_id: '',
+          designer_ids: [],
+          enterprise_contact_ids: [],
           due_date: '',
         })
         setShowForm(false)
@@ -137,7 +154,7 @@ export default function CgDesignsPage() {
         !q ||
         item.job_title.toLowerCase().includes(q) ||
         (item.team_name || '').toLowerCase().includes(q) ||
-        (item.league || '').toLowerCase().includes(q) ||
+        (item.tricode || '').toLowerCase().includes(q) ||
         (item.venue_name || '').toLowerCase().includes(q) ||
         (item.designer_name || '').toLowerCase().includes(q)
 
@@ -213,12 +230,19 @@ export default function CgDesignsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">League</label>
-                  <input type="text" value={formData.league} onChange={(e) => setFormData((prev) => ({ ...prev, league: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
-                </div>
-                <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Team Name</label>
                   <input type="text" value={formData.team_name} onChange={(e) => setFormData((prev) => ({ ...prev, team_name: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Tri-Code</label>
+                  <input
+                    type="text"
+                    value={formData.tricode}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
+                    maxLength={7}
+                    placeholder="BSX-FEN"
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white font-mono uppercase"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Due Date</label>
@@ -227,11 +251,52 @@ export default function CgDesignsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-600 mb-1">Designer</label>
-                  <select value={formData.designer_id} onChange={(e) => setFormData((prev) => ({ ...prev, designer_id: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
-                    <option value="">Unassigned</option>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Designers</label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({ ...prev, designer_ids: prev.designer_ids.includes(id) ? prev.designer_ids : [...prev.designer_ids, id] }))
+                    }}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  >
+                    <option value="">Add designer...</option>
                     {staff.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
                   </select>
+                  {formData.designer_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.designer_ids.map((id) => (
+                        <button key={id} type="button" onClick={() => setFormData((prev) => ({ ...prev, designer_ids: prev.designer_ids.filter((x) => x !== id) }))} className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-200">
+                          {staffById.get(id)?.full_name || 'Designer'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-600 mb-1">Enterprise Leads</label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) return
+                      setFormData((prev) => ({ ...prev, enterprise_contact_ids: prev.enterprise_contact_ids.includes(id) ? prev.enterprise_contact_ids : [...prev.enterprise_contact_ids, id] }))
+                    }}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  >
+                    <option value="">Add enterprise lead...</option>
+                    {staff.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+                  </select>
+                  {formData.enterprise_contact_ids.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {formData.enterprise_contact_ids.map((id) => (
+                        <button key={id} type="button" onClick={() => setFormData((prev) => ({ ...prev, enterprise_contact_ids: prev.enterprise_contact_ids.filter((x) => x !== id) }))} className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-200">
+                          {staffById.get(id)?.full_name || 'Enterprise Lead'} x
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -294,7 +359,7 @@ export default function CgDesignsPage() {
                       </div>
                       <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
                         <p>{item.team_name || 'No team'}</p>
-                        <p>{item.league || 'No league'}</p>
+                        <p className="font-mono">{item.tricode || 'No tri-code'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.designer_name || 'No designer assigned'}</p>
                         {item.due_date && <p>Due {formatDate(item.due_date)}</p>}

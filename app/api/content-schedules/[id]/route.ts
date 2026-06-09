@@ -22,6 +22,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'files_ready',
   'status',
   'notes',
+  'file_location',
 ])
 
 const ALLOWED_STATUSES = new Set([
@@ -30,12 +31,14 @@ const ALLOWED_STATUSES = new Set([
   'scheduled_to_launch',
   'content_live',
   'confirmed_live',
+  'content_removed',
+  'done',
 ])
 
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'operator_id'].includes(key)) return value || null
-  if (['company_name', 'content_name', 'notes'].includes(key)) {
+  if (['company_name', 'content_name', 'notes', 'file_location'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
@@ -55,7 +58,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
   const params: any[] = [id, ...vf.params]
 
   const result = await query(
-    `SELECT cs.id, cs.venue_id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.operator_id, cs.files_ready,
+    `SELECT cs.id, cs.venue_id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.operator_id, cs.files_ready, cs.file_location,
             cs.status, cs.notes, cs.created_at, cs.updated_at, v.name as venue_name, s.full_name as operator_name
      FROM content_schedules cs
      LEFT JOIN venues v ON cs.venue_id = v.id
@@ -89,7 +92,7 @@ async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
     status: (raw.status || '').toString().replace(/^STATUS_/i, '').toLowerCase() || 'in_queue',
     notes: notesText,
     proof_link: raw.proofLink || null,
-    ftp_location: raw.ftpLocation || null,
+    file_location: raw.ftpLocation || null,
     wrike_task_id: raw.wrikeTaskId || null,
     created_at: cs.createdAt,
     updated_at: cs.updatedAt,
@@ -138,6 +141,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (body.end_date !== undefined) payload.runEndDate = body.end_date || null
       if (body.status !== undefined && ALLOWED_STATUSES.has(body.status)) payload.status = body.status
       if (body.notes !== undefined) payload.notes = body.notes?.trim() || null
+      if (body.file_location !== undefined) payload.ftpLocation = body.file_location?.trim() || null
       if (body.venue_id !== undefined) {
         if (body.venue_id) {
           const twentyVenueId = await dashboardVenueIdToTwentyId(body.venue_id)

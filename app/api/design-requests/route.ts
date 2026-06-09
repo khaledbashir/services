@@ -85,6 +85,13 @@ function normalizeStatus(status: string | null | undefined) {
   return ALLOWED_STATUSES.has(status) ? status : 'request_submitted'
 }
 
+function normalizeTriCode(value: unknown) {
+  if (typeof value !== 'string') return null
+  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+  const normalized = cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+  return /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(normalized) ? normalized : null
+}
+
 // Dashboard status values → Twenty's STATUS_ enum values.
 // Required on any write (create + PATCH with status in body) because Twenty
 // rejects `request_submitted`/`in_queue`/etc. with `Invalid value "..."
@@ -263,7 +270,9 @@ export async function POST(request: NextRequest) {
       boards_requested,
       sizes_requested,
       designer_id,
+      designer_ids,
       enterprise_contact_id,
+      enterprise_contact_ids,
       status,
       hours_estimated,
       hours_spent,
@@ -300,8 +309,9 @@ export async function POST(request: NextRequest) {
     // Auto-resolve venue from tricode using venues.aliases (Alexis 5/27: try
     // codes like PACERS-XXX should land on the right venue automatically).
     let resolvedVenueId = venue_id || null
-    if (!resolvedVenueId && tricode && typeof tricode === 'string' && tricode.trim()) {
-      const code = tricode.trim()
+    const normalizedTriCode = normalizeTriCode(tricode)
+    if (!resolvedVenueId && normalizedTriCode) {
+      const code = normalizedTriCode
       const matched = await query(
         `SELECT id FROM venues WHERE $1 = ANY(COALESCE(aliases, '{}')) LIMIT 1`,
         [code],
@@ -324,7 +334,7 @@ export async function POST(request: NextRequest) {
         resolvedVenueId,
         company_name?.trim() || null,
         job_title.trim(),
-        tricode?.trim() || null,
+        normalizedTriCode,
         ftp_proof_link?.trim() || null,
         ftp_final_link?.trim() || null,
         final_file_name?.trim() || null,
@@ -342,7 +352,32 @@ export async function POST(request: NextRequest) {
       ],
     )
 
-    return NextResponse.json({ design_request: result.rows[0] })
+    const created = result.rows[0]
+    const designerIds = Array.isArray(designer_ids)
+      ? designer_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : (designer_id ? [designer_id] : [])
+    const enterpriseContactIds = Array.isArray(enterprise_contact_ids)
+      ? enterprise_contact_ids.filter((id: any) => typeof id === 'string' && id.trim())
+      : (enterprise_contact_id ? [enterprise_contact_id] : [])
+
+    for (const [idx, staffId] of Array.from(new Set(designerIds)).entries()) {
+      await query(
+        `INSERT INTO design_request_designers (design_request_id, staff_id, is_primary, assigned_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (design_request_id, staff_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
+        [created.id, staffId, idx === 0, auth.userId],
+      )
+    }
+    for (const staffId of Array.from(new Set(enterpriseContactIds))) {
+      await query(
+        `INSERT INTO design_request_enterprise_contacts (design_request_id, staff_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [created.id, staffId],
+      )
+    }
+
+    return NextResponse.json({ design_request: created })
   } catch (err) {
     console.error('Error creating design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
