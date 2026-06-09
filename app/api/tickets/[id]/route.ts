@@ -9,6 +9,7 @@ import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 import { awardPointsOnce } from '@/lib/gamification'
+import { notifyCustomerStatus } from '@/lib/customer-notify'
 
 const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
@@ -200,6 +201,13 @@ export async function PATCH(
           new_status: status,
         })]
       )
+
+      // Portal customer notification on resolve/close. Fire-and-forget —
+      // notifyCustomerStatus itself checks the new status and recipient.
+      if (status === 'closed' || status === 'resolved') {
+        notifyCustomerStatus({ ticketId: params.id })
+          .catch(err => console.error('[customer-notify] status email failed:', err))
+      }
 
       // Gamification: award points once when a ticket is first closed.
       if (status === 'closed' && oldTicket.assigned_to) {

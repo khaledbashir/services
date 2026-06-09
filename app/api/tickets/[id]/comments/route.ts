@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { notifyCustomerReply } from '@/lib/customer-notify'
 
 async function getUserFromToken(request: NextRequest) {
   const token = request.cookies.get('token')?.value
@@ -125,6 +126,14 @@ export async function POST(
           emailStatus = { sent: false, recipient_count: 0, reason: 'send_failed' }
         }
       }
+
+      // Portal customer (the requester) gets their own notification with a
+      // portal deep link. Fire-and-forget — never blocks the staff action.
+      notifyCustomerReply({
+        ticketId: params.id,
+        body,
+        authorName: user.fullName || 'ANC Support',
+      }).catch(err => console.error('[customer-notify] reply email failed:', err))
     }
 
     return NextResponse.json({ comment: result.rows[0], email: emailStatus })
