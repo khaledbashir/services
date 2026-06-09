@@ -47,6 +47,12 @@ function normalizeValue(key: string, value: any) {
   return value
 }
 
+function toDateOnly(value: any) {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10)
+}
+
 // ── Legacy: local-DB record access check ─────────────────────────────────────
 
 async function getAccessibleRecord(request: NextRequest, id: string) {
@@ -58,7 +64,10 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
   const params: any[] = [id, ...vf.params]
 
   const result = await query(
-    `SELECT cs.id, cs.venue_id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.operator_id, cs.files_ready, cs.file_location,
+    `SELECT cs.id, cs.venue_id, cs.company_name, cs.content_name,
+            CASE WHEN cs.launch_date IS NULL THEN NULL ELSE to_char(cs.launch_date::date, 'YYYY-MM-DD') END as launch_date,
+            CASE WHEN cs.end_date IS NULL THEN NULL ELSE to_char(cs.end_date::date, 'YYYY-MM-DD') END as end_date,
+            cs.operator_id, cs.files_ready, cs.file_location,
             cs.status, cs.notes, cs.created_at, cs.updated_at, v.name as venue_name, s.full_name as operator_name
      FROM content_schedules cs
      LEFT JOIN venues v ON cs.venue_id = v.id
@@ -84,8 +93,8 @@ async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
     venue_name: raw.scheduleClient?.name || null,
     company_name: raw.scheduleClient?.name || null,
     content_name: raw.contentTitle || raw.name || '(unnamed)',
-    launch_date: raw.startDate || null,
-    end_date: raw.endDate || null,
+    launch_date: toDateOnly(raw.startDate || raw.runStartDate),
+    end_date: toDateOnly(raw.endDate || raw.runEndDate),
     operator_id: null,
     operator_name: raw.operator || null,
     files_ready: !!raw.filesReady,

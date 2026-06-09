@@ -36,9 +36,11 @@ const statusOptions = [
   { value: 'done', label: 'Done' },
 ]
 
-function toDateInputValue(value: string | null | undefined) {
+function toDateInputValue(value: unknown) {
   if (!value) return ''
-  return value.slice(0, 10)
+  if (typeof value === 'string') return value.slice(0, 10)
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10)
 }
 
 export default function ContentScheduleDetailPage({ params }: { params: { id: string } }) {
@@ -102,8 +104,8 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
 
   const saveScheduleDates = async () => {
     await updateField({
-      launch_date: launchDateDraft || null,
-      end_date: endDateDraft || null,
+      launch_date: toDateInputValue(launchDateDraft) || null,
+      end_date: toDateInputValue(endDateDraft) || null,
     })
   }
 
@@ -189,11 +191,11 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
               <div className="space-y-4 text-sm">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Launch Date</label>
-                  <input type="date" value={launchDateDraft} onChange={(e) => setLaunchDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                  <input type="date" value={toDateInputValue(launchDateDraft)} onChange={(e) => setLaunchDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">End Date</label>
-                  <input type="date" value={endDateDraft} onChange={(e) => setEndDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                  <input type="date" value={toDateInputValue(endDateDraft)} onChange={(e) => setEndDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
                 <button type="button" onClick={saveScheduleDates} disabled={saving} className="w-full px-4 py-2 bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
                   {saving ? 'Saving...' : 'Save Dates'}
