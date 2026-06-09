@@ -36,12 +36,19 @@ const statusOptions = [
   { value: 'done', label: 'Done' },
 ]
 
+function toDateInputValue(value: string | null | undefined) {
+  if (!value) return ''
+  return value.slice(0, 10)
+}
+
 export default function ContentScheduleDetailPage({ params }: { params: { id: string } }) {
   const [item, setItem] = useState<ContentScheduleDetail | null>(null)
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
+  const [launchDateDraft, setLaunchDateDraft] = useState('')
+  const [endDateDraft, setEndDateDraft] = useState('')
   const router = useRouter()
 
   const fetchData = async () => {
@@ -59,6 +66,8 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
       setItem(data.content_schedule)
       setStaffList(staffData.staff || [])
       setNotesDraft(data.content_schedule?.notes || '')
+      setLaunchDateDraft(toDateInputValue(data.content_schedule?.launch_date))
+      setEndDateDraft(toDateInputValue(data.content_schedule?.end_date))
     } catch (err) {
       console.error(err)
     } finally {
@@ -89,6 +98,13 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
   const saveNotes = async (e: FormEvent) => {
     e.preventDefault()
     await updateField({ notes: notesDraft })
+  }
+
+  const saveScheduleDates = async () => {
+    await updateField({
+      launch_date: launchDateDraft || null,
+      end_date: endDateDraft || null,
+    })
   }
 
   if (loading) {
@@ -173,12 +189,15 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
               <div className="space-y-4 text-sm">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Launch Date</label>
-                  <input type="date" value={item.launch_date || ''} onChange={(e) => updateField({ launch_date: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                  <input type="date" value={launchDateDraft} onChange={(e) => setLaunchDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">End Date</label>
-                  <input type="date" value={item.end_date || ''} onChange={(e) => updateField({ end_date: e.target.value || null })} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+                  <input type="date" value={endDateDraft} onChange={(e) => setEndDateDraft(e.target.value)} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
                 </div>
+                <button type="button" onClick={saveScheduleDates} disabled={saving} className="w-full px-4 py-2 bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Dates'}
+                </button>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">File Location</label>
                   <input type="text" value={item.file_location || ''} onChange={(e) => updateField({ file_location: e.target.value })} placeholder="Folder, server path, or URL" className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
