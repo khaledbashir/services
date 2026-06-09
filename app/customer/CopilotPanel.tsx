@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
 
 interface ChatMsg {
   role: 'user' | 'assistant'
@@ -89,7 +90,9 @@ export default function CopilotPanel({ onTicketCreated }: { onTicketCreated?: ()
             {messages.map((m, i) => (
               <div key={i} className={`cp-chat-msg ${m.role === 'user' ? 'is-user' : 'is-bot'}`}>
                 <div className="cp-chat-bubble">
-                  {m.content}
+                  {m.role === 'assistant'
+                    ? <div className="cp-chat-md"><ReactMarkdown>{m.content}</ReactMarkdown></div>
+                    : m.content}
                   {m.ticket && (
                     <button
                       onClick={() => router.push(`/customer/tickets/${m.ticket!.id}`)}

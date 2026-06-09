@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import PortalShell from '../../PortalShell'
 
 interface TicketDetail {
   id: string
@@ -57,7 +58,7 @@ function fmtDateTime(value: string) {
   })
 }
 
-export default function CustomerTicketPage() {
+function TicketContent() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -121,19 +122,9 @@ export default function CustomerTicketPage() {
   const standaloneAttachments = attachments.filter(a => !a.comment_id)
 
   return (
-    <div className="min-h-screen">
-      <header className="cp-header">
-        <div className="max-w-3xl mx-auto px-5 py-4 flex items-center gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7" />
-          <div className="hidden sm:block" style={{ width: 1, height: 28, background: 'var(--cp-line-strong)' }} />
-          <Link href="/customer" className="cp-mono text-xs transition-colors" style={{ color: 'var(--cp-muted)' }}>
-            ← All requests
-          </Link>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-5 py-10">
+    <div>
+      <main className="max-w-3xl mx-auto">
+        <Link href="/customer/requests" className="cp-link-sm inline-block mb-4">← All requests</Link>
         <div className="cp-panel p-7 mb-8 cp-stagger">
           <div className="flex items-center gap-3 flex-wrap mb-3">
             <span className={`cp-led ${ledClass(ticket.status)}`} />
@@ -220,5 +211,13 @@ export default function CustomerTicketPage() {
         </form>
       </main>
     </div>
+  )
+}
+
+export default function CustomerTicketPage() {
+  return (
+    <PortalShell active="Requests">
+      <TicketContent />
+    </PortalShell>
   )
 }
