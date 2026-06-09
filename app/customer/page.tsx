@@ -148,7 +148,7 @@ export default function CustomerDashboard() {
         <div className="grid grid-cols-3 gap-4 mb-10 cp-stagger">
           <div className="cp-panel p-5">
             <div className="cp-stat-value is-blue">{stats.open}</div>
-            <div className="cp-stat-label mt-3">Open Requests</div>
+            <div className="cp-stat-label mt-3">Open requests</div>
           </div>
           <div className="cp-panel p-5">
             <div className="cp-stat-value is-green">{stats.closed}</div>
@@ -156,7 +156,7 @@ export default function CustomerDashboard() {
           </div>
           <div className="cp-panel p-5">
             <div className="cp-stat-value">{stats.total}</div>
-            <div className="cp-stat-label mt-3">All Time</div>
+            <div className="cp-stat-label mt-3">All time</div>
           </div>
         </div>
 
@@ -177,17 +177,17 @@ export default function CustomerDashboard() {
               style={{ width: 220, padding: '9px 14px' }}
             />
             <button onClick={() => setShowNew(true)} className="cp-btn whitespace-nowrap" style={{ padding: '9px 20px' }}>
-              + New Request
+              + New request
             </button>
           </div>
         </div>
 
         <div className="cp-panel overflow-hidden">
           {loading ? (
-            <div className="p-12 text-center cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>LOADING…</div>
+            <div className="p-12 text-center cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>Loading…</div>
           ) : tickets.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>NO {tab !== 'all' ? tab.toUpperCase() : ''} REQUESTS</div>
+              <div className="cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>No {tab !== 'all' ? tab : ''} requests yet</div>
             </div>
           ) : (
             <div className="cp-stagger">
@@ -266,7 +266,7 @@ export default function CustomerDashboard() {
             <div className="flex justify-end gap-3 pt-1">
               <button type="button" onClick={() => setShowNew(false)} className="cp-btn-ghost">Cancel</button>
               <button type="submit" disabled={ntSubmitting} className="cp-btn">
-                {ntSubmitting ? 'Submitting…' : 'Submit Request'}
+                {ntSubmitting ? 'Submitting…' : 'Submit request'}
               </button>
             </div>
           </form>

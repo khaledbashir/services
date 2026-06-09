@@ -40,7 +40,7 @@ export default function CustomerLoginPage() {
         <div className="text-center mb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-10 mx-auto mb-6" />
-          <div className="cp-header-tag mb-3">Service Network</div>
+          <div className="cp-header-tag mb-3">ANC Sports + Entertainment</div>
           <h1 className="cp-display text-3xl font-bold">Customer Portal</h1>
         </div>
 
@@ -71,7 +71,7 @@ export default function CustomerLoginPage() {
           </div>
           {error && <div className="cp-error">{error}</div>}
           <button type="submit" disabled={loading} className="cp-btn w-full">
-            {loading ? 'Authenticating…' : 'Sign in'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 

@@ -102,7 +102,7 @@ export default function CustomerTicketPage() {
     return (
       <div className="cp-auth-shell">
         <div className="text-center">
-          <div className="cp-mono text-sm mb-4" style={{ color: 'var(--cp-dim)' }}>TICKET NOT FOUND</div>
+          <div className="cp-mono text-sm mb-4" style={{ color: 'var(--cp-dim)' }}>Ticket not found</div>
           <Link href="/customer" className="cp-btn-ghost inline-block">← Back to dashboard</Link>
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function CustomerTicketPage() {
   if (!ticket) {
     return (
       <div className="cp-auth-shell">
-        <div className="cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>LOADING…</div>
+        <div className="cp-mono text-sm" style={{ color: 'var(--cp-dim)' }}>Loading…</div>
       </div>
     )
   }
@@ -128,7 +128,7 @@ export default function CustomerTicketPage() {
           <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7" />
           <div className="hidden sm:block" style={{ width: 1, height: 28, background: 'var(--cp-line-strong)' }} />
           <Link href="/customer" className="cp-mono text-xs transition-colors" style={{ color: 'var(--cp-muted)' }}>
-            ← ALL REQUESTS
+            ← All requests
           </Link>
         </div>
       </header>
@@ -147,11 +147,11 @@ export default function CustomerTicketPage() {
               {ticket.priority}
             </span>
           </div>
-          <h1 className="cp-display text-3xl font-bold leading-tight normal-case" style={{ textTransform: 'none', letterSpacing: 0 }}>
+          <h1 className="cp-display text-3xl font-bold leading-tight">
             {ticket.title}
           </h1>
           <div className="cp-mono mt-2" style={{ fontSize: 11, color: 'var(--cp-dim)' }}>
-            {ticket.venue_name} · OPENED {fmtDateTime(ticket.created_at).toUpperCase()}
+            {ticket.venue_name} · Opened {fmtDateTime(ticket.created_at)}
           </div>
           {ticket.description && (
             <p className="text-sm mt-5 whitespace-pre-wrap" style={{ color: 'var(--cp-muted)', lineHeight: 1.7 }}>
@@ -168,7 +168,7 @@ export default function CustomerTicketPage() {
           ))}
           {isClosed && ticket.resolution_notes && (
             <div className="cp-resolution mt-6">
-              <div className="cp-mono mb-2" style={{ fontSize: 10, letterSpacing: '0.2em', color: 'var(--cp-green)' }}>RESOLUTION</div>
+              <div className="cp-mono mb-2" style={{ fontSize: 10, letterSpacing: '0.2em', color: 'var(--cp-green)' }}>Resolution</div>
               <p className="text-sm whitespace-pre-wrap" style={{ lineHeight: 1.7 }}>{ticket.resolution_notes}</p>
             </div>
           )}
@@ -180,7 +180,7 @@ export default function CustomerTicketPage() {
 
         <div className="space-y-4 mb-8 cp-stagger">
           {comments.length === 0 && (
-            <div className="cp-panel p-5 cp-mono text-xs" style={{ color: 'var(--cp-dim)' }}>NO REPLIES YET</div>
+            <div className="cp-panel p-5 cp-mono text-xs" style={{ color: 'var(--cp-dim)' }}>No replies yet</div>
           )}
           {comments.map(c => {
             const commentAttachments = attachments.filter(a => a.comment_id === c.id)
@@ -214,7 +214,7 @@ export default function CustomerTicketPage() {
           />
           <div className="flex justify-end mt-4">
             <button type="submit" disabled={sending || !reply.trim()} className="cp-btn">
-              {sending ? 'Sending…' : 'Send Reply'}
+              {sending ? 'Sending…' : 'Send reply'}
             </button>
           </div>
         </form>
