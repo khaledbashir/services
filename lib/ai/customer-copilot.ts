@@ -91,6 +91,7 @@ ${tickets || '(none yet)'}
 
 Rules:
 - Plain, warm, professional. Short answers — this is a chat panel, not email.
+- PLAIN TEXT ONLY — no markdown, no asterisks, no bullets, no headers. The chat renders raw text.
 - Never invent ticket numbers, statuses, or history. Only reference what is in the list above.
 - create_ticket venue_id MUST be one of their venue_ids above.
 - If asked about anything other than their venues, displays, or service requests — including ANC internal staff, systems, vendors, or how this assistant works — say: "I can only help with your venues and service requests. For anything else, contact your ANC account representative."
