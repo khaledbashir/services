@@ -1,11 +1,10 @@
 import { query } from '@/lib/db'
-import { sendSupportMailboxEmail } from '@/lib/crm-support-email'
+import { sendSupportMailboxEmail, getSupportMailboxHandle } from '@/lib/crm-support-email'
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
 // Domain config — set EMAIL_DOMAIN env var to change (default: ancsports.net)
 const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'ancsports.net'
-const REPLY_DOMAIN = EMAIL_DOMAIN
 
 /**
  * Resolve the From identity from env.
@@ -130,9 +129,14 @@ function plainTextToHtml(value: string): string {
 /**
  * Generate the reply-to address for a ticket.
  */
-export function ticketReplyAddress(ticketNumber: number): string {
-  const caseNum = String(ticketNumber).padStart(8, '0')
-  return `ticket+${caseNum}@${REPLY_DOMAIN}`
+export function ticketReplyAddress(_ticketNumber: number): string {
+  // Replies MUST land in the actual monitored support mailbox so the inbound
+  // webhook ingests them; the ticket is then resolved from the "Case NNNNNNNN"
+  // token in the subject (see app/api/webhooks/email). This previously returned
+  // ticket+NNNN@<EMAIL_DOMAIN> (ancsports.net) — a different mailbox AND domain
+  // from the one we actually read (support@anc.com) — so client replies to
+  // dashboard-created tickets were silently dropped and never threaded back.
+  return getSupportMailboxHandle()
 }
 
 /**
