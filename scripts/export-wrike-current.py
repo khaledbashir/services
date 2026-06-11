@@ -1,4 +1,4 @@
-import json, os, time, urllib.request, urllib.parse, sys
+import json, os, time, urllib.request, urllib.parse, sys, datetime
 EXPORT = "/root/anc-services/wrike-export"
 # token from .env.local
 TOK = ""
@@ -42,7 +42,7 @@ tasks = []
 params = {
     "fields": json.dumps(FIELDS),
     "pageSize": 1000,
-    "createdDate": json.dumps({"start": "2026-04-09T00:00:00Z"}),
+    "createdDate": json.dumps({"start": (datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z")}),
     "descendants": "true",
 }
 print("tasks (created since 2026-04-09)...", flush=True)
