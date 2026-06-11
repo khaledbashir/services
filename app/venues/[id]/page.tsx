@@ -1820,7 +1820,7 @@ export default function VenueDetailPage() {
                 {creative.cgDesigns.length > 0 && (
                   <div className="bg-white rounded border border-[#E8E8E8] shadow-sm">
                     <div className="px-5 py-3 border-b border-[#E8E8E8] flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-zinc-900">CG Designs <span className="text-zinc-400 font-normal">({creative.cgDesigns.length})</span></h3>
+                      <h3 className="text-sm font-semibold text-zinc-900">CG Design <span className="text-zinc-400 font-normal">({creative.cgDesigns.length})</span></h3>
                       <Link href="/cg-designs" className="text-xs text-[#0A52EF] hover:underline">View all →</Link>
                     </div>
                     <table className="w-full text-sm">

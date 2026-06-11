@@ -241,7 +241,7 @@ export function Sidebar() {
       role: 'technician',
       links: [
         { href: '/designs', label: 'Design Requests' },
-        { href: '/cg-designs', label: 'CG Designs' },
+        { href: '/cg-designs', label: 'CG Design' },
         { href: '/reports/designs-by-client', label: 'Requests by Client' },
         { href: '/content-schedules', label: 'Content Schedule' },
         { href: '/marketing-hub', label: 'Marketing Hub', role: 'manager' },
