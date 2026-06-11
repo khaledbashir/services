@@ -763,7 +763,7 @@ export default function TicketsPage() {
                       <div className="mb-2">
                         <p
                           className={`text-xs text-zinc-600 whitespace-pre-wrap break-words leading-relaxed ${
-                            isLong && !expanded ? 'line-clamp-6' : ''
+                            isLong && !expanded ? 'max-h-28 overflow-hidden' : ''
                           }`}
                         >
                           {desc}
