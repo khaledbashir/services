@@ -100,6 +100,8 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [boardsDraft, setBoardsDraft] = useState('')
   const [sizesDraft, setSizesDraft] = useState('')
   const [finalFileDraft, setFinalFileDraft] = useState('')
+  const [finalLinkDraft, setFinalLinkDraft] = useState('')
+  const [proofLinkDraft, setProofLinkDraft] = useState('')
   const router = useRouter()
 
   const fetchData = async () => {
@@ -120,6 +122,8 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       setBoardsDraft(d?.boards_requested || '')
       setSizesDraft(d?.sizes_requested || '')
       setFinalFileDraft(d?.final_file_name || '')
+      setFinalLinkDraft(d?.ftp_final_link || '')
+      setProofLinkDraft(d?.ftp_proof_link || '')
     } catch (err) {
       console.error(err)
     } finally {
@@ -403,6 +407,31 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,280px] gap-6">
           {/* Main: active stage card + submitted summary */}
           <div className="space-y-5">
+
+            {/* Final Files & Proof Links — always visible (Alexis 2026-06-11): enter/see these at any stage, not gated to the Approved stage */}
+            <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 space-y-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Final Files &amp; Proof Links</div>
+              <Field label="Final File Location">
+                <input
+                  type="text"
+                  value={finalLinkDraft}
+                  onChange={(e) => setFinalLinkDraft(e.target.value)}
+                  onBlur={() => dr && finalLinkDraft !== (dr.ftp_final_link || '') && updateField({ ftp_final_link: finalLinkDraft })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                  placeholder="FTP path / folder for final files"
+                />
+              </Field>
+              <Field label="Proof Link">
+                <input
+                  type="text"
+                  value={proofLinkDraft}
+                  onChange={(e) => setProofLinkDraft(e.target.value)}
+                  onBlur={() => dr && proofLinkDraft !== (dr.ftp_proof_link || '') && updateField({ ftp_proof_link: proofLinkDraft })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                  placeholder="https://… proof or review link"
+                />
+              </Field>
+            </div>
 
             {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
             <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'}>
