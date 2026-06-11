@@ -870,11 +870,35 @@ export default function TicketsPage() {
                       <td className="py-2.5 px-4 text-zinc-400 font-mono text-xs">{String(ticket.ticket_number).padStart(5, '0')}</td>
                       <td className="py-2.5 px-4 font-medium text-zinc-900 max-w-md align-top">
                         <div className="font-medium">{ticket.title}</div>
-                        {ticket.description && ticket.description.trim() && (
-                          <div className="text-[11px] text-zinc-500 mt-1 whitespace-pre-wrap break-words leading-relaxed">
-                            {ticket.description}
-                          </div>
-                        )}
+                        {ticket.description && ticket.description.trim() && (() => {
+                          const desc = ticket.description.trim()
+                          const expanded = expandedDescriptions.has(ticket.id)
+                          const isLong = desc.length > 280 || desc.split('\n').length > 4
+                          return (
+                            <div className="mt-1">
+                              <div className={`text-[11px] text-zinc-500 whitespace-pre-wrap break-words leading-relaxed ${isLong && !expanded ? 'max-h-16 overflow-hidden' : ''}`}>
+                                {desc}
+                              </div>
+                              {isLong && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault(); e.stopPropagation()
+                                    setExpandedDescriptions(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(ticket.id)) next.delete(ticket.id)
+                                      else next.add(ticket.id)
+                                      return next
+                                    })
+                                  }}
+                                  className="mt-0.5 text-[11px] font-medium text-[#0A52EF] hover:text-[#0840C0]"
+                                >
+                                  {expanded ? 'Show less' : 'Show more'}
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
                         {ticket.source === 'voicemail' && ticket.contact_phone && (
                           <div className="text-[11px] text-blue-600 font-mono mt-0.5">📞 {ticket.contact_phone}</div>
                         )}
