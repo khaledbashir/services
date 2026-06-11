@@ -186,7 +186,7 @@ export default function DesignTemplatesPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-5xl mx-auto space-y-6 py-2">
+      <div className="max-w-[1800px] mx-auto space-y-6 py-2">
         <div className="space-y-3">
           <Link href="/designs" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors inline-flex items-center gap-1.5 group">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -229,7 +229,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="max-w-5xl mx-auto space-y-6 py-2">
+        <div className="max-w-[1800px] mx-auto space-y-6 py-2">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-96 w-full" />
