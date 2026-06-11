@@ -31,23 +31,29 @@ function normalizeTriCode(value: string): string {
 }
 
 const statusColumns = [
-  { key: 'request_submitted', label: 'Submitted' },
-  { key: 'in_queue', label: 'In Queue' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'review', label: 'Review' },
+  { key: 'request_submitted', label: 'Request Submitted' },
+  { key: 'in_progress', label: 'In-Progress' },
+  { key: 'submitted_internally', label: 'Submitted Internally' },
+  { key: 'client_review', label: 'Client Review' },
   { key: 'revisions', label: 'Revisions' },
   { key: 'approved', label: 'Approved' },
-  { key: 'posted', label: 'Posted' },
+  { key: 'on_hold', label: 'On Hold' },
+  { key: 'request_closed', label: 'Request Closed' },
 ] as const
+
+// User dashboard groupings (Alexis 2026-06-11): Requested / Active / Completed
+const ACTIVE_CG_STATUSES = ['in_progress', 'submitted_internally', 'client_review', 'revisions', 'on_hold']
+const COMPLETED_CG_STATUSES = ['approved', 'request_closed']
 
 const statusTone: Record<string, string> = {
   request_submitted: 'bg-sky-50 text-sky-700',
-  in_queue: 'bg-violet-50 text-violet-700',
   in_progress: 'bg-amber-50 text-amber-700',
-  review: 'bg-blue-50 text-blue-700',
+  submitted_internally: 'bg-violet-50 text-violet-700',
+  client_review: 'bg-blue-50 text-blue-700',
   revisions: 'bg-orange-50 text-orange-700',
   approved: 'bg-emerald-50 text-emerald-700',
-  posted: 'bg-zinc-100 text-zinc-600',
+  on_hold: 'bg-rose-50 text-rose-700',
+  request_closed: 'bg-zinc-100 text-zinc-600',
 }
 
 export default function CgDesignsPage() {
@@ -160,7 +166,9 @@ export default function CgDesignsPage() {
 
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'active' && item.status !== 'posted') ||
+        (statusFilter === 'requested' && item.status === 'request_submitted') ||
+        (statusFilter === 'active' && ACTIVE_CG_STATUSES.includes(item.status)) ||
+        (statusFilter === 'completed' && COMPLETED_CG_STATUSES.includes(item.status)) ||
         item.status === statusFilter
 
       const matchesDesigner =
@@ -171,7 +179,9 @@ export default function CgDesignsPage() {
   }, [items, search, statusFilter, designerFilter, currentUserId])
 
   const counts: Record<string, number> = {
-    active: items.filter((item) => item.status !== 'posted').length,
+    requested: items.filter((item) => item.status === 'request_submitted').length,
+    active: items.filter((item) => ACTIVE_CG_STATUSES.includes(item.status)).length,
+    completed: items.filter((item) => COMPLETED_CG_STATUSES.includes(item.status)).length,
     all: items.length,
   }
   for (const status of statusColumns) counts[status.key] = items.filter((item) => item.status === status.key).length
@@ -312,7 +322,7 @@ export default function CgDesignsPage() {
 
         <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-1 overflow-x-auto">
-            {[{ key: 'active', label: 'Active' }, ...statusColumns, { key: 'all', label: 'All' }].map((tab) => {
+            {[{ key: 'requested', label: 'Requested' }, { key: 'active', label: 'Active' }, { key: 'completed', label: 'Completed' }, { key: 'all', label: 'All' }].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
                 <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${isActive ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'}`}>

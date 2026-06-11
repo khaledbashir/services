@@ -28,12 +28,13 @@ interface Staff { id: string; full_name: string }
 
 const statusOptions = [
   { value: 'request_submitted', label: 'Request Submitted' },
-  { value: 'in_queue', label: 'In Queue' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'review', label: 'Review' },
+  { value: 'in_progress', label: 'In-Progress' },
+  { value: 'submitted_internally', label: 'Submitted Internally' },
+  { value: 'client_review', label: 'Client Review' },
   { value: 'revisions', label: 'Revisions' },
   { value: 'approved', label: 'Approved' },
-  { value: 'posted', label: 'Posted' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'request_closed', label: 'Request Closed' },
 ]
 
 export default function CgDesignDetailPage({ params }: { params: { id: string } }) {
