@@ -1,6 +1,7 @@
 'use client'
 
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { MarketingStudioShell } from '@/components/marketing/MarketingStudioShell'
 import { NewsletterVisualEditor } from '@/components/marketing/newsletter-visual/NewsletterVisualEditor'
 import {
   DEFAULT_NEWSLETTER_VISUAL,
@@ -8,14 +9,11 @@ import {
   parseVisualDocument,
   type NewsletterVisualDocument,
 } from '@/lib/marketing/newsletter-visual'
-import { ArrowLeft, Sparkles } from 'lucide-react'
-import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 export default function NewsletterCampaignEditPage() {
   const params = useParams<{ id: string }>()
-  const router = useRouter()
   const campaignId = params.id
 
   const [loading, setLoading] = useState(true)
@@ -91,55 +89,21 @@ export default function NewsletterCampaignEditPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="mx-auto max-w-[1600px] space-y-4 p-4 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <Link
-              href="/marketing-hub"
-              className="mb-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-zinc-500 hover:text-zinc-300"
-            >
-              <ArrowLeft className="size-3.5" />
-              Marketing Hub
-            </Link>
-            <h1 className="text-2xl font-semibold text-zinc-100">Visual Newsletter Editor</h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {campaignName || 'Campaign'} · DealDeck-style blocks · live inbox preview
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded border border-zinc-700 px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-zinc-400">{campaignStatus}</span>
-            <button
-              type="button"
-              onClick={() => router.push('/marketing-hub')}
-              className="rounded-md border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900"
-            >
-              Back to hub
-            </button>
-          </div>
-        </div>
-
-        {message && (
-          <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm text-zinc-200">{message}</div>
-        )}
-
+    <DashboardLayout fullBleed>
+      <MarketingStudioShell
+        title="Visual Newsletter Editor"
+        subtitle={`${campaignName || 'Campaign'} · section blocks, ANC themes, and live inbox preview`}
+        status={campaignStatus}
+        message={message || undefined}
+      >
         {loading ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-950/70 px-6 py-16 text-center text-sm text-zinc-500">
+          <div className="flex h-[calc(100vh-10rem)] items-center justify-center rounded-2xl border border-white/8 bg-[#11141d]/90 text-sm text-zinc-500">
             Loading visual composer…
           </div>
         ) : (
-          <>
-            <div className="rounded-md border border-[#7350FF]/20 bg-[#7350FF]/5 px-4 py-3 text-sm text-zinc-200">
-              <div className="flex items-center gap-2 font-medium">
-                <Sparkles className="size-4 text-[#7350FF]" />
-                Same visual stack as presentation.basheer.app — section blocks, ANC themes, live preview.
-              </div>
-              <p className="mt-1 text-xs text-zinc-400">Saving updates both the visual document and the email HTML used by test send and schedule.</p>
-            </div>
-            <NewsletterVisualEditor value={doc} onChange={setDoc} onSave={save} saving={saving} />
-          </>
+          <NewsletterVisualEditor value={doc} onChange={setDoc} onSave={save} saving={saving} saveLabel="Save" />
         )}
-      </div>
+      </MarketingStudioShell>
     </DashboardLayout>
   )
 }
