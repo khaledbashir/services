@@ -60,6 +60,24 @@ const inputClass = 'w-full rounded border border-zinc-200 bg-white px-3 py-2 tex
 const buttonClass = 'rounded bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButton = 'rounded border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50'
 
+const defaultCampaignBodyHtml = `<h1 style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#0f172a">Media & Partnerships Brief</h1>
+<p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#334155">A focused update on the partner-facing moments, venue media opportunities, and audience signals moving through ANC Sports.</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 18px;border-collapse:collapse">
+  <tr>
+    <td style="border-left:4px solid #e21b2d;background:#f8fafc;padding:14px 16px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748b">Lead Story</div>
+      <div style="font-size:18px;font-weight:700;line-height:1.3;color:#111827;margin-top:4px">The moment worth opening with</div>
+      <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#334155">Lead with the most useful partnership or venue story first. Keep it concrete, current, and tied to what the recipient should know next.</p>
+    </td>
+  </tr>
+</table>
+<h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;color:#111827">Partnership Signals</h2>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#334155">Use this section for sponsor-facing opportunities, league or venue momentum, campaign launches, or a quick note on where media demand is showing up.</p>
+<h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;color:#111827">Venue Notes</h2>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#334155">Summarize the operational story behind the screen: new installs, upgraded inventory, live-event wins, or context that helps a partner understand ANC's reach.</p>
+<h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;color:#111827">What To Watch</h2>
+<p style="margin:0;font-size:14px;line-height:1.65;color:#334155">Close with the next action: a meeting, a partner follow-up, an upcoming event, or the one opportunity the audience should keep on their radar.</p>`
+
 function Stat({ label, value, tone = 'default' }: { label: string; value: string | number; tone?: 'default' | 'warn' | 'good' }) {
   const colors = tone === 'good' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : tone === 'warn' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-zinc-200 bg-white text-zinc-900'
   return (
@@ -104,7 +122,7 @@ export default function MarketingHubPage() {
     previewText: 'Latest ANC media, venue, and partnership updates.',
     audienceId: '',
     templateId: '',
-    bodyHtml: '<h2 style="margin:0 0 12px">Media & Partnerships Update</h2><p>Replace this with the month’s highlights, partner news, venue updates, and calls to action.</p>',
+    bodyHtml: defaultCampaignBodyHtml,
   })
   const [testEmail, setTestEmail] = useState('')
   const [selectedCampaignId, setSelectedCampaignId] = useState('')
