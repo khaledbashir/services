@@ -9,10 +9,16 @@ export async function GET() {
     const result = await query(`SELECT c.*,
         a.name AS audience_name,
         COUNT(r.id)::int AS recipient_count,
+        COUNT(r.id) FILTER (WHERE r.status = 'pending')::int AS pending_count,
         COUNT(r.id) FILTER (WHERE r.sent_at IS NOT NULL)::int AS sent_count,
+        COUNT(r.id) FILTER (WHERE r.status = 'failed' OR r.status = 'test_failed')::int AS failed_count,
         COUNT(r.id) FILTER (WHERE r.opened_at IS NOT NULL)::int AS opened_count,
         COUNT(r.id) FILTER (WHERE r.first_clicked_at IS NOT NULL)::int AS clicked_count,
-        COUNT(r.id) FILTER (WHERE r.unsubscribed_at IS NOT NULL)::int AS unsubscribed_count
+        COUNT(r.id) FILTER (WHERE r.unsubscribed_at IS NOT NULL)::int AS unsubscribed_count,
+        ROUND((COUNT(r.id) FILTER (WHERE r.sent_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(r.id), 0), 1)::float AS delivery_rate,
+        ROUND((COUNT(r.id) FILTER (WHERE r.opened_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS open_rate,
+        ROUND((COUNT(r.id) FILTER (WHERE r.first_clicked_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS click_rate,
+        ROUND((COUNT(r.id) FILTER (WHERE r.unsubscribed_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS unsubscribe_rate
       FROM newsletter_campaigns c
       LEFT JOIN marketing_audiences a ON a.id = c.audience_id
       LEFT JOIN newsletter_campaign_recipients r ON r.campaign_id = c.id

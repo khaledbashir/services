@@ -16,10 +16,16 @@ type Campaign = {
   status: string
   scheduled_at?: string
   recipient_count?: number
+  pending_count?: number
   sent_count?: number
+  failed_count?: number
   opened_count?: number
   clicked_count?: number
   unsubscribed_count?: number
+  delivery_rate?: number
+  open_rate?: number
+  click_rate?: number
+  unsubscribe_rate?: number
 }
 type FormRoute = { id: string; form_title: string; inquiry_type?: string; route_to_name: string; route_to_email: string; crm_target?: string; is_active: boolean }
 type SocialPost = { id: string; platform: string; channel_name?: string; content: string; state: string; scheduled_at?: string }
@@ -454,6 +460,12 @@ export default function MarketingHubPage() {
                   <Stat label="Form Submissions" value={summary?.formSubmissions?.total || 0} />
                   <Stat label="CRM Notes" value={summary?.formSubmissions?.crm_notes || 0} />
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Stat label="Sent Events" value={summary?.events?.sent_events || 0} />
+                  <Stat label="Opens" value={summary?.events?.opens || 0} />
+                  <Stat label="Clicks" value={summary?.events?.clicks || 0} />
+                  <Stat label="Unsubscribes" value={summary?.events?.unsubscribes || 0} tone={summary?.events?.unsubscribes ? 'warn' : 'default'} />
+                </div>
                 <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                   <section className="border border-zinc-200 bg-white">
                     <div className="border-b border-zinc-200 px-4 py-3">
@@ -467,7 +479,7 @@ export default function MarketingHubPage() {
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients</div>
                           </div>
                           <StatusPill value={campaign.status} />
-                          <div className="text-xs tabular-nums text-zinc-500">{campaign.opened_count || 0} opens · {campaign.clicked_count || 0} clicks</div>
+                          <div className="text-xs tabular-nums text-zinc-500">{campaign.open_rate ?? 0}% open · {campaign.click_rate ?? 0}% click</div>
                         </div>
                       ))}
                       {campaigns.length === 0 && <div className="px-4 py-8 text-sm text-zinc-500">No campaigns yet.</div>}
@@ -578,10 +590,10 @@ export default function MarketingHubPage() {
                         <button key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} className="grid w-full gap-2 px-4 py-3 text-left text-sm hover:bg-zinc-50 md:grid-cols-[1fr_auto_auto] md:items-center">
                           <div>
                             <div className="font-medium text-zinc-900">{campaign.subject}</div>
-                            <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients</div>
+                            <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients · {campaign.sent_count || 0} sent · {campaign.pending_count || 0} pending</div>
                           </div>
                           <StatusPill value={campaign.status} />
-                          <div className="text-xs tabular-nums text-zinc-500">{campaign.opened_count || 0}/{campaign.sent_count || 0} opened</div>
+                          <div className="text-xs tabular-nums text-zinc-500">{campaign.open_rate ?? 0}% open · {campaign.click_rate ?? 0}% click · {campaign.unsubscribe_rate ?? 0}% unsub</div>
                         </button>
                       ))}
                     </div>

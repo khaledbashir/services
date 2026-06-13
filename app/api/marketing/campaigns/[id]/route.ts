@@ -32,8 +32,29 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
        LIMIT 100`,
       [params.id],
     )
+    const analytics = await query(
+      `SELECT
+         COUNT(DISTINCT r.id)::int AS recipient_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'pending')::int AS pending_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.sent_at IS NOT NULL)::int AS sent_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'failed' OR r.status = 'test_failed')::int AS failed_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.opened_at IS NOT NULL)::int AS opened_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.first_clicked_at IS NOT NULL)::int AS clicked_count,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.unsubscribed_at IS NOT NULL)::int AS unsubscribed_count,
+         ROUND((COUNT(DISTINCT r.id) FILTER (WHERE r.sent_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(DISTINCT r.id), 0), 1)::float AS delivery_rate,
+         ROUND((COUNT(DISTINCT r.id) FILTER (WHERE r.opened_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(DISTINCT r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS open_rate,
+         ROUND((COUNT(DISTINCT r.id) FILTER (WHERE r.first_clicked_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(DISTINCT r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS click_rate,
+         ROUND((COUNT(DISTINCT r.id) FILTER (WHERE r.unsubscribed_at IS NOT NULL))::numeric * 100 / NULLIF(COUNT(DISTINCT r.id) FILTER (WHERE r.sent_at IS NOT NULL), 0), 1)::float AS unsubscribe_rate,
+         MAX(e.created_at) AS last_event_at
+       FROM newsletter_campaigns c
+       LEFT JOIN newsletter_campaign_recipients r ON r.campaign_id = c.id
+       LEFT JOIN newsletter_campaign_events e ON e.campaign_id = c.id
+       WHERE c.id = $1
+       GROUP BY c.id`,
+      [params.id],
+    )
 
-    return NextResponse.json({ campaign: campaign.rows[0], recipients: recipients.rows, events: events.rows })
+    return NextResponse.json({ campaign: campaign.rows[0], analytics: analytics.rows[0], recipients: recipients.rows, events: events.rows })
   } catch (err) {
     console.error('Error loading campaign:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
