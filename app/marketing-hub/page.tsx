@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { BarChart3, CalendarClock, CheckCircle2, Clock3, FileText, LayoutTemplate, Mail, Megaphone, Send, Sparkles, Users, Workflow } from 'lucide-react'
 
 type Audience = { id: string; name: string; description?: string; member_count?: number }
 type Contact = { id: string; email: string; first_name?: string; last_name?: string; company_name?: string; subscription_status: string }
@@ -62,9 +63,11 @@ type FormSubmission = {
   timeline_status: string
 }
 
-const inputClass = 'w-full rounded border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[#0A52EF] focus:ring-2 focus:ring-[#0A52EF]/15'
-const buttonClass = 'rounded bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-50'
-const secondaryButton = 'rounded border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50'
+const inputClass = 'w-full rounded-md border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-[#4F7CFF] focus:ring-2 focus:ring-[#4F7CFF]/20'
+const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2B66F6] disabled:cursor-not-allowed disabled:opacity-50'
+const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50'
+const panelClass = 'rounded-md border border-zinc-800 bg-zinc-950/70 shadow-[0_20px_80px_rgba(0,0,0,0.28)]'
+const mutedPanelClass = 'rounded-md border border-zinc-800 bg-zinc-900/45'
 
 const defaultCampaignBodyHtml = `<h1 style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#0f172a">Media & Partnerships Brief</h1>
 <p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#334155">A focused update on the partner-facing moments, venue media opportunities, and audience signals moving through ANC Sports.</p>
@@ -84,11 +87,14 @@ const defaultCampaignBodyHtml = `<h1 style="margin:0 0 10px;font-size:26px;line-
 <h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;color:#111827">What To Watch</h2>
 <p style="margin:0;font-size:14px;line-height:1.65;color:#334155">Close with the next action: a meeting, a partner follow-up, an upcoming event, or the one opportunity the audience should keep on their radar.</p>`
 
-function Stat({ label, value, tone = 'default' }: { label: string; value: string | number; tone?: 'default' | 'warn' | 'good' }) {
-  const colors = tone === 'good' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : tone === 'warn' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-zinc-200 bg-white text-zinc-900'
+function Stat({ label, value, tone = 'default', icon }: { label: string; value: string | number; tone?: 'default' | 'warn' | 'good'; icon?: ReactNode }) {
+  const colors = tone === 'good' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : tone === 'warn' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-zinc-800 bg-zinc-950/70 text-zinc-100'
   return (
-    <div className={`border p-4 ${colors}`}>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
+    <div className={`rounded-md border p-4 ${colors}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-2xl font-semibold tabular-nums">{value}</div>
+        {icon && <div className="text-zinc-500">{icon}</div>}
+      </div>
       <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{label}</div>
     </div>
   )
@@ -96,13 +102,56 @@ function Stat({ label, value, tone = 'default' }: { label: string; value: string
 
 function StatusPill({ value }: { value: string }) {
   const color = value === 'sent' || value === 'published'
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : value === 'scheduled'
-      ? 'bg-blue-50 text-blue-700 border-blue-200'
+    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
+    : value === 'scheduled' || value === 'approved'
+      ? 'bg-blue-500/10 text-blue-300 border-blue-500/25'
       : value.includes('fail')
-        ? 'bg-rose-50 text-rose-700 border-rose-200'
-        : 'bg-zinc-50 text-zinc-600 border-zinc-200'
+        ? 'bg-rose-500/10 text-rose-300 border-rose-500/25'
+        : 'bg-zinc-800 text-zinc-300 border-zinc-700'
   return <span className={`inline-flex rounded border px-2 py-0.5 text-[11px] font-medium capitalize ${color}`}>{value.replace(/_/g, ' ')}</span>
+}
+
+function SectionHeader({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-start gap-3 border-b border-zinc-800 px-4 py-3">
+      <div className="mt-0.5 rounded-md border border-zinc-800 bg-zinc-900 p-2 text-zinc-300">{icon}</div>
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>}
+      </div>
+    </div>
+  )
+}
+
+function TemplateCard({ template, onUse }: { template: Template; onUse: () => void }) {
+  const body = template.template_type === 'newsletter' ? template.preview_text || template.subject || 'Email layout template' : template.content || 'Social copy template'
+  return (
+    <button
+      type="button"
+      onClick={onUse}
+      className="group rounded-md border border-zinc-800 bg-zinc-950/70 p-3 text-left transition-colors hover:border-[#4F7CFF]/70 hover:bg-zinc-900"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium text-zinc-100">{template.name}</div>
+        <span className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500 group-hover:text-zinc-300">
+          {template.platform || template.template_type}
+        </span>
+      </div>
+      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-500">{body}</p>
+    </button>
+  )
+}
+
+function ChannelButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${active ? 'border-[#4F7CFF] bg-[#0A52EF] text-white' : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'}`}
+    >
+      {label}
+    </button>
+  )
 }
 
 export default function MarketingHubPage() {
@@ -136,6 +185,7 @@ export default function MarketingHubPage() {
   const [routeForm, setRouteForm] = useState({ formId: '', formTitle: '', inquiryType: '', routeToName: '', routeToEmail: '', crmTarget: '' })
   const [templateForm, setTemplateForm] = useState({ templateType: 'newsletter', name: '', category: '', subject: '', previewText: '', bodyHtml: '', content: '', platform: 'linkedin' })
   const [socialForm, setSocialForm] = useState({ platform: 'slack', channelName: 'test', content: '', scheduledAt: '', templateId: '' })
+  const [campaignCanvas, setCampaignCanvas] = useState<'preview' | 'html'>('preview')
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedCampaignId) || campaigns[0],
@@ -413,18 +463,33 @@ export default function MarketingHubPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
-        <div className="flex flex-col gap-3 border-b border-zinc-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="space-y-5 text-zinc-100">
+        <div className="overflow-hidden rounded-md border border-zinc-800 bg-[radial-gradient(circle_at_top_left,rgba(10,82,239,0.24),transparent_36%),linear-gradient(135deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))] px-5 py-5 shadow-[0_24px_90px_rgba(0,0,0,0.34)]">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FF4655]">Media & Partnerships</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-normal text-white">Marketing Command Center</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">Audiences, newsletters, forms, approvals, and social planning in one operator surface.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-md border border-white/10 bg-black/20 p-2 text-center text-xs text-zinc-400">
+              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.contacts?.subscribed || 0}</div><div>send-safe</div></div>
+              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.templates?.total || 0}</div><div>templates</div></div>
+              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.formRoutes?.active || 0}</div><div>routes</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-b border-zinc-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E21B2D]">Media & Partnerships</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-zinc-950">Marketing Hub</h1>
+            <p className="text-xs text-zinc-500">Workspace</p>
+            <h2 className="mt-1 text-sm font-medium text-zinc-300">Pick the workflow Alison is working on.</h2>
           </div>
           <div className="flex flex-wrap gap-2">
             {tabs.map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${tab === key ? 'border-[#0A52EF] bg-[#0A52EF] text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'}`}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${tab === key ? 'border-[#4F7CFF] bg-[#0A52EF] text-white' : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'}`}
               >
                 {label}
               </button>
@@ -433,49 +498,47 @@ export default function MarketingHubPage() {
         </div>
 
         {message && (
-          <div className="border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">{message}</div>
+          <div className="rounded-md border border-[#4F7CFF]/25 bg-[#0A52EF]/10 px-4 py-3 text-sm text-blue-100">{message}</div>
         )}
 
         {loading ? (
-          <div className="border border-zinc-200 bg-white p-8 text-sm text-zinc-500">Loading Marketing Hub...</div>
+          <div className={panelClass + ' p-8 text-sm text-zinc-500'}>Loading Marketing Hub...</div>
         ) : (
           <>
             {tab === 'overview' && (
               <div className="space-y-5">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Send-Safe Contacts" value={summary?.contacts?.subscribed || 0} tone="good" />
-                  <Stat label="Campaigns" value={summary?.campaigns?.total || 0} />
-                  <Stat label="Suppressed" value={summary?.contacts?.suppressed || 0} tone="warn" />
-                  <Stat label="Pending Channels" value={summary?.socialChannels?.pendingChannels?.length ?? summary?.postiz?.missingChannels?.length ?? 0} tone="warn" />
+                  <Stat label="Send-Safe Contacts" value={summary?.contacts?.subscribed || 0} tone="good" icon={<Users className="size-4" />} />
+                  <Stat label="Campaigns" value={summary?.campaigns?.total || 0} icon={<Mail className="size-4" />} />
+                  <Stat label="Suppressed" value={summary?.contacts?.suppressed || 0} tone="warn" icon={<CheckCircle2 className="size-4" />} />
+                  <Stat label="Pending Channels" value={summary?.socialChannels?.pendingChannels?.length ?? summary?.postiz?.missingChannels?.length ?? 0} tone="warn" icon={<Megaphone className="size-4" />} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="HubSpot Imported" value={summary?.contacts?.hubspot_imported || 0} />
-                  <Stat label="Non-Marketing" value={summary?.contacts?.non_marketing || 0} />
-                  <Stat label="Review Candidates" value={summary?.contacts?.candidate || 0} />
-                  <Stat label="Imported Emails" value={summary?.campaigns?.hubspot_imported_reference || 0} />
+                  <Stat label="HubSpot Imported" value={summary?.contacts?.hubspot_imported || 0} icon={<Workflow className="size-4" />} />
+                  <Stat label="Non-Marketing" value={summary?.contacts?.non_marketing || 0} icon={<Users className="size-4" />} />
+                  <Stat label="Review Candidates" value={summary?.contacts?.candidate || 0} icon={<Clock3 className="size-4" />} />
+                  <Stat label="Imported Emails" value={summary?.campaigns?.hubspot_imported_reference || 0} icon={<FileText className="size-4" />} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Templates" value={summary?.templates?.total || 0} />
-                  <Stat label="Pending Approval" value={summary?.approvals?.pending || 0} tone={summary?.approvals?.pending ? 'warn' : 'default'} />
-                  <Stat label="Form Submissions" value={summary?.formSubmissions?.total || 0} />
-                  <Stat label="CRM Notes" value={summary?.formSubmissions?.crm_notes || 0} />
+                  <Stat label="Templates" value={summary?.templates?.total || 0} icon={<LayoutTemplate className="size-4" />} />
+                  <Stat label="Pending Approval" value={summary?.approvals?.pending || 0} tone={summary?.approvals?.pending ? 'warn' : 'default'} icon={<CheckCircle2 className="size-4" />} />
+                  <Stat label="Form Submissions" value={summary?.formSubmissions?.total || 0} icon={<FileText className="size-4" />} />
+                  <Stat label="CRM Notes" value={summary?.formSubmissions?.crm_notes || 0} icon={<Workflow className="size-4" />} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Sent Events" value={summary?.events?.sent_events || 0} />
-                  <Stat label="Opens" value={summary?.events?.opens || 0} />
-                  <Stat label="Clicks" value={summary?.events?.clicks || 0} />
-                  <Stat label="Unsubscribes" value={summary?.events?.unsubscribes || 0} tone={summary?.events?.unsubscribes ? 'warn' : 'default'} />
+                  <Stat label="Sent Events" value={summary?.events?.sent_events || 0} icon={<Send className="size-4" />} />
+                  <Stat label="Opens" value={summary?.events?.opens || 0} icon={<BarChart3 className="size-4" />} />
+                  <Stat label="Clicks" value={summary?.events?.clicks || 0} icon={<BarChart3 className="size-4" />} />
+                  <Stat label="Unsubscribes" value={summary?.events?.unsubscribes || 0} tone={summary?.events?.unsubscribes ? 'warn' : 'default'} icon={<Users className="size-4" />} />
                 </div>
                 <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <section className="border border-zinc-200 bg-white">
-                    <div className="border-b border-zinc-200 px-4 py-3">
-                      <h2 className="text-sm font-semibold text-zinc-900">Recent Campaigns</h2>
-                    </div>
+                  <section className={panelClass}>
+                    <SectionHeader icon={<Mail className="size-4" />} title="Recent Campaigns" subtitle="Newsletter drafts, imports, tests, and sent performance." />
                     <div className="divide-y divide-zinc-100">
                       {campaigns.slice(0, 6).map((campaign) => (
                         <div key={campaign.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center">
                           <div>
-                            <div className="font-medium text-zinc-900">{campaign.name}</div>
+                            <div className="font-medium text-zinc-100">{campaign.name}</div>
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients</div>
                           </div>
                           <StatusPill value={campaign.status} />
@@ -485,15 +548,13 @@ export default function MarketingHubPage() {
                       {campaigns.length === 0 && <div className="px-4 py-8 text-sm text-zinc-500">No campaigns yet.</div>}
                     </div>
                   </section>
-                  <section className="border border-zinc-200 bg-white">
-                    <div className="border-b border-zinc-200 px-4 py-3">
-                      <h2 className="text-sm font-semibold text-zinc-900">Readiness</h2>
-                    </div>
+                  <section className={panelClass}>
+                    <SectionHeader icon={<CheckCircle2 className="size-4" />} title="Readiness" subtitle="What is ready to use and what needs account connection." />
                     <div className="space-y-3 p-4 text-sm">
-                      <div className="flex items-center justify-between gap-3"><span>Email provider</span><StatusPill value="connected" /></div>
-                      <div className="flex items-center justify-between gap-3"><span>Newsletter tracking</span><StatusPill value="connected" /></div>
-                      <div className="flex items-center justify-between gap-3"><span>Forms routing</span><StatusPill value={`${summary?.formRoutes?.active || 0} active`} /></div>
-                      <div className="flex items-center justify-between gap-3"><span>Social channels</span><span className="text-xs text-amber-700">Signal ready; official accounts pending</span></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Email provider</span><StatusPill value="connected" /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Newsletter tracking</span><StatusPill value="connected" /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Forms routing</span><StatusPill value={`${summary?.formRoutes?.active || 0} active`} /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Social channels</span><span className="text-xs text-amber-300">Planning ready; accounts pending</span></div>
                     </div>
                   </section>
                 </div>
@@ -536,37 +597,58 @@ export default function MarketingHubPage() {
 
             {tab === 'campaigns' && (
               <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                <form onSubmit={submitCampaign} className="border border-zinc-200 bg-white p-4">
-                  <h2 className="text-sm font-semibold text-zinc-900">Newsletter Draft</h2>
+                <form onSubmit={submitCampaign} className={panelClass + ' overflow-hidden'}>
+                  <SectionHeader icon={<Mail className="size-4" />} title="Newsletter Builder" subtitle="Start from a template, edit the brief, then preview before approval." />
                   <div className="mt-4 grid gap-3">
-                    <input className={inputClass} value={campaignForm.name} onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })} />
-                    <select className={inputClass} value={campaignForm.templateId} onChange={(e) => {
-                      const template = templates.find((item) => item.id === e.target.value)
-                      if (template) applyNewsletterTemplate(template)
-                      else setCampaignForm({ ...campaignForm, templateId: '' })
-                    }}>
-                      <option value="">No template</option>
-                      {templates.filter((item) => item.template_type === 'newsletter').map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-                    </select>
-                    <input className={inputClass} value={campaignForm.subject} onChange={(e) => setCampaignForm({ ...campaignForm, subject: e.target.value })} />
-                    <input className={inputClass} value={campaignForm.previewText} onChange={(e) => setCampaignForm({ ...campaignForm, previewText: e.target.value })} />
-                    <select className={inputClass} value={campaignForm.audienceId || defaultAudienceId} onChange={(e) => setCampaignForm({ ...campaignForm, audienceId: e.target.value })}>
-                      {audiences.map((audience) => <option key={audience.id} value={audience.id}>{audience.name}</option>)}
-                    </select>
-                    <textarea className={`${inputClass} min-h-[180px] font-mono text-xs`} value={campaignForm.bodyHtml} onChange={(e) => setCampaignForm({ ...campaignForm, bodyHtml: e.target.value })} />
-                    <button className={buttonClass} disabled={busy === 'campaign'}>Create Draft</button>
+                    <div className="grid gap-2 px-4 sm:grid-cols-2">
+                      {templates.filter((item) => item.template_type === 'newsletter').slice(0, 4).map((template) => (
+                        <TemplateCard key={template.id} template={template} onUse={() => applyNewsletterTemplate(template)} />
+                      ))}
+                    </div>
+                    <div className="grid gap-3 px-4">
+                      <input className={inputClass} value={campaignForm.name} onChange={(e) => setCampaignForm({ ...campaignForm, name: e.target.value })} />
+                      <input className={inputClass} value={campaignForm.subject} onChange={(e) => setCampaignForm({ ...campaignForm, subject: e.target.value })} />
+                      <input className={inputClass} value={campaignForm.previewText} onChange={(e) => setCampaignForm({ ...campaignForm, previewText: e.target.value })} />
+                      <select className={inputClass} value={campaignForm.audienceId || defaultAudienceId} onChange={(e) => setCampaignForm({ ...campaignForm, audienceId: e.target.value })}>
+                        {audiences.map((audience) => <option key={audience.id} value={audience.id}>{audience.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="px-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">Canvas</span>
+                        <div className="flex rounded-md border border-zinc-800 bg-zinc-950 p-1">
+                          <button type="button" onClick={() => setCampaignCanvas('preview')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'preview' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}`}>Preview</button>
+                          <button type="button" onClick={() => setCampaignCanvas('html')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'html' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}`}>HTML</button>
+                        </div>
+                      </div>
+                      {campaignCanvas === 'preview' ? (
+                        <div className="max-h-[340px] overflow-auto rounded-md border border-zinc-800 bg-white p-5 text-zinc-900">
+                          <div className="mb-4 border-b border-zinc-200 pb-3">
+                            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Subject</div>
+                            <div className="mt-1 text-lg font-semibold">{campaignForm.subject}</div>
+                            <div className="mt-1 text-sm text-zinc-500">{campaignForm.previewText}</div>
+                          </div>
+                          <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: campaignForm.bodyHtml }} />
+                        </div>
+                      ) : (
+                        <textarea className={`${inputClass} min-h-[340px] font-mono text-xs`} value={campaignForm.bodyHtml} onChange={(e) => setCampaignForm({ ...campaignForm, bodyHtml: e.target.value })} />
+                      )}
+                    </div>
+                    <div className="border-t border-zinc-800 p-4">
+                      <button className={buttonClass + ' w-full'} disabled={busy === 'campaign'}><Sparkles className="size-4" /> Create Draft</button>
+                    </div>
                   </div>
                 </form>
                 <section className="space-y-4">
-                  <div className="border border-zinc-200 bg-white p-4">
-                    <h2 className="text-sm font-semibold text-zinc-900">Send & Schedule</h2>
+                  <div className={panelClass + ' p-4'}>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><CalendarClock className="size-4 text-zinc-500" /> Send & Schedule</div>
                     <div className="mt-4 grid gap-3">
                       <select className={inputClass} value={selectedCampaign?.id || ''} onChange={(e) => setSelectedCampaignId(e.target.value)}>
                         {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
                       </select>
                       {selectedCampaign && (
                         <div className="grid gap-2 sm:grid-cols-3">
-                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => requestApproval('newsletter', selectedCampaign.id)}>Request Approval</button>
+                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => requestApproval('newsletter', selectedCampaign.id)}><CheckCircle2 className="size-4" /> Approval</button>
                           <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'approve')}>Approve</button>
                           <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'changes_requested')}>Changes</button>
                         </div>
@@ -577,19 +659,17 @@ export default function MarketingHubPage() {
                       </div>
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                         <input className={inputClass} type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
-                        <button type="button" className={buttonClass} disabled={!selectedCampaign || busy === 'schedule' || selectedCampaign.status !== 'approved'} onClick={scheduleCampaign}>Schedule</button>
+                        <button type="button" className={buttonClass} disabled={!selectedCampaign || busy === 'schedule' || selectedCampaign.status !== 'approved'} onClick={scheduleCampaign}><Send className="size-4" /> Schedule</button>
                       </div>
                     </div>
                   </div>
-                  <div className="border border-zinc-200 bg-white">
-                    <div className="border-b border-zinc-200 px-4 py-3">
-                      <h2 className="text-sm font-semibold text-zinc-900">Campaigns</h2>
-                    </div>
-                    <div className="divide-y divide-zinc-100">
+                  <div className={panelClass}>
+                    <SectionHeader icon={<BarChart3 className="size-4" />} title="Campaigns" subtitle="Select one to test, approve, or schedule." />
+                    <div className="divide-y divide-zinc-800">
                       {campaigns.map((campaign) => (
-                        <button key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} className="grid w-full gap-2 px-4 py-3 text-left text-sm hover:bg-zinc-50 md:grid-cols-[1fr_auto_auto] md:items-center">
+                        <button key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} className="grid w-full gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-zinc-900 md:grid-cols-[1fr_auto_auto] md:items-center">
                           <div>
-                            <div className="font-medium text-zinc-900">{campaign.subject}</div>
+                            <div className="font-medium text-zinc-100">{campaign.subject}</div>
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients · {campaign.sent_count || 0} sent · {campaign.pending_count || 0} pending</div>
                           </div>
                           <StatusPill value={campaign.status} />
@@ -604,13 +684,13 @@ export default function MarketingHubPage() {
 
             {tab === 'templates' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <form onSubmit={submitTemplate} className="border border-zinc-200 bg-white p-4">
-                  <h2 className="text-sm font-semibold text-zinc-900">Template Library</h2>
-                  <div className="mt-4 grid gap-3">
-                    <select className={inputClass} value={templateForm.templateType} onChange={(e) => setTemplateForm({ ...templateForm, templateType: e.target.value })}>
-                      <option value="newsletter">Newsletter</option>
-                      <option value="social">Social</option>
-                    </select>
+                <form onSubmit={submitTemplate} className={panelClass + ' overflow-hidden'}>
+                  <SectionHeader icon={<LayoutTemplate className="size-4" />} title="Template Studio" subtitle="Save reusable newsletter layouts or social copy patterns." />
+                  <div className="grid gap-3 p-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <ChannelButton active={templateForm.templateType === 'newsletter'} label="Newsletter" onClick={() => setTemplateForm({ ...templateForm, templateType: 'newsletter' })} />
+                      <ChannelButton active={templateForm.templateType === 'social'} label="Social" onClick={() => setTemplateForm({ ...templateForm, templateType: 'social' })} />
+                    </div>
                     <input className={inputClass} placeholder="Template name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} />
                     <input className={inputClass} placeholder="Category" value={templateForm.category} onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value })} />
                     {templateForm.templateType === 'newsletter' ? (
@@ -630,22 +710,14 @@ export default function MarketingHubPage() {
                         <textarea className={`${inputClass} min-h-[160px]`} placeholder="Post copy" value={templateForm.content} onChange={(e) => setTemplateForm({ ...templateForm, content: e.target.value })} />
                       </>
                     )}
-                    <button className={buttonClass} disabled={busy === 'template'}>Save Template</button>
+                    <button className={buttonClass} disabled={busy === 'template'}><LayoutTemplate className="size-4" /> Save Template</button>
                   </div>
                 </form>
-                <section className="border border-zinc-200 bg-white">
-                  <div className="border-b border-zinc-200 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-zinc-900">Reusable Templates</h2>
-                  </div>
-                  <div className="divide-y divide-zinc-100">
+                <section className={panelClass + ' overflow-hidden'}>
+                  <SectionHeader icon={<Sparkles className="size-4" />} title="Reusable Templates" subtitle="Click a card to load it into the right workflow." />
+                  <div className="grid gap-3 p-4 sm:grid-cols-2">
                     {templates.map((template) => (
-                      <div key={template.id} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
-                        <div>
-                          <div className="font-medium text-zinc-900">{template.name}</div>
-                          <div className="text-xs text-zinc-500 capitalize">{template.template_type}{template.category ? ` · ${template.category}` : ''}{template.platform ? ` · ${template.platform}` : ''}</div>
-                        </div>
-                        <button type="button" className={secondaryButton} onClick={() => template.template_type === 'newsletter' ? applyNewsletterTemplate(template) : applySocialTemplate(template)}>Use</button>
-                      </div>
+                      <TemplateCard key={template.id} template={template} onUse={() => template.template_type === 'newsletter' ? applyNewsletterTemplate(template) : applySocialTemplate(template)} />
                     ))}
                   </div>
                 </section>
@@ -734,40 +806,47 @@ export default function MarketingHubPage() {
 
             {tab === 'social' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <form onSubmit={submitSocial} className="border border-zinc-200 bg-white p-4">
-                  <h2 className="text-sm font-semibold text-zinc-900">Social Draft</h2>
-                  <div className="mt-4 grid gap-3">
-                    <select className={inputClass} value={socialForm.templateId} onChange={(e) => {
-                      const template = templates.find((item) => item.id === e.target.value)
-                      if (template) applySocialTemplate(template)
-                      else setSocialForm({ ...socialForm, templateId: '' })
-                    }}>
-                      <option value="">No template</option>
-                      {templates.filter((item) => item.template_type === 'social').map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-                    </select>
-                    <select className={inputClass} value={socialForm.platform} onChange={(e) => setSocialForm({ ...socialForm, platform: e.target.value })}>
-                      <option value="slack">Slack</option>
-                      <option value="linkedin">LinkedIn</option>
-                      <option value="x">X</option>
-                      <option value="instagram">Instagram</option>
-                    </select>
+                <form onSubmit={submitSocial} className={panelClass + ' overflow-hidden'}>
+                  <SectionHeader icon={<Megaphone className="size-4" />} title="Social Draft Studio" subtitle="Pick a template, choose channel, preview the post, then send it for approval." />
+                  <div className="grid gap-3 p-4">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {templates.filter((item) => item.template_type === 'social').map((template) => (
+                        <TemplateCard key={template.id} template={template} onUse={() => applySocialTemplate(template)} />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {['linkedin', 'x', 'instagram', 'slack'].map((channel) => (
+                        <ChannelButton key={channel} active={socialForm.platform === channel} label={channel === 'x' ? 'X' : channel[0].toUpperCase() + channel.slice(1)} onClick={() => setSocialForm({ ...socialForm, platform: channel })} />
+                      ))}
+                    </div>
                     <input className={inputClass} placeholder="Channel/account" value={socialForm.channelName} onChange={(e) => setSocialForm({ ...socialForm, channelName: e.target.value })} />
                     <textarea className={`${inputClass} min-h-[140px]`} placeholder="Post copy" value={socialForm.content} onChange={(e) => setSocialForm({ ...socialForm, content: e.target.value })} />
                     <input className={inputClass} type="datetime-local" value={socialForm.scheduledAt} onChange={(e) => setSocialForm({ ...socialForm, scheduledAt: e.target.value })} />
-                    <button className={buttonClass} disabled={busy === 'social'}>Save Draft</button>
+                    <div className={mutedPanelClass + ' p-4'}>
+                      <div className="mb-2 flex items-center justify-between text-xs text-zinc-500">
+                        <span className="font-medium uppercase tracking-[0.12em]">Live Preview</span>
+                        <span>{socialForm.content.length} chars</span>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-medium capitalize text-zinc-100">{socialForm.platform || 'Channel'}</div>
+                          <StatusPill value={socialForm.scheduledAt ? 'scheduled' : 'draft'} />
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{socialForm.content || 'Choose a template or write the post copy here.'}</p>
+                      </div>
+                    </div>
+                    <button className={buttonClass} disabled={busy === 'social'}><Megaphone className="size-4" /> Save Draft</button>
                   </div>
                 </form>
-                <section className="border border-zinc-200 bg-white">
-                  <div className="border-b border-zinc-200 px-4 py-3">
-                    <h2 className="text-sm font-semibold text-zinc-900">Social Queue</h2>
-                  </div>
+                <section className={panelClass + ' overflow-hidden'}>
+                  <SectionHeader icon={<Clock3 className="size-4" />} title="Social Queue" subtitle="Drafts, scheduled posts, and approval actions." />
                   <div className="space-y-3 p-4">
-                    <div className="border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Signal is ready for planning and approvals. Connect official LinkedIn, X, Instagram, and Slack publishing before live posting.</div>
-                    <div className="divide-y divide-zinc-100 border border-zinc-100">
+                    <div className="rounded-md border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-200">Signal is ready for planning and approvals. Connect official LinkedIn, X, Instagram, and Slack publishing before live posting.</div>
+                    <div className="divide-y divide-zinc-800 rounded-md border border-zinc-800">
                       {socialPosts.map((post) => (
                         <div key={post.id} className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                           <div>
-                            <div className="font-medium capitalize text-zinc-900">{post.platform}{post.channel_name ? ` · ${post.channel_name}` : ''}</div>
+                            <div className="font-medium capitalize text-zinc-100">{post.platform}{post.channel_name ? ` · ${post.channel_name}` : ''}</div>
                             <div className="text-xs text-zinc-500 line-clamp-2">{post.content}</div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
