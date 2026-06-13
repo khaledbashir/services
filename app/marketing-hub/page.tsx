@@ -446,7 +446,7 @@ export default function MarketingHubPage() {
                   <Stat label="Send-Safe Contacts" value={summary?.contacts?.subscribed || 0} tone="good" />
                   <Stat label="Campaigns" value={summary?.campaigns?.total || 0} />
                   <Stat label="Suppressed" value={summary?.contacts?.suppressed || 0} tone="warn" />
-                  <Stat label="Missing Channels" value={summary?.postiz?.missingChannels?.length || 0} tone="warn" />
+                  <Stat label="Pending Channels" value={summary?.socialChannels?.pendingChannels?.length ?? summary?.postiz?.missingChannels?.length ?? 0} tone="warn" />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <Stat label="HubSpot Imported" value={summary?.contacts?.hubspot_imported || 0} />
@@ -493,7 +493,7 @@ export default function MarketingHubPage() {
                       <div className="flex items-center justify-between gap-3"><span>Email provider</span><StatusPill value="connected" /></div>
                       <div className="flex items-center justify-between gap-3"><span>Newsletter tracking</span><StatusPill value="connected" /></div>
                       <div className="flex items-center justify-between gap-3"><span>Forms routing</span><StatusPill value={`${summary?.formRoutes?.active || 0} active`} /></div>
-                      <div className="flex items-center justify-between gap-3"><span>Postiz channels</span><span className="text-xs text-amber-700">Slack live; LinkedIn, X, Instagram pending</span></div>
+                      <div className="flex items-center justify-between gap-3"><span>Social channels</span><span className="text-xs text-amber-700">Signal ready; official accounts pending</span></div>
                     </div>
                   </section>
                 </div>
@@ -762,7 +762,7 @@ export default function MarketingHubPage() {
                     <h2 className="text-sm font-semibold text-zinc-900">Social Queue</h2>
                   </div>
                   <div className="space-y-3 p-4">
-                    <div className="border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Postiz is connected to Slack. LinkedIn, X, and Instagram need official ANC account connections before publishing.</div>
+                    <div className="border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Signal is ready for planning and approvals. Connect official LinkedIn, X, Instagram, and Slack publishing before live posting.</div>
                     <div className="divide-y divide-zinc-100 border border-zinc-100">
                       {socialPosts.map((post) => (
                         <div key={post.id} className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">

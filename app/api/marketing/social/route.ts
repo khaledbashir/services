@@ -14,11 +14,17 @@ export async function GET() {
     )
     return NextResponse.json({
       posts: result.rows,
+      channels: {
+        mode: 'native_signal',
+        connectedChannels: [],
+        pendingChannels: ['LinkedIn', 'X', 'Instagram', 'Slack publishing'],
+        note: 'Signal owns planning, approvals, and native publishing. Connect official accounts before live posting.',
+      },
       postiz: {
         url: process.env.POSTIZ_API_URL || process.env.POSTIZ_URL || 'https://abc-postiz.izcgmb.easypanel.host',
-        connectedChannels: ['Slack'],
-        missingChannels: ['LinkedIn', 'X', 'Instagram'],
-        note: 'Connect remaining official ANC accounts in Postiz Integrations before this can publish to every HubSpot channel.',
+        connectedChannels: [],
+        missingChannels: ['LinkedIn', 'X', 'Instagram', 'Slack publishing'],
+        note: 'Legacy reference only. The active workflow is Signal/Marketing Hub.',
       },
     })
   } catch (err) {

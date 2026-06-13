@@ -1333,9 +1333,9 @@ async function runMigrations() {
             NULL,
             NULL,
             NULL,
-            'Proud to highlight [partner/client] and the work behind [venue/project]. [One concrete outcome].',
+            'A quick partner note from ANC Sports: [partner/client] is moving [venue/project] forward with [specific upgrade or media opportunity]. The story is the outcome: [one concrete impact for fans, sponsors, or venue operators].',
             'linkedin',
-            '{"source":"hubspot_retirement_default"}'::jsonb
+            '{"source":"hubspot_retirement_default","approvalPath":"media_partnerships"}'::jsonb
           ),
           (
             'social',
@@ -1344,9 +1344,9 @@ async function runMigrations() {
             NULL,
             NULL,
             NULL,
-            'The latest ANC Sports Media & Partnerships update is ready: [headline]. Read more: [link]',
+            'The latest ANC Sports Media & Partnerships brief is ready. Lead story: [headline]. Inside: [partner signal], [venue note], and [what to watch]. Read more: [link]',
             'linkedin',
-            '{"source":"hubspot_retirement_default"}'::jsonb
+            '{"source":"hubspot_retirement_default","approvalPath":"media_partnerships"}'::jsonb
           ),
           (
             'social',
@@ -1355,9 +1355,42 @@ async function runMigrations() {
             NULL,
             NULL,
             NULL,
-            'ANC Sports is growing our team. We are looking for [role/team] to support [venue/work type]. Details: [link]',
+            'ANC Sports is growing the team behind live-event execution. We are looking for [role/team] to support [venue/work type]. Details: [link]',
             'linkedin',
-            '{"source":"hubspot_retirement_default"}'::jsonb
+            '{"source":"hubspot_retirement_default","approvalPath":"people"}'::jsonb
+          ),
+          (
+            'social',
+            'Venue Moment',
+            'venue_moment',
+            NULL,
+            NULL,
+            NULL,
+            '[Venue/event] had the kind of moment that shows why live media matters: [moment]. ANC Sports helped power [display/media/sponsorship surface], giving fans and partners [specific outcome].',
+            'linkedin',
+            '{"source":"hubspot_retirement_default","approvalPath":"media_partnerships"}'::jsonb
+          ),
+          (
+            'social',
+            'Sponsor Signal',
+            'sponsor_signal',
+            NULL,
+            NULL,
+            NULL,
+            'Sponsor visibility works best when the message belongs to the moment. At [venue/event], [brand/partner] showed up through [asset/channel] with [measurable or observable impact].',
+            'linkedin',
+            '{"source":"hubspot_retirement_default","approvalPath":"media_partnerships"}'::jsonb
+          ),
+          (
+            'social',
+            'Internal Approval Brief',
+            'approval_brief',
+            NULL,
+            NULL,
+            NULL,
+            'Approval brief for [campaign/post]: audience = [audience], channel = [LinkedIn/X/Instagram/Slack], publish window = [date/time], risk check = [client/logo/rightsholder notes], final copy = [copy].',
+            'slack',
+            '{"source":"hubspot_retirement_default","approvalPath":"internal"}'::jsonb
           )
       )
       INSERT INTO marketing_templates
