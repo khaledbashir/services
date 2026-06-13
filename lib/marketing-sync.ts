@@ -13,6 +13,7 @@ type EligibilityResult = {
   crmPersonId: string | null
   crmCompanyId: string | null
   status: MarketingStatus
+  newsletterOptIn: boolean | null
   reason: string
   metadata: Record<string, unknown>
 }
@@ -32,6 +33,14 @@ function truthy(value: unknown): boolean {
   if (value === true) return true
   const text = String(value || '').trim().toLowerCase()
   return ['true', 'yes', '1', 'y', 'opted_out', 'unsubscribed'].includes(text)
+}
+
+function booleanValue(value: unknown): boolean | null {
+  if (value === true || value === false) return value
+  const text = String(value ?? '').trim().toLowerCase()
+  if (['true', 'yes', '1', 'y'].includes(text)) return true
+  if (['false', 'no', '0', 'n'].includes(text)) return false
+  return null
 }
 
 function readPath(record: Record<string, any>, paths: string[]): unknown {
@@ -64,13 +73,17 @@ export function evaluateMarketingEligibility(record: Record<string, any>, source
   if (!email) return null
 
   const signal = joinSignals(record)
+  const rawMarketingStatus = String(readPath(record, ['marketingStatus', 'marketingContactStatus', 'hs_marketable_status', 'subscriptionStatus']) || '')
+    .trim()
+    .toLowerCase()
   const hardBounce = truthy(readPath(record, ['hardBounced', 'hardBounce', 'bounced', 'emailBounced'])) ||
     /hard[_ -]?bounce|bounced|invalid email/.test(signal)
   const optedOut = truthy(readPath(record, ['doNotMarket', 'marketingOptOut', 'optedOut', 'unsubscribed', 'emailOptOut'])) ||
     /unsubscribe|opt[_ -]?out|do not market|do_not_market/.test(signal)
   const nonMarketing = truthy(readPath(record, ['nonMarketing', 'isNonMarketing'])) ||
-    /non[_ -]?marketing|disqualified|spam|unengaged/.test(signal)
+    /suppressed|non[_ -]?marketing|disqualified|spam|unengaged/.test(signal)
   const isAncStaff = truthy(readPath(record, ['isAncStaff', 'staff', 'isStaff']))
+  const newsletterOptIn = booleanValue(readPath(record, ['newsletterOptIn', 'newsletterOptedIn', 'metadata.newsletterOptIn']))
 
   let status: MarketingStatus = 'subscribed'
   let reason = 'eligible'
@@ -83,6 +96,9 @@ export function evaluateMarketingEligibility(record: Record<string, any>, source
   } else if (nonMarketing || isAncStaff) {
     status = 'non_marketing'
     reason = isAncStaff ? 'anc_staff' : 'non_marketing_or_disqualified'
+  } else if (/candidate|review/.test(rawMarketingStatus)) {
+    status = 'candidate'
+    reason = 'candidate_review'
   }
 
   const firstName = compactString(readPath(record, ['name.firstName', 'firstName']))
@@ -97,11 +113,13 @@ export function evaluateMarketingEligibility(record: Record<string, any>, source
     crmPersonId: compactString(readPath(record, ['id', 'personId'])),
     crmCompanyId: compactString(readPath(record, ['companyId', 'company.id'])),
     status,
+    newsletterOptIn,
     reason,
     metadata: {
       marketing_sync_source: source,
       marketing_sync_reason: reason,
       marketing_sync_seen_at: new Date().toISOString(),
+      crm_newsletter_opt_in: newsletterOptIn,
       crm_created_at: compactString(readPath(record, ['createdAt', 'created_at'])),
       crm_updated_at: compactString(readPath(record, ['updatedAt', 'updated_at'])),
       crm_raw_marketing_status: compactString(readPath(record, ['marketingStatus', 'marketingContactStatus', 'hs_marketable_status'])),
@@ -133,7 +151,7 @@ export async function upsertMarketingEligibility(input: EligibilityResult): Prom
              ELSE marketing_contacts.source
            END,
            subscription_status = CASE
-             WHEN marketing_contacts.subscription_status IN ('unsubscribed', 'bounced', 'non_marketing')
+             WHEN marketing_contacts.subscription_status IN ('unsubscribed', 'bounced', 'non_marketing', 'suppressed')
                AND EXCLUDED.subscription_status = 'subscribed'
              THEN marketing_contacts.subscription_status
              ELSE EXCLUDED.subscription_status
@@ -166,7 +184,7 @@ export async function upsertMarketingEligibility(input: EligibilityResult): Prom
     `SELECT id FROM marketing_audiences WHERE name = 'Media & Partnerships Newsletter' AND is_active = true LIMIT 1`,
   )
   const audience = audienceRes.rows[0]
-  const audienceStatus = contact.subscription_status === 'subscribed' ? 'active' : 'suppressed'
+  const audienceStatus = contact.subscription_status === 'subscribed' && input.newsletterOptIn !== false ? 'active' : 'suppressed'
 
   if (audience?.id) {
     await query(
