@@ -41,10 +41,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign name and subject are required' }, { status: 400 })
     }
 
+    const visualContent = body.visualContent != null ? JSON.stringify(body.visualContent) : null
     const result = await query(
       `INSERT INTO newsletter_campaigns
-        (audience_id, template_id, name, subject, preview_text, from_name, from_email, reply_to, body_html, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft')
+        (audience_id, template_id, name, subject, preview_text, from_name, from_email, reply_to, body_html, visual_content, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'draft')
        RETURNING *`,
       [
         body.audienceId || null,
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
         body.fromEmail || 'notifications@ancsports.net',
         body.replyTo || null,
         body.bodyHtml || '',
+        visualContent,
       ],
     )
     return NextResponse.json({ campaign: result.rows[0] })

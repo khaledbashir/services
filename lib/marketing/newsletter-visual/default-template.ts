@@ -1,0 +1,66 @@
+import type { NewsletterVisualDocument } from './types'
+
+/** Gold starter layout — mirrors DealDeck section rhythm for Alison's newsletter workflow */
+export const DEFAULT_NEWSLETTER_VISUAL: NewsletterVisualDocument = {
+  version: 1,
+  theme: 'ancNewsletter',
+  subject: 'ANC Sports Media & Partnerships Update',
+  previewText: 'Latest ANC media, venue, and partnership updates.',
+  sections: [
+    {
+      id: 'hero-default',
+      type: 'hero',
+      eyebrow: 'Media & Partnerships',
+      headline: 'Media & Partnerships Brief',
+      body: 'A focused update on partner-facing moments, venue media opportunities, and audience signals moving through ANC Sports.',
+      imageUrl: '',
+      imageAlt: 'ANC venue media',
+      imagePosition: 'full',
+    },
+    {
+      id: 'spotlight-default',
+      type: 'spotlight',
+      eyebrow: 'Lead Story',
+      headline: 'The moment worth opening with',
+      body: 'Lead with the most useful partnership or venue story first. Keep it concrete, current, and tied to what the recipient should know next.',
+    },
+    {
+      id: 'story-partnerships',
+      type: 'story',
+      eyebrow: 'Partnership Signals',
+      headline: 'Where media demand is showing up',
+      body: 'Use this section for sponsor-facing opportunities, league or venue momentum, campaign launches, or a quick note on where media demand is showing up.',
+      imageUrl: '',
+      imageAlt: '',
+      imagePosition: 'right',
+    },
+    {
+      id: 'story-venues',
+      type: 'story',
+      eyebrow: 'Venue Notes',
+      headline: 'The operational story behind the screen',
+      body: 'Summarize new installs, upgraded inventory, live-event wins, or context that helps a partner understand ANC reach.',
+      imageUrl: '',
+      imageAlt: '',
+      imagePosition: 'left',
+    },
+    {
+      id: 'event-default',
+      type: 'event',
+      eventDate: 'What To Watch',
+      headline: 'The next opportunity on the radar',
+      venue: 'Upcoming venue or league moment',
+      body: 'Close with the next action: a meeting, a partner follow-up, an upcoming event, or the one opportunity the audience should keep on their radar.',
+      ctaLabel: 'Connect with ANC',
+      ctaUrl: 'mailto:partnerships@ancsports.net',
+    },
+    {
+      id: 'cta-default',
+      type: 'cta',
+      headline: 'Partner with ANC Sports',
+      body: 'Talk to us about media inventory, venue partnerships, and sponsor-ready programs.',
+      ctaLabel: 'Start a conversation',
+      ctaUrl: 'mailto:partnerships@ancsports.net',
+    },
+  ],
+}

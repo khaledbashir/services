@@ -64,33 +64,36 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await request.json()
+    const visualContent = body.visualContent != null ? JSON.stringify(body.visualContent) : null
     const result = await query(
       `UPDATE newsletter_campaigns
-       SET audience_id = $2,
-           name = $3,
-           subject = $4,
-           preview_text = $5,
-           from_name = $6,
-           from_email = $7,
-           reply_to = $8,
-           body_html = $9,
-           status = COALESCE($10, status),
-           scheduled_at = $11,
+       SET audience_id = COALESCE($2, audience_id),
+           name = COALESCE($3, name),
+           subject = COALESCE($4, subject),
+           preview_text = COALESCE($5, preview_text),
+           from_name = COALESCE($6, from_name),
+           from_email = COALESCE($7, from_email),
+           reply_to = COALESCE($8, reply_to),
+           body_html = COALESCE($9, body_html),
+           visual_content = COALESCE($10::jsonb, visual_content),
+           status = COALESCE($11, status),
+           scheduled_at = COALESCE($12, scheduled_at),
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
       [
         params.id,
-        body.audienceId || null,
-        body.name,
-        body.subject,
-        body.previewText || null,
-        body.fromName || 'ANC Sports',
-        body.fromEmail || 'notifications@ancsports.net',
-        body.replyTo || null,
-        body.bodyHtml || '',
-        body.status || null,
-        body.scheduledAt || null,
+        body.audienceId ?? null,
+        body.name ?? null,
+        body.subject ?? null,
+        body.previewText ?? null,
+        body.fromName ?? null,
+        body.fromEmail ?? null,
+        body.replyTo ?? null,
+        body.bodyHtml ?? null,
+        visualContent,
+        body.status ?? null,
+        body.scheduledAt ?? null,
       ],
     )
     if (!result.rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 })

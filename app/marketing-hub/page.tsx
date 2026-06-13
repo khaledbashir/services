@@ -2,7 +2,9 @@
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { BarChart3, CalendarClock, CheckCircle2, Clock3, FileText, LayoutTemplate, Mail, Megaphone, Send, Sparkles, Users, Workflow } from 'lucide-react'
+import { DEFAULT_NEWSLETTER_VISUAL, exportNewsletterBodyHtml } from '@/lib/marketing/newsletter-visual'
+import { BarChart3, CalendarClock, CheckCircle2, Clock3, FileText, LayoutTemplate, Mail, Megaphone, Palette, Send, Sparkles, Users, Workflow } from 'lucide-react'
+import Link from 'next/link'
 
 type Audience = { id: string; name: string; description?: string; member_count?: number }
 type Contact = { id: string; email: string; first_name?: string; last_name?: string; company_name?: string; subscription_status: string }
@@ -260,13 +262,23 @@ export default function MarketingHubPage() {
     setBusy('campaign')
     setMessage('')
     try {
+      const visualContent = {
+        ...DEFAULT_NEWSLETTER_VISUAL,
+        subject: campaignForm.subject,
+        previewText: campaignForm.previewText,
+      }
       const data = await fetchJson('/api/marketing/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...campaignForm, audienceId: campaignForm.audienceId || defaultAudienceId }),
+        body: JSON.stringify({
+          ...campaignForm,
+          audienceId: campaignForm.audienceId || defaultAudienceId,
+          bodyHtml: campaignForm.bodyHtml || exportNewsletterBodyHtml(visualContent),
+          visualContent,
+        }),
       })
       setSelectedCampaignId(data.campaign.id)
-      setMessage('Newsletter draft created.')
+      setMessage('Newsletter draft created. Open the visual editor to polish the layout.')
       await loadAll()
     } catch (err: any) {
       setMessage(err.message)
@@ -647,10 +659,19 @@ export default function MarketingHubPage() {
                         {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
                       </select>
                       {selectedCampaign && (
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => requestApproval('newsletter', selectedCampaign.id)}><CheckCircle2 className="size-4" /> Approval</button>
-                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'approve')}>Approve</button>
-                          <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'changes_requested')}>Changes</button>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <Link
+                            href={`/marketing-hub/campaigns/${selectedCampaign.id}/edit`}
+                            className={buttonClass + ' w-full text-center no-underline'}
+                          >
+                            <Palette className="size-4" />
+                            Visual Editor
+                          </Link>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => requestApproval('newsletter', selectedCampaign.id)}><CheckCircle2 className="size-4" /> Approval</button>
+                            <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'approve')}>Approve</button>
+                            <button type="button" className={secondaryButton} disabled={busy === `approval-${selectedCampaign.id}`} onClick={() => decideApproval('newsletter', selectedCampaign.id, 'changes_requested')}>Changes</button>
+                          </div>
                         </div>
                       )}
                       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -667,14 +688,21 @@ export default function MarketingHubPage() {
                     <SectionHeader icon={<BarChart3 className="size-4" />} title="Campaigns" subtitle="Select one to test, approve, or schedule." />
                     <div className="divide-y divide-zinc-800">
                       {campaigns.map((campaign) => (
-                        <button key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} className="grid w-full gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-zinc-900 md:grid-cols-[1fr_auto_auto] md:items-center">
-                          <div>
+                        <div key={campaign.id} className="grid w-full gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-zinc-900 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
+                          <button type="button" onClick={() => setSelectedCampaignId(campaign.id)} className="text-left">
                             <div className="font-medium text-zinc-100">{campaign.subject}</div>
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients · {campaign.sent_count || 0} sent · {campaign.pending_count || 0} pending</div>
-                          </div>
+                          </button>
                           <StatusPill value={campaign.status} />
                           <div className="text-xs tabular-nums text-zinc-500">{campaign.open_rate ?? 0}% open · {campaign.click_rate ?? 0}% click · {campaign.unsubscribe_rate ?? 0}% unsub</div>
-                        </button>
+                          <Link
+                            href={`/marketing-hub/campaigns/${campaign.id}/edit`}
+                            className={secondaryButton + ' whitespace-nowrap no-underline'}
+                          >
+                            <Palette className="size-4" />
+                            Visual
+                          </Link>
+                        </div>
                       ))}
                     </div>
                   </div>

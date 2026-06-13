@@ -1064,6 +1064,7 @@ async function runMigrations() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
     await client.query(`ALTER TABLE newsletter_campaigns ADD COLUMN IF NOT EXISTS template_id UUID`)
+    await client.query(`ALTER TABLE newsletter_campaigns ADD COLUMN IF NOT EXISTS visual_content JSONB`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_status ON newsletter_campaigns(status)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_newsletter_campaigns_audience ON newsletter_campaigns(audience_id)`)
 
@@ -1143,6 +1144,7 @@ async function runMigrations() {
       UNIQUE(template_type, name)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_marketing_templates_type ON marketing_templates(template_type, is_active)`)
+    await client.query(`ALTER TABLE marketing_templates ADD COLUMN IF NOT EXISTS visual_content JSONB`)
 
     await client.query(`CREATE TABLE IF NOT EXISTS marketing_approval_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

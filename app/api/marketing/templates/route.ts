@@ -38,10 +38,11 @@ export async function POST(request: NextRequest) {
     }
     if (!name) return NextResponse.json({ error: 'Template name is required' }, { status: 400 })
 
+    const visualContent = body.visualContent != null ? JSON.stringify(body.visualContent) : null
     const result = await query(
       `INSERT INTO marketing_templates
-        (template_type, name, category, subject, preview_text, body_html, content, platform, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+        (template_type, name, category, subject, preview_text, body_html, content, platform, metadata, visual_content)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
        ON CONFLICT (template_type, name) DO UPDATE
          SET category = EXCLUDED.category,
              subject = EXCLUDED.subject,
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
              content = EXCLUDED.content,
              platform = EXCLUDED.platform,
              metadata = marketing_templates.metadata || EXCLUDED.metadata,
+             visual_content = COALESCE(EXCLUDED.visual_content, marketing_templates.visual_content),
              is_active = true,
              updated_at = NOW()
        RETURNING *`,
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
         body.content || null,
         body.platform || null,
         JSON.stringify(body.metadata || { source: 'manual' }),
+        visualContent,
       ],
     )
     return NextResponse.json({ template: result.rows[0] })
