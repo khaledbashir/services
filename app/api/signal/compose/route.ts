@@ -9,6 +9,8 @@ import { ANC_BRAND_VOICE, COMPOSE_PER_CHANNEL_PROMPTS, type ChannelKey } from '@
 interface ComposeBody {
   brief: string
   channel: ChannelKey
+  context?: string
+  useMarketingContext?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -20,13 +22,26 @@ export async function POST(request: NextRequest) {
   }
   const channelPrompt = COMPOSE_PER_CHANNEL_PROMPTS[channel] || COMPOSE_PER_CHANNEL_PROMPTS.linkedin
 
+  let contextBlock = (body.context || '').trim()
+  if (!contextBlock && body.useMarketingContext) {
+    try {
+      const { loadMarketingComposeContext } = await import('@/lib/marketing/compose-context')
+      const ctx = await loadMarketingComposeContext()
+      contextBlock = ctx.promptBlock
+    } catch {
+      // compose still works without live marketing context
+    }
+  }
+
+  const contextSection = contextBlock ? `\n\nMarketing context:\n${contextBlock}` : ''
+
   const result = streamText({
     model: openai('gpt-4o-mini'),
     system: ANC_BRAND_VOICE,
     messages: [
       {
         role: 'user',
-        content: `Brief from the operator:\n${brief}\n\nTask: ${channelPrompt}\n\nOutput only the final post copy — no preamble, no headings, no quote marks around it.`,
+        content: `Brief from the operator:\n${brief}${contextSection}\n\nTask: ${channelPrompt}\n\nOutput only the final post copy — no preamble, no headings, no quote marks around it.`,
       },
     ],
     temperature: 0.6,

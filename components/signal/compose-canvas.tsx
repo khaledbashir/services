@@ -134,7 +134,7 @@ export function ComposeCanvas() {
       const res = await fetch('/api/signal/compose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief, channel }),
+        body: JSON.stringify({ brief, channel, useMarketingContext: true }),
       })
       if (!res.ok || !res.body) {
         throw new Error(`HTTP ${res.status}`)
