@@ -24,9 +24,10 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
        ON CONFLICT (campaign_id, email) DO UPDATE
          SET contact_id = EXCLUDED.contact_id,
              status = CASE
-               WHEN newsletter_campaign_recipients.status IN ('sent', 'test_sent', 'unsubscribed') THEN newsletter_campaign_recipients.status
+               WHEN newsletter_campaign_recipients.status IN ('sent', 'unsubscribed') THEN newsletter_campaign_recipients.status
                ELSE 'pending'
-             END
+             END,
+             error_text = NULL
        RETURNING id`,
       [campaign.id, campaign.audience_id],
     )
