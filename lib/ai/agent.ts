@@ -1,6 +1,7 @@
 import { query } from '@/lib/db'
 import type { AgentRole, AgentChannel } from '@/lib/ai/types'
 import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
+import { OLLAMA_CLOUD_MODELS } from '@/lib/ai/ollama-cloud-models'
 
 export interface ProviderConfig {
   name: string
@@ -21,10 +22,47 @@ export interface ProviderConfig {
 
 function providerPriority(p: ProviderConfig): number {
   const text = `${p.name} ${p.model}`.toLowerCase()
+  if (text.includes('ollama-cloud')) return 0
   if (text.includes('kimi-k2.6')) return 0
   if (text.includes('kimi')) return 1
   if (text.includes('gpt') || text.includes('openai')) return 2
   return 3
+}
+
+function isOllamaCloudProvider(provider: ProviderConfig): boolean {
+  return provider.baseUrl.replace(/\/$/, '') === 'https://ollama.com/v1'
+}
+
+function uniqModels(values: Array<string | undefined | null>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())).map((value) => value.trim()))]
+}
+
+function collapseOllamaCloudProviders(providers: ProviderConfig[]): ProviderConfig[] {
+  const ollamaProviders = providers.filter(isOllamaCloudProvider)
+  if (ollamaProviders.length === 0) return providers
+
+  const first = ollamaProviders[0]
+  const envDefault = process.env.AI_MODEL
+  const models = uniqModels([
+    ...OLLAMA_CLOUD_MODELS,
+    ...ollamaProviders.flatMap((p) => [p.model, ...(p.availableModels || [])]),
+  ])
+  const defaultModel =
+    (envDefault && models.includes(envDefault) && envDefault) ||
+    (first.model && models.includes(first.model) && first.model) ||
+    'kimi-k2.6'
+
+  return [
+    ...providers.filter((p) => !isOllamaCloudProvider(p)),
+    {
+      name: 'ollama-cloud',
+      label: 'Ollama Cloud',
+      baseUrl: first.baseUrl,
+      apiKey: first.apiKey,
+      model: defaultModel,
+      availableModels: models,
+    },
+  ]
 }
 
 /**
@@ -96,7 +134,7 @@ export function loadProviders(): ProviderConfig[] {
     if (!collected.some(c => c.name === p.name)) collected.push(p)
   }
 
-  return collected.sort((a, b) => providerPriority(a) - providerPriority(b))
+  return collapseOllamaCloudProviders(collected).sort((a, b) => providerPriority(a) - providerPriority(b))
 }
 
 /**

@@ -1,19 +1,13 @@
 'use client'
 
-import { DashboardLayout } from '@/components/dashboard-layout'
-import { MarketingCampaignBuilder } from '@/components/marketing/MarketingCampaignBuilder'
-import { MarketingStudioShell } from '@/components/marketing/MarketingStudioShell'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
-export default function MarketingComposePage() {
-  return (
-    <DashboardLayout fullBleed>
-      <MarketingStudioShell
-        title="AI Campaign Builder"
-        subtitle="Brief → real HubSpot-backed context → newsletter preview + social variants → approval gate. Inspired by presentation.basheer.app."
-        status="Phase 1"
-      >
-        <MarketingCampaignBuilder />
-      </MarketingStudioShell>
-    </DashboardLayout>
-  )
+/** Legacy route — redirects to agent studio */
+export default function MarketingComposeRedirect() {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace('/marketing-hub/studio')
+  }, [router])
+  return null
 }

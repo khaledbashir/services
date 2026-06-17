@@ -245,6 +245,7 @@ export function Sidebar() {
         { href: '/reports/designs-by-client', label: 'Requests by Client' },
         { href: '/content-schedules', label: 'Content Schedule' },
         { href: '/marketing-hub', label: 'Marketing Hub', role: 'manager' },
+        { href: '/marketing-hub/studio', label: 'Marketing Agent', role: 'manager' },
         { href: '/print-requests', label: 'Print Requests', role: 'manager' },
         { href: '/gallery', label: 'Visual Gallery' },
         { href: '/time-entries', label: 'Time Entries' },
@@ -279,6 +280,7 @@ export function Sidebar() {
       icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></Icon>,
       role: 'manager',
       links: [
+        { href: '/presentation/new', label: 'Build Studio' },
         { href: '/client-portals', label: 'Build & Publish' },
         { href: '/admin/portal-users', label: 'Customer Portal Setup' },
         { href: '/portals', label: 'Venue Health Links' },

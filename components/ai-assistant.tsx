@@ -264,10 +264,16 @@ interface Skill {
   role: string
 }
 
-interface Provider { name: string; model: string }
+interface Provider {
+  name: string
+  label?: string
+  model: string
+  availableModels?: string[]
+}
 
 function providerPriority(p: Provider): number {
   const text = `${p.name} ${p.model}`.toLowerCase()
+  if (text.includes('ollama-cloud')) return 0
   if (text.includes('kimi-k2.6')) return 0
   if (text.includes('kimi')) return 1
   if (text.includes('gpt') || text.includes('openai')) return 2
@@ -290,6 +296,7 @@ interface PageContext {
 
   const STORAGE_KEY = 'ai-panel-open'
 const PROVIDER_KEY = 'ai-panel-provider'
+const MODEL_KEY = 'ai-panel-model'
 const WIDTH_KEY = 'ai-panel-width'
 const MIN_WIDTH = 360
 const MAX_WIDTH = 900
@@ -441,6 +448,7 @@ export function AiAssistant() {
   const [skills, setSkills] = useState<Skill[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string>('')
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
   const [expandedPromptGroups, setExpandedPromptGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(SUGGESTION_GROUPS.map(group => [group.title, !!group.defaultOpen]))
@@ -454,6 +462,7 @@ export function AiAssistant() {
   useEffect(() => {
     setOpen(localStorage.getItem(STORAGE_KEY) === '1')
     setSelectedProvider(localStorage.getItem(PROVIDER_KEY) || '')
+    setSelectedModel(localStorage.getItem(MODEL_KEY) || '')
     // Don't restore old chat on panel open — always start fresh
     const savedWidth = Number(localStorage.getItem(WIDTH_KEY))
     if (savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) setWidth(savedWidth)
@@ -493,6 +502,7 @@ export function AiAssistant() {
 
   useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, open ? '1' : '0') }, [open])
   useEffect(() => { if (selectedProvider && typeof window !== 'undefined') localStorage.setItem(PROVIDER_KEY, selectedProvider) }, [selectedProvider])
+  useEffect(() => { if (selectedModel && typeof window !== 'undefined') localStorage.setItem(MODEL_KEY, selectedModel) }, [selectedModel])
 
   const loadChats = useCallback(async () => {
     const r = await fetch('/api/ai/chats')
@@ -508,9 +518,19 @@ export function AiAssistant() {
       const data = await r.json()
       const ranked = [...(data.providers || [])].sort((a: Provider, b: Provider) => providerPriority(a) - providerPriority(b))
       setProviders(ranked)
-      if (!selectedProvider && ranked[0]) setSelectedProvider(ranked[0].name)
+      if (!selectedProvider && ranked[0]) {
+        setSelectedProvider(ranked[0].name)
+        setSelectedModel(ranked[0].model)
+      }
     }
   }, [selectedProvider])
+
+  useEffect(() => {
+    const provider = providers.find((p) => p.name === selectedProvider)
+    if (!provider) return
+    const options = provider.availableModels?.length ? provider.availableModels : [provider.model]
+    if (!selectedModel || !options.includes(selectedModel)) setSelectedModel(provider.model)
+  }, [providers, selectedProvider, selectedModel])
 
   const loadChat = useCallback(async (id: string) => {
     const r = await fetch(`/api/ai/chats/${id}`)
@@ -590,6 +610,7 @@ export function AiAssistant() {
           chat_id: activeChatId,
           message: text,
           provider: selectedProvider || undefined,
+          model: selectedModel || undefined,
           page_context: pageContext,
         }),
         signal: controller.signal,
@@ -1051,15 +1072,32 @@ export function AiAssistant() {
             <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1.5 px-0.5">
               <span>{skills.length} skills ready</span>
               {providers.length > 0 && (
-                <select
-                  value={selectedProvider}
-                  onChange={e => setSelectedProvider(e.target.value)}
-                  className="text-[10px] text-zinc-500 bg-transparent border-0 focus:outline-none cursor-pointer hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  title="AI provider"
-                  disabled={sending}
-                >
-                  {providers.map(p => <option key={p.name} value={p.name}>{p.model} ({p.name})</option>)}
-                </select>
+                <div className="flex max-w-[70%] items-center gap-1">
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => {
+                      const provider = providers.find((p) => p.name === e.target.value)
+                      setSelectedProvider(e.target.value)
+                      setSelectedModel(provider?.model || '')
+                    }}
+                    className="max-w-[130px] truncate bg-transparent text-[10px] text-zinc-500 border-0 focus:outline-none cursor-pointer hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    title="AI provider"
+                    disabled={sending}
+                  >
+                    {providers.map(p => <option key={p.name} value={p.name}>{p.label || p.name}</option>)}
+                  </select>
+                  <select
+                    value={selectedModel}
+                    onChange={e => setSelectedModel(e.target.value)}
+                    className="max-w-[150px] truncate bg-transparent text-[10px] text-zinc-500 border-0 focus:outline-none cursor-pointer hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    title="AI model"
+                    disabled={sending || !selectedProvider}
+                  >
+                    {(providers.find((p) => p.name === selectedProvider)?.availableModels || []).map((model) => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
           </div>

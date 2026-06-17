@@ -490,11 +490,11 @@ export default function MarketingHubPage() {
               <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.formRoutes?.active || 0}</div><div>routes</div></div>
             </div>
             <Link
-              href="/marketing-hub/compose"
+              href="/marketing-hub/studio"
               className="inline-flex items-center justify-center gap-2 rounded-md bg-[#7350FF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#8465ff]"
             >
               <Sparkles className="size-4" />
-              AI Campaign Builder
+              Marketing Agent
             </Link>
           </div>
           </div>
