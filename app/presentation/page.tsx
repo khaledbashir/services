@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 const TOTAL_SLIDES = 15
 
@@ -10,15 +11,33 @@ function BuildStudioHome() {
     {
       label: 'Client Portal',
       href: '/client-portals?start=service-portal',
-      eyebrow: 'Portal builder',
-      body: 'Assemble a client-facing portal with tickets, service health, AI diagnosis, documents, approvals, reports, onboarding, and deal deck modules.',
+      eyebrow: 'Client-facing shell',
+      body: 'Assemble a client workspace with tickets, service health, AI diagnosis, documents, approvals, reports, onboarding, and a publishable link.',
+      meta: 'Service, project, post-install',
       active: true,
     },
     {
       label: 'Deal Deck',
       href: '/client-portals?start=sales-proposal',
-      eyebrow: 'Sales story',
+      eyebrow: 'Sales presentation',
       body: 'Build a cinematic proposal or executive review experience with visual proof, investment framing, and a publishable client link.',
+      meta: 'Vision, proof, pricing',
+      active: true,
+    },
+    {
+      label: 'Marketing Campaign',
+      href: '/marketing-hub/studio',
+      eyebrow: 'Media & partnerships',
+      body: 'Use the marketing agent to draft a newsletter, render the visual, generate social copy, and stage the package for approval.',
+      meta: 'Newsletter, social, approval',
+      active: true,
+    },
+    {
+      label: 'Newsletter',
+      href: '/marketing-hub/studio',
+      eyebrow: 'Audience output',
+      body: 'Create a send-ready newsletter using live audience data, imported HubSpot references, templates, preview text, and approval gates.',
+      meta: 'Audience, template, test send',
       active: true,
     },
     {
@@ -26,6 +45,7 @@ function BuildStudioHome() {
       href: '/client-portals?start=issue-intake',
       eyebrow: 'First line of defense',
       body: 'Create an intake experience around tickets, image upload, AI diagnosis, knowledge base matching, and support routing.',
+      meta: 'Photo triage, ticket routing',
       active: true,
     },
     {
@@ -33,6 +53,7 @@ function BuildStudioHome() {
       href: '/client-portals?start=renewal-qbr',
       eyebrow: 'Executive readout',
       body: 'Package service health, ticket trends, completed work, risks, documents, and renewal-ready account summaries.',
+      meta: 'Reports, renewals, proof',
       active: true,
     },
     {
@@ -40,6 +61,15 @@ function BuildStudioHome() {
       href: '/client-portals?start=project-onboarding',
       eyebrow: 'Orientation',
       body: 'Build the client’s starting point: service scope, contacts, escalation paths, documents, approvals, and next steps.',
+      meta: 'Timeline, docs, scope',
+      active: true,
+    },
+    {
+      label: 'Approval Package',
+      href: '/marketing-hub',
+      eyebrow: 'Internal review',
+      body: 'Stage visual work for the right approvers, then track status before it goes to a client, newsletter audience, or social channel.',
+      meta: 'Draft, review, approve',
       active: true,
     },
     {
@@ -47,40 +77,84 @@ function BuildStudioHome() {
       href: '/presentation?mode=deck',
       eyebrow: 'Existing deck',
       body: 'Open the current ANC Service Dashboard presentation deck.',
+      meta: 'Current presentation',
       active: true,
     },
   ]
 
+  const proofItems = [
+    { label: 'Client portal', value: 'Live links', tone: 'bg-[#0A52EF]' },
+    { label: 'Marketing', value: 'Agent render', tone: 'bg-[#00A3FF]' },
+    { label: 'Approvals', value: 'Gated review', tone: 'bg-[#16A34A]' },
+    { label: 'Reports', value: 'Visual readouts', tone: 'bg-[#F59E0B]' },
+  ]
+
   return (
-    <main className="min-h-screen bg-[#05070a] text-white">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
-        <header className="flex items-center justify-between border-b border-white/10 pb-5">
+    <main className="min-h-screen bg-[#f7f9fc] text-zinc-950 dark:bg-[#05070a] dark:text-white">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-6 sm:py-8">
+        <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-white/10">
           <div className="flex items-center gap-3">
-            <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7 w-auto" />
-            <div className="text-xs font-semibold uppercase tracking-[0.26em] text-white/50">Build Studio</div>
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-[#0A52EF] shadow-[0_18px_36px_-24px_rgba(10,82,239,0.9)]">
+              <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-5 w-auto" />
+            </span>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.26em] text-zinc-500 dark:text-white/50">Visual Output Studio</div>
+              <div className="mt-0.5 text-[11px] font-medium text-zinc-400 dark:text-white/35">ANC build space for anything client-facing</div>
+            </div>
           </div>
-          <Link href="/client-portals" className="rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/70 hover:border-[#03b4ff]/50 hover:text-white">
-            Open portal workspace
-          </Link>
+          <div className="flex items-center gap-2">
+            <div className="hidden w-44 rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-400 sm:block">
+              <ThemeToggle />
+            </div>
+            <Link href="/client-portals" className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-[#0A52EF]/35 hover:text-[#0A52EF] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/70 dark:hover:border-[#03b4ff]/50 dark:hover:text-white">
+              Open workspace
+            </Link>
+          </div>
         </header>
 
-        <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#03b4ff]">ANC AI builder</p>
-            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[0.98] tracking-tight sm:text-6xl">
-              What do you want to build?
+        <div className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[0.82fr_1.18fr] lg:py-10">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#0A52EF] dark:text-[#03b4ff]">ANC AI builder</p>
+            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[0.96] tracking-tight text-zinc-950 dark:text-white sm:text-6xl">
+              What visual output are we building?
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/62">
-              Start with a build type, then use the AI side panel and module toggles to assemble the client-facing experience. Client Portal is one target, not the whole system.
+            <p className="mt-6 max-w-xl text-base leading-7 text-zinc-600 dark:text-white/62">
+              One ANC workspace for anything that needs to be shown, reviewed, approved, or sent: client portals, deal decks, marketing campaigns, reports, approval packages, and service readouts.
             </p>
-            <div className="mt-8 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/40">Modules stay modular</p>
+            <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-400 dark:text-white/40">Modules stay modular</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {['Deal Deck', 'Customer Portal', 'Tickets', 'Service Health', 'AI Diagnosis', 'Documents', 'Approvals', 'Reports / QBR', 'Onboarding'].map((module) => (
-                  <span key={module} className="rounded-full border border-[#03b4ff]/20 bg-[#03b4ff]/10 px-3 py-1.5 text-xs font-semibold text-white/78">
+                {['Deal Deck', 'Client Portal', 'Marketing Campaign', 'Newsletter', 'Social Pack', 'Tickets', 'Service Health', 'AI Diagnosis', 'Documents', 'Approvals', 'Reports / QBR', 'Onboarding'].map((module) => (
+                  <span key={module} className="rounded-full border border-[#0A52EF]/15 bg-[#0A52EF]/5 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:border-[#03b4ff]/20 dark:bg-[#03b4ff]/10 dark:text-white/78">
                     {module}
                   </span>
                 ))}
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {proofItems.map((item) => (
+                <div key={item.label} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.045]">
+                  <span className={`block h-1.5 w-8 rounded-full ${item.tone}`} />
+                  <div className="mt-3 text-sm font-black text-zinc-950 dark:text-white">{item.value}</div>
+                  <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400 dark:text-white/35">{item.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+              <img src="/dealdeck/anc-real/76ers-arena-centerhung.jpg" alt="ANC venue display" className="h-40 w-full object-cover" />
+              <div className="grid grid-cols-3 divide-x divide-zinc-200 text-center dark:divide-white/10">
+                <div className="p-3">
+                  <div className="text-lg font-black text-[#0A52EF] dark:text-[#03b4ff]">Build</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">AI guided</div>
+                </div>
+                <div className="p-3">
+                  <div className="text-lg font-black text-[#16A34A]">Review</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Approvals</div>
+                </div>
+                <div className="p-3">
+                  <div className="text-lg font-black text-[#F59E0B]">Publish</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Links/sends</div>
+                </div>
               </div>
             </div>
           </div>
@@ -90,12 +164,15 @@ function BuildStudioHome() {
               <Link
                 key={item.label}
                 href={item.href}
-                className="group min-h-56 rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:border-[#03b4ff]/45 hover:bg-white/[0.07]"
+                className="group min-h-52 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0A52EF]/40 hover:shadow-[0_22px_60px_-36px_rgba(10,82,239,0.65)] dark:border-white/10 dark:bg-white/[0.045] dark:hover:border-[#03b4ff]/45 dark:hover:bg-white/[0.07]"
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#03b4ff]">{item.eyebrow}</p>
-                <h2 className="mt-4 text-2xl font-black uppercase tracking-tight">{item.label}</h2>
-                <p className="mt-4 text-sm leading-6 text-white/58">{item.body}</p>
-                <div className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-white/35 group-hover:text-white/80">Build →</div>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0A52EF] dark:text-[#03b4ff]">{item.eyebrow}</p>
+                  <span className="rounded-full border border-zinc-200 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:border-white/10 dark:text-white/35">{item.meta}</span>
+                </div>
+                <h2 className="mt-4 text-2xl font-black uppercase tracking-tight text-zinc-950 dark:text-white">{item.label}</h2>
+                <p className="mt-4 text-sm leading-6 text-zinc-600 dark:text-white/58">{item.body}</p>
+                <div className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-zinc-400 group-hover:text-[#0A52EF] dark:text-white/35 dark:group-hover:text-white">Build →</div>
               </Link>
             ))}
           </div>

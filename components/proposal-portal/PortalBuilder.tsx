@@ -8,6 +8,7 @@ import {
   type PortalModuleId,
   type PortalRecipeId,
 } from '@/lib/proposal-portal/types'
+import { ThemeToggle } from '@/components/theme-toggle'
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 import { PortalViewer } from './PortalViewer'
@@ -184,6 +185,9 @@ export function PortalBuilder({
           </div>
         </div>
         <div className="actions">
+          <div className="theme-box">
+            <ThemeToggle />
+          </div>
           <Link className="btn" href="/client-portals">← All portals</Link>
           {isPublic && (
             <a className="btn" href={shareUrl} target="_blank" rel="noreferrer">

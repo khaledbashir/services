@@ -1,9 +1,13 @@
 .portal-workspace {
-  --pb-bg: #06080d;
-  --pb-panel: #0d1118;
-  --pb-line: rgba(255, 255, 255, 0.08);
+  --pb-bg: #f7f9fc;
+  --pb-panel: #ffffff;
+  --pb-panel-2: #f4f7fb;
+  --pb-line: rgba(15, 23, 42, 0.1);
   --pb-accent: #03b4ff;
   --pb-blue: #0a52eb;
+  --pb-text: #0b1220;
+  --pb-muted: rgba(51, 65, 85, 0.68);
+  --pb-soft: rgba(10, 82, 235, 0.06);
   display: grid;
   grid-template-columns: 300px 1fr 380px;
   height: 100vh;
@@ -11,6 +15,16 @@
   background: var(--pb-bg);
   color: #eef3ff;
   overflow: hidden;
+}
+
+.dark .portal-workspace {
+  --pb-bg: #06080d;
+  --pb-panel: #0d1118;
+  --pb-panel-2: #0a0e15;
+  --pb-line: rgba(255, 255, 255, 0.08);
+  --pb-text: #eef3ff;
+  --pb-muted: rgba(255, 255, 255, 0.45);
+  --pb-soft: rgba(255, 255, 255, 0.04);
 }
 
 .portal-workspace header.top {
@@ -21,7 +35,7 @@
   gap: 16px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--pb-line);
-  background: rgba(8, 11, 16, 0.96);
+  background: color-mix(in srgb, var(--pb-panel) 94%, transparent);
 }
 
 .portal-workspace header.top h1 {
@@ -35,7 +49,7 @@
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--pb-muted);
 }
 
 .portal-workspace .actions {
@@ -46,8 +60,8 @@
 
 .portal-workspace .btn {
   border: 1px solid var(--pb-line);
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: var(--pb-soft);
+  color: var(--pb-text);
   border-radius: 10px;
   padding: 8px 14px;
   font-size: 12px;
@@ -66,6 +80,24 @@
 .portal-workspace .btn.primary {
   background: linear-gradient(135deg, var(--pb-blue), #2f74ff);
   border-color: transparent;
+  color: #fff;
+}
+
+.portal-workspace .theme-box {
+  width: 156px;
+  overflow: hidden;
+  border: 1px solid var(--pb-line);
+  border-radius: 10px;
+  background: var(--pb-soft);
+}
+
+.portal-workspace .theme-box button {
+  color: var(--pb-text);
+  padding: 8px 10px;
+}
+
+.dark .portal-workspace .theme-box button {
+  color: #d4d4d8;
 }
 
 .portal-workspace .modules {
@@ -80,7 +112,7 @@
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--pb-muted);
   margin: 0 0 12px;
 }
 
@@ -94,7 +126,7 @@
 .portal-workspace .recipe-pill {
   border: 1px solid var(--pb-line);
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--pb-muted);
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 11px;
@@ -105,7 +137,7 @@
 .portal-workspace .recipe-pill.active {
   border-color: rgba(3, 180, 255, 0.5);
   background: rgba(3, 180, 255, 0.12);
-  color: #fff;
+  color: var(--pb-text);
 }
 
 .portal-workspace .module-row {
@@ -119,7 +151,7 @@
 }
 
 .portal-workspace .module-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--pb-soft);
 }
 
 .portal-workspace .module-row.focused {
@@ -143,12 +175,13 @@
 .portal-workspace .module-row b {
   display: block;
   font-size: 13px;
+  color: var(--pb-text);
 }
 
 .portal-workspace .module-row span {
   display: block;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--pb-muted);
   margin-top: 2px;
   line-height: 1.4;
 }
@@ -156,7 +189,7 @@
 .portal-workspace .module-row small {
   display: block;
   margin-top: 6px;
-  color: rgba(255, 255, 255, 0.36);
+  color: color-mix(in srgb, var(--pb-muted) 78%, transparent);
   font-size: 10px;
   line-height: 1.45;
 }
@@ -175,7 +208,7 @@
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.68);
   background: rgba(5, 7, 10, 0.88);
   border-bottom: 1px solid var(--pb-line);
   backdrop-filter: blur(8px);
@@ -185,7 +218,7 @@
   border-left: 1px solid var(--pb-line);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0a0e15, #070a10);
+  background: linear-gradient(180deg, var(--pb-panel-2), var(--pb-panel));
 }
 
 .portal-workspace .chat-messages {
@@ -207,8 +240,9 @@
 
 .portal-workspace .bubble.assistant {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--pb-soft);
   border: 1px solid var(--pb-line);
+  color: var(--pb-text);
 }
 
 .portal-workspace .bubble.user {
@@ -229,8 +263,8 @@
   resize: none;
   border-radius: 10px;
   border: 1px solid var(--pb-line);
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: var(--pb-panel);
+  color: var(--pb-text);
   padding: 10px 12px;
   font-size: 13px;
   font-family: inherit;
