@@ -273,6 +273,16 @@ export function Sidebar() {
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
       ],
     },
+    {
+      key: 'client-portals',
+      label: 'Client Portals',
+      icon: <Icon><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></Icon>,
+      role: 'manager',
+      links: [
+        { href: '/client-portals', label: 'Build & Publish' },
+        { href: '/portals', label: 'Venue Health Links' },
+      ],
+    },
     // Hidden 2026-05-02 — work in progress, surface to the team once Joe/
     // Charlie sign off. Route still works at /voice-agents direct.
     // {

@@ -47,6 +47,26 @@ async function runMigrations() {
       PRIMARY KEY (client_id, venue_id)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_client_venues_venue ON client_venues(venue_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS proposal_portals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL DEFAULT 'Untitled Client Portal',
+      mode TEXT NOT NULL DEFAULT 'PROPOSAL',
+      recipe TEXT NOT NULL DEFAULT 'natalia',
+      enabled_modules JSONB NOT NULL DEFAULT '[]'::jsonb,
+      client_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_by_user_id UUID NOT NULL,
+      created_by_email TEXT NOT NULL,
+      is_public BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      published_at TIMESTAMP,
+      published_version INTEGER NOT NULL DEFAULT 0,
+      published_title TEXT,
+      published_modules JSONB,
+      published_client_data JSONB
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proposal_portals_user ON proposal_portals(created_by_user_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_proposal_portals_updated ON proposal_portals(updated_at DESC)`)
     await client.query(`CREATE TABLE IF NOT EXISTS staff_venues (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       staff_id UUID NOT NULL REFERENCES staff(id),
