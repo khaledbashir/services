@@ -1172,7 +1172,7 @@ async function runMigrations() {
       item_id UUID NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       requested_by TEXT,
-      approver_group TEXT NOT NULL DEFAULT 'Jerry, Kirsten, Joe, Jireh, John',
+      approver_group TEXT NOT NULL DEFAULT 'Marketing Approvers',
       notes TEXT,
       metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1275,19 +1275,19 @@ async function runMigrations() {
     await client.query(`INSERT INTO marketing_audiences (name, description, source)
       VALUES (
         'Media & Partnerships Newsletter',
-        'Default audience for Alison''s monthly Media & Partnerships newsletter, seeded for the HubSpot replacement workflow.',
+        'Default audience for the monthly Media & Partnerships newsletter, seeded for the HubSpot replacement workflow.',
         'crm'
       )
       ON CONFLICT (name) DO NOTHING`)
 
     await client.query(`WITH defaults(form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target) AS (
         VALUES
-          ('contact-inquiry', 'Contact Inquiry Form', 'general', 'Alison', 'alison@anc.com', NULL, NULL),
-          ('design-request', 'ANC Design Request', 'design', 'Alison', 'alison@anc.com', NULL, 'designRequests'),
-          ('print-request', 'ANC Print Request', 'print', 'Alison', 'alison@anc.com', NULL, 'printRequests'),
-          ('parts-order', 'ANC Parts Order', 'parts', 'Alison', 'alison@anc.com', NULL, 'partsOrders'),
-          ('content-schedule', 'ANC Content Schedule', 'content', 'Alison', 'alison@anc.com', NULL, 'contentSchedules'),
-          ('hubspot-contact-form-2026', 'Contact Form 2026', 'general', 'Alison', 'alison@anc.com', NULL, NULL)
+          ('contact-inquiry', 'Contact Inquiry Form', 'general', 'Marketing Team', 'marketing@anc.com', NULL, NULL),
+          ('design-request', 'ANC Design Request', 'design', 'Marketing Team', 'marketing@anc.com', NULL, 'designRequests'),
+          ('print-request', 'ANC Print Request', 'print', 'Marketing Team', 'marketing@anc.com', NULL, 'printRequests'),
+          ('parts-order', 'ANC Parts Order', 'parts', 'Marketing Team', 'marketing@anc.com', NULL, 'partsOrders'),
+          ('content-schedule', 'ANC Content Schedule', 'content', 'Marketing Team', 'marketing@anc.com', NULL, 'contentSchedules'),
+          ('hubspot-contact-form-2026', 'Contact Form 2026', 'general', 'Marketing Team', 'marketing@anc.com', NULL, NULL)
       )
       INSERT INTO marketing_form_routing_rules
         (form_id, form_title, inquiry_type, route_to_name, route_to_email, slack_channel, crm_target)
@@ -1297,7 +1297,6 @@ async function runMigrations() {
         SELECT 1 FROM marketing_form_routing_rules r
         WHERE r.form_id = d.form_id
           AND COALESCE(r.inquiry_type, '') = COALESCE(d.inquiry_type, '')
-          AND r.route_to_email = d.route_to_email
       )`)
 
     await client.query(`

@@ -216,7 +216,7 @@ export function ComposeCanvas() {
         <div className="rounded-md border border-border bg-card/40 p-3 text-[11.5px] leading-relaxed text-muted-foreground">
           <span className="text-foreground/80">How this works.</span> Signal writes in ANC's voice — terse,
           sports-native, lead with the moment not the LED. Picks the right shape per channel automatically.
-          Approval flow lands in Slack DMs to Jerry / Kirsten / Joe / Jireh / John before anything goes live.
+          Approval flow lands with the configured approval group before anything goes live.
         </div>
       </div>
 

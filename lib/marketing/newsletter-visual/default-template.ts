@@ -1,6 +1,6 @@
 import type { NewsletterVisualDocument } from './types'
 
-/** Gold starter layout — mirrors DealDeck section rhythm for Alison's newsletter workflow */
+/** Gold starter layout — mirrors DealDeck section rhythm for the marketing newsletter workflow */
 export const DEFAULT_NEWSLETTER_VISUAL: NewsletterVisualDocument = {
   version: 1,
   theme: 'ancNewsletter',

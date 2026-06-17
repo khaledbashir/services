@@ -209,7 +209,7 @@ export function MarketingCampaignBuilder() {
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">What should Alison ship?</span>
+              <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">What should marketing ship?</span>
               <textarea
                 className="min-h-[180px] w-full resize-y rounded-xl border border-white/10 bg-[#141824] px-3 py-3 text-sm leading-relaxed text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#7350FF]/70"
                 placeholder="Example: May newsletter for partners — Hornets playoff run, new venue install at TD Garden, form spike from Contact 2026, CTA to book a media walkthrough."
@@ -315,7 +315,7 @@ export function MarketingCampaignBuilder() {
                 Approval gate
               </div>
               <p className="mt-1.5 leading-relaxed text-amber-100/80">
-                Staging creates a newsletter draft, social drafts, and a pending approval. Send and publish stay blocked until Jerry/Kirsten/Joe/Jireh/John approve.
+                Staging creates a newsletter draft, social drafts, and a pending approval. Send and publish stay blocked until the configured approval group approves.
               </p>
             </div>
           </div>

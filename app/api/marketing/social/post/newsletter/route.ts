@@ -6,8 +6,8 @@ import { query } from '@/lib/db'
 
 /**
  * Create a draft newsletter campaign from a Compose canvas section.
- * Doesn't send — drops a draft into newsletter_campaigns so Alison (or the
- * approval flow) can review, pick an audience, and schedule the send.
+ * Doesn't send — drops a draft into newsletter_campaigns so the marketing team
+ * can review, pick an audience, and schedule the send.
  *
  * Reuses the existing marketing-hub send infrastructure
  * (SendGrid via lib/email.ts is already wired).

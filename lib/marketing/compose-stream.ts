@@ -58,7 +58,7 @@ export async function runComposeStream(input: {
 }) {
   const brief = input.brief.trim()
   if (!brief) {
-    input.write({ type: 'error', message: 'Tell me what Alison should ship.' })
+    input.write({ type: 'error', message: 'Tell me what marketing should ship.' })
     return
   }
 
@@ -156,7 +156,7 @@ export function emptySandboxVisual(): NewsletterVisualDocument {
   return {
     ...DEFAULT_NEWSLETTER_VISUAL,
     subject: 'Your campaign will appear here',
-    previewText: 'Describe what Alison should ship in the chat.',
+    previewText: 'Describe what marketing should ship in the chat.',
     sections: [],
   }
 }

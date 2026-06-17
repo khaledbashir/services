@@ -17,7 +17,7 @@ export type NewsletterThemeTokens = {
   }
 }
 
-/** Alison Media & Partnerships newsletter palette + DealDeck layout discipline */
+/** Media & Partnerships newsletter palette + DealDeck layout discipline */
 export const ANC_NEWSLETTER_THEME: NewsletterThemeTokens = {
   id: 'ancNewsletter',
   name: 'ANC Newsletter',

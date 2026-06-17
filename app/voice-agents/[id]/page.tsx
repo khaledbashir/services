@@ -353,7 +353,7 @@ function SettingsForm({
           onChange={(e) => setKbText(e.target.value)}
           rows={5}
           className={inputCls}
-          placeholder="ANC team:&#10;- Joe Occhipinti runs ops; route urgent escalations to him.&#10;- Charlie Dinh runs IT; tech-platform issues go to him.&#10;- Default ticket assignee for non-critical issues: ops queue."
+          placeholder="ANC team:&#10;- Operations lead owns urgent service escalations.&#10;- Technical lead owns platform and integration issues.&#10;- Default ticket assignee for non-critical issues: ops queue."
         />
       </Field>
 

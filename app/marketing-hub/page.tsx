@@ -503,7 +503,7 @@ export default function MarketingHubPage() {
         <div className="flex flex-col gap-3 border-b border-zinc-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs text-zinc-500">Workspace</p>
-            <h2 className="mt-1 text-sm font-medium text-zinc-300">Pick the workflow Alison is working on.</h2>
+            <h2 className="mt-1 text-sm font-medium text-zinc-300">Pick the workflow the marketing team is working on.</h2>
           </div>
           <div className="flex flex-wrap gap-2">
             {tabs.map(([key, label]) => (
@@ -811,7 +811,7 @@ export default function MarketingHubPage() {
                       <div key={route.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                         <div>
                           <div className="font-medium text-zinc-900">{route.form_title}</div>
-                          <div className="text-xs text-zinc-500">{route.inquiry_type || 'Any'} · {route.route_to_name} · {route.route_to_email}</div>
+                          <div className="text-xs text-zinc-500">{route.inquiry_type || 'Any'} · {route.route_to_name} · configured inbox</div>
                         </div>
                         <StatusPill value={route.is_active ? 'active' : 'paused'} />
                       </div>

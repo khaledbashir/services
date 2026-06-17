@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
           itemType,
           itemId,
           body.requestedBy || 'Marketing Hub',
-          body.approverGroup || 'Jerry, Kirsten, Joe, Jireh, John',
+          body.approverGroup || 'Marketing Approvers',
           body.notes || null,
           JSON.stringify(body.metadata || {}),
         ],

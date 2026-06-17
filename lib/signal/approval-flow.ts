@@ -27,14 +27,12 @@ export interface Approver {
  */
 export function defaultApprovers(): Approver[] {
   const raw = process.env.SIGNAL_APPROVERS || ''
-  // Format: "U123:Jerry,U456:Kirsten,U789:Joe,UABC:Jireh,UDEF:John"
+  // Format: "U123:Marketing Lead,U456:Revenue Lead,U789:Executive Sponsor"
   if (!raw.trim()) {
     return [
-      { slackId: 'PLACEHOLDER_JERRY', label: 'Jerry' },
-      { slackId: 'PLACEHOLDER_KIRSTEN', label: 'Kirsten' },
-      { slackId: 'PLACEHOLDER_JOE', label: 'Joe' },
-      { slackId: 'PLACEHOLDER_JIREH', label: 'Jireh' },
-      { slackId: 'PLACEHOLDER_JOHN', label: 'John' },
+      { slackId: 'PLACEHOLDER_MARKETING_LEAD', label: 'Marketing Lead' },
+      { slackId: 'PLACEHOLDER_REVENUE_LEAD', label: 'Revenue Lead' },
+      { slackId: 'PLACEHOLDER_EXECUTIVE_SPONSOR', label: 'Executive Sponsor' },
     ]
   }
   return raw.split(',').map((p) => {
@@ -51,6 +49,6 @@ export function publicAppOrigin(): string {
   return process.env.PUBLIC_APP_URL || 'https://services.ancsports.net'
 }
 
-export function buildDecisionLink(token: string, decision: 'approve' | 'reject'): string {
+export function buildDecisionLink(token: string, decision: 'approve' | 'reject' | 'changes'): string {
   return `${publicAppOrigin()}/api/marketing/approvals/decide?token=${token}&decision=${decision}`
 }

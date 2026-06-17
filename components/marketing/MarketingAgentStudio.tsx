@@ -78,7 +78,7 @@ export function MarketingAgentStudio() {
     {
       id: 'welcome',
       role: 'agent',
-      text: 'I’m your marketing agent. Tell me what Alison should ship — I’ll pull live audience data, draft the newsletter, and render it in the sandbox.',
+      text: 'I’m your marketing agent. Tell me what the marketing team should ship — I’ll pull live audience data, draft the newsletter, and render it in the sandbox.',
     },
   ])
   const [input, setInput] = useState('')
@@ -247,7 +247,7 @@ export function MarketingAgentStudio() {
         {
           id: uid(),
           role: 'agent',
-          text: `Staged for approval${donePayload.audienceName ? ` (${donePayload.audienceName})` : ''}. Alison, Jireh, Charlie, and the marketing approvers will get the gate next.`,
+          text: `Staged for approval${donePayload.audienceName ? ` (${donePayload.audienceName})` : ''}. The configured marketing approvers get the gate next.`,
         },
       ])
     } catch (err) {
@@ -393,7 +393,7 @@ export function MarketingAgentStudio() {
                   }
                 }}
                 rows={2}
-                placeholder="What should Alison ship this week?"
+                placeholder="What should marketing ship this week?"
                 disabled={streaming}
                 className="w-full resize-none rounded-xl border border-white/10 bg-[#0c0d14] px-4 py-3 pr-12 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#7350FF]/50 focus:ring-2 focus:ring-[#7350FF]/20 disabled:opacity-60"
               />
