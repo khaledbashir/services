@@ -41,6 +41,14 @@ function BuildStudioHome() {
       active: true,
     },
     {
+      label: 'Venue Vision 3D',
+      href: '/venue-vision',
+      eyebrow: 'Interactive venue model',
+      body: 'Use the 3D venue configurator for proposed display layouts, sponsor inventory, approval reviews, asset maps, and issue intake.',
+      meta: 'Configure, review, approve',
+      active: true,
+    },
+    {
       label: 'Issue Intake',
       href: '/client-portals?start=issue-intake',
       eyebrow: 'First line of defense',
@@ -119,12 +127,12 @@ function BuildStudioHome() {
               What visual output are we building?
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-zinc-600 dark:text-white/62">
-              One ANC workspace for anything that needs to be shown, reviewed, approved, or sent: client portals, deal decks, marketing campaigns, reports, approval packages, and service readouts.
+              One ANC workspace for anything that needs to be shown, reviewed, approved, or sent: client portals, deal decks, venue vision models, marketing campaigns, reports, approval packages, and service readouts.
             </p>
             <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-400 dark:text-white/40">Modules stay modular</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {['Deal Deck', 'Client Portal', 'Marketing Campaign', 'Newsletter', 'Social Pack', 'Tickets', 'Service Health', 'AI Diagnosis', 'Documents', 'Approvals', 'Reports / QBR', 'Onboarding'].map((module) => (
+                {['Deal Deck', 'Client Portal', 'Venue Vision 3D', 'Marketing Campaign', 'Newsletter', 'Social Pack', 'Tickets', 'Service Health', 'AI Diagnosis', 'Documents', 'Approvals', 'Reports / QBR', 'Onboarding'].map((module) => (
                   <span key={module} className="rounded-full border border-[#0A52EF]/15 bg-[#0A52EF]/5 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:border-[#03b4ff]/20 dark:bg-[#03b4ff]/10 dark:text-white/78">
                     {module}
                   </span>

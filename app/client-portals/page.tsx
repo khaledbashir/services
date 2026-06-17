@@ -71,6 +71,12 @@ export default function ClientPortalsHubPage() {
       active: false,
     },
     {
+      label: 'Venue Vision 3D',
+      href: '/venue-vision',
+      body: 'Interactive venue model for proposed display layouts, approvals, asset maps, and issue intake.',
+      active: false,
+    },
+    {
       label: 'QBR report',
       href: '/client-portals?start=renewal-qbr',
       body: 'Service health, trends, completed work, open risks, and renewal proof.',
@@ -115,7 +121,7 @@ export default function ClientPortalsHubPage() {
                 </div>
               </div>
               <p className="mt-4 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                This is the workspace for visual things ANC needs to show, review, publish, or send. Client portals are one lane; presentations, marketing campaigns, reports, and approvals use the same studio model.
+                This is the workspace for visual things ANC needs to show, review, publish, or send. Client portals are one lane; presentations, venue vision models, marketing campaigns, reports, and approvals use the same studio model.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <button
