@@ -28,12 +28,28 @@ const NAV = [
     icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6" /><path d="M9 17h6" /></>,
   },
   {
-    href: '/customer/displays', label: 'Displays', exact: false,
+    href: '/customer/displays', label: 'Service Health', exact: false,
     icon: <><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>,
+  },
+  {
+    href: '/customer/diagnosis', label: 'AI Diagnosis', exact: false,
+    icon: <><path d="M12 2v4" /><path d="M12 18v4" /><path d="m4.93 4.93 2.83 2.83" /><path d="m16.24 16.24 2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="m4.93 19.07 2.83-2.83" /><path d="m16.24 7.76 2.83-2.83" /><circle cx="12" cy="12" r="3" /></>,
   },
   {
     href: '/customer/documents', label: 'Documents', exact: false,
     icon: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></>,
+  },
+  {
+    href: '/customer/approvals', label: 'Approvals', exact: false,
+    icon: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>,
+  },
+  {
+    href: '/customer/reports', label: 'Reports', exact: false,
+    icon: <><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-7" /></>,
+  },
+  {
+    href: '/customer/orientation', label: 'Orientation', exact: false,
+    icon: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></>,
   },
 ]
 

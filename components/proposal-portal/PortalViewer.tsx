@@ -14,6 +14,7 @@ type PortalViewerProps = {
   document?: Partial<PortalDocument>
   embedded?: boolean
   showHud?: boolean
+  focusModule?: PortalModuleId
 }
 
 type SceneMeta = {
@@ -26,6 +27,11 @@ type SceneMeta = {
   update: (p: number) => void
 }
 
+type PortalExperienceSection = {
+  id: PortalModuleId
+  label: string
+}
+
 function splitClientName(name: string) {
   const parts = name.trim().split(/\s+/)
   return { first: parts[0] ?? name, rest: parts.slice(1).join(' ') || 'Arena' }
@@ -35,6 +41,7 @@ export function PortalViewer({
   document: doc,
   embedded = false,
   showHud = true,
+  focusModule,
 }: PortalViewerProps) {
   const merged = useMemo<PortalDocument>(() => {
     const recipe = doc?.recipe ?? 'service-portal'
@@ -59,64 +66,32 @@ export function PortalViewer({
   const names = splitClientName(d.clientName)
   const moduleKey = merged.enabledModules.join(',')
   const hasDealDeck = has('deal-deck')
-  const moduleCards = [
-    {
-      id: 'customer-portal' as PortalModuleId,
-      kicker: 'Client access',
-      title: 'Customer Portal',
-      body: 'A clean login surface where the client sees their venues, requests, documents, and account overview.',
-      items: ['Venue overview', 'Request history', 'Service contacts'],
-    },
-    {
-      id: 'tickets' as PortalModuleId,
-      kicker: 'Support',
-      title: 'Tickets',
-      body: 'Submit issues, upload photos, follow status, reply on the thread, and see open/closed cases.',
-      items: ['New issue intake', 'Photo upload', 'Open / resolved cases'],
-    },
-    {
-      id: 'service-health' as PortalModuleId,
-      kicker: 'Operations',
-      title: 'Service Health',
-      body: 'Venue status, display inventory, active risks, maintenance history, and what ANC is watching.',
-      items: ['Display status', 'Maintenance history', 'Risk callouts'],
-    },
-    {
-      id: 'ai-diagnosis' as PortalModuleId,
-      kicker: 'First line of defense',
-      title: 'AI Diagnosis',
-      body: 'Client or staff uploads a photo, the system gives an initial read, checks prior fixes, and enriches the ticket.',
-      items: ['Photo diagnosis', 'Knowledge base match', 'Suggested next step'],
-    },
-    {
-      id: 'documents' as PortalModuleId,
-      kicker: 'File hub',
-      title: 'Documents',
-      body: 'Reports, drawings, proof files, approved assets, and downloads organized by venue or project.',
-      items: ['Reports', 'Drawings', 'Proof assets'],
-    },
-    {
-      id: 'approvals' as PortalModuleId,
-      kicker: 'Workflow',
-      title: 'Approvals',
-      body: 'Client review and sign-off for designs, proof files, scope decisions, and change requests.',
-      items: ['Review queue', 'Approve / request changes', 'Decision history'],
-    },
-    {
-      id: 'reports-qbr' as PortalModuleId,
-      kicker: 'Executive readout',
-      title: 'Reports / QBR',
-      body: 'Monthly service summaries, ticket trends, completed work, uptime, and renewal-ready proof.',
-      items: ['Monthly summary', 'Ticket trends', 'Completed work'],
-    },
-    {
-      id: 'onboarding' as PortalModuleId,
-      kicker: 'Orientation',
-      title: 'Onboarding',
-      body: 'How to use the portal, who to contact, what is in scope, and how escalations work.',
-      items: ['Portal guide', 'Service scope', 'Escalation paths'],
-    },
-  ].filter((card) => has(card.id))
+  const experienceSections = useMemo<PortalExperienceSection[]>(
+    () => ([
+      { id: 'customer-portal', label: 'Overview' },
+      { id: 'tickets', label: 'Requests' },
+      { id: 'service-health', label: 'Service Health' },
+      { id: 'ai-diagnosis', label: 'AI Diagnosis' },
+      { id: 'documents', label: 'Documents' },
+      { id: 'approvals', label: 'Approvals' },
+      { id: 'reports-qbr', label: 'Reports' },
+      { id: 'onboarding', label: 'Orientation' },
+    ] satisfies PortalExperienceSection[]).filter((section) => has(section.id)),
+    [moduleKey],
+  )
+  const [activeSection, setActiveSection] = useState<PortalModuleId>('customer-portal')
+
+  useEffect(() => {
+    if (!experienceSections.some((section) => section.id === activeSection)) {
+      setActiveSection(experienceSections[0]?.id ?? 'customer-portal')
+    }
+  }, [activeSection, experienceSections])
+
+  useEffect(() => {
+    if (focusModule && experienceSections.some((section) => section.id === focusModule)) {
+      setActiveSection(focusModule)
+    }
+  }, [focusModule, experienceSections])
 
   const rootRef = useRef<HTMLDivElement>(null)
   const progRef = useRef<HTMLDivElement>(null)
@@ -419,27 +394,265 @@ export function PortalViewer({
             </div>
           </section>
         )}
-        {moduleCards.length > 0 && (
-          <section className="portal-modules-section">
-            <div className="portal-modules-heading">
-              <p>Client portal modules</p>
-              <h2>What this client experience includes</h2>
-            </div>
-            <div className="portal-modules-grid">
-              {moduleCards.map((card) => (
-                <article key={card.id} className="portal-module-card">
-                  <p className="portal-module-kicker">{card.kicker}</p>
-                  <h3>{card.title}</h3>
-                  <p>{card.body}</p>
-                  <ul>
-                    {card.items.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
-                </article>
-              ))}
+        {experienceSections.length > 0 && (
+          <section className="portal-app-section">
+            <div className="portal-app-shell">
+              <aside className="portal-app-side">
+                <div className="portal-app-side-brand">
+                  <img src="/ANC_Logo_2023_white.png" alt="" />
+                  <span>ANC Portal</span>
+                </div>
+                <div className="portal-app-side-client">{d.clientName}</div>
+                <nav className="portal-app-nav" aria-label="Client portal preview sections">
+                  {experienceSections.map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      className={activeSection === section.id ? 'is-active' : ''}
+                      onClick={() => setActiveSection(section.id)}
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </nav>
+                <div className="portal-app-support">
+                  <span>Service contact</span>
+                  <strong>ANC Support Desk</strong>
+                  <a href="mailto:support@ancsports.net">support@ancsports.net</a>
+                </div>
+              </aside>
+              <div className="portal-app-main">
+                <header className="portal-app-topbar">
+                  <div>
+                    <p>{merged.recipe === 'issue-intake' ? 'Issue intake portal' : 'Client service portal'}</p>
+                    <h2>{activeSection === 'customer-portal' ? `Welcome back, ${names.first}` : experienceSections.find((section) => section.id === activeSection)?.label}</h2>
+                  </div>
+                  <button type="button" onClick={() => setActiveSection(has('tickets') ? 'tickets' : 'customer-portal')}>
+                    New request
+                  </button>
+                </header>
+                <PortalExperiencePanel
+                  active={activeSection}
+                  clientName={d.clientName}
+                  hasModule={has}
+                  setActive={setActiveSection}
+                />
+              </div>
             </div>
           </section>
         )}
       </main>
+    </div>
+  )
+}
+
+function PortalExperiencePanel({
+  active,
+  clientName,
+  hasModule,
+  setActive,
+}: {
+  active: PortalModuleId
+  clientName: string
+  hasModule: (id: PortalModuleId) => boolean
+  setActive: (id: PortalModuleId) => void
+}) {
+  if (active === 'tickets') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-grid two">
+          <div className="portal-app-card accent">
+            <p className="portal-app-kicker">New request</p>
+            <h3>Tell ANC what is happening</h3>
+            <label>
+              Issue summary
+              <input value="North ribbon board has intermittent black panels" readOnly />
+            </label>
+            <label>
+              Location
+              <input value="Main bowl / north end" readOnly />
+            </label>
+            <div className="portal-app-upload">
+              <span>Photo attached</span>
+              <strong>display-panel-photo.jpg</strong>
+            </div>
+            <button type="button">Submit to ANC</button>
+          </div>
+          <div className="portal-app-card">
+            <p className="portal-app-kicker">Open cases</p>
+            <TicketRow title="North ribbon board intermittent panels" status="In progress" tone="work" />
+            <TicketRow title="Content playback timing question" status="Waiting on client" tone="wait" />
+            <TicketRow title="Suite fascia calibration" status="Resolved" tone="done" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'service-health') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-health">
+          <div>
+            <p className="portal-app-kicker">Venue status</p>
+            <h3>{clientName} systems are service-ready</h3>
+            <p>ANC is tracking open requests, display health, maintenance history, and event-readiness in one place.</p>
+          </div>
+          <div className="portal-app-score">96%</div>
+        </div>
+        <div className="portal-app-grid three">
+          <Metric label="Displays monitored" value="18" />
+          <Metric label="Open risks" value="2" />
+          <Metric label="Last inspection" value="Jun 14" />
+        </div>
+        <div className="portal-app-card">
+          <p className="portal-app-kicker">Active watchlist</p>
+          <TicketRow title="Ribbon board cabinet temperature trending high" status="Watching" tone="wait" />
+          <TicketRow title="Control-room processor firmware review" status="Scheduled" tone="work" />
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'ai-diagnosis') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-grid two">
+          <div className="portal-app-card accent">
+            <p className="portal-app-kicker">First line of defense</p>
+            <h3>Upload a display photo</h3>
+            <div className="portal-app-drop">
+              <span>Drop photo here</span>
+              <strong>or choose from device</strong>
+            </div>
+            <button type="button">Run diagnosis</button>
+          </div>
+          <div className="portal-app-card">
+            <p className="portal-app-kicker">AI readout</p>
+            <h3>Likely LED module data issue</h3>
+            <p className="portal-app-muted">Matched against prior service notes and common display symptoms before the ticket reaches the ANC team.</p>
+            <ul className="portal-app-checks">
+              <li>Check cabinet receiving card</li>
+              <li>Attach photo and venue location</li>
+              <li>Route to service support with high priority</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'documents') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-grid three">
+          <DocumentCard title="Monthly Service Report" meta="PDF · Jun 2026" />
+          <DocumentCard title="Display Layout Drawings" meta="Package · Current" />
+          <DocumentCard title="Approved Creative Specs" meta="Reference · Updated" />
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'approvals') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-card">
+          <p className="portal-app-kicker">Approval queue</p>
+          <TicketRow title="Main concourse proof package" status="Needs review" tone="wait" />
+          <TicketRow title="LED ribbon creative template" status="Approved" tone="done" />
+          <TicketRow title="Scope change: sponsor rotation" status="ANC review" tone="work" />
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'reports-qbr') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-grid three">
+          <Metric label="Requests resolved" value="24" />
+          <Metric label="Avg response" value="1.8h" />
+          <Metric label="Events supported" value="12" />
+        </div>
+        <div className="portal-app-card">
+          <p className="portal-app-kicker">Executive summary</p>
+          <h3>Service volume is stable and response time is ahead of target.</h3>
+          <p className="portal-app-muted">The monthly readout combines ticket trends, completed work, open risks, and renewal-ready proof.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (active === 'onboarding') {
+    return (
+      <div className="portal-app-panel">
+        <div className="portal-app-grid three">
+          <DocumentCard title="How to file a request" meta="Portal guide" />
+          <DocumentCard title="Service scope" meta="What ANC covers" />
+          <DocumentCard title="Escalation path" meta="Who gets notified" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="portal-app-panel">
+      <div className="portal-app-hero">
+        <div>
+          <p className="portal-app-kicker">Overview</p>
+          <h3>{clientName}</h3>
+          <p>Requests, venue health, documents, and ANC service activity are together in one client-facing workspace.</p>
+        </div>
+        <button type="button" onClick={() => setActive(hasModule('tickets') ? 'tickets' : 'documents')}>Create request</button>
+      </div>
+      <div className="portal-app-grid three">
+        <Metric label="Open requests" value={hasModule('tickets') ? '2' : '0'} />
+        <Metric label="Venues" value="2" />
+        <Metric label="Service status" value="Green" />
+      </div>
+      <div className="portal-app-grid two">
+        <div className="portal-app-card">
+          <p className="portal-app-kicker">Recent activity</p>
+          <TicketRow title="ANC reviewed north ribbon board photo" status="Today" tone="work" />
+          <TicketRow title="June service report posted" status="Yesterday" tone="done" />
+          <TicketRow title="Event readiness check completed" status="Jun 14" tone="done" />
+        </div>
+        <div className="portal-app-card">
+          <p className="portal-app-kicker">Your ANC team</p>
+          <h3>Support Desk</h3>
+          <p className="portal-app-muted">Service support, venue operations, and escalation contacts stay visible without digging through email.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="portal-app-metric">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function TicketRow({ title, status, tone }: { title: string; status: string; tone: 'work' | 'wait' | 'done' }) {
+  return (
+    <div className="portal-app-row">
+      <span className={`portal-app-dot ${tone}`} />
+      <strong>{title}</strong>
+      <em>{status}</em>
+    </div>
+  )
+}
+
+function DocumentCard({ title, meta }: { title: string; meta: string }) {
+  return (
+    <div className="portal-app-card doc">
+      <p className="portal-app-kicker">{meta}</p>
+      <h3>{title}</h3>
+      <button type="button">Open</button>
     </div>
   )
 }

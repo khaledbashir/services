@@ -15,6 +15,54 @@ import './portal-builder.css'
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
+const MODULE_BLUEPRINTS: Record<PortalModuleId, { job: string; output: string; connects: string }> = {
+  'deal-deck': {
+    job: 'Tell the sales or executive story with visuals, proof, investment, and the close.',
+    output: 'Public presentation/deck section.',
+    connects: 'Presentation link, documents, approvals.',
+  },
+  'customer-portal': {
+    job: 'Give the client a logged-in home base for their venues, account status, requests, and ANC contacts.',
+    output: 'Overview landing page and portal navigation.',
+    connects: 'Customer login, organization, linked venues.',
+  },
+  tickets: {
+    job: 'Let the client submit issues, track status, reply, and see open/resolved cases.',
+    output: 'Service request list, intake form, ticket detail.',
+    connects: 'Tickets API, venue IDs, Slack/email notification path.',
+  },
+  'service-health': {
+    job: 'Show venue display inventory, open work, active risks, maintenance state, and readiness.',
+    output: 'Service Health page.',
+    connects: 'Display registry, open tickets, venue service records.',
+  },
+  'ai-diagnosis': {
+    job: 'Use a photo/symptom prompt as first-line triage before a service request reaches ANC.',
+    output: 'AI Diagnosis page and ticket creation path.',
+    connects: 'Customer ticket API, AI/copilot, venue routing.',
+  },
+  documents: {
+    job: 'Centralize reports, drawings, proof assets, manuals, specs, and client downloads.',
+    output: 'Document library.',
+    connects: 'Customer documents API and shared file records.',
+  },
+  approvals: {
+    job: 'Give the client a clear review queue for proof files, scope decisions, and requested changes.',
+    output: 'Approval queue and decision controls.',
+    connects: 'Documents, design/proof workflow, service decisions.',
+  },
+  'reports-qbr': {
+    job: 'Summarize service performance, ticket trends, completed work, and renewal/QBR proof.',
+    output: 'Reports page and monthly readout.',
+    connects: 'Ticket stats, venues, documents, service history.',
+  },
+  onboarding: {
+    job: 'Explain how to use the portal, what is in scope, and how escalation works.',
+    output: 'Orientation page.',
+    connects: 'Requests, diagnosis, documents, contacts.',
+  },
+}
+
 type PortalBuilderProps = {
   portalId: string
   initialTitle: string
@@ -46,6 +94,7 @@ export function PortalBuilder({
         'Tell me the client, preset, and modules you want — for example: service portal with tickets, AI diagnosis, documents, and onboarding. Watch the portal assemble live.',
     },
   ])
+  const [focusedModule, setFocusedModule] = useState<PortalModuleId>('customer-portal')
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') return `/client-portals/p/${portalId}`
@@ -87,6 +136,7 @@ export function PortalBuilder({
     const next = modulesForRecipe(id)
     setRecipe(id)
     setModules(next)
+    setFocusedModule(next[0] ?? 'customer-portal')
     void save({ recipe: id, enabledModules: next })
   }
 
@@ -94,6 +144,7 @@ export function PortalBuilder({
     const next = toggleModule(modules, id, on)
     setModules(next)
     setRecipe('custom')
+    setFocusedModule(id)
     void save({ enabledModules: next, recipe: 'custom' })
   }
 
@@ -105,6 +156,7 @@ export function PortalBuilder({
     const result = parsePortalIntent(text, modules, recipe)
     setModules(result.enabledModules)
     setRecipe(result.recipe)
+    setFocusedModule(result.enabledModules[0] ?? 'customer-portal')
     setData((prev) => ({ ...prev, ...result.data }))
     if (result.data.clientName) {
       setTitle(`${result.data.clientName} — Client Portal`)
@@ -165,20 +217,24 @@ export function PortalBuilder({
         <h2>Modules</h2>
         {PORTAL_MODULES.map((mod) => {
           const on = modules.includes(mod.id)
+          const blueprint = MODULE_BLUEPRINTS[mod.id]
           return (
             <div
               key={mod.id}
-              className={`module-row ${on ? '' : 'off'} ${mod.implemented ? '' : 'missing'}`}
+              className={`module-row ${on ? '' : 'off'} ${focusedModule === mod.id ? 'focused' : ''} ${mod.implemented ? '' : 'missing'}`}
+              onClick={() => setFocusedModule(mod.id)}
             >
               <input
                 type="checkbox"
                 checked={on}
                 disabled={mod.required || !mod.implemented}
                 onChange={(e) => onToggle(mod.id, e.target.checked)}
+                onClick={(event) => event.stopPropagation()}
               />
               <label>
                 <b>{mod.label}{mod.required ? ' · required' : ''}{!mod.implemented ? ' · coming' : ''}</b>
-                <span>{mod.description}</span>
+                <span>{blueprint.job}</span>
+                <small>{blueprint.output} Connects to: {blueprint.connects}</small>
               </label>
             </div>
           )
@@ -190,6 +246,7 @@ export function PortalBuilder({
         <PortalViewer
           embedded
           showHud={false}
+          focusModule={focusedModule}
           document={{ title, mode: 'PROPOSAL', recipe, enabledModules: modules, data }}
         />
       </section>

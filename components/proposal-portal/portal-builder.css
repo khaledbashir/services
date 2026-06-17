@@ -115,10 +115,16 @@
   padding: 10px 8px;
   border-radius: 10px;
   border: 1px solid transparent;
+  cursor: pointer;
 }
 
 .portal-workspace .module-row:hover {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.portal-workspace .module-row.focused {
+  border-color: rgba(3, 180, 255, 0.32);
+  background: rgba(3, 180, 255, 0.08);
 }
 
 .portal-workspace .module-row.off {
@@ -145,6 +151,14 @@
   color: rgba(255, 255, 255, 0.45);
   margin-top: 2px;
   line-height: 1.4;
+}
+
+.portal-workspace .module-row small {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .portal-workspace .preview {
