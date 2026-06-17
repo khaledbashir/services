@@ -43,7 +43,7 @@ export function PortalBuilder({
     {
       role: 'assistant',
       content:
-        'Tell me the client and which modules you want — or say Natalia recipe, Jireh recipe, add before/after, drop pricing. Watch the portal assemble live.',
+        'Tell me the client, preset, and modules you want — for example: service portal with tickets, AI diagnosis, documents, and onboarding. Watch the portal assemble live.',
     },
   ])
 
@@ -128,7 +128,7 @@ export function PortalBuilder({
         <div>
           <h1>{title}</h1>
           <div className="meta">
-            {recipe} recipe · {modules.length} modules · {isPublic ? 'live link' : 'draft'}
+            {recipe === 'custom' ? 'custom preset' : `${PORTAL_RECIPES.find((r) => r.id === recipe)?.label ?? recipe} preset`} · {modules.length} modules · {isPublic ? 'live link' : 'draft'}
           </div>
         </div>
         <div className="actions">
@@ -148,16 +148,17 @@ export function PortalBuilder({
       </header>
 
       <aside className="modules">
-        <h2>Recipes</h2>
+        <h2>Presets</h2>
         <div className="recipe-row">
-          {PORTAL_RECIPES.filter((r) => r.id !== 'custom').map((r) => (
+          {PORTAL_RECIPES.map((r) => (
             <button
               key={r.id}
               type="button"
               className={`recipe-pill ${recipe === r.id ? 'active' : ''}`}
               onClick={() => applyRecipe(r.id)}
+              title={r.tagline}
             >
-              {r.owner}
+              {r.label}
             </button>
           ))}
         </div>
@@ -206,7 +207,7 @@ export function PortalBuilder({
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder='e.g. "Flyers portal, Natalia recipe, add before/after"'
+            placeholder='e.g. "make this an issue intake portal with tickets and AI diagnosis"'
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()

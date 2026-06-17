@@ -1,20 +1,132 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
 const TOTAL_SLIDES = 15
 
+function BuildStudioHome() {
+  const buildTypes = [
+    {
+      label: 'Client Portal',
+      href: '/client-portals',
+      eyebrow: 'Portal builder',
+      body: 'Assemble a client-facing portal with tickets, service health, AI diagnosis, documents, approvals, reports, onboarding, and deal deck modules.',
+      active: true,
+    },
+    {
+      label: 'Deal Deck',
+      href: '/client-portals',
+      eyebrow: 'Sales story',
+      body: 'Build a cinematic proposal or executive review experience with visual proof, investment framing, and a publishable client link.',
+      active: true,
+    },
+    {
+      label: 'Issue Intake',
+      href: '/client-portals',
+      eyebrow: 'First line of defense',
+      body: 'Create an intake experience around tickets, image upload, AI diagnosis, knowledge base matching, and support routing.',
+      active: true,
+    },
+    {
+      label: 'Service / QBR Report',
+      href: '/client-portals',
+      eyebrow: 'Executive readout',
+      body: 'Package service health, ticket trends, completed work, risks, documents, and renewal-ready account summaries.',
+      active: true,
+    },
+    {
+      label: 'Project Onboarding',
+      href: '/client-portals',
+      eyebrow: 'Orientation',
+      body: 'Build the client’s starting point: service scope, contacts, escalation paths, documents, approvals, and next steps.',
+      active: true,
+    },
+    {
+      label: 'Service Dashboard Story',
+      href: '/presentation?mode=deck',
+      eyebrow: 'Existing deck',
+      body: 'Open the current ANC Service Dashboard presentation deck.',
+      active: true,
+    },
+  ]
+
+  return (
+    <main className="min-h-screen bg-[#05070a] text-white">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
+        <header className="flex items-center justify-between border-b border-white/10 pb-5">
+          <div className="flex items-center gap-3">
+            <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7 w-auto" />
+            <div className="text-xs font-semibold uppercase tracking-[0.26em] text-white/50">Build Studio</div>
+          </div>
+          <Link href="/client-portals" className="rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/70 hover:border-[#03b4ff]/50 hover:text-white">
+            Open portal workspace
+          </Link>
+        </header>
+
+        <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[0.9fr_1.1fr]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#03b4ff]">ANC AI builder</p>
+            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-[0.98] tracking-tight sm:text-6xl">
+              What do you want to build?
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-white/62">
+              Start with a build type, then use the AI side panel and module toggles to assemble the client-facing experience. Client Portal is one target, not the whole system.
+            </p>
+            <div className="mt-8 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/40">Modules stay modular</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {['Deal Deck', 'Customer Portal', 'Tickets', 'Service Health', 'AI Diagnosis', 'Documents', 'Approvals', 'Reports / QBR', 'Onboarding'].map((module) => (
+                  <span key={module} className="rounded-full border border-[#03b4ff]/20 bg-[#03b4ff]/10 px-3 py-1.5 text-xs font-semibold text-white/78">
+                    {module}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {buildTypes.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="group min-h-56 rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:border-[#03b4ff]/45 hover:bg-white/[0.07]"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#03b4ff]">{item.eyebrow}</p>
+                <h2 className="mt-4 text-2xl font-black uppercase tracking-tight">{item.label}</h2>
+                <p className="mt-4 text-sm leading-6 text-white/58">{item.body}</p>
+                <div className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-white/35 group-hover:text-white/80">Build →</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
 export default function PresentationPage() {
   const [slide, setSlide] = useState(0)
+  const [showDeck, setShowDeck] = useState(false)
 
   useEffect(() => {
+    setShowDeck(new URLSearchParams(window.location.search).get('mode') === 'deck')
+  }, [])
+
+  useEffect(() => {
+    if (!showDeck) return
+
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setSlide(s => Math.min(s + 1, TOTAL_SLIDES - 1)) }
       if (e.key === 'ArrowLeft') setSlide(s => Math.max(s - 1, 0))
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+  }, [showDeck])
+
+  if (!showDeck) {
+    return <BuildStudioHome />
+  }
 
   const Slide = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <div className={`w-full h-screen bg-[#f0f2f5] flex flex-col justify-center items-center relative overflow-hidden ${className}`}>

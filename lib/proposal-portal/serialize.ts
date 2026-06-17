@@ -1,5 +1,5 @@
 import { normalizeModuleOrder } from './modules'
-import { modulesForRecipe } from './recipes'
+import { modulesForRecipe, normalizePresetId } from './recipes'
 import {
   DEFAULT_PORTAL_DATA,
   type PortalClientData,
@@ -8,8 +8,8 @@ import {
 } from './types'
 
 export function parseModules(raw: unknown): PortalModuleId[] {
-  if (!Array.isArray(raw)) return modulesForRecipe('natalia')
-  return normalizeModuleOrder(raw.filter((x) => typeof x === 'string') as PortalModuleId[])
+  if (!Array.isArray(raw)) return modulesForRecipe('service-portal')
+  return normalizeModuleOrder(raw.filter((x) => typeof x === 'string') as string[])
 }
 
 export function parseClientData(raw: unknown): PortalClientData {
@@ -18,7 +18,5 @@ export function parseClientData(raw: unknown): PortalClientData {
 }
 
 export function parseRecipe(raw: unknown): PortalRecipeId {
-  const v = String(raw ?? 'natalia')
-  if (v === 'jireh' || v === 'joe' || v === 'custom' || v === 'natalia') return v
-  return 'natalia'
+  return normalizePresetId(raw)
 }

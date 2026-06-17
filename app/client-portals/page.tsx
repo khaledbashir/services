@@ -99,7 +99,7 @@ export default function ClientPortalsHubPage() {
           <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.6fr)_minmax(0,0.5fr)_auto] gap-4 border-b border-zinc-200 bg-zinc-50 px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
               <div>Portal</div>
-              <div>Recipe</div>
+              <div>Preset</div>
               <div>Status</div>
               <div />
             </div>
@@ -120,7 +120,7 @@ export default function ClientPortalsHubPage() {
                         Created by {portal.created_by_email} · Updated {new Date(portal.updated_at).toLocaleDateString()}
                       </div>
                     </div>
-                    <div className="capitalize text-zinc-600">{portal.recipe}</div>
+                    <div className="capitalize text-zinc-600">{portal.recipe.replace(/-/g, ' ')}</div>
                     <div>
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${

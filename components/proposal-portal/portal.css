@@ -411,6 +411,91 @@
   box-shadow: 0 18px 50px -6px rgba(10, 82, 235, 0.65);
 }
 
+/* ---- capability modules ---- */
+.portal-modules-section {
+  position: relative;
+  padding: 12vh 6vw 14vh;
+  background:
+    radial-gradient(circle at top left, rgba(10, 82, 235, 0.24), transparent 34vw),
+    linear-gradient(180deg, #05070a, #0b1018);
+  color: #fff;
+}
+
+.portal-modules-heading {
+  max-width: 920px;
+  margin: 0 auto 32px;
+}
+
+.portal-modules-heading p,
+.portal-module-kicker {
+  margin: 0 0 10px;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.portal-modules-heading h2 {
+  margin: 0;
+  max-width: 680px;
+  font-family: "ANCHead", "ANCBody", sans-serif;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.portal-modules-grid {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.portal-module-card {
+  min-height: 260px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 28px 80px -58px rgba(3, 180, 255, 0.7);
+}
+
+.portal-module-card h3 {
+  margin: 0;
+  font-family: "ANCHead", "ANCBody", sans-serif;
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.portal-module-card > p:not(.portal-module-kicker) {
+  margin: 18px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.portal-module-card ul {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.portal-module-card li {
+  border: 1px solid rgba(3, 180, 255, 0.18);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(3, 180, 255, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .portal-brand-mark {
   position: fixed;
   top: 18px;
@@ -453,6 +538,9 @@
   }
   .portal-ba-wrap {
     width: 92vw;
+  }
+  .portal-modules-grid {
+    grid-template-columns: 1fr;
   }
 }
 

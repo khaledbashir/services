@@ -1,26 +1,33 @@
 export type PortalMode = 'PROPOSAL' | 'PROJECT' | 'OPS'
 
-export type PortalRecipeId = 'natalia' | 'jireh' | 'joe' | 'custom'
+export type PortalRecipeId =
+  | 'sales-proposal'
+  | 'service-portal'
+  | 'renewal-qbr'
+  | 'issue-intake'
+  | 'project-onboarding'
+  | 'executive-review'
+  | 'custom'
 
 export type PortalModuleId =
-  | 'venue-hero'
-  | 'before-after'
-  | 'solution-story'
-  | 'proof-gallery'
-  | 'team'
-  | 'stats'
-  | 'pricing'
-  | 'timeline'
-  | 'case-study'
+  | 'deal-deck'
+  | 'customer-portal'
+  | 'tickets'
+  | 'service-health'
+  | 'ai-diagnosis'
+  | 'documents'
+  | 'approvals'
+  | 'reports-qbr'
+  | 'onboarding'
 
-export type PortalAudience = 'design' | 'sales' | 'ops'
+export type PortalAudience = 'sales' | 'service' | 'operations' | 'executive'
 
 export type PortalModuleDef = {
   id: PortalModuleId
   label: string
   description: string
   audience: PortalAudience[]
-  scroll: 'pin' | 'river'
+  category: 'presentation' | 'service' | 'support' | 'workflow' | 'reporting'
   required?: boolean
   implemented: boolean
 }

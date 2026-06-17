@@ -1,7 +1,6 @@
 import { PORTAL_MODULE_MAP, normalizeModuleOrder } from './modules'
-import { PORTAL_RECIPES, modulesForRecipe } from './recipes'
+import { PORTAL_RECIPES, modulesForRecipe, normalizePresetId } from './recipes'
 import type { PortalClientData, PortalModuleId, PortalRecipeId } from './types'
-import { DEFAULT_PORTAL_DATA } from './types'
 
 export type AssembleResult = {
   reply: string
@@ -12,26 +11,66 @@ export type AssembleResult = {
 }
 
 const MODULE_ALIASES: Record<string, PortalModuleId> = {
-  hero: 'venue-hero',
-  venue: 'venue-hero',
-  'before after': 'before-after',
-  beforeafter: 'before-after',
-  ba: 'before-after',
-  solution: 'solution-story',
-  story: 'solution-story',
-  vision: 'solution-story',
-  gallery: 'proof-gallery',
-  proof: 'proof-gallery',
-  team: 'team',
-  stats: 'stats',
-  numbers: 'stats',
-  pricing: 'pricing',
-  price: 'pricing',
-  investment: 'pricing',
-  timeline: 'timeline',
-  steps: 'timeline',
-  'case study': 'case-study',
-  casestudy: 'case-study',
+  deck: 'deal-deck',
+  deal: 'deal-deck',
+  sales: 'deal-deck',
+  proposal: 'deal-deck',
+  presentation: 'deal-deck',
+  portal: 'customer-portal',
+  customer: 'customer-portal',
+  client: 'customer-portal',
+  login: 'customer-portal',
+  ticket: 'tickets',
+  tickets: 'tickets',
+  request: 'tickets',
+  requests: 'tickets',
+  case: 'tickets',
+  cases: 'tickets',
+  health: 'service-health',
+  service: 'service-health',
+  displays: 'service-health',
+  maintenance: 'service-health',
+  diagnosis: 'ai-diagnosis',
+  diagnose: 'ai-diagnosis',
+  vision: 'ai-diagnosis',
+  photo: 'ai-diagnosis',
+  picture: 'ai-diagnosis',
+  kb: 'ai-diagnosis',
+  documents: 'documents',
+  docs: 'documents',
+  files: 'documents',
+  downloads: 'documents',
+  approval: 'approvals',
+  approvals: 'approvals',
+  proof: 'approvals',
+  signoff: 'approvals',
+  report: 'reports-qbr',
+  reports: 'reports-qbr',
+  qbr: 'reports-qbr',
+  renewal: 'reports-qbr',
+  onboarding: 'onboarding',
+  orientation: 'onboarding',
+  training: 'onboarding',
+  contacts: 'onboarding',
+}
+
+const PRESET_ALIASES: Record<string, PortalRecipeId> = {
+  'sales proposal': 'sales-proposal',
+  proposal: 'sales-proposal',
+  'deal deck': 'sales-proposal',
+  'service portal': 'service-portal',
+  service: 'service-portal',
+  portal: 'service-portal',
+  qbr: 'renewal-qbr',
+  renewal: 'renewal-qbr',
+  'issue intake': 'issue-intake',
+  intake: 'issue-intake',
+  'first line': 'issue-intake',
+  diagnosis: 'issue-intake',
+  onboarding: 'project-onboarding',
+  orientation: 'project-onboarding',
+  executive: 'executive-review',
+  review: 'executive-review',
 }
 
 function extractClientName(text: string): string | undefined {
@@ -67,6 +106,18 @@ function findMentionedModules(text: string): PortalModuleId[] {
   return [...found]
 }
 
+function findPreset(text: string): PortalRecipeId | null {
+  const lower = text.toLowerCase()
+  for (const preset of PORTAL_RECIPES) {
+    if (lower.includes(preset.id) || lower.includes(preset.label.toLowerCase())) return preset.id
+  }
+  for (const [alias, id] of Object.entries(PRESET_ALIASES)) {
+    if (lower.includes(alias)) return id
+  }
+  const normalized = normalizePresetId(lower)
+  return normalized === lower ? normalized : null
+}
+
 export function parsePortalIntent(
   message: string,
   currentModules: PortalModuleId[],
@@ -76,73 +127,56 @@ export function parsePortalIntent(
   let modules = [...currentModules]
   let recipe: PortalRecipeId = currentRecipe
   const data: Partial<PortalClientData> = {}
-  const missingModules: string[] = []
   const hasRemovalIntent = /\b(remove|drop|hide|without|no)\b/.test(lower)
-  const hasAddIntent = /\b(add|include|enable|want|need)\b/.test(lower)
+  const hasAddIntent = /\b(add|include|enable|want|need|turn on|show)\b/.test(lower)
 
-  for (const r of PORTAL_RECIPES) {
-    if (lower.includes(r.id) || lower.includes(r.owner.toLowerCase()) || lower.includes(r.label.toLowerCase())) {
-      recipe = r.id
-      modules = modulesForRecipe(r.id)
-      for (const id of r.modules) {
-        const mod = PORTAL_MODULE_MAP[id]
-        if (mod && !mod.implemented) missingModules.push(mod.label)
-      }
-      break
-    }
+  const preset = findPreset(lower)
+  if (preset && !hasRemovalIntent) {
+    recipe = preset
+    modules = modulesForRecipe(preset)
   }
 
   if (/\b(reset|start over|clear)\b/.test(lower)) {
-    modules = modulesForRecipe('natalia')
-    recipe = 'natalia'
+    modules = modulesForRecipe('service-portal')
+    recipe = 'service-portal'
   }
 
-  const removeHits = findMentionedModules(lower.replace(/\b(remove|drop|hide|without|no)\b/g, ' '))
   if (hasRemovalIntent) {
+    const removeHits = findMentionedModules(lower.replace(/\b(remove|drop|hide|without|no)\b/g, ' '))
     for (const id of removeHits) {
-      if (!PORTAL_MODULE_MAP[id]?.required) {
-        modules = modules.filter((m) => m !== id)
-      }
+      if (!PORTAL_MODULE_MAP[id]?.required) modules = modules.filter((m) => m !== id)
     }
+    recipe = 'custom'
   }
 
-  if (hasAddIntent || !hasRemovalIntent) {
+  if (hasAddIntent || (!hasRemovalIntent && !preset)) {
     const addHits = findMentionedModules(lower)
-    for (const id of addHits) {
-      const mod = PORTAL_MODULE_MAP[id]
-      if (!mod?.implemented) {
-        if (mod) missingModules.push(mod.label)
-      } else {
-        modules = [...new Set([...modules, id])]
-      }
-    }
+    for (const id of addHits) modules = [...new Set([...modules, id])]
+    if (addHits.length > 0 && !preset) recipe = 'custom'
   }
 
   const clientName = extractClientName(message)
   if (clientName) {
     data.clientName = clientName.replace(/\b\w/g, (c) => c.toUpperCase())
-    data.league = data.clientName.includes('Arena') ? 'Renovation · 2026' : 'Venue Technology'
+    data.league = data.clientName.includes('Arena') ? 'Service Portal · 2026' : 'Client Portal'
   }
 
   modules = normalizeModuleOrder(modules)
 
   let reply: string
-  const uniqueMissing = [...new Set(missingModules)]
-  if (uniqueMissing.length > 0) {
-    reply = `Turned on what we have. These modules aren't in the library yet: ${uniqueMissing.join(', ')}.`
-  } else if (recipe !== 'custom' && recipe !== currentRecipe) {
-    reply = `Loaded the ${PORTAL_RECIPES.find((r) => r.id === recipe)?.label} recipe (${PORTAL_RECIPES.find((r) => r.id === recipe)?.owner}'s preset). Watch the preview update.`
+  if (preset && preset !== currentRecipe && !hasRemovalIntent) {
+    reply = `Loaded ${PORTAL_RECIPES.find((r) => r.id === preset)?.label}. Active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`
   } else if (clientName) {
-    reply = `Updated for ${data.clientName}. Modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(' → ')}.`
+    reply = `Updated for ${data.clientName}. Active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`
   } else {
-    reply = `Portal updated — ${modules.length} modules active. Toggle anything in the panel or keep talking.`
+    reply = `Updated. Active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`
   }
 
   return {
     reply,
     enabledModules: modules,
     recipe,
-    data: { ...DEFAULT_PORTAL_DATA, ...data },
-    missingModules: uniqueMissing,
+    data,
+    missingModules: [],
   }
 }

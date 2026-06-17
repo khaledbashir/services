@@ -37,7 +37,7 @@ export function PortalViewer({
   showHud = true,
 }: PortalViewerProps) {
   const merged = useMemo<PortalDocument>(() => {
-    const recipe = doc?.recipe ?? 'natalia'
+    const recipe = doc?.recipe ?? 'service-portal'
     return {
       title: doc?.title ?? 'Client Portal',
       mode: doc?.mode ?? 'PROPOSAL',
@@ -58,6 +58,65 @@ export function PortalViewer({
   const d = merged.data
   const names = splitClientName(d.clientName)
   const moduleKey = merged.enabledModules.join(',')
+  const hasDealDeck = has('deal-deck')
+  const moduleCards = [
+    {
+      id: 'customer-portal' as PortalModuleId,
+      kicker: 'Client access',
+      title: 'Customer Portal',
+      body: 'A clean login surface where the client sees their venues, requests, documents, and account overview.',
+      items: ['Venue overview', 'Request history', 'Service contacts'],
+    },
+    {
+      id: 'tickets' as PortalModuleId,
+      kicker: 'Support',
+      title: 'Tickets',
+      body: 'Submit issues, upload photos, follow status, reply on the thread, and see open/closed cases.',
+      items: ['New issue intake', 'Photo upload', 'Open / resolved cases'],
+    },
+    {
+      id: 'service-health' as PortalModuleId,
+      kicker: 'Operations',
+      title: 'Service Health',
+      body: 'Venue status, display inventory, active risks, maintenance history, and what ANC is watching.',
+      items: ['Display status', 'Maintenance history', 'Risk callouts'],
+    },
+    {
+      id: 'ai-diagnosis' as PortalModuleId,
+      kicker: 'First line of defense',
+      title: 'AI Diagnosis',
+      body: 'Client or staff uploads a photo, the system gives an initial read, checks prior fixes, and enriches the ticket.',
+      items: ['Photo diagnosis', 'Knowledge base match', 'Suggested next step'],
+    },
+    {
+      id: 'documents' as PortalModuleId,
+      kicker: 'File hub',
+      title: 'Documents',
+      body: 'Reports, drawings, proof files, approved assets, and downloads organized by venue or project.',
+      items: ['Reports', 'Drawings', 'Proof assets'],
+    },
+    {
+      id: 'approvals' as PortalModuleId,
+      kicker: 'Workflow',
+      title: 'Approvals',
+      body: 'Client review and sign-off for designs, proof files, scope decisions, and change requests.',
+      items: ['Review queue', 'Approve / request changes', 'Decision history'],
+    },
+    {
+      id: 'reports-qbr' as PortalModuleId,
+      kicker: 'Executive readout',
+      title: 'Reports / QBR',
+      body: 'Monthly service summaries, ticket trends, completed work, uptime, and renewal-ready proof.',
+      items: ['Monthly summary', 'Ticket trends', 'Completed work'],
+    },
+    {
+      id: 'onboarding' as PortalModuleId,
+      kicker: 'Orientation',
+      title: 'Onboarding',
+      body: 'How to use the portal, who to contact, what is in scope, and how escalations work.',
+      items: ['Portal guide', 'Service scope', 'Escalation paths'],
+    },
+  ].filter((card) => has(card.id))
 
   const rootRef = useRef<HTMLDivElement>(null)
   const progRef = useRef<HTMLDivElement>(null)
@@ -172,31 +231,25 @@ export function PortalViewer({
       vh = window.innerHeight
       const y = window.scrollY
       const defs: Omit<SceneMeta, 'start' | 'end' | 'prev'>[] = []
-      if (has('venue-hero')) {
+      if (hasDealDeck) {
         defs.push({
           el: root.querySelector('#portal-sc-hero') as HTMLElement,
           theme: 'dark',
-          label: '01 — VENUE HERO',
+          label: '01 — DEAL DECK',
           update: updateHero,
         })
-      }
-      if (has('solution-story')) {
         defs.push({
           el: root.querySelector('#portal-sc-river-1') as HTMLElement,
           theme: 'dark',
           label: 'THE VISION',
           update: (p) => updateRiver(river1Ref.current, p),
         })
-      }
-      if (has('before-after')) {
         defs.push({
           el: root.querySelector('#portal-sc-ba') as HTMLElement,
           theme: 'light',
-          label: '02 — BEFORE / AFTER',
+          label: '02 — PROOF',
           update: updateBa,
         })
-      }
-      if (has('pricing')) {
         defs.push({
           el: root.querySelector('#portal-sc-river-2') as HTMLElement,
           theme: 'light',
@@ -206,7 +259,7 @@ export function PortalViewer({
         defs.push({
           el: root.querySelector('#portal-sc-stinger') as HTMLElement,
           theme: 'void',
-          label: '03 — INVESTMENT',
+          label: '03 — CLOSE',
           update: updateStinger,
         })
       }
@@ -280,14 +333,14 @@ export function PortalViewer({
           <header className="portal-hud" aria-hidden="true">
             <div className="portal-hud-tl">ANC Client Portal</div>
             <div className="portal-hud-tr">{d.clientName}</div>
-            <div className="portal-hud-bl" ref={actRef}>01 — VENUE HERO</div>
+            <div className="portal-hud-bl" ref={actRef}>01 — CLIENT PORTAL</div>
             <div className="portal-hud-br" ref={pctRef}>000%</div>
           </header>
           <div className="portal-prog" ref={progRef} aria-hidden="true" />
         </>
       )}
       <main>
-        {has('venue-hero') && (
+        {hasDealDeck && (
           <section className="portal-pin" id="portal-sc-hero" style={kinetic ? { ['--track-vh' as string]: '340vh' } : undefined}>
             <div className={kinetic ? 'portal-pin-track' : undefined}>
               <div className={kinetic ? 'portal-pin-sticky' : undefined}>
@@ -295,7 +348,7 @@ export function PortalViewer({
                   <div ref={heroBgRef} className="portal-hero-bg" style={{ backgroundImage: `url(${d.heroImage})` }} />
                   <div className="portal-hero-scrim" />
                   <div className="portal-hero-content">
-                    <p ref={heroEyebrowRef} className="portal-hero-eyebrow">ANC · Venue Transformation</p>
+                    <p ref={heroEyebrowRef} className="portal-hero-eyebrow">ANC · Deal Deck</p>
                     <h1 ref={heroTitleRef} className="portal-hero-title">
                       <span className="outline">{names.first}</span>
                       <br />
@@ -317,13 +370,13 @@ export function PortalViewer({
             </div>
           </section>
         )}
-        {has('solution-story') && (
+        {hasDealDeck && (
           <section className="portal-river" id="portal-sc-river-1" ref={river1Ref}>
             <p className="portal-river-eyebrow">The vision</p>
             <p className="portal-river-copy">{d.visionCopy}</p>
           </section>
         )}
-        {has('before-after') && (
+        {hasDealDeck && (
           <section className="portal-pin" id="portal-sc-ba" style={kinetic ? { ['--track-vh' as string]: '420vh' } : undefined}>
             <div className={kinetic ? 'portal-pin-track' : undefined}>
               <div className={kinetic ? 'portal-pin-sticky' : undefined}>
@@ -344,13 +397,13 @@ export function PortalViewer({
             </div>
           </section>
         )}
-        {has('pricing') && (
+        {hasDealDeck && (
           <section className="portal-river" id="portal-sc-river-2" ref={river2Ref}>
             <p className="portal-river-eyebrow">The program</p>
             <p className="portal-river-copy">{d.subtitle}. {d.programCopy}</p>
           </section>
         )}
-        {has('pricing') && (
+        {hasDealDeck && (
           <section className="portal-pin" id="portal-sc-stinger" style={kinetic ? { ['--track-vh' as string]: '360vh' } : undefined}>
             <div className={kinetic ? 'portal-pin-track' : undefined}>
               <div className={kinetic ? 'portal-pin-sticky' : undefined}>
@@ -363,6 +416,26 @@ export function PortalViewer({
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+        )}
+        {moduleCards.length > 0 && (
+          <section className="portal-modules-section">
+            <div className="portal-modules-heading">
+              <p>Client portal modules</p>
+              <h2>What this client experience includes</h2>
+            </div>
+            <div className="portal-modules-grid">
+              {moduleCards.map((card) => (
+                <article key={card.id} className="portal-module-card">
+                  <p className="portal-module-kicker">{card.kicker}</p>
+                  <h3>{card.title}</h3>
+                  <p>{card.body}</p>
+                  <ul>
+                    {card.items.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </article>
+              ))}
             </div>
           </section>
         )}
