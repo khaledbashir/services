@@ -251,7 +251,7 @@ export default function PortalUsersAdminPage() {
                       onChange={(event) => setFullName(event.target.value)}
                       required
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0A52EF]"
-                      placeholder="Jane Smith"
+                      placeholder="Client Contact"
                     />
                   </label>
                   <label className="block text-sm font-medium text-slate-700">
@@ -262,7 +262,7 @@ export default function PortalUsersAdminPage() {
                       onChange={(event) => setEmail(event.target.value)}
                       required
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0A52EF]"
-                      placeholder="jane@team.com"
+                      placeholder="contact@example.com"
                     />
                   </label>
                 </div>

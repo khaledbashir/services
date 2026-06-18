@@ -50,7 +50,7 @@ export async function createProposalPortal(params: {
   recipe?: string
 }) {
   const recipe = parseRecipe(params.recipe ?? 'service-portal')
-  const clientName = params.clientName?.trim() || 'New Client'
+  const clientName = params.clientName?.trim() || 'Client workspace'
   const title = (params.title ?? `${clientName} — Client Portal`).slice(0, 200)
   const data = { ...DEFAULT_PORTAL_DATA, clientName }
   const modules = modulesForRecipe(recipe)

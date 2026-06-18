@@ -9,11 +9,11 @@
   --pb-muted: rgba(51, 65, 85, 0.68);
   --pb-soft: rgba(10, 82, 235, 0.06);
   display: grid;
-  grid-template-columns: 300px 1fr 380px;
+  grid-template-columns: 280px minmax(0, 1fr) 360px;
   height: 100vh;
   height: 100dvh;
   background: var(--pb-bg);
-  color: #eef3ff;
+  color: var(--pb-text);
   overflow: hidden;
 }
 
@@ -56,13 +56,14 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .portal-workspace .btn {
   border: 1px solid var(--pb-line);
   background: var(--pb-soft);
   color: var(--pb-text);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
@@ -84,10 +85,10 @@
 }
 
 .portal-workspace .theme-box {
-  width: 156px;
+  width: 148px;
   overflow: hidden;
   border: 1px solid var(--pb-line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--pb-soft);
 }
 
@@ -145,7 +146,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 10px 8px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
 }
@@ -200,6 +201,15 @@
   background: #05070a;
 }
 
+.portal-workspace .portal-preview-canvas {
+  min-width: 1120px;
+  min-height: calc(100dvh - 42px);
+}
+
+.portal-workspace .portal-preview-canvas .portal-app-shell {
+  min-width: 980px;
+}
+
 .portal-workspace .preview-note {
   position: sticky;
   top: 0;
@@ -221,6 +231,29 @@
   background: linear-gradient(180deg, var(--pb-panel-2), var(--pb-panel));
 }
 
+.portal-workspace .chat-head {
+  padding: 14px 14px 0;
+}
+
+.portal-workspace .model-controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+  margin: 10px 0 2px;
+}
+
+.portal-workspace .model-controls select {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid var(--pb-line);
+  border-radius: 8px;
+  background: var(--pb-panel);
+  color: var(--pb-text);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .portal-workspace .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -232,7 +265,7 @@
 
 .portal-workspace .bubble {
   max-width: 92%;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.5;
@@ -248,6 +281,7 @@
 .portal-workspace .bubble.user {
   align-self: flex-end;
   background: rgba(10, 82, 235, 0.85);
+  color: #fff;
 }
 
 .portal-workspace .chat-input {
@@ -261,7 +295,7 @@
 .portal-workspace .chat-input textarea {
   min-height: 72px;
   resize: none;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--pb-line);
   background: var(--pb-panel);
   color: var(--pb-text);
@@ -272,11 +306,16 @@
 
 .portal-workspace .chat-input button {
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--pb-blue);
   color: #fff;
   cursor: pointer;
   font-weight: 800;
+}
+
+.portal-workspace .chat-input button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .portal-dashboard {

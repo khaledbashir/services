@@ -48,6 +48,7 @@ function collapseOllamaCloudProviders(providers: ProviderConfig[]): ProviderConf
     ...ollamaProviders.flatMap((p) => [p.model, ...(p.availableModels || [])]),
   ])
   const defaultModel =
+    (models.includes('glm-5.2') && 'glm-5.2') ||
     (envDefault && models.includes(envDefault) && envDefault) ||
     (first.model && models.includes(first.model) && first.model) ||
     'kimi-k2.6'

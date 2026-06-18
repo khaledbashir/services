@@ -27,7 +27,7 @@ export default function ClientPortalsHubPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [startRecipe, setStartRecipe] = useState<PortalRecipeId>('service-portal')
-  const [clientName, setClientName] = useState('New Client')
+  const [clientName, setClientName] = useState('Client workspace')
 
   const load = useCallback(async () => {
     try {
@@ -85,7 +85,7 @@ export default function ClientPortalsHubPage() {
   ]
 
   const create = async (recipe: PortalRecipeId = startRecipe) => {
-    const name = clientName.trim() || 'New Client'
+    const name = clientName.trim() || 'Client workspace'
     setCreating(true)
     try {
       const res = await fetch('/api/proposal-portals', {
@@ -142,7 +142,7 @@ export default function ClientPortalsHubPage() {
                   href="/marketing-hub/studio"
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-[#0A52EF]/35 hover:text-[#0A52EF] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-[#60A5FA]/45"
                 >
-                  Marketing agent
+                  Marketing studio
                 </Link>
               </div>
             </div>
