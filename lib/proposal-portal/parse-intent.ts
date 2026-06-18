@@ -118,6 +118,19 @@ function findPreset(text: string): PortalRecipeId | null {
   return normalized === lower ? normalized : null
 }
 
+function findThemePatch(text: string): Partial<PortalClientData> {
+  if (/\bblue\b/.test(text) && /\b(gold|yellow)\b/.test(text)) {
+    return { brandPrimary: '#0A52EB', brandAccent: '#F5B84B' }
+  }
+  if (/\bblack\b/.test(text) && /\bgold\b/.test(text)) {
+    return { brandPrimary: '#05070A', brandAccent: '#F5B84B' }
+  }
+  if (/\bred\b/.test(text)) return { brandPrimary: '#D92D20', brandAccent: '#F5B84B' }
+  if (/\bgreen\b/.test(text)) return { brandPrimary: '#16A34A', brandAccent: '#2DD4BF' }
+  if (/\bpurple\b/.test(text)) return { brandPrimary: '#6D28D9', brandAccent: '#F5B84B' }
+  return {}
+}
+
 export function parsePortalIntent(
   message: string,
   currentModules: PortalModuleId[],
@@ -160,11 +173,14 @@ export function parsePortalIntent(
     data.clientName = clientName.replace(/\b\w/g, (c) => c.toUpperCase())
     data.league = data.clientName.includes('Arena') ? 'Service Portal · 2026' : 'Client Portal'
   }
+  Object.assign(data, findThemePatch(lower))
 
   modules = normalizeModuleOrder(modules)
 
   let reply: string
-  if (preset && preset !== currentRecipe && !hasRemovalIntent) {
+  if (data.brandPrimary || data.brandAccent) {
+    reply = `Updated the portal colors and active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`
+  } else if (preset && preset !== currentRecipe && !hasRemovalIntent) {
     reply = `Loaded ${PORTAL_RECIPES.find((r) => r.id === preset)?.label}. Active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`
   } else if (clientName) {
     reply = `Updated for ${data.clientName}. Active modules: ${modules.map((m) => PORTAL_MODULE_MAP[m].label).join(', ')}.`

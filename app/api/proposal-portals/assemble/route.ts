@@ -72,6 +72,8 @@ function safeDataPatch(raw: unknown): Partial<PortalClientData> {
     'afterImage',
     'visionCopy',
     'programCopy',
+    'brandPrimary',
+    'brandAccent',
   ] satisfies Array<keyof PortalClientData>) {
     if (typeof data[key] === 'string' && data[key].trim()) {
       out[key] = data[key].trim()
@@ -127,6 +129,8 @@ Rules:
 - If they mention photo, diagnose, vision, first line of defense, symptom, display issue, or knowledge base, include ai-diagnosis.
 - If they mention orientation, onboarding, training, scope, contacts, or escalation, include onboarding.
 - If they mention reports, monthly, renewal, QBR, executive, performance, or proof of value, include reports-qbr.
+- If they ask for colors, palette, brand, or a color pair, set brandPrimary and brandAccent as hex colors.
+- If they ask for blue and gold, use brandPrimary "#0A52EB" and brandAccent "#F5B84B".
 - Use ANC-specific language. Never use staff names or generic placeholder people.
 - Keep reply short and useful.
 
@@ -141,7 +145,9 @@ JSON shape:
     "subtitle": "short visual subtitle",
     "league": "short context",
     "visionCopy": "one polished sentence",
-    "programCopy": "one polished sentence"
+    "programCopy": "one polished sentence",
+    "brandPrimary": "#0A52EB",
+    "brandAccent": "#F5B84B"
   }
 }`
 

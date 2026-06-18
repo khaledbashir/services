@@ -32,6 +32,19 @@
   overflow-x: clip;
 }
 
+.portal-demo.portal-embedded {
+  position: relative;
+  min-height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 34px 120px -82px var(--glow);
+}
+
+.portal-embedded .portal-grain {
+  display: none;
+}
+
 .portal-demo[data-theme="light"] {
   --bg: var(--paper);
   --fg: var(--ink);
@@ -423,6 +436,13 @@
   color: #fff;
 }
 
+.portal-embedded .portal-app-section {
+  min-height: 100%;
+  padding: clamp(18px, 2.6vw, 34px);
+  display: grid;
+  align-items: center;
+}
+
 .portal-app-shell {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -435,6 +455,25 @@
   background: rgba(7, 10, 15, 0.82);
   box-shadow: 0 44px 120px -70px rgba(3, 180, 255, 0.72);
   backdrop-filter: blur(18px);
+}
+
+.portal-embedded .portal-app-shell {
+  width: 100%;
+  max-width: 1040px;
+  min-height: clamp(560px, calc(100dvh - 190px), 660px);
+  border-radius: 14px;
+}
+
+.portal-embedded .portal-app-side {
+  padding: 20px;
+}
+
+.portal-embedded .portal-app-topbar {
+  padding: 20px 24px;
+}
+
+.portal-embedded .portal-app-panel {
+  padding: 22px 24px 26px;
 }
 
 .portal-app-side {
@@ -848,6 +887,14 @@
 .portal-brand-mark img {
   height: 22px;
   width: auto;
+}
+
+.portal-embedded .portal-brand-mark {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  z-index: 4;
+  font-size: 12px;
 }
 
 @media (max-width: 700px) {

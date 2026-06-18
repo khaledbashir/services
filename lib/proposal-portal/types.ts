@@ -43,6 +43,8 @@ export type PortalClientData = {
   afterImage: string
   visionCopy?: string
   programCopy?: string
+  brandPrimary?: string
+  brandAccent?: string
 }
 
 export type PortalDocument = {

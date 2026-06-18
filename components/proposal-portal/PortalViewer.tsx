@@ -6,6 +6,7 @@ import {
   type PortalDocument,
   type PortalModuleId,
 } from '@/lib/proposal-portal/types'
+import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { clamp01, eo3, lerp, sm, type PortalTheme } from './scroll-math'
 import './portal.css'
@@ -63,6 +64,16 @@ export function PortalViewer({
   )
   const has = (id: PortalModuleId) => enabled.has(id)
   const d = merged.data
+  const portalStyle = useMemo(
+    () => ({
+      '--blue': d.brandPrimary || '#0a52eb',
+      '--bright': d.brandAccent || '#2f74ff',
+      '--cyan': d.brandAccent || '#03b4ff',
+      '--glow': d.brandAccent || '#5b97ff',
+      '--acc': d.brandAccent || 'var(--cyan)',
+    }) as CSSProperties,
+    [d.brandPrimary, d.brandAccent],
+  )
   const names = splitClientName(d.clientName)
   const moduleKey = merged.enabledModules.join(',')
   const hasDealDeck = has('deal-deck')
@@ -295,9 +306,10 @@ export function PortalViewer({
   }, [kinetic, moduleKey])
 
   const kineticClass = kinetic ? 'portal-kinetic' : ''
+  const embeddedClass = embedded ? 'portal-embedded' : ''
 
   return (
-    <div ref={rootRef} className={`portal-demo ${kineticClass}`} data-theme="dark">
+    <div ref={rootRef} className={`portal-demo ${kineticClass} ${embeddedClass}`} data-theme="dark" style={portalStyle}>
       <div className="portal-grain" aria-hidden="true" />
       <div className="portal-brand-mark" aria-hidden="true">
         <img src="/ANC_Logo_2023_white.png" alt="" />
