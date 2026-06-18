@@ -468,12 +468,43 @@
   padding: 20px;
 }
 
+.portal-embedded .portal-app-side-client {
+  font-size: 20px;
+}
+
+.portal-embedded .portal-app-support {
+  padding: 12px;
+}
+
 .portal-embedded .portal-app-topbar {
   padding: 20px 24px;
 }
 
 .portal-embedded .portal-app-panel {
-  padding: 22px 24px 26px;
+  padding: 20px 24px 24px;
+}
+
+.portal-embedded .portal-app-hero {
+  min-height: 150px;
+  padding: 22px;
+}
+
+.portal-embedded .portal-app-grid {
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.portal-embedded .portal-app-card {
+  padding: 16px;
+}
+
+.portal-embedded .portal-app-metric {
+  min-height: 100px;
+  padding: 16px;
+}
+
+.portal-embedded .portal-app-row {
+  min-height: 46px;
 }
 
 .portal-app-side {
