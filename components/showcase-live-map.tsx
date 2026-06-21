@@ -1,7 +1,8 @@
 'use client'
 
 import 'leaflet/dist/leaflet.css'
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import { MapContainer, GeoJSON, CircleMarker, Tooltip } from 'react-leaflet'
 import type { LatLngBoundsExpression } from 'leaflet'
 
 export interface ShowcaseMapPoint {
@@ -19,17 +20,40 @@ const US_BOUNDS: LatLngBoundsExpression = [
   [49.384358, -66.93457],
 ]
 
-const NAVY = '#1E2761'
 const CORAL = '#F96167'
 
+// Self-contained landmass: render a bundled US states outline rather than
+// pulling external map tiles. Guarantees the country always shows, on-brand,
+// with no third-party CDN dependency or DNS risk.
+const landStyle = {
+  fillColor: '#222C61',
+  fillOpacity: 0.55,
+  color: '#3A4788',
+  weight: 0.7,
+  opacity: 0.8,
+}
+
 export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[] }) {
+  const [geo, setGeo] = useState<any>(null)
+
+  useEffect(() => {
+    let alive = true
+    fetch('/us-states.geojson')
+      .then((r) => r.json())
+      .then((d) => alive && setGeo(d))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const live = points.filter((p) => p.live)
   const dormant = points.filter((p) => !p.live)
 
   return (
     <MapContainer
       bounds={US_BOUNDS}
-      boundsOptions={{ padding: [12, 12] }}
+      boundsOptions={{ padding: [10, 10] }}
       zoomControl={false}
       attributionControl={false}
       scrollWheelZoom={false}
@@ -37,9 +61,10 @@ export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[]
       dragging={false}
       touchZoom={false}
       keyboard={false}
+      className="anc-live-map"
       style={{ height: '100%', width: '100%', background: 'transparent' }}
     >
-      <TileLayer url="https://{s}.basemap.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png" />
+      {geo && <GeoJSON data={geo} style={() => landStyle} />}
 
       {/* Every venue in the network — quiet background constellation. */}
       {dormant.map((p) => (
@@ -47,12 +72,7 @@ export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[]
           key={p.id}
           center={[p.lat, p.lng]}
           radius={2.5}
-          pathOptions={{
-            color: '#5560A8',
-            fillColor: '#5560A8',
-            fillOpacity: 0.45,
-            weight: 0,
-          }}
+          pathOptions={{ color: '#7E88C8', fillColor: '#7E88C8', fillOpacity: 0.5, weight: 0 }}
         />
       ))}
 
@@ -61,14 +81,9 @@ export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[]
         <CircleMarker
           key={p.id}
           center={[p.lat, p.lng]}
-          radius={7}
+          radius={6.5}
           className="anc-live-pulse"
-          pathOptions={{
-            color: CORAL,
-            fillColor: CORAL,
-            fillOpacity: 0.9,
-            weight: 2,
-          }}
+          pathOptions={{ color: CORAL, fillColor: CORAL, fillOpacity: 0.95, weight: 2 }}
         >
           <Tooltip direction="top" offset={[0, -6]} opacity={1} className="anc-live-tooltip">
             {p.name}
