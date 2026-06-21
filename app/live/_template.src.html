@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANC — Live Service Operations</title>
+<meta name="description" content="ANC Service Operations — a live national picture of every event, every venue, every night, across America.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="/globe/globe.gl.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--blue:#0A52EF;--cyan:#03B8FF;--navy:#002C73;--ink:#070A18;--paper:#F4F7FF}
+html{scroll-behavior:auto}
+body{font-family:'Anybody',ui-sans-serif,system-ui,sans-serif;background:var(--ink);color:#fff;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--blue);color:#fff}
+img{display:block;max-width:100%}
+
+/* HUD */
+.hud{position:fixed;inset:0;z-index:60;pointer-events:none}
+.hud .l{position:absolute;top:18px;left:22px;display:flex;align-items:center;gap:10px}
+.hud .l img{height:22px;width:auto}
+.hud .r{position:absolute;top:20px;right:22px;font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.8);font-variant-numeric:tabular-nums}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);display:inline-block;margin-right:7px;animation:bp 2s infinite}
+@keyframes bp{0%,100%{opacity:1}50%{opacity:.35}}
+.prog{position:fixed;left:0;top:0;height:3px;background:var(--blue);width:0;z-index:80;box-shadow:0 0 10px var(--blue)}
+
+/* ---------- GLOBE STORY (sticky, scroll-scrubbed) ---------- */
+#story{height:560vh;position:relative}
+#story .pin{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;
+  background:radial-gradient(120% 90% at 50% 12%, rgba(10,82,239,.14), transparent 55%),radial-gradient(100% 80% at 50% 120%, rgba(3,184,255,.10), transparent 60%),var(--ink)}
+#globe{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.cap{position:absolute;left:0;right:0;z-index:20;text-align:center;padding:0 8vw;pointer-events:none;opacity:0;transition:opacity .5s ease}
+.cap.show{opacity:1}
+.cap-top{top:13vh}
+.cap-bottom{bottom:13vh}
+.eyebrow{font-size:clamp(.7rem,1.4vw,.92rem);font-weight:800;letter-spacing:.4em;text-transform:uppercase;color:var(--cyan)}
+.cap h2{margin-top:2.4vh;font-size:clamp(2.1rem,5.6vw,4.6rem);font-weight:800;line-height:1.02;letter-spacing:-.02em}
+.cap p{margin-top:1.8vh;font-size:clamp(1rem,1.7vw,1.3rem);font-weight:500;color:rgba(255,255,255,.72);max-width:46ch;margin-left:auto;margin-right:auto}
+.bignum{font-size:clamp(5rem,20vw,18rem);font-weight:900;line-height:.85;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 0 60px rgba(3,184,255,.45)}
+.bignum .s{display:block;margin-top:1vh;font-size:clamp(.9rem,1.7vw,1.25rem);font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.75);text-shadow:none}
+.scrollcue{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%);z-index:20;display:flex;flex-direction:column;align-items:center;gap:9px;font-size:10px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.5);transition:opacity .4s}
+.scrollcue .ln{width:1px;height:38px;background:var(--cyan);animation:cue 1.7s cubic-bezier(.7,0,.3,1) infinite;transform-origin:top}
+@keyframes cue{0%{transform:scaleY(0)}45%{transform:scaleY(1)}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* ---------- legible content acts ---------- */
+section.act{position:relative;z-index:2;padding:16vh 7vw;background:var(--ink);max-width:100vw}
+.act-k{font-size:clamp(.7rem,1.3vw,.85rem);font-weight:800;letter-spacing:.42em;text-transform:uppercase;color:var(--cyan)}
+.act-h{margin-top:2.4vh;font-size:clamp(2.4rem,6vw,5rem);font-weight:900;line-height:.95;letter-spacing:-.03em}
+.act-sub{margin-top:2.4vh;font-size:clamp(1rem,1.6vw,1.25rem);font-weight:500;color:rgba(255,255,255,.66);max-width:60ch}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .8s cubic-bezier(.22,1,.36,1),transform .8s cubic-bezier(.22,1,.36,1)}
+.reveal.in{opacity:1;transform:none}
+
+.stat-grid{margin-top:9vh;display:grid;grid-template-columns:repeat(2,1fr);gap:7vh 6vw}
+@media(min-width:860px){.stat-grid{grid-template-columns:repeat(4,1fr)}}
+.stat .n{font-size:clamp(3rem,7vw,5.6rem);font-weight:900;line-height:.9;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.stat .n.acc{color:var(--cyan)}
+.stat .l{margin-top:1.6vh;font-size:clamp(.72rem,1.1vw,.85rem);font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+
+.bars{margin-top:8vh;display:flex;align-items:flex-end;gap:1.4%;height:200px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;height:100%}
+.bars .bar{width:100%;border-radius:4px 4px 0 0;background:rgba(91,102,176,.5);height:0;transition:height 1s cubic-bezier(.22,1,.36,1)}
+.bars .bar.peak{background:var(--blue)}
+.bars .bl{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+
+.slate{margin-top:8vh;display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:760px){.slate{grid-template-columns:1fr 1fr}}
+@media(min-width:1140px){.slate{grid-template-columns:1fr 1fr 1fr}}
+.ev{display:flex;gap:16px;align-items:flex-start;padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.025);transition:border-color .3s,background .3s}
+.ev:hover{border-color:rgba(3,184,255,.4);background:rgba(3,184,255,.05)}
+.ev .t{width:64px;flex:none}
+.ev .t .tm{font-size:14px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums}
+.ev .t .tg{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-top:2px}
+.ev .nm{font-size:14px;font-weight:600;line-height:1.25}
+.ev .vn{font-size:12px;color:rgba(255,255,255,.45);margin-top:4px}
+
+.mk{margin-top:8vh;display:flex;flex-direction:column;gap:20px}
+.mk .row{display:flex;align-items:center;gap:20px}
+.mk .nm{width:42%;max-width:240px;font-size:clamp(.95rem,1.5vw,1.15rem);font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+.mk .track{flex:1;height:26px;border-radius:5px;background:rgba(255,255,255,.05);overflow:hidden}
+.mk .fill{height:100%;width:0;border-radius:5px;background:rgba(91,102,176,.55);transition:width 1s cubic-bezier(.22,1,.36,1)}
+.mk .fill.peak{background:var(--blue)}
+.mk .v{width:54px;text-align:right;font-weight:900;font-variant-numeric:tabular-nums}
+
+.close{min-height:90vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:radial-gradient(100% 80% at 50% 30%, rgba(10,82,239,.16), transparent 60%),var(--ink)}
+.close h2{font-size:clamp(3.4rem,11vw,9rem);font-weight:900;line-height:.88;letter-spacing:-.04em}
+.close img{height:30px;margin-top:9vh;opacity:.85}
+.close .meta{margin-top:2.4vh;font-size:12px;color:rgba(255,255,255,.4)}
+</style>
+</head>
+<body>
+<script>window.__ANC_MAP__ = {{MAP_JSON}};
+window.__ANC_TONIGHT__ = {events:{{TONIGHT_EVENTS}}, states:{{TONIGHT_STATES}}, venues:{{TONIGHT_VENUES}}};</script>
+
+<div class="hud">
+  <div class="l"><img src="/brand-2026/anc-logo-main-white-transparent.png" alt="ANC"><span style="font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.6)">Service Operations</span></div>
+  <div class="r"><span class="dot"></span><span id="clock">--:--:--</span> ET</div>
+</div>
+<div class="prog" id="prog"></div>
+
+<!-- ===== GLOBE STORY ===== -->
+<div id="story">
+  <div class="pin">
+    <div id="globe"></div>
+
+    <div class="cap cap-top" id="cap1">
+      <div class="eyebrow">Every night, across America</div>
+      <h2>It starts with one event.</h2>
+      <p>Somewhere right now, ANC is bringing a venue to life.</p>
+    </div>
+
+    <div class="cap cap-bottom" id="cap2">
+      <div class="bignum"><span id="ticker">0</span><span class="s">events live tonight</span></div>
+    </div>
+
+    <div class="cap cap-bottom" id="cap3">
+      <div class="eyebrow">Coast to coast</div>
+      <h2 id="cap3h">Across the country, all at once.</h2>
+      <p><span id="t-states">0</span> states · <span id="t-venues">0</span> venues lit tonight.</p>
+    </div>
+
+    <div class="cap cap-top" id="cap4">
+      <div class="eyebrow">ANC Service Operations</div>
+      <h2>One operation. Every night.</h2>
+    </div>
+
+    <div class="scrollcue" id="cue"><span>Scroll</span><span class="ln"></span></div>
+  </div>
+</div>
+
+<!-- ===== THE SCALE ===== -->
+<section class="act">
+  <div class="reveal"><div class="act-k">The Scale</div><h2 class="act-h">A year in motion.</h2>
+  <p class="act-sub">Every game, concert, and show ANC supports — coordinated end to end, from the morning schedule to the final post-game close-out.</p></div>
+  <div class="stat-grid">
+    <div class="stat reveal"><div class="n acc" data-count="{{YTD}}">0</div><div class="l">Events coordinated in 2026</div></div>
+    <div class="stat reveal"><div class="n" data-count="{{ALLTIME}}">0</div><div class="l">Events all-time</div></div>
+    <div class="stat reveal"><div class="n" data-count="{{VENUES}}">0</div><div class="l">Venues in network</div></div>
+    <div class="stat reveal"><div class="n" data-count="{{STATES}}">0</div><div class="l">States covered</div></div>
+  </div>
+  <div class="reveal" style="margin-top:11vh"><div class="act-k">2026 momentum · events per month</div>
+    <div class="bars" id="bars"></div>
+  </div>
+</section>
+
+<!-- ===== TONIGHT'S SLATE ===== -->
+<section class="act">
+  <div class="reveal"><div class="act-k">Tonight</div><h2 class="act-h">Tonight's slate.</h2>
+  <p class="act-sub">{{TONIGHT_EVENTS}} events, live across {{TONIGHT_STATES}} states — every one tracked in real time.</p></div>
+  <div class="slate reveal" id="slate"></div>
+</section>
+
+<!-- ===== SERVICE DESK ===== -->
+<section class="act">
+  <div class="reveal"><div class="act-k">The Service Desk</div><h2 class="act-h">Handled, at scale.</h2>
+  <p class="act-sub">When something needs attention at a venue, it's logged, routed, and closed out.</p></div>
+  <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);max-width:900px">
+    <div class="stat reveal"><div class="n" data-count="{{TICKETS}}">0</div><div class="l">Service tickets handled</div></div>
+    <div class="stat reveal"><div class="n acc" data-count="{{RESOLVED_PCT}}" data-suffix="%">0</div><div class="l">Resolved</div></div>
+  </div>
+</section>
+
+<!-- ===== MARKETS ===== -->
+<section class="act">
+  <div class="reveal"><div class="act-k">Coast to coast</div><h2 class="act-h">Busiest markets.</h2>
+  <p class="act-sub">Events coordinated this year, by market.</p></div>
+  <div class="mk reveal" id="markets"></div>
+</section>
+
+<!-- ===== CLOSE ===== -->
+<section class="close act">
+  <div class="reveal"><div class="act-k" style="text-align:center">This runs</div>
+  <h2>Every night.</h2>
+  <img src="/brand-2026/anc-logo-main-white-transparent.png" alt="ANC">
+  <div class="meta" id="foot">ANC Service Operations · live</div></div>
+</section>
+
+<script>
+window.__ANC_EXTRA__ = { monthly: {{MONTHLY_JSON}}, markets: {{MARKETS_JSON}}, slate: {{SLATE_JSON}} };
+</script>
+<script src="/live-app.js"></script>
+</body>
+</html>

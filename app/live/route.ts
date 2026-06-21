@@ -43,6 +43,30 @@ export async function GET() {
        FROM venues v
        WHERE v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.is_active IS NOT FALSE`
     )
+    const monthly = await query(
+      `SELECT to_char(date_trunc('month', event_date), 'Mon') AS mon,
+              EXTRACT(MONTH FROM event_date)::int AS mnum, COUNT(*) AS events
+       FROM events
+       WHERE event_date >= date_trunc('year', CURRENT_DATE)
+         AND event_date < date_trunc('year', CURRENT_DATE) + interval '1 year'
+       GROUP BY date_trunc('month', event_date), to_char(date_trunc('month', event_date), 'Mon'), EXTRACT(MONTH FROM event_date)
+       ORDER BY mnum`
+    )
+    const topMarkets = await query(
+      `SELECT m.name, COUNT(e.id) AS events
+       FROM markets m JOIN venues v ON v.market_id = m.id
+       JOIN events e ON e.venue_id = v.id AND e.event_date >= date_trunc('year', CURRENT_DATE)
+       GROUP BY m.name ORDER BY events DESC LIMIT 6`
+    )
+    const slate = await query(
+      `SELECT e.summary, v.name AS venue,
+              COALESCE(v.requires_assignment, true) AS venue_req, e.requires_staffing AS ev_req,
+              CASE WHEN TO_CHAR(e.start_time AT TIME ZONE 'America/New_York','HH24:MI')='00:00' THEN 'TBD'
+                   ELSE TO_CHAR(e.start_time AT TIME ZONE 'America/New_York','HH12:MI AM') END AS start_et
+       FROM events e LEFT JOIN venues v ON v.id = e.venue_id
+       WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
+       ORDER BY e.start_time ASC NULLS LAST`
+    )
 
     const t = totals.rows[0] || {}
     const ticketsTotal = Number(tickets.rows[0]?.total) || 0
@@ -70,6 +94,18 @@ export async function GET() {
       TONIGHT_STATES: num(tonightStates.rows[0]?.states),
       TONIGHT_VENUES: num(tonight.rows[0]?.venues),
       MAP_JSON: JSON.stringify(mapPoints),
+      MONTHLY_JSON: JSON.stringify(
+        monthly.rows.map((r: any) => ({ mon: r.mon, events: Number(r.events) || 0 }))
+      ),
+      MARKETS_JSON: JSON.stringify(
+        topMarkets.rows.map((r: any) => ({ name: r.name, events: Number(r.events) || 0 }))
+      ),
+      SLATE_JSON: JSON.stringify(
+        slate.rows.map((r: any) => {
+          const needs = r.ev_req === true ? true : r.ev_req === false ? false : r.venue_req !== false
+          return { t: r.start_et, s: r.summary, v: r.venue, live: needs }
+        })
+      ),
     }
 
     let html = TEMPLATE
