@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
+import { motion, useScroll, useSpring, useInView } from 'framer-motion'
 import type { ShowcaseMapPoint } from '@/components/showcase-live-map'
 
-// Map is leaflet-based — must only render client-side.
 const ShowcaseLiveMap = dynamic(() => import('@/components/showcase-live-map'), {
   ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse rounded-3xl bg-white/[0.03]" />,
+  loading: () => <div className="h-full w-full animate-pulse bg-white/[0.02]" />,
 })
+
+const CORAL = '#F96167'
+const YELLOW = '#F9E795'
+const CREAM = '#F1EDE3'
 
 type TonightEvent = {
   id: string
@@ -24,65 +27,88 @@ type ShowcaseData = {
   ok: boolean
   generatedAt: string
   cumulative: {
-    allTimeEvents: number
-    ytdEvents: number
-    last30Events: number
-    venues: number
-    venuesWithEvents: number
-    states: number
-    markets: number
-    year: number
+    allTimeEvents: number; ytdEvents: number; last30Events: number; last7Events: number
+    venues: number; venuesWithEvents: number; states: number; markets: number; year: number
   }
   tonight: { events: number; venues: number; states: number; list: TonightEvent[] }
+  topMarkets: { name: string; events: number }[]
+  monthly: { mon: string; events: number }[]
+  service: { ticketsTotal: number; ticketsResolved: number; ticketsOpen: number }
   mapPoints: ShowcaseMapPoint[]
 }
 
-const NAVY = '#1E2761'
-const CORAL = '#F96167'
-const YELLOW = '#F9E795'
+/* ---------- primitives ---------- */
 
-function useCountUp(target: number, duration = 1400) {
-  const [value, setValue] = useState(0)
-  const started = useRef(false)
+function Counter({ value, className, duration = 1500 }: { value: number; className?: string; duration?: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-12% 0px' })
+  const [n, setN] = useState(0)
   useEffect(() => {
-    if (started.current) {
-      setValue(target)
-      return
-    }
-    started.current = true
+    if (!inView) return
     let raf = 0
     const start = performance.now()
     const tick = (now: number) => {
       const p = Math.min(1, (now - start) / duration)
-      // easeOutExpo
       const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p)
-      setValue(Math.round(target * eased))
+      setN(Math.round(value * eased))
       if (p < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [target, duration])
-  return value
+  }, [inView, value, duration])
+  return <span ref={ref} className={className}>{n.toLocaleString()}</span>
 }
 
-function Stat({ value, label, accent }: { value: number; label: string; accent?: boolean }) {
-  const n = useCountUp(value)
+function Reveal({ children, y = 26, delay = 0, className }: any) {
   return (
-    <div className="flex flex-col">
-      <span
-        className="font-serif text-5xl font-black leading-none tracking-tight sm:text-6xl"
-        style={{ color: accent ? CORAL : '#fff' }}
-      >
-        {n.toLocaleString()}
-      </span>
-      <span className="mt-2 text-xs font-bold uppercase tracking-[0.22em] text-white/55">{label}</span>
-    </div>
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-10% 0px' }}
+      transition={{ duration: 0.75, delay, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
   )
 }
+
+function Slam({ children, className, delay = 0 }: any) {
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, scale: 1.14, filter: 'blur(10px)' }}
+      whileInView={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      viewport={{ once: true, margin: '-15% 0px' }}
+      transition={{ duration: 0.7, delay, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function ActLabel({ no, title }: { no: string; title: string }) {
+  return (
+    <Reveal>
+      <p className="text-[11px] font-bold uppercase tracking-[0.5em]" style={{ color: CORAL }}>
+        {no}
+      </p>
+      <h2 className="mt-4 text-5xl font-black uppercase leading-[0.9] tracking-tight sm:text-7xl kinetic-wide">
+        {title}
+      </h2>
+    </Reveal>
+  )
+}
+
+/* ---------- page ---------- */
 
 export default function LiveShowcaseClient() {
   const [data, setData] = useState<ShowcaseData | null>(null)
   const [error, setError] = useState(false)
+  const [clock, setClock] = useState('')
+
+  const { scrollYProgress } = useScroll()
+  const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 30, mass: 0.4 })
 
   useEffect(() => {
     let alive = true
@@ -90,194 +116,318 @@ export default function LiveShowcaseClient() {
       try {
         const r = await fetch('/api/live-showcase', { cache: 'no-store' })
         const j = await r.json()
-        if (alive && j?.ok) {
-          setData(j)
-          setError(false)
-        } else if (alive) {
-          setError(true)
-        }
-      } catch {
-        if (alive) setError(true)
-      }
+        if (alive && j?.ok) { setData(j); setError(false) }
+        else if (alive) setError(true)
+      } catch { if (alive) setError(true) }
     }
     load()
-    const iv = setInterval(load, 60_000) // keep the page live without a reload
-    return () => {
-      alive = false
-      clearInterval(iv)
-    }
+    const iv = setInterval(load, 60_000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [])
+
+  useEffect(() => {
+    const tick = () =>
+      setClock(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/New_York' }))
+    tick()
+    const iv = setInterval(tick, 1000)
+    return () => clearInterval(iv)
   }, [])
 
   const todayLabel = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'America/New_York',
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
   })
+
+  const c = data?.cumulative
+  const resolvedPct = data?.service ? Math.round((data.service.ticketsResolved / Math.max(1, data.service.ticketsTotal)) * 100) : 0
+  const monthlyMax = data ? Math.max(1, ...data.monthly.map((m) => m.events)) : 1
+  const marketMax = data ? Math.max(1, ...data.topMarkets.map((m) => m.events)) : 1
 
   return (
     <div
-      className="min-h-screen w-full text-white"
+      className="relative min-h-screen w-full overflow-x-clip text-white"
       style={{
-        background: `radial-gradient(1200px 600px at 20% -10%, rgba(249,97,103,0.18), transparent 55%),
-                     radial-gradient(1000px 700px at 100% 0%, rgba(30,39,97,0.9), transparent 60%),
-                     linear-gradient(180deg, #0B0E24 0%, #0A0C1C 100%)`,
+        fontFamily: 'var(--font-anybody), ui-sans-serif, system-ui, sans-serif',
+        background:
+          'radial-gradient(1100px 620px at 18% -8%, rgba(249,97,103,0.16), transparent 55%), radial-gradient(900px 600px at 100% 4%, rgba(30,39,97,0.85), transparent 60%), linear-gradient(180deg, #070912 0%, #060810 100%)',
       }}
     >
-      <div className="mx-auto max-w-6xl px-6 py-8 sm:px-10 sm:py-12">
-        {/* Top bar */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-7 w-auto" />
-            <span className="hidden text-xs font-bold uppercase tracking-[0.25em] text-white/45 sm:inline">
-              Service Operations
-            </span>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
-            <span className="relative flex h-2 w-2">
-              <span
-                className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
-                style={{ background: CORAL }}
-              />
-              <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: CORAL }} />
-            </span>
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/70">Live</span>
-          </div>
-        </div>
+      {/* frame chrome */}
+      <div className="anc-grain" aria-hidden />
+      <div className="anc-vignette" aria-hidden />
 
-        {/* Hero — cumulative scale */}
-        <motion.section
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-16 sm:mt-24"
+      {/* HUD */}
+      <div className="pointer-events-none fixed inset-0 z-[70] mix-blend-difference">
+        <div className="absolute left-5 top-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
+          <span>ANC · Service Operations</span>
+        </div>
+        <div className="absolute right-5 top-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white kinetic-num">
+          LIVE · {clock} ET
+        </div>
+        <div className="absolute bottom-4 left-5 hidden text-[10px] font-bold uppercase tracking-[0.28em] text-white sm:block">
+          National Coverage
+        </div>
+        <div className="absolute bottom-4 right-5 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
+          Est. {c?.year ?? 2026}
+        </div>
+      </div>
+
+      {/* scroll progress */}
+      <motion.div className="fixed bottom-0 left-0 right-0 z-[80] h-[3px] origin-left" style={{ background: CORAL, scaleX: progress }} />
+
+      {/* ============ 00 · LEADER ============ */}
+      <section className="relative flex min-h-screen flex-col items-center justify-center px-6 text-center">
+        <Reveal>
+          <img src="/ANC_Logo_2023_white.png" alt="ANC" className="mx-auto h-10 w-auto sm:h-12" />
+        </Reveal>
+        <Reveal delay={0.15}>
+          <p className="mt-10 text-xs font-bold uppercase tracking-[0.6em] text-white/55">Service Operations</p>
+        </Reveal>
+        <motion.div
+          className="mx-auto mt-7 h-[2px] w-44"
+          style={{ background: CORAL }}
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 1, delay: 0.5, ease: [0.65, 0, 0.3, 1] }}
+        />
+        <Reveal delay={0.5}>
+          <p className="mt-7 max-w-md text-sm leading-relaxed text-white/45">
+            A live national picture of what ANC runs — every event, every venue, every night.
+          </p>
+        </Reveal>
+        <motion.div
+          className="absolute bottom-10 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}
         >
-          <p className="text-sm font-bold uppercase tracking-[0.35em]" style={{ color: YELLOW }}>
+          <span className="text-[10px] font-bold uppercase tracking-[0.34em] text-white/40">Scroll</span>
+          <motion.div className="h-10 w-px" style={{ background: CORAL }}
+            animate={{ scaleY: [0, 1, 0] }} transition={{ duration: 1.7, repeat: Infinity, ease: [0.7, 0, 0.3, 1] }} />
+        </motion.div>
+      </section>
+
+      {/* ============ 01 · THESIS ============ */}
+      <section className="relative flex min-h-screen flex-col justify-center px-6 sm:px-14">
+        <Reveal>
+          <p className="text-sm font-bold uppercase tracking-[0.4em]" style={{ color: YELLOW }}>
             Every night, across America
           </p>
-          <h1 className="mt-5 max-w-4xl font-serif text-[3.25rem] font-black leading-[0.95] tracking-[-0.04em] sm:text-7xl md:text-8xl">
-            {data ? (
-              <>
-                <span style={{ color: CORAL }}>{data.cumulative.ytdEvents.toLocaleString()}</span> events
-                <br />
-                coordinated in {data.cumulative.year}.
-              </>
-            ) : (
-              <span className="opacity-40">Loading the national slate…</span>
-            )}
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-white/65 sm:text-xl">
-            One platform runs every game, concert, and show ANC supports — from the morning schedule to
-            the final post-game close-out. This is that operation, live.
+        </Reveal>
+        <h1 className="mt-7 max-w-5xl text-[3.4rem] font-black leading-[0.92] tracking-[-0.03em] sm:text-8xl md:text-9xl">
+          <Slam>
+            <span style={{ color: CORAL }} className="kinetic-num kinetic-wide">
+              {c ? <Counter value={c.ytdEvents} /> : '—'}
+            </span>
+          </Slam>
+          <Slam delay={0.1}>
+            <span className="block kinetic-wide">events coordinated</span>
+          </Slam>
+          <Slam delay={0.18}>
+            <span className="block kinetic-wide">in {c?.year ?? 2026}.</span>
+          </Slam>
+        </h1>
+        <Reveal delay={0.2}>
+          <p className="mt-9 max-w-2xl text-lg leading-relaxed text-white/60 sm:text-xl">
+            One platform runs every game, concert, and show ANC supports — from the morning schedule to the final
+            post-game close-out. This is that operation, live.
           </p>
+        </Reveal>
+      </section>
 
-          {data && (
-            <div className="mt-12 grid grid-cols-2 gap-8 sm:flex sm:flex-wrap sm:gap-16">
-              <Stat value={data.cumulative.allTimeEvents} label="Events all-time" />
-              <Stat value={data.cumulative.venues} label="Venues in network" />
-              <Stat value={data.cumulative.states} label="States covered" />
-              <Stat value={data.cumulative.markets} label="Markets" />
-            </div>
-          )}
-        </motion.section>
+      {/* ============ ACT I · THE SCALE ============ */}
+      <section className="relative px-6 py-28 sm:px-14">
+        <ActLabel no="Act I" title="The Scale" />
 
-        {/* Live tonight band */}
-        <motion.section
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-24 grid grid-cols-1 gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center"
-        >
-          <div>
-            <p className="text-sm font-bold uppercase tracking-[0.3em]" style={{ color: YELLOW }}>
-              Live right now · {todayLabel}
-            </p>
-            {data ? (
-              <>
-                <div className="mt-6 flex items-end gap-4">
-                  <span className="font-serif text-7xl font-black leading-none" style={{ color: '#fff' }}>
-                    {data.tonight.events}
-                  </span>
-                  <span className="mb-2 text-xl font-semibold text-white/70">
-                    events tonight
-                  </span>
-                </div>
-                <p className="mt-4 text-lg text-white/60">
-                  across <span className="font-bold text-white">{data.tonight.states} states</span> and{' '}
-                  <span className="font-bold text-white">{data.tonight.venues} venues</span> — coordinated
-                  in real time.
-                </p>
-              </>
-            ) : (
-              <div className="mt-6 h-24 w-48 animate-pulse rounded-2xl bg-white/[0.04]" />
-            )}
-          </div>
-
-          <div className="relative h-[340px] overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] sm:h-[440px]">
-            {data && <ShowcaseLiveMap points={data.mapPoints} />}
-            <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 backdrop-blur">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: CORAL }} />
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">
-                Live tonight
+        <div className="mt-20 grid grid-cols-2 gap-x-8 gap-y-16 sm:grid-cols-4">
+          {[
+            { v: c?.allTimeEvents ?? 0, l: 'Events all-time' },
+            { v: c?.venues ?? 0, l: 'Venues in network' },
+            { v: c?.states ?? 0, l: 'States covered' },
+            { v: c?.markets ?? 0, l: 'Markets' },
+          ].map((s, i) => (
+            <Slam key={s.l} delay={i * 0.06} className="flex flex-col">
+              <span className="text-5xl font-black leading-none tracking-tight sm:text-7xl kinetic-num kinetic-wide">
+                <Counter value={s.v} />
               </span>
-            </div>
-          </div>
-        </motion.section>
+              <span className="mt-3 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">{s.l}</span>
+            </Slam>
+          ))}
+        </div>
 
-        {/* Tonight's slate — the proof */}
-        {data && data.tonight.list.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-24"
-          >
+        {/* momentum curve */}
+        {data && data.monthly.length > 0 && (
+          <Reveal delay={0.1} className="mt-24">
             <div className="flex items-baseline justify-between">
-              <h2 className="font-serif text-3xl font-black tracking-tight sm:text-4xl">Tonight’s slate</h2>
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-white/40">
-                {data.tonight.list.length} events
-              </span>
+              <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-white/50">
+                {c?.year} momentum · events per month
+              </p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: CORAL }}>
+                {c ? <Counter value={c.last30Events} /> : '—'} in the last 30 days
+              </p>
             </div>
-            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {data.tonight.list.map((ev) => (
-                <div
-                  key={ev.id}
-                  className="flex items-start gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition-colors hover:border-white/15 hover:bg-white/[0.05]"
-                >
-                  <div className="mt-0.5 flex w-20 shrink-0 flex-col">
-                    <span className="text-sm font-bold" style={{ color: ev.needs_staffing ? CORAL : '#8E97D6' }}>
+            <div className="mt-6 flex h-44 items-end gap-1.5 sm:gap-3">
+              {data.monthly.map((m, i) => {
+                const h = Math.max(4, Math.round((m.events / monthlyMax) * 100))
+                const peak = m.events === monthlyMax
+                return (
+                  <div key={i} className="flex flex-1 flex-col items-center justify-end gap-2">
+                    <motion.div
+                      className="w-full rounded-t-sm"
+                      style={{ background: peak ? CORAL : 'rgba(126,136,190,0.5)' }}
+                      initial={{ height: 0 }}
+                      whileInView={{ height: `${h}%` }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.8, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-white/35">{m.mon}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Reveal>
+        )}
+      </section>
+
+      {/* ============ ACT II · TONIGHT — THE MAP ============ */}
+      <section className="relative px-6 pt-28 sm:px-14">
+        <ActLabel no="Act II" title="Tonight, Live" />
+        <Reveal delay={0.1}>
+          <p className="mt-6 max-w-2xl text-lg text-white/60">
+            {todayLabel}. Each light is a venue ANC is running right now — drag, zoom, explore the night.
+          </p>
+        </Reveal>
+      </section>
+
+      <div className="relative mt-10 h-[78vh] w-full overflow-hidden border-y border-white/10">
+        {data && <ShowcaseLiveMap points={data.mapPoints} interactive />}
+        {/* overlay stat card — does not block map interaction */}
+        <div className="pointer-events-none absolute left-5 top-5 z-[20] sm:left-10 sm:top-10">
+          {data && (
+            <Slam>
+              <div className="flex items-end gap-3">
+                <span className="text-7xl font-black leading-none kinetic-num kinetic-wide sm:text-8xl">
+                  {data.tonight.events}
+                </span>
+                <span className="mb-2 text-base font-semibold uppercase tracking-[0.2em] text-white/70">events tonight</span>
+              </div>
+              <p className="mt-3 text-base text-white/65 sm:text-lg">
+                across <span className="font-bold text-white">{data.tonight.states} states</span> ·{' '}
+                <span className="font-bold text-white">{data.tonight.venues} venues</span>
+              </p>
+            </Slam>
+          )}
+        </div>
+        <div className="pointer-events-none absolute bottom-5 left-5 z-[20] flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 backdrop-blur sm:left-10">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: CORAL }} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/80">Live tonight</span>
+        </div>
+      </div>
+
+      {/* ============ ACT III · THE SLATE ============ */}
+      {data && data.tonight.list.length > 0 && (
+        <section className="relative px-6 py-28 sm:px-14">
+          <ActLabel no="Act III" title="Tonight's Slate" />
+          <div className="mt-14 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.tonight.list.map((ev, i) => (
+              <Reveal key={ev.id} delay={Math.min(i * 0.03, 0.4)}>
+                <div className="flex h-full items-start gap-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4 transition-colors hover:border-white/20 hover:bg-white/[0.05]">
+                  <div className="flex w-16 shrink-0 flex-col">
+                    <span className="text-sm font-bold kinetic-num" style={{ color: ev.needs_staffing ? CORAL : '#8E97D6' }}>
                       {ev.start_et}
                     </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-white/35">
                       {ev.needs_staffing ? 'Live event' : 'Coverage'}
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-white/90">{ev.summary}</p>
-                    <p className="mt-0.5 truncate text-sm text-white/50">{ev.venue_name || 'ANC venue'}</p>
+                    <p className="text-[14px] font-semibold leading-tight text-white/90">{ev.summary}</p>
+                    <p className="mt-1 truncate text-xs text-white/45">{ev.venue_name || 'ANC venue'}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </motion.section>
-        )}
-
-        {/* Footer */}
-        <footer className="mt-24 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-8 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3">
-            <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-5 w-auto opacity-70" />
-            <span className="text-sm text-white/45">ANC Service Operations</span>
+              </Reveal>
+            ))}
           </div>
-          <span className="text-xs text-white/35">
+        </section>
+      )}
+
+      {/* ============ ACT IV · THE SERVICE DESK ============ */}
+      {data && (
+        <section className="relative px-6 py-28 sm:px-14">
+          <ActLabel no="Act IV" title="The Service Desk" />
+          <Reveal delay={0.1}>
+            <p className="mt-6 max-w-2xl text-lg text-white/60">
+              When something needs attention at a venue, it's tracked, routed, and closed out — at scale.
+            </p>
+          </Reveal>
+          <div className="mt-16 grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-3">
+            {[
+              { v: data.service.ticketsTotal, l: 'Service tickets handled', accent: false, suffix: '' },
+              { v: resolvedPct, l: 'Resolved', accent: true, suffix: '%' },
+              { v: data.service.ticketsOpen, l: 'Open & actively managed', accent: false, suffix: '' },
+            ].map((s, i) => (
+              <Slam key={s.l} delay={i * 0.08} className="flex flex-col">
+                <span className="text-6xl font-black leading-none tracking-tight sm:text-8xl kinetic-num kinetic-wide" style={{ color: s.accent ? CORAL : '#fff' }}>
+                  <Counter value={s.v} />{s.suffix}
+                </span>
+                <span className="mt-3 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">{s.l}</span>
+              </Slam>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ============ REACH · MARKETS ============ */}
+      {data && data.topMarkets.length > 0 && (
+        <section className="relative px-6 py-28 sm:px-14">
+          <ActLabel no="Reach" title="Coast to Coast" />
+          <Reveal delay={0.1}>
+            <p className="mt-6 max-w-2xl text-lg text-white/60">Busiest markets this year by events coordinated.</p>
+          </Reveal>
+          <div className="mt-14 space-y-5">
+            {data.topMarkets.map((m, i) => (
+              <Reveal key={m.name} delay={i * 0.05}>
+                <div className="flex items-center gap-5">
+                  <span className="w-44 shrink-0 text-base font-bold uppercase tracking-wide text-white/85 sm:w-56 sm:text-lg">
+                    {m.name}
+                  </span>
+                  <div className="relative h-7 flex-1 overflow-hidden rounded-sm bg-white/[0.04]">
+                    <motion.div
+                      className="h-full rounded-sm"
+                      style={{ background: i === 0 ? CORAL : 'rgba(126,136,190,0.55)' }}
+                      initial={{ width: 0 }}
+                      whileInView={{ width: `${Math.round((m.events / marketMax) * 100)}%` }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.9, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-base font-black kinetic-num sm:text-lg">{m.events}</span>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ============ CLOSE ============ */}
+      <section className="relative flex min-h-[80vh] flex-col items-center justify-center px-6 text-center">
+        <Reveal>
+          <p className="text-xs font-bold uppercase tracking-[0.5em]" style={{ color: YELLOW }}>This runs</p>
+        </Reveal>
+        <Slam delay={0.1}>
+          <h2 className="mt-5 text-6xl font-black uppercase leading-[0.9] tracking-tight sm:text-8xl md:text-9xl kinetic-wide">
+            Every<br />night.
+          </h2>
+        </Slam>
+        <Reveal delay={0.2}>
+          <img src="/ANC_Logo_2023_white.png" alt="ANC" className="mx-auto mt-16 h-8 w-auto opacity-80" />
+        </Reveal>
+        <Reveal delay={0.3}>
+          <p className="mt-5 text-sm text-white/45">ANC Service Operations</p>
+          <p className="mt-1 text-xs text-white/30">
             {error
               ? 'Reconnecting to live operations…'
               : data
               ? `Figures update live · last refreshed ${new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`
               : 'Connecting to live operations…'}
-          </span>
-        </footer>
-      </div>
+          </p>
+        </Reveal>
+      </section>
     </div>
   )
 }

@@ -1,7 +1,16 @@
 import type { Metadata } from 'next'
+import { Anybody } from 'next/font/google'
 import LiveShowcaseClient from './LiveShowcaseClient'
 
 export const dynamic = 'force-dynamic'
+
+// The Kinetic Max typeface — variable weight + width, self-hosted by Next.
+const anybody = Anybody({
+  subsets: ['latin'],
+  axes: ['wdth'],
+  display: 'swap',
+  variable: '--font-anybody',
+})
 
 export const metadata: Metadata = {
   title: 'ANC — Live Service Operations',
@@ -10,5 +19,9 @@ export const metadata: Metadata = {
 }
 
 export default function LivePage() {
-  return <LiveShowcaseClient />
+  return (
+    <div className={anybody.variable}>
+      <LiveShowcaseClient />
+    </div>
+  )
 }

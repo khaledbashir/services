@@ -34,6 +34,7 @@ export async function GET() {
          COUNT(*)                                            AS all_events,
          COUNT(*) FILTER (WHERE event_date >= date_trunc('year', CURRENT_DATE)) AS ytd_events,
          COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 30)                AS last30_events,
+         COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 7)                 AS last7_events,
          COUNT(DISTINCT venue_id)                            AS venues_with_events
        FROM events`
     )
@@ -43,6 +44,39 @@ export async function GET() {
     )
 
     const marketTotals = await query(`SELECT COUNT(*) AS markets FROM markets`)
+
+    // Service desk — volume and resolution. (SLA-met rates are deliberately
+    // NOT surfaced: only a fraction of tickets are SLA-measured and the rate
+    // would understate the operation rather than impress.)
+    const tickets = await query(
+      `SELECT COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE status = 'closed') AS resolved,
+              COUNT(*) FILTER (WHERE status IN ('new','on_hold','in_progress','escalated')) AS open
+       FROM tickets`
+    )
+
+    // Top markets by events this year — the geographic reach story.
+    const topMarkets = await query(
+      `SELECT m.name, COUNT(e.id) AS events
+       FROM markets m
+       JOIN venues v ON v.market_id = m.id
+       JOIN events e ON e.venue_id = v.id AND e.event_date >= date_trunc('year', CURRENT_DATE)
+       GROUP BY m.name
+       ORDER BY events DESC
+       LIMIT 6`
+    )
+
+    // Month-by-month volume this calendar year — the momentum curve.
+    const monthly = await query(
+      `SELECT to_char(date_trunc('month', event_date), 'Mon') AS mon,
+              EXTRACT(MONTH FROM event_date)::int AS mnum,
+              COUNT(*) AS events
+       FROM events
+       WHERE event_date >= date_trunc('year', CURRENT_DATE)
+         AND event_date < date_trunc('year', CURRENT_DATE) + interval '1 year'
+       GROUP BY date_trunc('month', event_date), to_char(date_trunc('month', event_date), 'Mon'), EXTRACT(MONTH FROM event_date)
+       ORDER BY mnum`
+    )
 
     // Distinct US states inferred from "ST 12345" in the venue address.
     const stateTotals = await query(
@@ -135,11 +169,25 @@ export async function GET() {
           allTimeEvents: Number(t.all_events) || 0,
           ytdEvents: Number(t.ytd_events) || 0,
           last30Events: Number(t.last30_events) || 0,
+          last7Events: Number(t.last7_events) || 0,
           venues: Number(venueTotals.rows[0]?.active_venues) || 0,
           venuesWithEvents: Number(t.venues_with_events) || 0,
           states: Number(stateTotals.rows[0]?.states) || 0,
           markets: Number(marketTotals.rows[0]?.markets) || 0,
           year: new Date().getFullYear(),
+        },
+        topMarkets: topMarkets.rows.map((r: any) => ({
+          name: r.name,
+          events: Number(r.events) || 0,
+        })),
+        monthly: monthly.rows.map((r: any) => ({
+          mon: r.mon,
+          events: Number(r.events) || 0,
+        })),
+        service: {
+          ticketsTotal: Number(tickets.rows[0]?.total) || 0,
+          ticketsResolved: Number(tickets.rows[0]?.resolved) || 0,
+          ticketsOpen: Number(tickets.rows[0]?.open) || 0,
         },
         tonight: {
           events: tonightRows.length,

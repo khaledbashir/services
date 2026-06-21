@@ -2,8 +2,8 @@
 
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useState } from 'react'
-import { MapContainer, GeoJSON, CircleMarker, Tooltip } from 'react-leaflet'
-import type { LatLngBoundsExpression } from 'leaflet'
+import { MapContainer, GeoJSON, CircleMarker, Marker, Tooltip, ZoomControl } from 'react-leaflet'
+import L, { type LatLngBoundsExpression } from 'leaflet'
 
 export interface ShowcaseMapPoint {
   id: string
@@ -13,8 +13,6 @@ export interface ShowcaseMapPoint {
   live: boolean
 }
 
-// Continental-US framing. Locked, non-interactive — this is a hero visual on a
-// showcase page, not a tool the viewer pans around.
 const US_BOUNDS: LatLngBoundsExpression = [
   [24.396308, -125.0],
   [49.384358, -66.93457],
@@ -22,18 +20,30 @@ const US_BOUNDS: LatLngBoundsExpression = [
 
 const CORAL = '#F96167'
 
-// Self-contained landmass: render a bundled US states outline rather than
-// pulling external map tiles. Guarantees the country always shows, on-brand,
-// with no third-party CDN dependency or DNS risk.
+// Bundled US states outline rendered as the landmass — no external tiles.
 const landStyle = {
-  fillColor: '#222C61',
-  fillOpacity: 0.55,
+  fillColor: '#1A2151',
+  fillOpacity: 0.65,
   color: '#3A4788',
   weight: 0.7,
-  opacity: 0.8,
+  opacity: 0.85,
 }
 
-export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[] }) {
+// A glowing light column rising from a live venue — "the country at night."
+const beamIcon = L.divIcon({
+  className: 'anc-beam-icon',
+  html: '<div class="anc-beamwrap"><div class="anc-beam-col"></div><div class="anc-beam-base"></div></div>',
+  iconSize: [12, 54],
+  iconAnchor: [6, 50],
+})
+
+export default function ShowcaseLiveMap({
+  points,
+  interactive = true,
+}: {
+  points: ShowcaseMapPoint[]
+  interactive?: boolean
+}) {
   const [geo, setGeo] = useState<any>(null)
 
   useEffect(() => {
@@ -53,42 +63,39 @@ export default function ShowcaseLiveMap({ points }: { points: ShowcaseMapPoint[]
   return (
     <MapContainer
       bounds={US_BOUNDS}
-      boundsOptions={{ padding: [10, 10] }}
+      boundsOptions={{ padding: [16, 16] }}
+      minZoom={3}
+      maxZoom={9}
       zoomControl={false}
       attributionControl={false}
       scrollWheelZoom={false}
-      doubleClickZoom={false}
-      dragging={false}
-      touchZoom={false}
+      doubleClickZoom={interactive}
+      dragging={interactive}
+      touchZoom={interactive}
       keyboard={false}
-      className="anc-live-map"
-      style={{ height: '100%', width: '100%', background: 'transparent' }}
+      className="anc-map-dark"
+      style={{ height: '100%', width: '100%', background: '#070912' }}
     >
+      {interactive && <ZoomControl position="bottomright" />}
       {geo && <GeoJSON data={geo} style={() => landStyle} />}
 
-      {/* Every venue in the network — quiet background constellation. */}
+      {/* Quiet background constellation — every venue in the network. */}
       {dormant.map((p) => (
         <CircleMarker
           key={p.id}
           center={[p.lat, p.lng]}
-          radius={2.5}
-          pathOptions={{ color: '#7E88C8', fillColor: '#7E88C8', fillOpacity: 0.5, weight: 0 }}
+          radius={2.2}
+          pathOptions={{ color: '#6E78BE', fillColor: '#6E78BE', fillOpacity: 0.45, weight: 0 }}
         />
       ))}
 
-      {/* Tonight — glowing, pulsing, with a name on hover. */}
+      {/* Tonight — glowing light columns rising from each active venue. */}
       {live.map((p) => (
-        <CircleMarker
-          key={p.id}
-          center={[p.lat, p.lng]}
-          radius={6.5}
-          className="anc-live-pulse"
-          pathOptions={{ color: CORAL, fillColor: CORAL, fillOpacity: 0.95, weight: 2 }}
-        >
-          <Tooltip direction="top" offset={[0, -6]} opacity={1} className="anc-live-tooltip">
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={beamIcon}>
+          <Tooltip direction="top" offset={[0, -48]} opacity={1} className="anc-live-tooltip">
             {p.name}
           </Tooltip>
-        </CircleMarker>
+        </Marker>
       ))}
     </MapContainer>
   )
