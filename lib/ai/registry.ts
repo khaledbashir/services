@@ -41,6 +41,7 @@ async function loadSkills(): Promise<Skill[]> {
     () => import('@/lib/ai/skills/generate-signage-proof'),
     () => import('@/lib/ai/skills/slack-create-canvas'),
     () => import('@/lib/ai/skills/jireh-repeat-clients-report'),
+    () => import('@/lib/ai/skills/project-schedule-workspace'),
     () => import('@/lib/ai/skills/enrich-from-salesforce'),
     () => import('@/lib/ai/skills/ops-list-tables'),
     () => import('@/lib/ai/skills/ops-query-table'),

@@ -7,9 +7,9 @@ import { AiUiDriver } from './ai-ui-driver'
 import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
-// Feature flags — flip to true to bring the surface back. Hidden 5/6 per
-// Ahmad ("hide the ai on the side for it to be easily be back later").
-const SHOW_AI_ASSISTANT = false
+function shouldShowAiAssistant(pathname: string) {
+  return pathname === '/project-schedule' || pathname.startsWith('/project-schedule/')
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -21,6 +21,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const pathname = usePathname() ?? ''
+  const showAiAssistant = shouldShowAiAssistant(pathname)
   // When the AI (or any code) fires "anc:data-refresh", remount the page tree
   // by bumping this key. That forces every child's useEffect/useState to
   // re-initialize — so any page that fetches on mount re-fetches. The AI
@@ -57,8 +58,8 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
           </div>
         )}
       </div>
-      {SHOW_AI_ASSISTANT && <AiAssistant />}
-      {SHOW_AI_ASSISTANT && <AiUiDriver />}
+      {showAiAssistant && <AiAssistant />}
+      {showAiAssistant && <AiUiDriver />}
       {/* Mirror --ai-panel-width into --ai-panel-shrink only above the sm
           breakpoint so mobile keeps overlay behavior (the panel fills the
           screen, content underneath doesn't matter). */}

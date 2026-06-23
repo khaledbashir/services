@@ -27,6 +27,10 @@ interface MessageRow {
 }
 
 const DEFAULT_SUGGESTIONS = [
+  'Teach me this project schedule workflow',
+  'Show needed submittals',
+  'Build the next PM agenda',
+  'Explain the Baltimore Ravens job packet',
   'What needs attention today?',
   'Open Morning Command Center',
   'Show urgent open tickets',
@@ -47,8 +51,24 @@ const DEFAULT_SUGGESTIONS = [
 
 const SUGGESTION_GROUPS = [
   {
-    title: 'Overview',
+    title: 'Project Schedule',
     defaultOpen: true,
+    suggestions: [
+      'Run the leadership demo',
+      'Scan install readiness risks',
+      'Teach me this project schedule workflow',
+      'Show needed submittals',
+      'Show returned submittals',
+      'Build the next PM agenda',
+      'What package gaps block install readiness?',
+      'Explain the Baltimore Ravens job packet',
+      'Show how to use the register in a PM sync',
+      'Draft the project controls handoff',
+    ],
+  },
+  {
+    title: 'Overview',
+    defaultOpen: false,
     suggestions: [
       'What needs attention today?',
       'Open Morning Command Center',
@@ -137,6 +157,16 @@ const SUGGESTION_GROUPS = [
 ]
 
 const PROMPT_EXAMPLES: Record<string, string> = {
+  'Teach me this project schedule workflow': 'Use the project schedule workspace data. Teach me the practical workflow for running this new Project Deployment Workspace: where to start, how to read submittal statuses, what to check before install readiness, how to use the project detail page, and what to do in a PM sync. Keep it pragmatic and specific to this tool.',
+  'Run the leadership demo': 'Use project_schedule_workspace in leadership_demo mode. Give me an executive-ready live demo script: what to click first, what the AI can prove live, current blockers, current proof points, and the V5/V6 path that would make this operationally valuable.',
+  'Scan install readiness risks': 'Use project_schedule_workspace in install_readiness mode. Find projects that could be blocked for install by submittal gaps, missing logistics, missing install windows, or owner/date ambiguity. Return a leadership-readable watch list and the next action for each.',
+  'Show needed submittals': 'Use project_schedule_workspace in register mode filtered to needed. Show the needed submittals, owners, due dates, and the next practical action for each.',
+  'Show returned submittals': 'Use project_schedule_workspace in register mode filtered to returned. Show returned submittals, what likely needs revision, and how to clear them.',
+  'Build the next PM agenda': 'Use project_schedule_workspace in agenda mode. Build the next PM sync agenda from submittal blockers, decisions, logistics watch, and install-window risks.',
+  'What package gaps block install readiness?': 'Use project_schedule_workspace in register mode for needed and returned rows. Explain which package gaps are most likely to block install readiness and what should happen next.',
+  'Explain the Baltimore Ravens job packet': 'Use project_schedule_workspace in project mode for project_id baltimore-ravens. Explain the job packet: submittal register, current gaps, owners, due dates, delivery team, checklist, and next PM action.',
+  'Show how to use the register in a PM sync': 'Use project_schedule_workspace in agenda mode, then teach how to run a PM sync using the register: needed/returned first, owner/date confirmation, logistics check, install readiness, closeout action.',
+  'Draft the project controls handoff': 'Use project_schedule_workspace in agenda mode. Draft a concise internal project controls handoff for the schedule workspace: what changed, current blockers, how to use it, and next operating cadence.',
   'What needs attention today?': 'Open the Morning Command Center. Do a deep daily analysis and tell me what I should care about today: ticket risk, SLA risk, events, staffing gaps, risky venues, walkthrough issues, low stock, automation signals, the first actions to take, and the rationale for why those are the priorities. Then ask if I want it turned into a NocoDB ops doc, CRM note, Slack handoff, technician day plan, or client-safe update.',
   'Open Morning Command Center': 'Open the Morning Command Center. Do a deep daily analysis and tell me what I should care about today: ticket risk, SLA risk, events, staffing gaps, risky venues, walkthrough issues, low stock, automation signals, the first actions to take, and the rationale for why those are the priorities. Then ask if I want it turned into a NocoDB ops doc, CRM note, Slack handoff, technician day plan, or client-safe update.',
   'Show what changed since yesterday': 'Show what changed since yesterday across tickets, events, staffing, walkthroughs, and urgent issues.',

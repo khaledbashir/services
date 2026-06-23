@@ -342,6 +342,7 @@ function buildPageContextBlock(pageContext?: PageContext): string {
   // Without this branch the model improvises "I don't have vision
   // capabilities" and refuses to act, instead of routing to ops_*.
   const isOps = !!path && (path === '/operations' || path.startsWith('/operations/'))
+  const isProjectSchedule = !!path && (path === '/project-schedule' || path.startsWith('/project-schedule/'))
 
   if (!path && !title && fields.length === 0) return ''
 
@@ -375,6 +376,18 @@ function buildPageContextBlock(pageContext?: PageContext): string {
       '- Bases in this workspace include: WMATA Inventory, ANC Service -',
       '  WMATA, ANC Service - South, ANC Advertising, Inventory Tracking,',
       '  WinStar World Casino, New York, ANC Test Sandbox.'
+    )
+  } else if (isProjectSchedule) {
+    lines.push(
+      '- The user is in the Project Deployment Workspace.',
+      '- This workspace is for PM schedule control, submittal/register review,',
+      '  install readiness, package gaps, logistics watch items, and meeting agendas.',
+      '- Use project_schedule_workspace for real schedule/submittal facts before',
+      '  answering questions like "what is blocked", "what should we do next",',
+      '  "teach me the workflow", "show needed submittals", or "build the PM agenda".',
+      '- Pragmatic operating model: start with Needed/Returned submittals, confirm',
+      '  owner and due date, check install window/logistics, then write the next',
+      '  PM-sync action. Do not drift into generic project management advice.'
     )
   } else if (fields.length > 0) {
     lines.push('- Visible editable fields:')
@@ -520,6 +533,20 @@ WORKFLOW TIPS:
   coverage, or staffing recommendations, call staffing_recommendations.
   It suggests people based on venue familiarity and workload. Do not
   assign staff unless the user explicitly confirms the assignment.
+- When the user asks about the project schedule, submittal register,
+  project deployment workspace, package gaps, install readiness, PM sync
+  agenda, or "how should we run this", call project_schedule_workspace.
+  Use mode "register" for needed/returned/submitted/approved rows, mode
+  "agenda" for the PM meeting cut, mode "install_readiness" for blocker
+  scans, mode "leadership_demo" for executive demos, and mode "project"
+  when the current URL includes a project id. Teach the workflow in practical steps:
+  submittals first, owners/dates second, logistics/install window third,
+  then the next PM action. Avoid generic project-management theory.
+- When the user asks what would impress leadership, what to demo, what
+  the AI should do live, or what would make this feel valuable to ANC,
+  call project_schedule_workspace with mode "leadership_demo" first.
+  Then recommend a single demo flow: leadership proof points, install
+  readiness scan, one project packet, and the next V5/V6 product move.
 - When the user asks for a client-safe update, reply draft, email draft,
   or customer-facing ticket summary, call client_update_draft. It uses
   external comments only and does not send anything.
