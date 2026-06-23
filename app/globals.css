@@ -193,6 +193,24 @@ body {
   color: #6f7b8c !important;
 }
 
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--anc-surface-raised);
+  color: var(--anc-text);
+  border-color: var(--anc-border);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #71717a;
+}
+
+.dark select option {
+  background-color: var(--anc-surface-raised);
+  color: var(--anc-text);
+}
+
 .dark .border-zinc-100,
 .dark .border-zinc-200,
 .dark .border-zinc-300,

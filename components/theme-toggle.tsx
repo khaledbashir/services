@@ -6,6 +6,25 @@ const THEME_KEY = 'anc-theme'
 
 type Theme = 'light' | 'dark'
 
+function getStoredTheme(): Theme | null {
+  try {
+    const stored = localStorage.getItem(THEME_KEY)
+    return stored === 'dark' || stored === 'light' ? stored : null
+  } catch {
+    return null
+  }
+}
+
+function getResolvedTheme(): Theme {
+  if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) {
+    return 'dark'
+  }
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    return 'dark'
+  }
+  return 'light'
+}
+
 function applyTheme(theme: Theme) {
   const root = document.documentElement
   root.classList.toggle('dark', theme === 'dark')
@@ -40,15 +59,14 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
-    const root = document.documentElement
-    const initial = root.classList.contains('dark') ? 'dark' : 'light'
+    const initial = getStoredTheme() ?? getResolvedTheme()
+    applyTheme(initial)
     setTheme(initial)
 
     const onStorage = (event: StorageEvent) => {
       if (event.key !== THEME_KEY) return
       const next = event.newValue === 'dark' ? 'dark' : 'light'
-      root.classList.toggle('dark', next === 'dark')
-      root.style.colorScheme = next
+      applyTheme(next)
       setTheme(next)
     }
 
