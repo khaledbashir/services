@@ -12,6 +12,12 @@ interface ClientOption {
   name: string
 }
 
+interface VenueOption {
+  id: string
+  name: string
+  aliases?: string[] | null
+}
+
 interface PrintShippingAddress {
   client: string
   address: string
@@ -22,6 +28,8 @@ interface PrintRequestRecord {
   client_id: string | null
   client_name: string | null
   print_client_id: string | null
+  venue_id: string | null
+  venue_name: string | null
   job_title: string
   status: string
   shipping_address: string | null
@@ -50,6 +58,8 @@ const STATUS_COLUMNS = [
 const EMPTY_FORM = {
   client_id: '',
   client_name: '',
+  venue_id: '',
+  venue_tricode: '',
   job_title: '',
   status: 'new_job',
   shipping_address: '',
@@ -84,12 +94,25 @@ function formatMoney(value: number | null) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
 }
 
+function normalizeTriCode(value: string): string {
+  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
+  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+}
+
+function venueTriCodeOptions(venue: VenueOption | null | undefined): string[] {
+  const options = (venue?.aliases || [])
+    .map(normalizeTriCode)
+    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
+  return Array.from(new Set(options))
+}
+
 export default function PrintRequestsPage() {
   const auth = useAuth('manager')
   const { showToast } = useToast()
 
   const [records, setRecords] = useState<PrintRequestRecord[]>([])
   const [clients, setClients] = useState<ClientOption[]>([])
+  const [venues, setVenues] = useState<VenueOption[]>([])
   const [shippingAddresses, setShippingAddresses] = useState<PrintShippingAddress[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<ViewMode>('list')
@@ -107,14 +130,16 @@ export default function PrintRequestsPage() {
       const params = new URLSearchParams()
       if (selectedClientId && selectedClientId !== 'all') params.set('client_id', selectedClientId)
 
-      const [printRes, clientsRes] = await Promise.all([
+      const [printRes, clientsRes, venuesRes] = await Promise.all([
         fetch(`/api/print-requests${params.toString() ? `?${params.toString()}` : ''}`),
         fetch('/api/clients'),
+        fetch('/api/venues'),
       ])
 
-      const [printJson, clientsJson] = await Promise.all([printRes.json(), clientsRes.json()])
+      const [printJson, clientsJson, venuesJson] = await Promise.all([printRes.json(), clientsRes.json(), venuesRes.json()])
       setRecords(printJson.print_requests || [])
       setClients(clientsJson.clients || [])
+      setVenues(venuesJson.venues || [])
     } catch {
       showToast('Failed to load print requests', 'error')
     } finally {
@@ -139,6 +164,14 @@ export default function PrintRequestsPage() {
     shippingAddresses.forEach((item) => map.set(normalizeClientName(item.client), item.address))
     return map
   }, [shippingAddresses])
+  const venueById = useMemo(() => {
+    const map = new Map<string, VenueOption>()
+    venues.forEach((venue) => map.set(venue.id, venue))
+    return map
+  }, [venues])
+  const selectedVenueTriCodes = useMemo(() => {
+    return form.venue_id ? venueTriCodeOptions(venueById.get(form.venue_id)) : []
+  }, [form.venue_id, venueById])
 
   function findShippingAddressForClient(clientName: string | null | undefined) {
     const needle = normalizeClientName(clientName)
@@ -159,6 +192,7 @@ export default function PrintRequestsPage() {
       return (
         record.job_title.toLowerCase().includes(q) ||
         (record.client_name || '').toLowerCase().includes(q) ||
+        (record.venue_name || '').toLowerCase().includes(q) ||
         (record.shipping_address || '').toLowerCase().includes(q) ||
         (record.notes || '').toLowerCase().includes(q) ||
         (record.tracking_number || '').toLowerCase().includes(q)
@@ -198,6 +232,8 @@ export default function PrintRequestsPage() {
     setForm({
       client_id: record.client_id || '',
       client_name: record.client_name || '',
+      venue_id: record.venue_id || '',
+      venue_tricode: '',
       job_title: record.job_title,
       status: record.status,
       shipping_address: record.shipping_address || '',
@@ -236,6 +272,8 @@ export default function PrintRequestsPage() {
       const payload = {
         client_id: form.client_id || null,
         client_name: form.client_name || null,
+        venue_id: form.venue_id || null,
+        venue_tricode: form.venue_tricode || null,
         job_title: form.job_title.trim(),
         status: form.status,
         shipping_address: form.shipping_address.trim() || null,
@@ -412,7 +450,10 @@ export default function PrintRequestsPage() {
                             <div className="font-medium text-zinc-950">{record.job_title}</div>
                             <div className="mt-1 line-clamp-1 text-xs text-zinc-500">{record.shipping_address || 'No shipping address yet'}</div>
                           </td>
-                          <td className="px-5 py-3.5 text-zinc-700">{record.client_name || 'Unlinked'}</td>
+                          <td className="px-5 py-3.5 text-zinc-700">
+                            <div>{record.client_name || 'Unlinked'}</div>
+                            {record.venue_name && <div className="mt-0.5 text-xs text-zinc-400">{record.venue_name}</div>}
+                          </td>
                           <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
                           <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
                           <td className="px-5 py-3.5 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
@@ -450,6 +491,7 @@ export default function PrintRequestsPage() {
                       >
                         <div className="text-sm font-semibold text-zinc-950">{record.job_title}</div>
                         <div className="mt-1 text-xs text-zinc-500">{record.client_name || 'Unlinked client'}</div>
+                        {record.venue_name && <div className="mt-1 text-xs text-zinc-400">{record.venue_name}</div>}
                         <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
                           <span>Ship {formatShortDate(record.ship_date)}</span>
                           <span>{record.proof_links.length} proof{record.proof_links.length === 1 ? '' : 's'}</span>
@@ -525,6 +567,47 @@ export default function PrintRequestsPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Venue</label>
+                    <select
+                      value={form.venue_id}
+                      onChange={(event) => {
+                        const venueId = event.target.value
+                        const codes = venueTriCodeOptions(venueId ? venueById.get(venueId) : null)
+                        setForm((current) => ({ ...current, venue_id: venueId, venue_tricode: codes.length === 1 ? codes[0] : current.venue_tricode }))
+                      }}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    >
+                      <option value="">Select venue...</option>
+                      {venues.map((venue) => (
+                        <option key={venue.id} value={venue.id}>{venue.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Venue Tri-Code</label>
+                    {selectedVenueTriCodes.length > 0 ? (
+                      <select
+                        value={form.venue_tricode}
+                        onChange={(event) => setForm((current) => ({ ...current, venue_tricode: event.target.value }))}
+                        className="w-full rounded-xl border border-[#E6ECF5] bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10 font-mono uppercase"
+                      >
+                        <option value="">Select code...</option>
+                        {selectedVenueTriCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={form.venue_tricode}
+                        onChange={(event) => setForm((current) => ({ ...current, venue_tricode: normalizeTriCode(event.target.value) }))}
+                        maxLength={7}
+                        placeholder="BSX-FEN"
+                        className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10 font-mono uppercase"
+                      />
+                    )}
                   </div>
 
                   <div className="md:col-span-2">

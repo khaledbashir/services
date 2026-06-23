@@ -12,6 +12,7 @@ import {
   isTwentyBackedEnabled,
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
+import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 
 const ALLOWED_STATUSES = new Set([
   'ready',
@@ -183,6 +184,7 @@ export async function POST(request: NextRequest) {
       enterprise_contact_ids,
       files_ready,
       status,
+      venue_tricode,
       file_location,
       notes,
     } = body
@@ -202,8 +204,9 @@ export async function POST(request: NextRequest) {
           notes: notes?.trim() || null,
           ftpLocation: file_location?.trim() || null,
         }
-        if (venue_id) {
-          const twentyVenueId = await dashboardVenueIdToTwentyId(venue_id)
+        const resolvedVenueId = venue_id || await resolveVenueIdFromTriCode(venue_tricode)
+        if (resolvedVenueId) {
+          const twentyVenueId = await dashboardVenueIdToTwentyId(resolvedVenueId)
           if (twentyVenueId) payload.contentScheduleVenueId = twentyVenueId
         }
         // company_name is a text field in legacy; in Twenty it's a relation.
@@ -223,7 +226,8 @@ export async function POST(request: NextRequest) {
 
     // ── Legacy local-DB path ──
     const venueIds = await getStaffVenueIds(auth.userId, auth.role)
-    if (auth.role === 'technician' && Array.isArray(venueIds) && venueIds.length > 0 && venue_id && !venueIds.includes(venue_id)) {
+    const resolvedVenueId = venue_id || await resolveVenueIdFromTriCode(venue_tricode)
+    if (auth.role === 'technician' && Array.isArray(venueIds) && venueIds.length > 0 && resolvedVenueId && !venueIds.includes(resolvedVenueId)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -235,7 +239,7 @@ export async function POST(request: NextRequest) {
       )
       RETURNING id, content_name, status`,
       [
-        venue_id || null,
+        resolvedVenueId || null,
         company_name?.trim() || null,
         content_name.trim(),
         launch_date || null,

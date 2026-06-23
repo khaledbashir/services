@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
+import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 
 type TwentyCompany = { id: string; name: string }
 
@@ -150,10 +151,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const result = await query(
-      `SELECT id, client_name, job_title, notes, shipping_info, ship_date, arrival_date,
-              britten_cost, tracking_number, status, created_at, updated_at
-       FROM print_requests
-       WHERE id = $1`,
+      `SELECT pr.id, pr.venue_id, v.name as venue_name, pr.client_name, pr.job_title, pr.notes,
+              pr.shipping_info, pr.ship_date, pr.arrival_date, pr.britten_cost, pr.tracking_number,
+              pr.status, pr.created_at, pr.updated_at
+       FROM print_requests pr
+       LEFT JOIN venues v ON v.id = pr.venue_id
+       WHERE pr.id = $1`,
       [params.id],
     )
 
@@ -163,8 +166,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({
       print_request: {
         id: row.id,
-        venue_id: null,
-        venue_name: null,
+        venue_id: row.venue_id,
+        venue_name: row.venue_name,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,
@@ -226,6 +229,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values.push(body.client_name?.trim() || (await getClientNameFromLocalId(body.client_id || null)) || null)
       updates.push(`client_name = $${values.length}`)
     }
+    if ('venue_id' in body || 'venue_tricode' in body || 'tricode' in body) {
+      values.push(body.venue_id || await resolveVenueIdFromTriCode(body.venue_tricode || body.tricode))
+      updates.push(`venue_id = $${values.length}`)
+    }
     if ('job_title' in body) {
       values.push(body.job_title?.trim() || null)
       updates.push(`job_title = $${values.length}`)
@@ -268,18 +275,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       `UPDATE print_requests
        SET ${updates.join(', ')}, updated_at = NOW()
        WHERE id = $${values.length}
-       RETURNING id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
+       RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
       values,
     )
 
     const row = result.rows[0]
     if (!row) return NextResponse.json({ error: 'Print request not found' }, { status: 404 })
+    const venueName = row.venue_id
+      ? (await query('SELECT name FROM venues WHERE id = $1 LIMIT 1', [row.venue_id])).rows[0]?.name || null
+      : null
 
     return NextResponse.json({
       print_request: {
         id: row.id,
-        venue_id: null,
-        venue_name: null,
+        venue_id: row.venue_id,
+        venue_name: venueName,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,

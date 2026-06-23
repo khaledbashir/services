@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled, type TwentyCgDesignRequest } from '@/lib/twenty-ops'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 
 // Map Twenty's STATUS_* enum values onto the kanban lane keys the UI renders.
 // Without this every record ends up lumped into 'request_submitted' (or a lane
@@ -70,12 +71,7 @@ function normalizeStatus(status: string | null | undefined) {
   return ALLOWED_STATUSES.has(status) ? status : 'request_submitted'
 }
 
-function normalizeTriCode(value: unknown) {
-  if (typeof value !== 'string') return null
-  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
-  const normalized = cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
-  return /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(normalized) ? normalized : null
-}
+const normalizeTriCode = normalizeVenueTriCode
 
 export async function GET(request: NextRequest) {
   try {
@@ -190,6 +186,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const normalizedTriCode = normalizeTriCode(tricode)
+    const resolvedVenueId = venue_id || await resolveVenueIdFromTriCode(normalizedTriCode)
+
     const result = await query(
       `INSERT INTO cg_design_requests (
         venue_id, league, team_name, job_title, tricode, notes, designer_id, due_date, status, updated_at
@@ -198,11 +197,11 @@ export async function POST(request: NextRequest) {
       )
       RETURNING id, job_title, status`,
       [
-        venue_id || null,
+        resolvedVenueId || null,
         null,
         team_name?.trim() || null,
         job_title.trim(),
-        normalizeTriCode(tricode),
+        normalizedTriCode,
         notes?.trim() || null,
         (Array.isArray(designer_ids) && designer_ids[0]) || designer_id || null,
         due_date || null,

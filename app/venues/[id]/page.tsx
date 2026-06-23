@@ -2136,10 +2136,10 @@ export default function VenueDetailPage() {
                   </button>
                 </form>
               </div>
-              {/* Team Aliases — Joe 2026-05-04 */}
+              {/* Venue tri-codes / aliases — Alexis 2026-06-23 */}
               <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Team Aliases</h3>
-                <p className="text-xs text-zinc-500 mb-3">When a team calls in by name (&ldquo;Philadelphia Flyers&rdquo;, &ldquo;Sixers&rdquo;), tech support can search any of these and pull this venue. Add nicknames, mascots, school names — anything callers actually say.</p>
+                <h3 className="text-sm font-semibold text-zinc-900 mb-2">Venue Tri-Codes</h3>
+                <p className="text-xs text-zinc-500 mb-3">These tags connect design requests, CG requests, print requests, and content schedules back to this venue. Add the short request codes and any common team names people use.</p>
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {aliases.map((a, idx) => (
                     <span key={`${a}-${idx}`} className="inline-flex items-center gap-1.5 bg-zinc-100 text-zinc-800 rounded-full px-3 py-1 text-xs">
@@ -2161,7 +2161,7 @@ export default function VenueDetailPage() {
                       >×</button>
                     </span>
                   ))}
-                  {aliases.length === 0 && <p className="text-xs text-zinc-400">No aliases yet</p>}
+                  {aliases.length === 0 && <p className="text-xs text-zinc-400">No tri-codes yet</p>}
                 </div>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
@@ -2180,7 +2180,7 @@ export default function VenueDetailPage() {
                   } catch {} finally { setSavingAliases(false) }
                 }} className="flex gap-2">
                   <input type="text" value={newAlias} onChange={e => setNewAlias(e.target.value)}
-                    placeholder="e.g., Flyers, Sixers, Phila Eagles"
+                    placeholder="e.g., BSX-FEN, FEN, Flyers"
                     maxLength={80}
                     className="flex-1 px-3 py-2 border border-[#E8E8E8] rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30" />
                   <button type="submit" disabled={savingAliases || !newAlias.trim()}

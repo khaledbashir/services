@@ -22,12 +22,19 @@ interface CgDesignRequest {
   created_date: string
 }
 
-interface Venue { id: string; name: string }
+interface Venue { id: string; name: string; aliases?: string[] | null }
 interface Staff { id: string; full_name: string }
 
 function normalizeTriCode(value: string): string {
   const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
   return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
+}
+
+function venueTriCodeOptions(venue: Venue | null | undefined): string[] {
+  const options = (venue?.aliases || [])
+    .map(normalizeTriCode)
+    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
+  return Array.from(new Set(options))
 }
 
 const statusColumns = [
@@ -88,6 +95,14 @@ export default function CgDesignsPage() {
     staff.forEach((person) => m.set(person.id, person))
     return m
   }, [staff])
+  const venueById = useMemo(() => {
+    const m = new Map<string, Venue>()
+    venues.forEach((venue) => m.set(venue.id, venue))
+    return m
+  }, [venues])
+  const selectedVenueTriCodes = useMemo(() => {
+    return formData.venue_id ? venueTriCodeOptions(venueById.get(formData.venue_id)) : []
+  }, [formData.venue_id, venueById])
 
   const fetchData = async () => {
     try {
@@ -234,7 +249,15 @@ export default function CgDesignsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Venue</label>
-                  <select value={formData.venue_id} onChange={(e) => setFormData((prev) => ({ ...prev, venue_id: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
+                  <select
+                    value={formData.venue_id}
+                    onChange={(e) => {
+                      const venueId = e.target.value
+                      const codes = venueTriCodeOptions(venueId ? venueById.get(venueId) : null)
+                      setFormData((prev) => ({ ...prev, venue_id: venueId, tricode: codes.length === 1 ? codes[0] : prev.tricode }))
+                    }}
+                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"
+                  >
                     <option value="">Select venue...</option>
                     {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
                   </select>
@@ -245,14 +268,25 @@ export default function CgDesignsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Tri-Code</label>
-                  <input
-                    type="text"
-                    value={formData.tricode}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
-                    maxLength={7}
-                    placeholder="BSX-FEN"
-                    className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white font-mono uppercase"
-                  />
+                  {selectedVenueTriCodes.length > 0 ? (
+                    <select
+                      value={formData.tricode}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value }))}
+                      className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white font-mono uppercase"
+                    >
+                      <option value="">Select code...</option>
+                      {selectedVenueTriCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.tricode}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
+                      maxLength={7}
+                      placeholder="BSX-FEN"
+                      className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white font-mono uppercase"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Due Date</label>

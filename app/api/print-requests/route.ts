@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
+import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 
 type ClientRow = { id: string; name: string }
 type TwentyCompany = { id: string; name: string }
@@ -229,9 +230,10 @@ async function listLegacyPrintRequests(request: NextRequest) {
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const result = await query(
-    `SELECT pr.id, pr.client_name, pr.job_title, pr.notes, pr.shipping_info, pr.ship_date, pr.arrival_date,
+    `SELECT pr.id, pr.venue_id, v.name as venue_name, pr.client_name, pr.job_title, pr.notes, pr.shipping_info, pr.ship_date, pr.arrival_date,
             pr.britten_cost, pr.tracking_number, pr.status, pr.created_at, pr.updated_at
      FROM print_requests pr
+     LEFT JOIN venues v ON v.id = pr.venue_id
      ${whereClause}
      ORDER BY pr.updated_at DESC, pr.created_at DESC`,
     params,
@@ -243,6 +245,8 @@ async function listLegacyPrintRequests(request: NextRequest) {
       client_id: await findLocalClientIdByName(row.client_name || null),
       client_name: row.client_name,
       print_client_id: null,
+      venue_id: row.venue_id,
+      venue_name: row.venue_name,
       job_title: row.job_title,
       status: normalizeStatus(row.status),
       shipping_address: row.shipping_info,
@@ -309,16 +313,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(created) })
     }
 
+    const resolvedVenueId = body.venue_id || await resolveVenueIdFromTriCode(body.venue_tricode || body.tricode)
+
     const result = await query(
       `INSERT INTO print_requests (
-        client_name, job_title, notes, shipping_info, ship_date, arrival_date,
+        venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date,
         britten_cost, tracking_number, status, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, NOW()
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, NOW()
       )
-      RETURNING id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
+      RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
       [
+        resolvedVenueId || null,
         body.client_name?.trim() || (await getClientNameFromLocalId(body.client_id || null)) || null,
         jobTitle,
         body.notes?.trim() || null,
@@ -332,12 +339,17 @@ export async function POST(request: NextRequest) {
     )
 
     const row = result.rows[0]
+    const venueName = row.venue_id
+      ? (await query('SELECT name FROM venues WHERE id = $1 LIMIT 1', [row.venue_id])).rows[0]?.name || null
+      : null
     return NextResponse.json({
       print_request: {
         id: row.id,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,
+        venue_id: row.venue_id,
+        venue_name: venueName,
         job_title: row.job_title,
         status: normalizeStatus(row.status),
         shipping_address: row.shipping_info,

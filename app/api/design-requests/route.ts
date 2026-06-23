@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { Designs, isTwentyBackedEnabled, type TwentyDesignRequest } from '@/lib/twenty-ops'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 
 function normalizeTwentyStatus(raw: string | null | undefined): string {
   if (!raw) return 'request_submitted'
@@ -85,12 +86,7 @@ function normalizeStatus(status: string | null | undefined) {
   return ALLOWED_STATUSES.has(status) ? status : 'request_submitted'
 }
 
-function normalizeTriCode(value: unknown) {
-  if (typeof value !== 'string') return null
-  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
-  const normalized = cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
-  return /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(normalized) ? normalized : null
-}
+const normalizeTriCode = normalizeVenueTriCode
 
 // Dashboard status values → Twenty's STATUS_ enum values.
 // Required on any write (create + PATCH with status in body) because Twenty
@@ -313,14 +309,7 @@ export async function POST(request: NextRequest) {
     // codes like PACERS-XXX should land on the right venue automatically).
     let resolvedVenueId = venue_id || null
     const normalizedTriCode = normalizeTriCode(tricode)
-    if (!resolvedVenueId && normalizedTriCode) {
-      const code = normalizedTriCode
-      const matched = await query(
-        `SELECT id FROM venues WHERE $1 = ANY(COALESCE(aliases, '{}')) LIMIT 1`,
-        [code],
-      )
-      if (matched.rows[0]) resolvedVenueId = matched.rows[0].id
-    }
+    if (!resolvedVenueId && normalizedTriCode) resolvedVenueId = await resolveVenueIdFromTriCode(normalizedTriCode)
 
     const result = await query(
       `INSERT INTO design_requests (
