@@ -412,7 +412,8 @@ export async function POST(request: NextRequest) {
         trackingNumber: body.tracking_number?.trim() || null,
       })
 
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(created) })
+      const saved = await PrintRequests.get(created.id)
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || created) })
     }
 
     const result = await query(
@@ -521,7 +522,8 @@ export async function PATCH(request: NextRequest) {
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null
 
       const updated = await PrintRequests.update(id, patch)
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(updated) })
+      const saved = await PrintRequests.get(updated.id)
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated) })
     }
 
     const updates: string[] = []

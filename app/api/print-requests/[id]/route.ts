@@ -306,7 +306,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null
 
       const updated = await PrintRequests.update(params.id, patch)
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(updated) })
+      const saved = await PrintRequests.get(updated.id)
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated) })
     }
 
     const updates: string[] = []
