@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   AlertTriangle,
   CalendarDays,
@@ -10,6 +11,9 @@ import {
   ClipboardList,
   Columns3,
   Download,
+  ExternalLink,
+  FileText,
+  FolderKanban,
   ListFilter,
   Search,
   Table2,
@@ -18,10 +22,11 @@ import {
   X,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import type { ActiveProject, ProjectScheduleInsights, ScheduleRisk } from '@/lib/project-schedule'
+import type { ActiveProject, DeploymentDocumentStatus, DeploymentStatus, ProjectScheduleInsights, ScheduleRisk } from '@/lib/project-schedule'
 
-type ViewMode = 'board' | 'table'
+type ViewMode = 'agenda' | 'board' | 'table'
 type RiskFilter = 'all' | ScheduleRisk
+type DeploymentFilter = 'all' | DeploymentStatus
 
 const riskStyles: Record<ScheduleRisk, string> = {
   critical: 'bg-rose-50 text-rose-700 ring-rose-100',
@@ -39,6 +44,28 @@ const riskLabels: Record<ScheduleRisk, string> = {
 
 const phaseOrder = ['Coordination', 'Logistics', 'Install window', 'On site', 'Closeout', 'Planning', 'Complete']
 
+const deploymentLabels: Record<DeploymentStatus, string> = {
+  blocked: 'Blocked',
+  'needs-docs': 'Needs docs',
+  'needs-update': 'Needs update',
+  ready: 'Ready',
+  complete: 'Complete',
+}
+
+const deploymentStyles: Record<DeploymentStatus, string> = {
+  blocked: 'bg-rose-50 text-rose-700 ring-rose-100',
+  'needs-docs': 'bg-orange-50 text-orange-700 ring-orange-100',
+  'needs-update': 'bg-amber-50 text-amber-700 ring-amber-100',
+  ready: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  complete: 'bg-zinc-100 text-zinc-600 ring-zinc-200',
+}
+
+const documentStyles: Record<DeploymentDocumentStatus, string> = {
+  ready: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  watch: 'bg-amber-50 text-amber-700 ring-amber-100',
+  missing: 'bg-rose-50 text-rose-700 ring-rose-100',
+}
+
 function formatMoney(value: number) {
   if (!value) return '$0'
   if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
@@ -50,6 +77,22 @@ function RiskBadge({ risk }: { risk: ScheduleRisk }) {
   return (
     <span className={`inline-flex items-center whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ring-1 ${riskStyles[risk]}`}>
       {riskLabels[risk]}
+    </span>
+  )
+}
+
+function DeploymentBadge({ status }: { status: DeploymentStatus }) {
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ring-1 ${deploymentStyles[status]}`}>
+      {deploymentLabels[status]}
+    </span>
+  )
+}
+
+function DocumentBadge({ status }: { status: DeploymentDocumentStatus }) {
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold capitalize ring-1 ${documentStyles[status]}`}>
+      {status}
     </span>
   )
 }
@@ -97,18 +140,22 @@ function projectMatches(project: ActiveProject, query: string) {
     project.installSub,
     project.electricalSub,
     project.phase,
+    project.deploymentStatus,
+    project.deploymentDocuments.map((item) => `${item.label} ${item.status} ${item.detail}`).join(' '),
     ...project.nextActions,
   ].join(' ').toLowerCase()
   return haystack.includes(query.toLowerCase())
 }
 
 function downloadCsv(projects: ActiveProject[]) {
-  const headers = ['Project', 'PM', 'Phase', 'Risk', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
+  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Document Gaps', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
   const rows = projects.map((project) => [
     project.project,
     project.pm,
     project.phase,
+    deploymentLabels[project.deploymentStatus],
     riskLabels[project.risk],
+    project.documentGapCount,
     project.installOnsite,
     project.substantialCompletion,
     [project.nextDateLabel, project.nextDate].filter(Boolean).join(': '),
@@ -129,37 +176,41 @@ function downloadCsv(projects: ActiveProject[]) {
 
 function ProjectCard({ project, onOpen }: { project: ActiveProject; onOpen: (project: ActiveProject) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(project)}
-      className="w-full rounded-md border border-[#E8E8E8] bg-white p-4 text-left shadow-sm transition hover:border-[#0A52EF]/40 hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-zinc-950">{project.project}</div>
-          <div className="mt-1 truncate text-xs text-zinc-500">{project.pm || 'Unassigned'} · {project.phase}</div>
-        </div>
-        <RiskBadge risk={project.risk} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded bg-zinc-50 px-2 py-1.5">
-          <div className="text-zinc-400">Install</div>
-          <div className="mt-0.5 truncate font-medium text-zinc-700"><EmptyDash value={project.installOnsite} /></div>
-        </div>
-        <div className="rounded bg-zinc-50 px-2 py-1.5">
-          <div className="text-zinc-400">Next</div>
-          <div className="mt-0.5 truncate font-medium text-zinc-700"><EmptyDash value={project.nextDateLabel || project.nextDate} /></div>
-        </div>
-      </div>
-      <div className="mt-3 space-y-1">
-        {project.nextActions.slice(0, 2).map((action) => (
-          <div key={action} className="flex items-start gap-2 text-xs leading-5 text-zinc-600">
-            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#0A52EF]" />
-            <span>{action}</span>
+    <article className="rounded-md border border-[#E8E8E8] bg-white p-4 shadow-sm transition hover:border-[#0A52EF]/40 hover:shadow-md">
+      <button type="button" onClick={() => onOpen(project)} className="w-full text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-zinc-950">{project.project}</div>
+            <div className="mt-1 truncate text-xs text-zinc-500">{project.pm || 'Unassigned'} · {project.phase}</div>
           </div>
-        ))}
+          <DeploymentBadge status={project.deploymentStatus} />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded bg-zinc-50 px-2 py-1.5">
+            <div className="text-zinc-400">Install</div>
+            <div className="mt-0.5 truncate font-medium text-zinc-700"><EmptyDash value={project.installOnsite} /></div>
+          </div>
+          <div className="rounded bg-zinc-50 px-2 py-1.5">
+            <div className="text-zinc-400">Next</div>
+            <div className="mt-0.5 truncate font-medium text-zinc-700"><EmptyDash value={project.nextDateLabel || project.nextDate} /></div>
+          </div>
+        </div>
+        <div className="mt-3 space-y-1">
+          {project.nextActions.slice(0, 2).map((action) => (
+            <div key={action} className="flex items-start gap-2 text-xs leading-5 text-zinc-600">
+              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#0A52EF]" />
+              <span>{action}</span>
+            </div>
+          ))}
+        </div>
+      </button>
+      <div className="mt-3 flex items-center justify-between border-t border-[#E8E8E8] pt-3 text-xs text-zinc-500">
+        <span>{project.documentGapCount} document gaps</span>
+        <Link href={`/project-schedule/${project.id}`} className="inline-flex items-center gap-1 font-medium text-[#0A52EF]">
+          Open <ExternalLink className="h-3 w-3" />
+        </Link>
       </div>
-    </button>
+    </article>
   )
 }
 
@@ -173,6 +224,7 @@ function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; on
           <div className="flex items-start justify-between gap-4">
             <div>
               <RiskBadge risk={project.risk} />
+              <span className="ml-2"><DeploymentBadge status={project.deploymentStatus} /></span>
               <h2 className="mt-3 text-xl font-semibold text-zinc-950">{project.project}</h2>
               <p className="mt-1 text-sm text-zinc-500">{project.pm || 'Unassigned'} · {project.phase}</p>
             </div>
@@ -183,6 +235,26 @@ function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; on
         </div>
 
         <div className="space-y-6 p-6">
+          <section>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Deployment Package</h3>
+              <Link href={`/project-schedule/${project.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-[#0A52EF]">
+                Open project <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="mt-3 space-y-2">
+              {project.deploymentDocuments.map((doc) => (
+                <div key={doc.key} className="flex items-center justify-between gap-3 rounded-md border border-[#E8E8E8] px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-zinc-900">{doc.label}</div>
+                    <div className="truncate text-xs text-zinc-500">{doc.detail}</div>
+                  </div>
+                  <DocumentBadge status={doc.status} />
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Next Actions</h3>
             <div className="mt-3 space-y-2">
@@ -255,7 +327,7 @@ function ProjectTable({ projects, onOpen }: { projects: ActiveProject[]; onOpen:
       <table className="w-full text-left">
         <thead className="bg-zinc-50">
           <tr className="border-b border-[#E8E8E8]">
-            {['Project', 'PM', 'Phase', 'Install', 'Completion', 'LED Logistics', 'Status', 'Next Action'].map((header) => (
+            {['Project', 'PM', 'Phase', 'Install', 'Documents', 'Status', 'Next Action'].map((header) => (
               <th key={header} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{header}</th>
             ))}
           </tr>
@@ -272,12 +344,11 @@ function ProjectTable({ projects, onOpen }: { projects: ActiveProject[]; onOpen:
               <td className="px-4 py-3 text-sm text-zinc-700"><EmptyDash value={project.pm} /></td>
               <td className="px-4 py-3 text-sm text-zinc-700">{project.phase}</td>
               <td className="px-4 py-3 text-sm text-zinc-700"><EmptyDash value={project.installOnsite} /></td>
-              <td className="px-4 py-3 text-sm text-zinc-700"><EmptyDash value={project.substantialCompletion} /></td>
               <td className="px-4 py-3 text-sm text-zinc-700">
-                <div><EmptyDash value={project.ledShipDate} /></div>
-                <div className="mt-1 text-xs text-zinc-500"><EmptyDash value={project.ledOnSite || project.shippingMethod} /></div>
+                <div>{project.documentGapCount} gaps</div>
+                <div className="mt-1 text-xs text-zinc-500">{project.deploymentDocuments.filter((doc) => doc.status === 'missing').length} missing</div>
               </td>
-              <td className="px-4 py-3"><RiskBadge risk={project.risk} /></td>
+              <td className="px-4 py-3"><DeploymentBadge status={project.deploymentStatus} /></td>
               <td className="min-w-[220px] px-4 py-3 text-sm leading-5 text-zinc-600">{project.nextActions[0]}</td>
             </tr>
           ))}
@@ -292,7 +363,8 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
   const [risk, setRisk] = useState<RiskFilter>('all')
   const [pm, setPm] = useState('all')
   const [phase, setPhase] = useState('all')
-  const [view, setView] = useState<ViewMode>('board')
+  const [deployment, setDeployment] = useState<DeploymentFilter>('all')
+  const [view, setView] = useState<ViewMode>('agenda')
   const [selected, setSelected] = useState<ActiveProject | null>(null)
 
   const filtered = useMemo(() => {
@@ -301,9 +373,10 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
       if (risk !== 'all' && project.risk !== risk) return false
       if (pm !== 'all' && !project.pmList.includes(pm) && !(pm === 'Unassigned' && project.pmList.length === 0)) return false
       if (phase !== 'all' && project.phase !== phase) return false
+      if (deployment !== 'all' && project.deploymentStatus !== deployment) return false
       return true
     })
-  }, [data.activeProjects, phase, pm, query, risk])
+  }, [data.activeProjects, deployment, phase, pm, query, risk])
 
   const grouped = useMemo(() => {
     const phases = phaseOrder.filter((item) => filtered.some((project) => project.phase === item))
@@ -326,17 +399,29 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
     done: data.activeProjects.filter((project) => project.risk === 'done').length,
   }
 
+  const deploymentCounts = data.activeProjects.reduce<Record<DeploymentStatus, number>>((acc, project) => {
+    acc[project.deploymentStatus] += 1
+    return acc
+  }, { blocked: 0, 'needs-docs': 0, 'needs-update': 0, ready: 0, complete: 0 })
+
+  const agendaSections = [
+    { title: 'Decision Queue', projects: data.meetingAgenda.decisions, icon: <ListFilter className="h-4 w-4 text-[#0A52EF]" /> },
+    { title: 'Document Gaps', projects: data.meetingAgenda.documentGaps, icon: <FileText className="h-4 w-4 text-orange-600" /> },
+    { title: 'Logistics Watch', projects: data.meetingAgenda.logistics, icon: <Truck className="h-4 w-4 text-amber-600" /> },
+    { title: 'Install Window', projects: data.meetingAgenda.installWindow, icon: <CalendarDays className="h-4 w-4 text-emerald-600" /> },
+  ]
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <div className="inline-flex items-center gap-2 rounded bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
-              Project Management Schedule
+              Project Deployment Workspace
             </div>
-            <h1 className="mt-3 text-2xl font-semibold text-zinc-950">Project Schedule Workspace</h1>
+            <h1 className="mt-3 text-2xl font-semibold text-zinc-950">Project Deployment Workspace</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-500">
-              Working view for PM syncs: filter the schedule, open project details, review next actions, and export the current cut.
+              PM sync workspace for schedule, submittals, logistics, install readiness, project package gaps, and exportable meeting cuts.
             </p>
           </div>
           <div className="text-left text-xs text-zinc-500 lg:text-right">
@@ -348,8 +433,8 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Active Projects" value={data.stats.activeCount} detail={`${data.stats.next30Starts} installs start in the next 30 days`} icon={<ClipboardList className="h-5 w-5" />} />
           <MetricCard label="Needs Attention" value={data.stats.criticalCount} detail={`${data.stats.watchCount} more projects are on watch`} icon={<AlertTriangle className="h-5 w-5" />} tone="warn" />
-          <MetricCard label="Logistics Gaps" value={data.stats.missingLedDates} detail="Projects missing LED ship/on-site dates" icon={<Truck className="h-5 w-5" />} tone="warn" />
-          <MetricCard label="Scheduled Revenue" value={formatMoney(data.stats.totalRevenue)} detail={`${formatMoney(data.stats.totalMargin)} margin${data.stats.marginPercent ? ` · ${data.stats.marginPercent}%` : ''}`} icon={<CircleDollarSign className="h-5 w-5" />} tone="good" />
+          <MetricCard label="Document Gaps" value={data.stats.documentGaps} detail={`${data.stats.missingLedDates} projects still need LED logistics`} icon={<FileText className="h-5 w-5" />} tone="warn" />
+          <MetricCard label="Ready Packages" value={data.stats.readyForInstall} detail={`${formatMoney(data.stats.totalRevenue)} scheduled revenue`} icon={<FolderKanban className="h-5 w-5" />} tone="good" />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
@@ -373,6 +458,12 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                   <option value="all">All phases</option>
                   {data.filters.phases.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
+                <select value={deployment} onChange={(event) => setDeployment(event.target.value as DeploymentFilter)} className="h-10 rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-700">
+                  <option value="all">All deployment</option>
+                  {(['blocked', 'needs-docs', 'needs-update', 'ready', 'complete'] as DeploymentStatus[]).map((item) => (
+                    <option key={item} value={item}>{deploymentLabels[item]}</option>
+                  ))}
+                </select>
                 <button type="button" onClick={() => downloadCsv(filtered)} className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E8E8E8] px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
                   <Download className="h-4 w-4" />
                   CSV
@@ -382,6 +473,18 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
 
             <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
+                {(['blocked', 'needs-docs', 'needs-update', 'ready', 'complete'] as DeploymentStatus[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setDeployment(deployment === item ? 'all' : item)}
+                    className={`rounded-md px-3 py-2 text-xs font-semibold ring-1 transition ${deployment === item ? 'bg-[#0A52EF] text-white ring-[#0A52EF]' : 'bg-white text-zinc-600 ring-[#E8E8E8] hover:bg-zinc-50'}`}
+                  >
+                    {deploymentLabels[item]} · {deploymentCounts[item]}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 lg:mt-0">
                 {(['all', 'critical', 'watch', 'ready', 'done'] as RiskFilter[]).map((item) => (
                   <button
                     key={item}
@@ -394,6 +497,10 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                 ))}
               </div>
               <div className="inline-flex rounded-md border border-[#E8E8E8] bg-zinc-50 p-1">
+                <button type="button" onClick={() => setView('agenda')} className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium ${view === 'agenda' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500'}`}>
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Agenda
+                </button>
                 <button type="button" onClick={() => setView('board')} className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium ${view === 'board' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500'}`}>
                   <Columns3 className="h-3.5 w-3.5" />
                   Board
@@ -430,7 +537,29 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
 
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
           <div>
-            {view === 'table' ? (
+            {view === 'agenda' ? (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {agendaSections.map((section) => (
+                  <section key={section.title} className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
+                      <h2 className="text-sm font-semibold text-zinc-950">{section.title}</h2>
+                      {section.icon}
+                    </div>
+                    <div className="divide-y divide-[#E8E8E8]">
+                      {section.projects.slice(0, 6).map((project) => (
+                        <button key={`${section.title}-${project.id}`} type="button" onClick={() => setSelected(project)} className="grid w-full grid-cols-[1fr_auto] gap-3 px-5 py-3 text-left hover:bg-zinc-50">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-zinc-950">{project.project}</div>
+                            <div className="truncate text-xs text-zinc-500">{project.nextActions[0]} · {project.pm || 'Unassigned'}</div>
+                          </div>
+                          <DeploymentBadge status={project.deploymentStatus} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : view === 'table' ? (
               <ProjectTable projects={filtered} onOpen={setSelected} />
             ) : (
               <div className="grid gap-4 xl:grid-cols-3">

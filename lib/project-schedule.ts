@@ -5,6 +5,21 @@ import * as XLSX from 'xlsx'
 const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
 
 export type ScheduleRisk = 'critical' | 'watch' | 'ready' | 'done'
+export type DeploymentStatus = 'blocked' | 'needs-docs' | 'needs-update' | 'ready' | 'complete'
+export type DeploymentDocumentStatus = 'ready' | 'watch' | 'missing'
+
+export interface DeploymentDocument {
+  key: string
+  label: string
+  status: DeploymentDocumentStatus
+  detail: string
+}
+
+export interface DeploymentChecklistItem {
+  label: string
+  status: DeploymentDocumentStatus
+  owner: string
+}
 
 export interface ActiveProject {
   id: string
@@ -28,6 +43,10 @@ export interface ActiveProject {
   risk: ScheduleRisk
   riskReasons: string[]
   phase: string
+  deploymentStatus: DeploymentStatus
+  deploymentDocuments: DeploymentDocument[]
+  deploymentChecklist: DeploymentChecklistItem[]
+  documentGapCount: number
   nextActions: string[]
   nextDate: string | null
   nextDateLabel: string | null
@@ -67,6 +86,8 @@ export interface ProjectScheduleInsights {
     readyCount: number
     next30Starts: number
     missingLedDates: number
+    documentGaps: number
+    readyForInstall: number
     totalRevenue: number
     totalMargin: number
     marginPercent: number | null
@@ -76,9 +97,16 @@ export interface ProjectScheduleInsights {
   upcomingProjects: ActiveProject[]
   riskProjects: ActiveProject[]
   pipelineByStage: Array<{ stage: string; count: number }>
+  meetingAgenda: {
+    decisions: ActiveProject[]
+    documentGaps: ActiveProject[]
+    logistics: ActiveProject[]
+    installWindow: ActiveProject[]
+  }
   filters: {
     pms: string[]
     phases: string[]
+    deploymentStatuses: DeploymentStatus[]
   }
 }
 
@@ -202,6 +230,65 @@ function deriveNextActions(project: Partial<ActiveProject>, installDate: Date | 
   return Array.from(actions)
 }
 
+function documentStatus(hasValue: boolean, nearInstall: boolean): DeploymentDocumentStatus {
+  if (hasValue) return 'ready'
+  return nearInstall ? 'missing' : 'watch'
+}
+
+function deriveDeploymentDocuments(project: Partial<ActiveProject>, installDate: Date | null): DeploymentDocument[] {
+  const nearInstall = Boolean(installDate && daysUntil(installDate) <= 45)
+  return [
+    {
+      key: 'led-specs',
+      label: 'LED specs and drawings',
+      status: documentStatus(Boolean(project.productSupplier || project.controlSystem), nearInstall),
+      detail: project.productSupplier || project.controlSystem || 'Supplier/control package not listed',
+    },
+    {
+      key: 'electrical',
+      label: 'Electrical permit set',
+      status: documentStatus(Boolean(project.electricalSub), nearInstall),
+      detail: project.electricalSub || 'Electrical owner not listed',
+    },
+    {
+      key: 'structural',
+      label: 'Structural / install permit set',
+      status: documentStatus(Boolean(project.installSub), nearInstall),
+      detail: project.installSub || 'Install/structural owner not listed',
+    },
+    {
+      key: 'rack-elevations',
+      label: 'One-lines and rack elevations',
+      status: documentStatus(Boolean(project.controlSystem || project.integrationManager), nearInstall),
+      detail: project.integrationManager || project.controlSystem || 'Integration/control detail not listed',
+    },
+    {
+      key: 'commissioning',
+      label: 'Commissioning and closeout package',
+      status: documentStatus(Boolean(project.commissioningDate || project.ancCommissioning), nearInstall),
+      detail: project.commissioningDate || project.ancCommissioning || 'Commissioning detail not listed',
+    },
+  ]
+}
+
+function deriveDeploymentStatus(project: Partial<ActiveProject>, documents: DeploymentDocument[], risk: ScheduleRisk): DeploymentStatus {
+  if (risk === 'done') return 'complete'
+  if (risk === 'critical') return 'blocked'
+  if (documents.some((item) => item.status === 'missing')) return 'needs-docs'
+  if (risk === 'watch') return 'needs-update'
+  return 'ready'
+}
+
+function deriveDeploymentChecklist(project: Partial<ActiveProject>, documents: DeploymentDocument[], actions: string[]): DeploymentChecklistItem[] {
+  const owner = project.pm || 'PM'
+  return [
+    ...actions.slice(0, 4).map((action) => ({ label: action, status: 'watch' as DeploymentDocumentStatus, owner })),
+    ...documents
+      .filter((item) => item.status !== 'ready')
+      .map((item) => ({ label: `Resolve ${item.label.toLowerCase()}`, status: item.status, owner })),
+  ].slice(0, 7)
+}
+
 function classifyRisk(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null): { risk: ScheduleRisk; reasons: string[] } {
   const haystack = `${project.project ?? ''} ${project.notes ?? ''} ${project.installOnsite ?? ''} ${project.substantialCompletion ?? ''} ${project.ledShipDate ?? ''}`.toLowerCase()
   const reasons: string[] = []
@@ -276,12 +363,19 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
       }
       const risk = classifyRisk(base, installDate, completionDate)
       const phase = classifyPhase(base, installDate, completionDate)
+      const deploymentDocuments = deriveDeploymentDocuments(base, installDate)
+      const nextActions = deriveNextActions(base, installDate, completionDate, risk.reasons)
+      const deploymentStatus = deriveDeploymentStatus(base, deploymentDocuments, risk.risk)
       return {
         ...base,
         risk: risk.risk,
         riskReasons: risk.reasons,
         phase,
-        nextActions: deriveNextActions(base, installDate, completionDate, risk.reasons),
+        deploymentStatus,
+        deploymentDocuments,
+        deploymentChecklist: deriveDeploymentChecklist(base, deploymentDocuments, nextActions),
+        documentGapCount: deploymentDocuments.filter((item) => item.status !== 'ready').length,
+        nextActions,
         ...getNextMilestone(row),
       } as ActiveProject
     })
@@ -397,6 +491,24 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
     .filter((project) => project.nextDate)
     .sort((a, b) => new Date(a.nextDate || '').getTime() - new Date(b.nextDate || '').getTime())
     .slice(0, 10)
+  const meetingAgenda = {
+    decisions: activeProjects
+      .filter((project) => project.deploymentStatus === 'blocked' || project.nextActions.some((action) => /capture|assign|set|update/i.test(action)))
+      .slice(0, 8),
+    documentGaps: activeProjects
+      .filter((project) => project.documentGapCount > 0 && project.deploymentStatus !== 'complete')
+      .sort((a, b) => b.documentGapCount - a.documentGapCount)
+      .slice(0, 8),
+    logistics: activeProjects
+      .filter((project) => !project.ledShipDate && !project.ledOnSite && project.deploymentStatus !== 'complete')
+      .slice(0, 8),
+    installWindow: activeProjects
+      .filter((project) => {
+        const date = coerceDate(project.installOnsite)
+        return date ? daysUntil(date) >= -7 && daysUntil(date) <= 30 : false
+      })
+      .slice(0, 8),
+  }
 
   const revenueByProject = new Map<string, { revenue: number | null; margin: number | null }>()
   onsiteAssignments.forEach((assignment) => {
@@ -428,6 +540,8 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
         return date ? daysUntil(date) >= 0 && daysUntil(date) <= 30 : false
       }).length,
       missingLedDates: activeProjects.filter((project) => !project.ledShipDate && !project.ledOnSite).length,
+      documentGaps: activeProjects.reduce((count, project) => count + project.documentGapCount, 0),
+      readyForInstall: activeProjects.filter((project) => project.deploymentStatus === 'ready').length,
       totalRevenue: totals.revenue,
       totalMargin: totals.margin,
       marginPercent: totals.revenue > 0 ? Math.round((totals.margin / totals.revenue) * 1000) / 10 : null,
@@ -437,9 +551,27 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
     upcomingProjects,
     riskProjects,
     pipelineByStage: buildPipelineByStage(opportunities),
+    meetingAgenda,
     filters: {
       pms: Array.from(new Set(activeProjects.flatMap((project) => project.pmList.length ? project.pmList : ['Unassigned']))).sort(),
       phases: Array.from(new Set(activeProjects.map((project) => project.phase))).sort(),
+      deploymentStatuses: Array.from(new Set(activeProjects.map((project) => project.deploymentStatus))).sort() as DeploymentStatus[],
     },
   }
+}
+
+export function getProjectScheduleProject(projectId: string) {
+  const data = getProjectScheduleInsights()
+  const project = data.activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+  const normalized = project.project.toLowerCase()
+  const onsiteAssignments = data.onsiteAssignments.filter((assignment) => {
+    const source = assignment.project.toLowerCase()
+    return source.includes(normalized.slice(0, 16)) || normalized.includes(source.slice(0, 16))
+  })
+  const opportunities = data.opportunities.filter((item) => {
+    const text = `${item.account} ${item.opportunity}`.toLowerCase()
+    return normalized.split(/\s+/).filter((part) => part.length > 3).some((part) => text.includes(part))
+  }).slice(0, 6)
+  return { data, project, onsiteAssignments, opportunities }
 }
