@@ -23,6 +23,7 @@ async function runMigrations() {
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS source TEXT`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'confirmed'`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS client_id UUID`)
+    await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`)
     await client.query(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`)
     await client.query(`CREATE TABLE IF NOT EXISTS clients (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1478,6 +1479,23 @@ async function runMigrations() {
       snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_lb_period ON gamification_leaderboard_snapshots(period, snapshot_at)`)
+
+    await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_overrides (
+      project_id TEXT PRIMARY KEY,
+      project_name TEXT NOT NULL,
+      pm TEXT,
+      phase TEXT,
+      install_onsite TEXT,
+      substantial_completion TEXT,
+      next_date TEXT,
+      next_date_label TEXT,
+      deployment_status TEXT,
+      notes TEXT,
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_pm ON project_schedule_overrides(pm)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_phase ON project_schedule_overrides(phase)`)
 
     migrationRan = true
   } catch (err) {

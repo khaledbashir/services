@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CalendarDays, CheckCircle2, FileText, FolderKanban, Truck } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { getProjectScheduleProject, type DeploymentDocumentStatus, type DeploymentStatus, type SubmittalStatus } from '@/lib/project-schedule'
+import { getProjectScheduleProjectLive, type DeploymentDocumentStatus, type DeploymentStatus, type SubmittalStatus } from '@/lib/project-schedule'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -51,8 +51,8 @@ function EmptyDash({ value }: { value?: string | null }) {
   return <>{value ? value : <span className="text-zinc-300">-</span>}</>
 }
 
-export default function ProjectDeploymentPage({ params }: { params: { id: string } }) {
-  const result = getProjectScheduleProject(params.id)
+export default async function ProjectDeploymentPage({ params }: { params: { id: string } }) {
+  const result = await getProjectScheduleProjectLive(params.id)
   if (!result) notFound()
 
   const { project, onsiteAssignments, opportunities } = result

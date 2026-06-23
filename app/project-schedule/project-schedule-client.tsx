@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -15,6 +15,7 @@ import {
   FileText,
   FolderKanban,
   ListFilter,
+  Save,
   Search,
   Table2,
   Truck,
@@ -22,9 +23,9 @@ import {
   X,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import type { ActiveProject, DeploymentDocumentStatus, DeploymentStatus, ProjectScheduleInsights, ScheduleRisk, SubmittalRegisterItem, SubmittalStatus } from '@/lib/project-schedule'
+import type { ActiveProject, DeploymentDocumentStatus, DeploymentStatus, ProjectScheduleInsights, ProjectSchedulePatch, ScheduleRisk, SubmittalRegisterItem, SubmittalStatus } from '@/lib/project-schedule'
 
-type ViewMode = 'agenda' | 'board' | 'table' | 'submittals'
+type ViewMode = 'agenda' | 'board' | 'table' | 'submittals' | 'workload'
 type RiskFilter = 'all' | ScheduleRisk
 type DeploymentFilter = 'all' | DeploymentStatus
 type SubmittalFilter = 'all' | SubmittalStatus
@@ -313,8 +314,36 @@ function SubmittalRegisterTable({
   )
 }
 
-function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; onClose: () => void }) {
+function ProjectDrawer({
+  project,
+  onClose,
+  onSave,
+  isSaving,
+}: {
+  project: ActiveProject | null
+  onClose: () => void
+  onSave: (projectId: string, patch: ProjectSchedulePatch) => Promise<void>
+  isSaving: boolean
+}) {
+  const [draft, setDraft] = useState<ProjectSchedulePatch>({})
+
+  useEffect(() => {
+    if (!project) return
+    setDraft({
+      pm: project.pm,
+      phase: project.phase,
+      installOnsite: project.installOnsite,
+      substantialCompletion: project.substantialCompletion,
+      nextDate: project.nextDate || '',
+      nextDateLabel: project.nextDateLabel || '',
+      deploymentStatus: project.deploymentStatus,
+      notes: project.notes,
+    })
+  }, [project])
+
   if (!project) return null
+  const phaseOptions = Array.from(new Set([...phaseOrder, project.phase].filter(Boolean)))
+
   return (
     <div className="fixed inset-0 z-[80]">
       <button type="button" aria-label="Close project drawer" className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -334,6 +363,61 @@ function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; on
         </div>
 
         <div className="space-y-6 p-6">
+          <section className="rounded-md border border-[#E8E8E8] bg-zinc-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Live Schedule Edit</h3>
+              <button
+                type="button"
+                onClick={() => onSave(project.id, draft)}
+                disabled={isSaving}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-[#0A52EF] px-3 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {isSaving ? 'Saving' : 'Save'}
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>PM owner</span>
+                <input value={draft.pm ?? ''} onChange={(event) => setDraft((current) => ({ ...current, pm: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>Phase</span>
+                <select value={draft.phase ?? project.phase} onChange={(event) => setDraft((current) => ({ ...current, phase: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]">
+                  {phaseOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>Install onsite</span>
+                <input value={draft.installOnsite ?? ''} onChange={(event) => setDraft((current) => ({ ...current, installOnsite: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>Substantial completion</span>
+                <input value={draft.substantialCompletion ?? ''} onChange={(event) => setDraft((current) => ({ ...current, substantialCompletion: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>Next milestone</span>
+                <input value={draft.nextDateLabel ?? ''} onChange={(event) => setDraft((current) => ({ ...current, nextDateLabel: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600">
+                <span>Next date</span>
+                <input value={draft.nextDate ?? ''} onChange={(event) => setDraft((current) => ({ ...current, nextDate: event.target.value }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600 sm:col-span-2">
+                <span>Deployment status</span>
+                <select value={draft.deploymentStatus ?? project.deploymentStatus} onChange={(event) => setDraft((current) => ({ ...current, deploymentStatus: event.target.value as DeploymentStatus }))} className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]">
+                  {(['blocked', 'needs-docs', 'needs-update', 'ready', 'complete'] as DeploymentStatus[]).map((item) => (
+                    <option key={item} value={item}>{deploymentLabels[item]}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600 sm:col-span-2">
+                <span>Notes</span>
+                <textarea value={draft.notes ?? ''} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} rows={4} className="w-full rounded-md border border-[#E8E8E8] bg-white px-3 py-2 text-sm leading-6 text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+            </div>
+          </section>
+
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Submittal Register</h3>
             <div className="mt-3 overflow-hidden rounded-md border border-[#E8E8E8]">
@@ -473,7 +557,44 @@ function ProjectTable({ projects, onOpen }: { projects: ActiveProject[]; onOpen:
   )
 }
 
-export default function ProjectScheduleClient({ data }: { data: ProjectScheduleInsights }) {
+function WorkloadView({ data, onOpen }: { data: ProjectScheduleInsights; onOpen: (project: ActiveProject) => void }) {
+  const projectsByPm = data.pmLoad.map((pm) => ({
+    ...pm,
+    projects: data.activeProjects
+      .filter((project) => project.pmList.includes(pm.pm) || (pm.pm === 'Unassigned' && project.pmList.length === 0))
+      .sort((a, b) => new Date(a.nextDate || '2999-01-01').getTime() - new Date(b.nextDate || '2999-01-01').getTime()),
+  }))
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {projectsByPm.map((pm) => (
+        <section key={pm.pm} className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-[#E8E8E8] px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-950">{pm.pm}</h2>
+              <p className="mt-1 text-xs text-zinc-500">{pm.critical} action · {pm.watch} watch · {pm.count} total</p>
+            </div>
+            <div className="text-3xl font-semibold text-zinc-950">{pm.count}</div>
+          </div>
+          <div className="divide-y divide-[#E8E8E8]">
+            {pm.projects.map((project) => (
+              <button key={`${pm.pm}-${project.id}`} type="button" onClick={() => onOpen(project)} className="grid w-full gap-2 px-5 py-3 text-left hover:bg-zinc-50 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-zinc-950">{project.project}</div>
+                  <div className="truncate text-xs text-zinc-500">{project.phase} · {project.nextDateLabel || 'Next'} {project.nextDate || 'not set'}</div>
+                </div>
+                <DeploymentBadge status={project.deploymentStatus} />
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+export default function ProjectScheduleClient({ data: initialData }: { data: ProjectScheduleInsights }) {
+  const [data, setData] = useState(initialData)
   const [query, setQuery] = useState('')
   const [risk, setRisk] = useState<RiskFilter>('all')
   const [pm, setPm] = useState('all')
@@ -482,6 +603,25 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
   const [submittalStatus, setSubmittalStatus] = useState<SubmittalFilter>('all')
   const [view, setView] = useState<ViewMode>('agenda')
   const [selected, setSelected] = useState<ActiveProject | null>(null)
+  const [savingProjectId, setSavingProjectId] = useState<string | null>(null)
+
+  async function saveProject(projectId: string, patch: ProjectSchedulePatch) {
+    setSavingProjectId(projectId)
+    try {
+      const response = await fetch(`/api/project-schedule/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Failed to update project schedule')
+      setData(payload.data)
+      const nextProject = payload.data.activeProjects.find((project: ActiveProject) => project.id === projectId) || null
+      setSelected(nextProject)
+    } finally {
+      setSavingProjectId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     return data.activeProjects.filter((project) => {
@@ -662,6 +802,10 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                   <FileText className="h-3.5 w-3.5" />
                   Register
                 </button>
+                <button type="button" onClick={() => setView('workload')} className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium ${view === 'workload' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500'}`}>
+                  <UsersRound className="h-3.5 w-3.5" />
+                  PMs
+                </button>
               </div>
             </div>
           </div>
@@ -716,6 +860,8 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
               <ProjectTable projects={filtered} onOpen={setSelected} />
             ) : view === 'submittals' ? (
               <SubmittalRegisterTable items={filteredSubmittals} projects={data.activeProjects} onOpen={setSelected} />
+            ) : view === 'workload' ? (
+              <WorkloadView data={data} onOpen={setSelected} />
             ) : (
               <div className="grid gap-4 xl:grid-cols-3">
                 {grouped.map((group) => (
@@ -822,7 +968,7 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
         )}
       </div>
 
-      <ProjectDrawer project={selected} onClose={() => setSelected(null)} />
+      <ProjectDrawer project={selected} onClose={() => setSelected(null)} onSave={saveProject} isSaving={savingProjectId === selected?.id} />
     </DashboardLayout>
   )
 }

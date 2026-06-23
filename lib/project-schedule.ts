@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import * as XLSX from 'xlsx'
+import { query } from '@/lib/db'
 
 const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
 
@@ -136,6 +137,31 @@ export interface ProjectScheduleInsights {
 }
 
 type SheetRow = unknown[]
+export type ProjectScheduleEditableField =
+  | 'pm'
+  | 'phase'
+  | 'installOnsite'
+  | 'substantialCompletion'
+  | 'nextDate'
+  | 'nextDateLabel'
+  | 'deploymentStatus'
+  | 'notes'
+
+export type ProjectSchedulePatch = Partial<Pick<ActiveProject, ProjectScheduleEditableField>>
+
+interface ProjectScheduleOverrideRow {
+  project_id: string
+  project_name: string
+  pm: string | null
+  phase: string | null
+  install_onsite: string | null
+  substantial_completion: string | null
+  next_date: string | null
+  next_date_label: string | null
+  deployment_status: DeploymentStatus | null
+  notes: string | null
+  updated_at: Date | string
+}
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -610,17 +636,12 @@ function buildPipelineByStage(items: OpportunityScheduleItem[]) {
     .sort((a, b) => b.count - a.count)
 }
 
-export function getProjectScheduleInsights(): ProjectScheduleInsights {
-  const filePath = workbookPath()
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Project schedule workbook not found: ${filePath}`)
-  }
-
-  const workbook = XLSX.read(fs.readFileSync(filePath), { cellDates: true })
-  const activeProjects = parseActiveProjects(readRows(workbook, 'Active Projects'))
+function buildInsights(
+  activeProjects: ActiveProject[],
+  onsiteAssignments: OnsiteAssignment[],
+  opportunities: OpportunityScheduleItem[],
+): ProjectScheduleInsights {
   const submittalRegister = activeProjects.flatMap((project) => project.submittals)
-  const onsiteAssignments = parseOnsiteAssignments(readRows(workbook, 'On-Site PM Schedule (JOE)'))
-  const opportunities = parseOpportunities(readRows(workbook, 'Sheet1'))
   const riskProjects = activeProjects.filter((project) => project.risk === 'critical' || project.risk === 'watch')
   const upcomingProjects = activeProjects
     .filter((project) => project.nextDate)
@@ -707,8 +728,109 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
   }
 }
 
+function readWorkbookData() {
+  const filePath = workbookPath()
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Project schedule workbook not found: ${filePath}`)
+  }
+
+  const workbook = XLSX.read(fs.readFileSync(filePath), { cellDates: true })
+  const activeProjects = parseActiveProjects(readRows(workbook, 'Active Projects'))
+  const onsiteAssignments = parseOnsiteAssignments(readRows(workbook, 'On-Site PM Schedule (JOE)'))
+  const opportunities = parseOpportunities(readRows(workbook, 'Sheet1'))
+  return { activeProjects, onsiteAssignments, opportunities }
+}
+
+export function getProjectScheduleInsights(): ProjectScheduleInsights {
+  const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
+  return buildInsights(activeProjects, onsiteAssignments, opportunities)
+}
+
+function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOverrideRow[]) {
+  const byId = new Map(overrides.map((item) => [item.project_id, item]))
+  return projects.map((project) => {
+    const override = byId.get(project.id)
+    if (!override) return project
+    const pm = override.pm ?? project.pm
+    return {
+      ...project,
+      pm,
+      pmList: splitPeople(pm),
+      phase: override.phase ?? project.phase,
+      installOnsite: override.install_onsite ?? project.installOnsite,
+      substantialCompletion: override.substantial_completion ?? project.substantialCompletion,
+      nextDate: override.next_date ?? project.nextDate,
+      nextDateLabel: override.next_date_label ?? project.nextDateLabel,
+      deploymentStatus: override.deployment_status ?? project.deploymentStatus,
+      notes: override.notes ?? project.notes,
+    }
+  })
+}
+
+export async function getProjectScheduleInsightsLive(): Promise<ProjectScheduleInsights> {
+  const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
+  const overrides = await query(`SELECT * FROM project_schedule_overrides`)
+  return buildInsights(applyOverrides(activeProjects, overrides.rows), onsiteAssignments, opportunities)
+}
+
+export async function updateProjectScheduleOverride(projectId: string, patch: ProjectSchedulePatch, updatedBy = 'dashboard') {
+  const { activeProjects } = readWorkbookData()
+  const project = activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+
+  await query(
+    `INSERT INTO project_schedule_overrides (
+      project_id, project_name, pm, phase, install_onsite, substantial_completion,
+      next_date, next_date_label, deployment_status, notes, updated_by, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+    ON CONFLICT (project_id) DO UPDATE SET
+      project_name = EXCLUDED.project_name,
+      pm = EXCLUDED.pm,
+      phase = EXCLUDED.phase,
+      install_onsite = EXCLUDED.install_onsite,
+      substantial_completion = EXCLUDED.substantial_completion,
+      next_date = EXCLUDED.next_date,
+      next_date_label = EXCLUDED.next_date_label,
+      deployment_status = EXCLUDED.deployment_status,
+      notes = EXCLUDED.notes,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()`,
+    [
+      project.id,
+      project.project,
+      patch.pm ?? project.pm,
+      patch.phase ?? project.phase,
+      patch.installOnsite ?? project.installOnsite,
+      patch.substantialCompletion ?? project.substantialCompletion,
+      patch.nextDate ?? project.nextDate,
+      patch.nextDateLabel ?? project.nextDateLabel,
+      patch.deploymentStatus ?? project.deploymentStatus,
+      patch.notes ?? project.notes,
+      updatedBy,
+    ],
+  )
+
+  return getProjectScheduleInsightsLive()
+}
+
 export function getProjectScheduleProject(projectId: string) {
   const data = getProjectScheduleInsights()
+  const project = data.activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+  const normalized = project.project.toLowerCase()
+  const onsiteAssignments = data.onsiteAssignments.filter((assignment) => {
+    const source = assignment.project.toLowerCase()
+    return source.includes(normalized.slice(0, 16)) || normalized.includes(source.slice(0, 16))
+  })
+  const opportunities = data.opportunities.filter((item) => {
+    const text = `${item.account} ${item.opportunity}`.toLowerCase()
+    return normalized.split(/\s+/).filter((part) => part.length > 3).some((part) => text.includes(part))
+  }).slice(0, 6)
+  return { data, project, onsiteAssignments, opportunities }
+}
+
+export async function getProjectScheduleProjectLive(projectId: string) {
+  const data = await getProjectScheduleInsightsLive()
   const project = data.activeProjects.find((item) => item.id === projectId)
   if (!project) return null
   const normalized = project.project.toLowerCase()

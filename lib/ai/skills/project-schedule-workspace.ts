@@ -1,4 +1,4 @@
-import { getProjectScheduleInsights } from '@/lib/project-schedule'
+import { getProjectScheduleInsightsLive, type ActiveProject, type ProjectScheduleInsights } from '@/lib/project-schedule'
 import type { Skill } from '@/lib/ai/types'
 
 const statusLabels: Record<string, string> = {
@@ -17,13 +17,26 @@ function projectUrl(projectId: string) {
   return `/project-schedule/${projectId}`
 }
 
-function summarizeProject(projectId: string) {
-  const data = getProjectScheduleInsights()
-  const project = data.activeProjects.find((item) => item.id === projectId)
+function projectLine(project: ActiveProject) {
+  return `- **${project.project}** — ${project.phase} · ${project.pm || 'Unassigned'} · ${project.deploymentStatus} · ${project.nextDateLabel || 'Next'} ${project.nextDate || 'not set'} · [open ->](${projectUrl(project.id)})`
+}
+
+function resolveProject(data: ProjectScheduleInsights, input: string) {
+  const q = input.trim().toLowerCase()
+  if (!q) return null
+  return data.activeProjects.find((item) => item.id === q)
+    || data.activeProjects.find((item) => item.project.toLowerCase() === q)
+    || data.activeProjects.find((item) => item.project.toLowerCase().includes(q))
+    || null
+}
+
+async function summarizeProject(projectId: string) {
+  const data = await getProjectScheduleInsightsLive()
+  const project = resolveProject(data, projectId)
   if (!project) {
     return {
       text_summary: `Project not found: ${projectId}`,
-      markdown: `I could not find a project with id \`${projectId}\` in the current schedule workbook.`,
+      markdown: `I could not find a project matching \`${projectId}\` in the current schedule.`,
     }
   }
 
@@ -56,8 +69,67 @@ function summarizeProject(projectId: string) {
   }
 }
 
-function summarizeRegister(args: Record<string, unknown>) {
-  const data = getProjectScheduleInsights()
+async function summarizeOverview() {
+  const data = await getProjectScheduleInsightsLive()
+  const markdown = [
+    '## Project schedule overview',
+    `- **Active projects:** ${data.stats.activeCount}`,
+    `- **Needs attention:** ${data.stats.criticalCount}`,
+    `- **Watch:** ${data.stats.watchCount}`,
+    `- **Ready packages:** ${data.stats.readyForInstall}`,
+    `- **Submittal blockers:** ${data.stats.submittalsNeeded}`,
+    `- **Installs starting in 30 days:** ${data.stats.next30Starts}`,
+    '',
+    '### Next milestones',
+    ...data.upcomingProjects.slice(0, 8).map(projectLine),
+    '',
+    '[Open Project Schedule ->](/project-schedule)',
+  ].join('\n')
+  return { text_summary: `${data.stats.activeCount} active projects, ${data.stats.criticalCount} needing attention`, markdown, stats: data.stats }
+}
+
+async function summarizeRisk() {
+  const data = await getProjectScheduleInsightsLive()
+  const projects = data.riskProjects.slice(0, 12)
+  const markdown = [
+    '## Projects at risk',
+    `- **Needs attention:** ${data.stats.criticalCount}`,
+    `- **Watch:** ${data.stats.watchCount}`,
+    '',
+    projects.length ? '### Risk list' : '### Risk list\n- No risk projects found.',
+    ...projects.map((project) => [
+      projectLine(project),
+      `  - ${project.riskReasons.join('; ')}`,
+      `  - Next action: ${project.nextActions[0]}`,
+    ].join('\n')),
+  ].join('\n')
+  return { text_summary: `${projects.length} risk projects returned`, markdown, projects }
+}
+
+async function summarizeWorkload(args: Record<string, unknown>) {
+  const data = await getProjectScheduleInsightsLive()
+  const pmQuery = typeof args.pm === 'string' ? args.pm.trim().toLowerCase() : ''
+  const loads = pmQuery ? data.pmLoad.filter((item) => item.pm.toLowerCase().includes(pmQuery)) : data.pmLoad
+  const markdown = [
+    pmQuery ? `## PM workload: ${args.pm}` : '## PM workload',
+    '',
+    ...loads.slice(0, 12).map((pm) => {
+      const projects = data.activeProjects
+        .filter((project) => project.pmList.includes(pm.pm) || (pm.pm === 'Unassigned' && project.pmList.length === 0))
+        .slice(0, 8)
+      return [
+        `### ${pm.pm} — ${pm.count} projects`,
+        `- **Needs attention:** ${pm.critical}`,
+        `- **Watch:** ${pm.watch}`,
+        ...projects.map(projectLine),
+      ].join('\n')
+    }),
+  ].join('\n\n')
+  return { text_summary: `${loads[0]?.pm || 'PM'} is carrying ${loads[0]?.count || 0} projects`, markdown, workload: loads }
+}
+
+async function summarizeRegister(args: Record<string, unknown>) {
+  const data = await getProjectScheduleInsightsLive()
   const status = typeof args.status === 'string' ? args.status : ''
   const limit = asNumber(args.limit, 10)
   const rows = data.submittalRegister
@@ -97,8 +169,8 @@ function summarizeRegister(args: Record<string, unknown>) {
   }
 }
 
-function summarizeAgenda() {
-  const data = getProjectScheduleInsights()
+async function summarizeAgenda() {
+  const data = await getProjectScheduleInsightsLive()
   const markdown = [
     '## PM sync agenda',
     '',
@@ -121,8 +193,8 @@ function summarizeAgenda() {
   }
 }
 
-function summarizeInstallReadiness() {
-  const data = getProjectScheduleInsights()
+async function summarizeInstallReadiness() {
+  const data = await getProjectScheduleInsightsLive()
   const projects = data.activeProjects
     .filter((project) => project.deploymentStatus !== 'complete')
     .map((project) => ({
@@ -169,8 +241,122 @@ function summarizeInstallReadiness() {
   }
 }
 
-function summarizeLeadershipDemo() {
-  const data = getProjectScheduleInsights()
+async function summarizeDeploymentBreakdown() {
+  const data = await getProjectScheduleInsightsLive()
+  const counts = data.activeProjects.reduce<Record<string, ActiveProject[]>>((acc, project) => {
+    if (!acc[project.deploymentStatus]) acc[project.deploymentStatus] = []
+    acc[project.deploymentStatus].push(project)
+    return acc
+  }, {})
+  const markdown = [
+    '## Deployment status breakdown',
+    ...Object.entries(counts).map(([status, projects]) => [
+      `### ${status} — ${projects.length}`,
+      ...projects.slice(0, 6).map(projectLine),
+    ].join('\n')),
+  ].join('\n\n')
+  return { text_summary: `${Object.keys(counts).length} deployment statuses represented`, markdown, counts: Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v.length])) }
+}
+
+async function summarizeDocumentGaps() {
+  const data = await getProjectScheduleInsightsLive()
+  const projects = data.activeProjects
+    .filter((project) => project.documentGapCount > 0)
+    .sort((a, b) => b.documentGapCount - a.documentGapCount)
+    .slice(0, 12)
+  const markdown = [
+    '## Projects with document gaps',
+    `- **Total document gaps:** ${data.stats.documentGaps}`,
+    '',
+    ...projects.map((project) => [
+      projectLine(project),
+      `  - ${project.documentGapCount} document gaps`,
+      ...project.deploymentDocuments.filter((doc) => doc.status !== 'ready').slice(0, 4).map((doc) => `  - ${doc.label}: ${doc.status} (${doc.detail})`),
+    ].join('\n')),
+  ].join('\n')
+  return { text_summary: `${projects.length} projects with document gaps`, markdown, projects }
+}
+
+async function summarizePipeline() {
+  const data = await getProjectScheduleInsightsLive()
+  const markdown = [
+    '## Opportunity pipeline by stage',
+    ...data.pipelineByStage.map((item) => `- **${item.stage}:** ${item.count}`),
+    '',
+    '### Sample opportunities',
+    ...data.opportunities.slice(0, 10).map((item) => `- **${item.account}** — ${item.opportunity} · ${item.stage} · ${item.estimatedCompletion || 'completion not listed'}`),
+  ].join('\n')
+  return { text_summary: `${data.opportunities.length} opportunities across ${data.pipelineByStage.length} stages`, markdown, pipeline: data.pipelineByStage }
+}
+
+async function summarizeOnsite(args: Record<string, unknown>) {
+  const data = await getProjectScheduleInsightsLive()
+  const month = typeof args.month === 'string' ? args.month.trim().toLowerCase() : ''
+  const months = month ? data.monthlyOnsite.filter((item) => item.month.toLowerCase().includes(month)) : data.monthlyOnsite.slice(0, 3)
+  const markdown = [
+    month ? `## On-site schedule: ${args.month}` : '## Upcoming on-site schedule',
+    ...months.map((item) => [
+      `### ${item.month} — ${item.count} projects`,
+      ...item.projects.slice(0, 12).map((project) => `- ${project}`),
+    ].join('\n')),
+  ].join('\n\n')
+  return { text_summary: `${months[0]?.month || 'On-site'} has ${months[0]?.count || 0} projects`, markdown, months }
+}
+
+async function summarizeInstallCalendar(args: Record<string, unknown>) {
+  const data = await getProjectScheduleInsightsLive()
+  const limit = asNumber(args.limit, 12)
+  const projects = data.upcomingProjects.slice(0, limit)
+  const markdown = [
+    '## Upcoming install calendar',
+    ...projects.map(projectLine),
+  ].join('\n')
+  return { text_summary: `${projects.length} upcoming project milestones`, markdown, projects }
+}
+
+async function summarizeInstallWindow() {
+  const data = await getProjectScheduleInsightsLive()
+  const projects = data.meetingAgenda.installWindow
+  const markdown = [
+    '## Projects in the install window',
+    projects.length ? '' : '- No projects are currently in the install window.',
+    ...projects.map(projectLine),
+  ].join('\n')
+  return { text_summary: `${projects.length} projects in install window`, markdown, projects }
+}
+
+async function exportActiveProjectsCsv() {
+  const data = await getProjectScheduleInsightsLive()
+  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Install', 'Completion', 'Next Milestone', 'Next Date', 'Next Action']
+  const rows = data.activeProjects.map((project) => [
+    project.project,
+    project.pm,
+    project.phase,
+    project.deploymentStatus,
+    project.risk,
+    project.installOnsite,
+    project.substantialCompletion,
+    project.nextDateLabel || '',
+    project.nextDate || '',
+    project.nextActions[0] || '',
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  return {
+    text_summary: `CSV generated for ${data.activeProjects.length} active projects`,
+    markdown: '## Active projects CSV\n```csv\n' + csv + '\n```',
+    csv,
+  }
+}
+
+async function summarizeNextActions(args: Record<string, unknown>) {
+  const project = await summarizeProject(String(args.project_id || args.project || ''))
+  return project
+}
+
+async function summarizeLeadershipDemo() {
+  const data = await getProjectScheduleInsightsLive()
   const topSubmittals = data.meetingAgenda.submittals.slice(0, 5)
   const topDecisions = data.meetingAgenda.decisions.slice(0, 5)
   const markdown = [
@@ -225,12 +411,42 @@ const skill: Skill = {
     properties: {
       mode: {
         type: 'string',
-        enum: ['register', 'agenda', 'project', 'install_readiness', 'leadership_demo'],
-        description: 'register for submittal rows, agenda for PM sync priorities, project for a single project detail, install_readiness for blocker scan, leadership_demo for an executive-ready live demo script.',
+        enum: [
+          'overview',
+          'risk',
+          'workload',
+          'register',
+          'agenda',
+          'project',
+          'install_calendar',
+          'deployment_breakdown',
+          'document_gaps',
+          'pipeline',
+          'onsite',
+          'pm_detail',
+          'install_window',
+          'csv',
+          'next_actions',
+          'install_readiness',
+          'leadership_demo',
+        ],
+        description: 'overview, risk, workload/pm_detail, register, agenda, project, install_calendar, deployment_breakdown, document_gaps, pipeline, onsite, install_window, csv, next_actions, install_readiness, or leadership_demo.',
       },
       project_id: {
         type: 'string',
-        description: 'Project id/slug from the project schedule URL, required for mode=project.',
+        description: 'Project id/slug or project name. Used for mode=project or next_actions.',
+      },
+      project: {
+        type: 'string',
+        description: 'Project name search, e.g. Baltimore Ravens or Charlotte Hornets IPF.',
+      },
+      pm: {
+        type: 'string',
+        description: 'PM name for workload or pm_detail mode.',
+      },
+      month: {
+        type: 'string',
+        description: 'Month name for onsite mode.',
       },
       status: {
         type: 'string',
@@ -245,8 +461,19 @@ const skill: Skill = {
     required: ['mode'],
   },
   async handler(args) {
-    if (args.mode === 'project') return summarizeProject(String(args.project_id || ''))
+    if (args.mode === 'overview') return summarizeOverview()
+    if (args.mode === 'risk') return summarizeRisk()
+    if (args.mode === 'workload' || args.mode === 'pm_detail') return summarizeWorkload(args)
+    if (args.mode === 'project') return summarizeProject(String(args.project_id || args.project || ''))
     if (args.mode === 'agenda') return summarizeAgenda()
+    if (args.mode === 'install_calendar') return summarizeInstallCalendar(args)
+    if (args.mode === 'deployment_breakdown') return summarizeDeploymentBreakdown()
+    if (args.mode === 'document_gaps') return summarizeDocumentGaps()
+    if (args.mode === 'pipeline') return summarizePipeline()
+    if (args.mode === 'onsite') return summarizeOnsite(args)
+    if (args.mode === 'install_window') return summarizeInstallWindow()
+    if (args.mode === 'csv') return exportActiveProjectsCsv()
+    if (args.mode === 'next_actions') return summarizeNextActions(args)
     if (args.mode === 'install_readiness') return summarizeInstallReadiness()
     if (args.mode === 'leadership_demo') return summarizeLeadershipDemo()
     return summarizeRegister(args)

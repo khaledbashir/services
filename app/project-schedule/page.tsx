@@ -1,10 +1,10 @@
 import ProjectScheduleClient from './project-schedule-client'
-import { getProjectScheduleInsights } from '@/lib/project-schedule'
+import { getProjectScheduleInsightsLive } from '@/lib/project-schedule'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default function ProjectSchedulePage() {
-  const data = getProjectScheduleInsights()
+export default async function ProjectSchedulePage() {
+  const data = await getProjectScheduleInsightsLive()
   return <ProjectScheduleClient data={data} />
 }
