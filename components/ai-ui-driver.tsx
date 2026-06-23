@@ -82,13 +82,13 @@ function fieldCurrentValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSele
   return (el.value || '').trim()
 }
 
-// Cross-origin iframe relay — the NocoDB iframe at ops.ancsports.net
+// Cross-origin iframe relay — the NocoDB iframe at nocodb.ancsports.net
 // hosts a sibling listener (anc-overrides.js) that performs ui_* actions
 // inside the iframe DOM and posts back results. We need this because
 // browser security blocks the parent from touching cross-origin iframe
 // DOM directly, so click/fill/highlight against NocoDB cells from the
 // parent's findElement will always come up empty.
-const OPS_IFRAME_ORIGIN = 'https://ops.ancsports.net'
+const OPS_IFRAME_ORIGIN = 'https://nocodb.ancsports.net'
 const OPS_BRIDGE_TIMEOUT_MS = 5000
 
 function findOpsIframe(): HTMLIFrameElement | null {

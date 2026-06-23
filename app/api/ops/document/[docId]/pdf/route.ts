@@ -87,9 +87,8 @@ export async function GET(
       'Content-Length': String(pdf.length),
       'Content-Disposition': `attachment; filename="${safeName}.pdf"`,
       'Cache-Control': 'no-store',
-      // CORS — the NocoDB iframe at ops.ancsports.net will fetch this
-      // cross-origin; allow the two known origins.
-      'Access-Control-Allow-Origin': 'https://ops.ancsports.net',
+      // CORS — the NocoDB iframe at nocodb.ancsports.net will fetch this cross-origin.
+      'Access-Control-Allow-Origin': 'https://nocodb.ancsports.net',
       'Access-Control-Allow-Credentials': 'true',
       'X-Doc-Id': doc.id,
       'X-Doc-Version': String(doc.version),
