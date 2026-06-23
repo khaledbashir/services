@@ -218,6 +218,7 @@ export function Sidebar() {
           ? { href: '/my-events', label: 'My Assignments', role: 'technician' }
           : { href: '/events', label: 'Events', role: 'manager' },
         !isTechnician ? { href: '/my-events', label: 'My Assignments', role: 'manager' } : null,
+        { href: '/project-schedule', label: 'Project Schedule', role: 'manager' },
         { href: '/venues', label: 'Venues', role: 'manager' },
         { href: '/venues/map', label: 'Map View', role: 'manager' },
         { href: '/shifts', label: 'Shift Templates', role: 'manager' },
