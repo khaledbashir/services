@@ -2,7 +2,7 @@
 
 import { DashboardLayout } from '@/components/dashboard-layout'
 
-const OPS_WORKSPACE_URL = 'https://anc-ops-workspace.izcgmb.easypanel.host/'
+const OPS_WORKSPACE_URL = 'https://anc-ops-workspace.izcgmb.easypanel.host/#/nc/workspace/w2116qsq'
 
 export default function OperationsPage() {
   return (
