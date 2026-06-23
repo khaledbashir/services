@@ -7,8 +7,10 @@ const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
 export type ScheduleRisk = 'critical' | 'watch' | 'ready' | 'done'
 
 export interface ActiveProject {
+  id: string
   project: string
   pm: string
+  pmList: string[]
   notes: string
   installOnsite: string
   substantialCompletion: string
@@ -25,6 +27,8 @@ export interface ActiveProject {
   electricalSub: string
   risk: ScheduleRisk
   riskReasons: string[]
+  phase: string
+  nextActions: string[]
   nextDate: string | null
   nextDateLabel: string | null
 }
@@ -72,6 +76,10 @@ export interface ProjectScheduleInsights {
   upcomingProjects: ActiveProject[]
   riskProjects: ActiveProject[]
   pipelineByStage: Array<{ stage: string; count: number }>
+  filters: {
+    pms: string[]
+    phases: string[]
+  }
 }
 
 type SheetRow = unknown[]
@@ -156,6 +164,44 @@ function splitPeople(input: string): string[] {
     .filter(Boolean)
 }
 
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function classifyPhase(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null): string {
+  const text = `${project.project ?? ''} ${project.notes ?? ''} ${project.installOnsite ?? ''} ${project.substantialCompletion ?? ''} ${project.ledShipDate ?? ''} ${project.ledOnSite ?? ''}`.toLowerCase()
+  if (/\bdone\b|\bcomplete\b/.test(text)) return 'Complete'
+  if (/\bpunch|closeout|signoff|training|docs?\b/.test(text)) return 'Closeout'
+  if (/\bonsite|install ongoing|now\b/.test(text)) return 'On site'
+  if (installDate) {
+    const delta = daysUntil(installDate)
+    if (delta >= -14 && delta <= 30) return 'Install window'
+  }
+  if (/\ben route|in transit|ordered|ship|delivery|stock\b/.test(text) || project.ledShipDate || project.ledOnSite) return 'Logistics'
+  if (/\bawaiting|pricing|contract|coordination|electrical|engineering|submittal|kickoff|asap\b/.test(text)) return 'Coordination'
+  if (completionDate && daysUntil(completionDate) > 60) return 'Planning'
+  return 'Planning'
+}
+
+function deriveNextActions(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null, riskReasons: string[]): string[] {
+  const actions = new Set<string>()
+  const text = `${project.notes ?? ''} ${project.installOnsite ?? ''} ${project.substantialCompletion ?? ''}`.toLowerCase()
+
+  if (!project.pm) actions.add('Assign PM owner')
+  if (!project.installOnsite) actions.add('Set install window')
+  if (!project.ledShipDate && !project.ledOnSite && installDate && daysUntil(installDate) <= 45) actions.add('Confirm LED ship and on-site dates')
+  if (!project.commissioningDate && installDate && daysUntil(installDate) <= 45) actions.add('Schedule commissioning coverage')
+  if (/awaiting|pricing|asap|contract|coordination|electrical|inspection|outstanding|change/.test(text)) actions.add('Capture latest PM update')
+  if (completionDate && daysUntil(completionDate) < 0 && !/\bdone\b|\bcomplete\b/.test(text)) actions.add('Update completion or closeout status')
+  if (riskReasons.some((reason) => reason.includes('Install starts'))) actions.add('Confirm site readiness')
+
+  if (actions.size === 0) actions.add('Review at next PM sync')
+  return Array.from(actions)
+}
+
 function classifyRisk(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null): { risk: ScheduleRisk; reasons: string[] } {
   const haystack = `${project.project ?? ''} ${project.notes ?? ''} ${project.installOnsite ?? ''} ${project.substantialCompletion ?? ''} ${project.ledShipDate ?? ''}`.toLowerCase()
   const reasons: string[] = []
@@ -209,8 +255,10 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
       const installDate = coerceDate(value(row, 3))
       const completionDate = coerceDate(value(row, 4))
       const base: Partial<ActiveProject> = {
+        id: slugify(project),
         project,
         pm: cleanText(value(row, 1)),
+        pmList: splitPeople(cleanText(value(row, 1))),
         notes: cleanText(value(row, 2)),
         installOnsite: displayDate(value(row, 3)),
         substantialCompletion: displayDate(value(row, 4)),
@@ -227,10 +275,13 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
         electricalSub: cleanText(value(row, 17)),
       }
       const risk = classifyRisk(base, installDate, completionDate)
+      const phase = classifyPhase(base, installDate, completionDate)
       return {
         ...base,
         risk: risk.risk,
         riskReasons: risk.reasons,
+        phase,
+        nextActions: deriveNextActions(base, installDate, completionDate, risk.reasons),
         ...getNextMilestone(row),
       } as ActiveProject
     })
@@ -386,5 +437,9 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
     upcomingProjects,
     riskProjects,
     pipelineByStage: buildPipelineByStage(opportunities),
+    filters: {
+      pms: Array.from(new Set(activeProjects.flatMap((project) => project.pmList.length ? project.pmList : ['Unassigned']))).sort(),
+      phases: Array.from(new Set(activeProjects.map((project) => project.phase))).sort(),
+    },
   }
 }
