@@ -22,11 +22,12 @@ import {
   X,
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import type { ActiveProject, DeploymentDocumentStatus, DeploymentStatus, ProjectScheduleInsights, ScheduleRisk } from '@/lib/project-schedule'
+import type { ActiveProject, DeploymentDocumentStatus, DeploymentStatus, ProjectScheduleInsights, ScheduleRisk, SubmittalRegisterItem, SubmittalStatus } from '@/lib/project-schedule'
 
-type ViewMode = 'agenda' | 'board' | 'table'
+type ViewMode = 'agenda' | 'board' | 'table' | 'submittals'
 type RiskFilter = 'all' | ScheduleRisk
 type DeploymentFilter = 'all' | DeploymentStatus
+type SubmittalFilter = 'all' | SubmittalStatus
 
 const riskStyles: Record<ScheduleRisk, string> = {
   critical: 'bg-rose-50 text-rose-700 ring-rose-100',
@@ -66,6 +67,20 @@ const documentStyles: Record<DeploymentDocumentStatus, string> = {
   missing: 'bg-rose-50 text-rose-700 ring-rose-100',
 }
 
+const submittalLabels: Record<SubmittalStatus, string> = {
+  needed: 'Needed',
+  submitted: 'Submitted',
+  returned: 'Returned',
+  approved: 'Approved',
+}
+
+const submittalStyles: Record<SubmittalStatus, string> = {
+  needed: 'bg-rose-50 text-rose-700 ring-rose-100',
+  submitted: 'bg-blue-50 text-blue-700 ring-blue-100',
+  returned: 'bg-amber-50 text-amber-700 ring-amber-100',
+  approved: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+}
+
 function formatMoney(value: number) {
   if (!value) return '$0'
   if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
@@ -93,6 +108,14 @@ function DocumentBadge({ status }: { status: DeploymentDocumentStatus }) {
   return (
     <span className={`inline-flex items-center whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold capitalize ring-1 ${documentStyles[status]}`}>
       {status}
+    </span>
+  )
+}
+
+function SubmittalBadge({ status }: { status: SubmittalStatus }) {
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded px-2 py-1 text-[11px] font-semibold ring-1 ${submittalStyles[status]}`}>
+      {submittalLabels[status]}
     </span>
   )
 }
@@ -142,13 +165,14 @@ function projectMatches(project: ActiveProject, query: string) {
     project.phase,
     project.deploymentStatus,
     project.deploymentDocuments.map((item) => `${item.label} ${item.status} ${item.detail}`).join(' '),
+    project.submittals.map((item) => `${item.submittalNo} ${item.packageType} ${item.title} ${item.revision} ${item.status} ${item.owner} ${item.dueDate}`).join(' '),
     ...project.nextActions,
   ].join(' ').toLowerCase()
   return haystack.includes(query.toLowerCase())
 }
 
 function downloadCsv(projects: ActiveProject[]) {
-  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Document Gaps', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
+  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Document Gaps', 'Submittal Gaps', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
   const rows = projects.map((project) => [
     project.project,
     project.pm,
@@ -156,6 +180,7 @@ function downloadCsv(projects: ActiveProject[]) {
     deploymentLabels[project.deploymentStatus],
     riskLabels[project.risk],
     project.documentGapCount,
+    project.submittalGapCount,
     project.installOnsite,
     project.substantialCompletion,
     [project.nextDateLabel, project.nextDate].filter(Boolean).join(': '),
@@ -170,6 +195,33 @@ function downloadCsv(projects: ActiveProject[]) {
   const link = document.createElement('a')
   link.href = url
   link.download = 'anc-project-schedule.csv'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadSubmittalCsv(items: SubmittalRegisterItem[]) {
+  const headers = ['Project', 'Submittal No.', 'Package', 'Title', 'Revision', 'Status', 'Owner', 'Due Date', 'Received Date', 'Latest', 'Source']
+  const rows = items.map((item) => [
+    item.project,
+    item.submittalNo,
+    item.packageType,
+    item.title,
+    item.revision,
+    submittalLabels[item.status],
+    item.owner,
+    item.dueDate,
+    item.receivedDate,
+    item.latestRevision ? 'Yes' : 'No',
+    item.source,
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'anc-submittal-register.csv'
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -214,6 +266,53 @@ function ProjectCard({ project, onOpen }: { project: ActiveProject; onOpen: (pro
   )
 }
 
+function SubmittalRegisterTable({
+  items,
+  projects,
+  onOpen,
+}: {
+  items: SubmittalRegisterItem[]
+  projects: ActiveProject[]
+  onOpen: (project: ActiveProject) => void
+}) {
+  const projectById = new Map(projects.map((project) => [project.id, project]))
+  return (
+    <div className="overflow-x-auto rounded-md border border-[#E8E8E8] bg-white shadow-sm">
+      <table className="w-full text-left">
+        <thead className="bg-zinc-50">
+          <tr className="border-b border-[#E8E8E8]">
+            {['Project', 'No.', 'Package', 'Rev', 'Status', 'Owner', 'Due', 'Latest'].map((header) => (
+              <th key={header} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const project = projectById.get(item.projectId)
+            return (
+              <tr key={item.id} className="border-b border-[#E8E8E8] align-top last:border-b-0 hover:bg-zinc-50/70">
+                <td className="min-w-[220px] px-4 py-3">
+                  <button type="button" onClick={() => project && onOpen(project)} className="text-left font-medium text-zinc-950 hover:text-[#0A52EF]">
+                    {item.project}
+                  </button>
+                  <div className="mt-1 text-xs text-zinc-500">{item.title}</div>
+                </td>
+                <td className="px-4 py-3 text-sm font-semibold text-zinc-900">{item.submittalNo}</td>
+                <td className="min-w-[190px] px-4 py-3 text-sm text-zinc-700">{item.packageType}</td>
+                <td className="px-4 py-3 text-sm text-zinc-700">{item.revision}</td>
+                <td className="px-4 py-3"><SubmittalBadge status={item.status} /></td>
+                <td className="min-w-[160px] px-4 py-3 text-sm text-zinc-700"><EmptyDash value={item.owner} /></td>
+                <td className="min-w-[140px] px-4 py-3 text-sm text-zinc-700"><EmptyDash value={item.dueDate} /></td>
+                <td className="px-4 py-3 text-sm text-zinc-700">{item.latestRevision ? 'Yes' : 'No'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; onClose: () => void }) {
   if (!project) return null
   return (
@@ -235,6 +334,22 @@ function ProjectDrawer({ project, onClose }: { project: ActiveProject | null; on
         </div>
 
         <div className="space-y-6 p-6">
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Submittal Register</h3>
+            <div className="mt-3 overflow-hidden rounded-md border border-[#E8E8E8]">
+              {project.submittals.map((item) => (
+                <div key={item.id} className="grid gap-2 border-b border-[#E8E8E8] px-3 py-3 last:border-b-0 sm:grid-cols-[64px_1fr_auto] sm:items-center">
+                  <div className="text-sm font-semibold text-zinc-900">{item.submittalNo}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-zinc-900">{item.packageType} · {item.revision}</div>
+                    <div className="truncate text-xs text-zinc-500">{item.owner} · due {item.dueDate}</div>
+                  </div>
+                  <SubmittalBadge status={item.status} />
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Deployment Package</h3>
@@ -364,6 +479,7 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
   const [pm, setPm] = useState('all')
   const [phase, setPhase] = useState('all')
   const [deployment, setDeployment] = useState<DeploymentFilter>('all')
+  const [submittalStatus, setSubmittalStatus] = useState<SubmittalFilter>('all')
   const [view, setView] = useState<ViewMode>('agenda')
   const [selected, setSelected] = useState<ActiveProject | null>(null)
 
@@ -374,9 +490,21 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
       if (pm !== 'all' && !project.pmList.includes(pm) && !(pm === 'Unassigned' && project.pmList.length === 0)) return false
       if (phase !== 'all' && project.phase !== phase) return false
       if (deployment !== 'all' && project.deploymentStatus !== deployment) return false
+      if (submittalStatus !== 'all' && !project.submittals.some((item) => item.status === submittalStatus)) return false
       return true
     })
-  }, [data.activeProjects, deployment, phase, pm, query, risk])
+  }, [data.activeProjects, deployment, phase, pm, query, risk, submittalStatus])
+
+  const filteredSubmittals = useMemo(() => {
+    const projectIds = new Set(filtered.map((project) => project.id))
+    return data.submittalRegister
+      .filter((item) => projectIds.has(item.projectId))
+      .filter((item) => submittalStatus === 'all' || item.status === submittalStatus)
+      .sort((a, b) => {
+        const priority: Record<SubmittalStatus, number> = { returned: 0, needed: 1, submitted: 2, approved: 3 }
+        return priority[a.status] - priority[b.status] || a.project.localeCompare(b.project) || a.submittalNo.localeCompare(b.submittalNo)
+      })
+  }, [data.submittalRegister, filtered, submittalStatus])
 
   const grouped = useMemo(() => {
     const phases = phaseOrder.filter((item) => filtered.some((project) => project.phase === item))
@@ -404,9 +532,14 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
     return acc
   }, { blocked: 0, 'needs-docs': 0, 'needs-update': 0, ready: 0, complete: 0 })
 
+  const submittalCounts = data.submittalRegister.reduce<Record<SubmittalStatus, number>>((acc, item) => {
+    acc[item.status] += 1
+    return acc
+  }, { needed: 0, submitted: 0, returned: 0, approved: 0 })
+
   const agendaSections = [
     { title: 'Decision Queue', projects: data.meetingAgenda.decisions, icon: <ListFilter className="h-4 w-4 text-[#0A52EF]" /> },
-    { title: 'Document Gaps', projects: data.meetingAgenda.documentGaps, icon: <FileText className="h-4 w-4 text-orange-600" /> },
+    { title: 'Submittal Gaps', projects: data.meetingAgenda.documentGaps, icon: <FileText className="h-4 w-4 text-orange-600" /> },
     { title: 'Logistics Watch', projects: data.meetingAgenda.logistics, icon: <Truck className="h-4 w-4 text-amber-600" /> },
     { title: 'Install Window', projects: data.meetingAgenda.installWindow, icon: <CalendarDays className="h-4 w-4 text-emerald-600" /> },
   ]
@@ -421,7 +554,7 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
             </div>
             <h1 className="mt-3 text-2xl font-semibold text-zinc-950">Project Deployment Workspace</h1>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-500">
-              PM sync workspace for schedule, submittals, logistics, install readiness, project package gaps, and exportable meeting cuts.
+              PM sync workspace for schedule, submittals, latest revisions, logistics, install readiness, project package gaps, and exportable meeting cuts.
             </p>
           </div>
           <div className="text-left text-xs text-zinc-500 lg:text-right">
@@ -433,8 +566,8 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Active Projects" value={data.stats.activeCount} detail={`${data.stats.next30Starts} installs start in the next 30 days`} icon={<ClipboardList className="h-5 w-5" />} />
           <MetricCard label="Needs Attention" value={data.stats.criticalCount} detail={`${data.stats.watchCount} more projects are on watch`} icon={<AlertTriangle className="h-5 w-5" />} tone="warn" />
-          <MetricCard label="Document Gaps" value={data.stats.documentGaps} detail={`${data.stats.missingLedDates} projects still need LED logistics`} icon={<FileText className="h-5 w-5" />} tone="warn" />
-          <MetricCard label="Ready Packages" value={data.stats.readyForInstall} detail={`${formatMoney(data.stats.totalRevenue)} scheduled revenue`} icon={<FolderKanban className="h-5 w-5" />} tone="good" />
+          <MetricCard label="Submittal Gaps" value={data.stats.submittalsNeeded} detail={`${data.stats.documentGaps} package fields need attention`} icon={<FileText className="h-5 w-5" />} tone="warn" />
+          <MetricCard label="Ready Packages" value={data.stats.readyForInstall} detail={`${data.stats.submittalsApproved} approved package rows`} icon={<FolderKanban className="h-5 w-5" />} tone="good" />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
@@ -464,7 +597,13 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                     <option key={item} value={item}>{deploymentLabels[item]}</option>
                   ))}
                 </select>
-                <button type="button" onClick={() => downloadCsv(filtered)} className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E8E8E8] px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+                <select value={submittalStatus} onChange={(event) => setSubmittalStatus(event.target.value as SubmittalFilter)} className="h-10 rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-700">
+                  <option value="all">All submittals</option>
+                  {(['needed', 'returned', 'submitted', 'approved'] as SubmittalStatus[]).map((item) => (
+                    <option key={item} value={item}>{submittalLabels[item]}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => view === 'submittals' ? downloadSubmittalCsv(filteredSubmittals) : downloadCsv(filtered)} className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E8E8E8] px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
                   <Download className="h-4 w-4" />
                   CSV
                 </button>
@@ -485,6 +624,16 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                 ))}
               </div>
               <div className="mt-2 flex flex-wrap gap-2 lg:mt-0">
+                {(['needed', 'returned', 'submitted', 'approved'] as SubmittalStatus[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setSubmittalStatus(submittalStatus === item ? 'all' : item)}
+                    className={`rounded-md px-3 py-2 text-xs font-semibold ring-1 transition ${submittalStatus === item ? 'bg-[#0A52EF] text-white ring-[#0A52EF]' : 'bg-white text-zinc-600 ring-[#E8E8E8] hover:bg-zinc-50'}`}
+                  >
+                    {submittalLabels[item]} · {submittalCounts[item]}
+                  </button>
+                ))}
                 {(['all', 'critical', 'watch', 'ready', 'done'] as RiskFilter[]).map((item) => (
                   <button
                     key={item}
@@ -508,6 +657,10 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
                 <button type="button" onClick={() => setView('table')} className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium ${view === 'table' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500'}`}>
                   <Table2 className="h-3.5 w-3.5" />
                   Table
+                </button>
+                <button type="button" onClick={() => setView('submittals')} className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium ${view === 'submittals' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500'}`}>
+                  <FileText className="h-3.5 w-3.5" />
+                  Register
                 </button>
               </div>
             </div>
@@ -561,6 +714,8 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
               </div>
             ) : view === 'table' ? (
               <ProjectTable projects={filtered} onOpen={setSelected} />
+            ) : view === 'submittals' ? (
+              <SubmittalRegisterTable items={filteredSubmittals} projects={data.activeProjects} onOpen={setSelected} />
             ) : (
               <div className="grid gap-4 xl:grid-cols-3">
                 {grouped.map((group) => (
@@ -581,6 +736,27 @@ export default function ProjectScheduleClient({ data }: { data: ProjectScheduleI
           </div>
 
           <div className="space-y-6">
+            <div className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
+                <h2 className="text-sm font-semibold text-zinc-950">Submittal Register</h2>
+                <FileText className="h-4 w-4 text-orange-600" />
+              </div>
+              <div className="divide-y divide-[#E8E8E8]">
+                {data.meetingAgenda.submittals.slice(0, 7).map((item) => {
+                  const project = data.activeProjects.find((candidate) => candidate.id === item.projectId)
+                  return (
+                    <button key={item.id} type="button" onClick={() => project && setSelected(project)} className="grid w-full grid-cols-[1fr_auto] gap-3 px-5 py-3 text-left hover:bg-zinc-50">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-zinc-950">{item.submittalNo} · {item.packageType}</div>
+                        <div className="truncate text-xs text-zinc-500">{item.project} · due {item.dueDate}</div>
+                      </div>
+                      <SubmittalBadge status={item.status} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <div className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
                 <h2 className="text-sm font-semibold text-zinc-950">PM Load</h2>

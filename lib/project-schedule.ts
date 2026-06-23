@@ -7,6 +7,7 @@ const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
 export type ScheduleRisk = 'critical' | 'watch' | 'ready' | 'done'
 export type DeploymentStatus = 'blocked' | 'needs-docs' | 'needs-update' | 'ready' | 'complete'
 export type DeploymentDocumentStatus = 'ready' | 'watch' | 'missing'
+export type SubmittalStatus = 'needed' | 'submitted' | 'returned' | 'approved'
 
 export interface DeploymentDocument {
   key: string
@@ -19,6 +20,23 @@ export interface DeploymentChecklistItem {
   label: string
   status: DeploymentDocumentStatus
   owner: string
+}
+
+export interface SubmittalRegisterItem {
+  id: string
+  projectId: string
+  project: string
+  submittalNo: string
+  packageType: string
+  title: string
+  revision: string
+  status: SubmittalStatus
+  owner: string
+  dueDate: string
+  receivedDate: string
+  latestRevision: boolean
+  source: string
+  documentStatus: DeploymentDocumentStatus
 }
 
 export interface ActiveProject {
@@ -46,7 +64,9 @@ export interface ActiveProject {
   deploymentStatus: DeploymentStatus
   deploymentDocuments: DeploymentDocument[]
   deploymentChecklist: DeploymentChecklistItem[]
+  submittals: SubmittalRegisterItem[]
   documentGapCount: number
+  submittalGapCount: number
   nextActions: string[]
   nextDate: string | null
   nextDateLabel: string | null
@@ -77,6 +97,7 @@ export interface ProjectScheduleInsights {
   sourceFile: string
   generatedAt: string
   activeProjects: ActiveProject[]
+  submittalRegister: SubmittalRegisterItem[]
   onsiteAssignments: OnsiteAssignment[]
   opportunities: OpportunityScheduleItem[]
   stats: {
@@ -87,6 +108,8 @@ export interface ProjectScheduleInsights {
     next30Starts: number
     missingLedDates: number
     documentGaps: number
+    submittalsNeeded: number
+    submittalsApproved: number
     readyForInstall: number
     totalRevenue: number
     totalMargin: number
@@ -102,11 +125,13 @@ export interface ProjectScheduleInsights {
     documentGaps: ActiveProject[]
     logistics: ActiveProject[]
     installWindow: ActiveProject[]
+    submittals: SubmittalRegisterItem[]
   }
   filters: {
     pms: string[]
     phases: string[]
     deploymentStatuses: DeploymentStatus[]
+    submittalStatuses: SubmittalStatus[]
   }
 }
 
@@ -174,6 +199,12 @@ function coerceDate(input: unknown): Date | null {
 
 function formatDate(input: Date): string {
   return input.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+}
+
+function addDays(input: Date, days: number): Date {
+  const next = new Date(input)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
 }
 
 function displayDate(input: unknown): string {
@@ -289,6 +320,106 @@ function deriveDeploymentChecklist(project: Partial<ActiveProject>, documents: D
   ].slice(0, 7)
 }
 
+const submittalPackages: Record<string, { submittalNo: string; packageType: string; title: string; dueOffset: number }> = {
+  'led-specs': {
+    submittalNo: '005',
+    packageType: 'LED specs / drawings',
+    title: 'LED display specifications and drawings',
+    dueOffset: -35,
+  },
+  electrical: {
+    submittalNo: '002',
+    packageType: 'Electrical permit set',
+    title: 'Electrical engineering permit set',
+    dueOffset: -42,
+  },
+  structural: {
+    submittalNo: '003',
+    packageType: 'Structural permit set',
+    title: 'Structural engineering permit set',
+    dueOffset: -42,
+  },
+  'rack-elevations': {
+    submittalNo: '006',
+    packageType: 'One-lines / rack elevations',
+    title: 'One-line diagrams and rack elevations',
+    dueOffset: -28,
+  },
+  commissioning: {
+    submittalNo: '900',
+    packageType: 'Commissioning / closeout',
+    title: 'Commissioning and closeout package',
+    dueOffset: -7,
+  },
+}
+
+function submittalStatus(project: Partial<ActiveProject>, document: DeploymentDocument, risk: ScheduleRisk): SubmittalStatus {
+  if (risk === 'done') return 'approved'
+  if (document.status === 'missing') return 'needed'
+  if (document.status === 'watch') return 'needed'
+  if (/\bpunch|closeout|signoff|complete|done\b/i.test(`${project.notes ?? ''} ${project.substantialCompletion ?? ''}`)) return 'approved'
+  if (/\brev|revision|change|coordination|inspection|outstanding\b/i.test(`${project.notes ?? ''}`)) return 'returned'
+  return 'submitted'
+}
+
+function submittalRevision(status: SubmittalStatus, document: DeploymentDocument, project: Partial<ActiveProject>): string {
+  if (status === 'needed') return 'Initial'
+  if (status === 'approved') return document.key === 'commissioning' ? 'Closeout' : 'Rev2'
+  if (status === 'returned') return 'Rev1'
+  if (document.key === 'led-specs' && project.productSupplier) return 'Rev1'
+  if (document.key === 'rack-elevations' && (project.controlSystem || project.integrationManager)) return 'Rev1'
+  return 'Initial'
+}
+
+function submittalOwner(project: Partial<ActiveProject>, document: DeploymentDocument): string {
+  if (document.key === 'electrical') return project.electricalSub || project.pm || 'Electrical owner'
+  if (document.key === 'structural') return project.installSub || project.pm || 'Install owner'
+  if (document.key === 'rack-elevations') return project.integrationManager || project.controlSystem || project.pm || 'Integration owner'
+  if (document.key === 'led-specs') return project.productSupplier || project.pm || 'Product owner'
+  return project.ancCommissioning || project.pm || 'PM'
+}
+
+function deriveSubmittals(
+  project: Partial<ActiveProject>,
+  documents: DeploymentDocument[],
+  installDate: Date | null,
+  risk: ScheduleRisk,
+): SubmittalRegisterItem[] {
+  const projectId = project.id || slugify(project.project || 'project')
+  return documents.map((document) => {
+    const template = submittalPackages[document.key] ?? {
+      submittalNo: 'TBD',
+      packageType: document.label,
+      title: document.label,
+      dueOffset: -30,
+    }
+    const status = submittalStatus(project, document, risk)
+    const dueDate = installDate ? formatDate(addDays(installDate, template.dueOffset)) : 'Set after install window'
+    const receivedDate = status === 'needed'
+      ? ''
+      : status === 'approved'
+        ? (project.commissioningDate || project.substantialCompletion || project.ledOnSite || '')
+        : (project.ledOnSite || project.ledShipDate || project.installOnsite || '')
+
+    return {
+      id: `${projectId}-${document.key}`,
+      projectId,
+      project: project.project || 'Unnamed project',
+      submittalNo: template.submittalNo,
+      packageType: template.packageType,
+      title: template.title,
+      revision: submittalRevision(status, document, project),
+      status,
+      owner: submittalOwner(project, document),
+      dueDate,
+      receivedDate,
+      latestRevision: true,
+      source: document.detail,
+      documentStatus: document.status,
+    }
+  })
+}
+
 function classifyRisk(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null): { risk: ScheduleRisk; reasons: string[] } {
   const haystack = `${project.project ?? ''} ${project.notes ?? ''} ${project.installOnsite ?? ''} ${project.substantialCompletion ?? ''} ${project.ledShipDate ?? ''}`.toLowerCase()
   const reasons: string[] = []
@@ -366,6 +497,7 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
       const deploymentDocuments = deriveDeploymentDocuments(base, installDate)
       const nextActions = deriveNextActions(base, installDate, completionDate, risk.reasons)
       const deploymentStatus = deriveDeploymentStatus(base, deploymentDocuments, risk.risk)
+      const submittals = deriveSubmittals(base, deploymentDocuments, installDate, risk.risk)
       return {
         ...base,
         risk: risk.risk,
@@ -374,7 +506,9 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
         deploymentStatus,
         deploymentDocuments,
         deploymentChecklist: deriveDeploymentChecklist(base, deploymentDocuments, nextActions),
+        submittals,
         documentGapCount: deploymentDocuments.filter((item) => item.status !== 'ready').length,
+        submittalGapCount: submittals.filter((item) => item.status === 'needed' || item.status === 'returned').length,
         nextActions,
         ...getNextMilestone(row),
       } as ActiveProject
@@ -484,6 +618,7 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
 
   const workbook = XLSX.read(fs.readFileSync(filePath), { cellDates: true })
   const activeProjects = parseActiveProjects(readRows(workbook, 'Active Projects'))
+  const submittalRegister = activeProjects.flatMap((project) => project.submittals)
   const onsiteAssignments = parseOnsiteAssignments(readRows(workbook, 'On-Site PM Schedule (JOE)'))
   const opportunities = parseOpportunities(readRows(workbook, 'Sheet1'))
   const riskProjects = activeProjects.filter((project) => project.risk === 'critical' || project.risk === 'watch')
@@ -508,6 +643,14 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
         return date ? daysUntil(date) >= -7 && daysUntil(date) <= 30 : false
       })
       .slice(0, 8),
+    submittals: submittalRegister
+      .filter((item) => item.status === 'needed' || item.status === 'returned')
+      .sort((a, b) => {
+        const aDate = coerceDate(a.dueDate)?.getTime() ?? Number.MAX_SAFE_INTEGER
+        const bDate = coerceDate(b.dueDate)?.getTime() ?? Number.MAX_SAFE_INTEGER
+        return aDate - bDate
+      })
+      .slice(0, 10),
   }
 
   const revenueByProject = new Map<string, { revenue: number | null; margin: number | null }>()
@@ -528,6 +671,7 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
     sourceFile: WORKBOOK_NAME,
     generatedAt: new Date().toISOString(),
     activeProjects,
+    submittalRegister,
     onsiteAssignments,
     opportunities,
     stats: {
@@ -541,6 +685,8 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
       }).length,
       missingLedDates: activeProjects.filter((project) => !project.ledShipDate && !project.ledOnSite).length,
       documentGaps: activeProjects.reduce((count, project) => count + project.documentGapCount, 0),
+      submittalsNeeded: submittalRegister.filter((item) => item.status === 'needed' || item.status === 'returned').length,
+      submittalsApproved: submittalRegister.filter((item) => item.status === 'approved').length,
       readyForInstall: activeProjects.filter((project) => project.deploymentStatus === 'ready').length,
       totalRevenue: totals.revenue,
       totalMargin: totals.margin,
@@ -556,6 +702,7 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
       pms: Array.from(new Set(activeProjects.flatMap((project) => project.pmList.length ? project.pmList : ['Unassigned']))).sort(),
       phases: Array.from(new Set(activeProjects.map((project) => project.phase))).sort(),
       deploymentStatuses: Array.from(new Set(activeProjects.map((project) => project.deploymentStatus))).sort() as DeploymentStatus[],
+      submittalStatuses: Array.from(new Set(submittalRegister.map((item) => item.status))).sort() as SubmittalStatus[],
     },
   }
 }
