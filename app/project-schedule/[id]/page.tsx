@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, CalendarDays, CheckCircle2, FileText, FolderKanban, Truck } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CheckCircle2, ExternalLink, FileText, FolderKanban, Truck } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { getProjectScheduleProjectLive, type DeploymentDocumentStatus, type DeploymentStatus, type SubmittalStatus } from '@/lib/project-schedule'
 
@@ -139,6 +139,22 @@ export default async function ProjectDeploymentPage({ params }: { params: { id: 
                     <Badge className={documentStyles[doc.status]}>{doc.status}</Badge>
                   </div>
                 ))}
+              </div>
+            </section>
+
+            <section className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
+                <h2 className="text-sm font-semibold text-zinc-950">Project Documents</h2>
+                <FileText className="h-4 w-4 text-[#0A52EF]" />
+              </div>
+              <div className="px-5 py-4">
+                {project.documentFolderUrl ? (
+                  <a href={project.documentFolderUrl} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#E8E8E8] px-3 text-sm font-semibold text-zinc-800 hover:border-[#0A52EF]/40 hover:text-[#0A52EF]">
+                    Open project folder <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <p className="text-sm text-zinc-500">No project folder linked yet.</p>
+                )}
               </div>
             </section>
 

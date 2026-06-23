@@ -165,6 +165,7 @@ function projectMatches(project: ActiveProject, query: string) {
     project.electricalSub,
     project.phase,
     project.deploymentStatus,
+    project.documentFolderUrl || '',
     project.deploymentDocuments.map((item) => `${item.label} ${item.status} ${item.detail}`).join(' '),
     project.submittals.map((item) => `${item.submittalNo} ${item.packageType} ${item.title} ${item.revision} ${item.status} ${item.owner} ${item.dueDate}`).join(' '),
     ...project.nextActions,
@@ -173,13 +174,14 @@ function projectMatches(project: ActiveProject, query: string) {
 }
 
 function downloadCsv(projects: ActiveProject[]) {
-  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Document Gaps', 'Submittal Gaps', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
+  const headers = ['Project', 'PM', 'Phase', 'Deployment', 'Risk', 'Document Folder', 'Document Gaps', 'Submittal Gaps', 'Install', 'Completion', 'Next Milestone', 'Next Actions', 'Notes']
   const rows = projects.map((project) => [
     project.project,
     project.pm,
     project.phase,
     deploymentLabels[project.deploymentStatus],
     riskLabels[project.risk],
+    project.documentFolderUrl || '',
     project.documentGapCount,
     project.submittalGapCount,
     project.installOnsite,
@@ -338,6 +340,7 @@ function ProjectDrawer({
       nextDateLabel: project.nextDateLabel || '',
       deploymentStatus: project.deploymentStatus,
       notes: project.notes,
+      documentFolderUrl: project.documentFolderUrl || '',
     })
   }, [project])
 
@@ -412,6 +415,10 @@ function ProjectDrawer({
                 </select>
               </label>
               <label className="space-y-1.5 text-xs font-medium text-zinc-600 sm:col-span-2">
+                <span>Project documents folder</span>
+                <input value={draft.documentFolderUrl ?? ''} onChange={(event) => setDraft((current) => ({ ...current, documentFolderUrl: event.target.value }))} placeholder="https://..." className="h-10 w-full rounded-md border border-[#E8E8E8] bg-white px-3 text-sm text-zinc-900 outline-none focus:border-[#0A52EF]" />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium text-zinc-600 sm:col-span-2">
                 <span>Notes</span>
                 <textarea value={draft.notes ?? ''} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} rows={4} className="w-full rounded-md border border-[#E8E8E8] bg-white px-3 py-2 text-sm leading-6 text-zinc-900 outline-none focus:border-[#0A52EF]" />
               </label>
@@ -451,6 +458,22 @@ function ProjectDrawer({
                   <DocumentBadge status={doc.status} />
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section className="rounded-md border border-[#E8E8E8] bg-zinc-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Project Documents</h3>
+                <p className="mt-1 text-sm text-zinc-600">
+                  {project.documentFolderUrl ? 'Folder linked for drawings and project documents.' : 'No project folder linked yet.'}
+                </p>
+              </div>
+              {project.documentFolderUrl ? (
+                <a href={project.documentFolderUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E8E8E8] bg-white px-3 text-xs font-semibold text-zinc-800 hover:border-[#0A52EF]/40 hover:text-[#0A52EF]">
+                  Open <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              ) : null}
             </div>
           </section>
 

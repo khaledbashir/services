@@ -1491,9 +1491,11 @@ async function runMigrations() {
       next_date_label TEXT,
       deployment_status TEXT,
       notes TEXT,
+      document_folder_url TEXT,
       updated_by TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`ALTER TABLE project_schedule_overrides ADD COLUMN IF NOT EXISTS document_folder_url TEXT`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_pm ON project_schedule_overrides(pm)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_phase ON project_schedule_overrides(phase)`)
 

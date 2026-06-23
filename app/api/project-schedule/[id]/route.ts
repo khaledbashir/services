@@ -9,6 +9,19 @@ function cleanString(value: unknown) {
   return String(value).replace(/\s+/g, ' ').trim()
 }
 
+function cleanUrl(value: unknown) {
+  const next = cleanString(value)
+  if (!next) return next
+
+  try {
+    const url = new URL(next)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const auth = await requireRole(request, 'manager')
@@ -37,6 +50,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const notes = cleanString(body.notes)
     if (notes !== undefined) patch.notes = notes
+
+    if (body.documentFolderUrl !== undefined) {
+      const documentFolderUrl = cleanUrl(body.documentFolderUrl)
+      if (documentFolderUrl === null) {
+        return NextResponse.json({ error: 'Invalid document folder URL' }, { status: 400 })
+      }
+      patch.documentFolderUrl = documentFolderUrl
+    }
 
     if (body.deploymentStatus !== undefined) {
       const deploymentStatus = cleanString(body.deploymentStatus) as DeploymentStatus | undefined

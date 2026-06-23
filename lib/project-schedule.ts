@@ -71,6 +71,7 @@ export interface ActiveProject {
   nextActions: string[]
   nextDate: string | null
   nextDateLabel: string | null
+  documentFolderUrl: string | null
 }
 
 export interface OnsiteAssignment {
@@ -146,6 +147,7 @@ export type ProjectScheduleEditableField =
   | 'nextDateLabel'
   | 'deploymentStatus'
   | 'notes'
+  | 'documentFolderUrl'
 
 export type ProjectSchedulePatch = Partial<Pick<ActiveProject, ProjectScheduleEditableField>>
 
@@ -160,6 +162,7 @@ interface ProjectScheduleOverrideRow {
   next_date_label: string | null
   deployment_status: DeploymentStatus | null
   notes: string | null
+  document_folder_url: string | null
   updated_at: Date | string
 }
 
@@ -536,6 +539,7 @@ function parseActiveProjects(rows: SheetRow[]): ActiveProject[] {
         documentGapCount: deploymentDocuments.filter((item) => item.status !== 'ready').length,
         submittalGapCount: submittals.filter((item) => item.status === 'needed' || item.status === 'returned').length,
         nextActions,
+        documentFolderUrl: null,
         ...getNextMilestone(row),
       } as ActiveProject
     })
@@ -763,6 +767,7 @@ function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOve
       nextDateLabel: override.next_date_label ?? project.nextDateLabel,
       deploymentStatus: override.deployment_status ?? project.deploymentStatus,
       notes: override.notes ?? project.notes,
+      documentFolderUrl: override.document_folder_url ?? project.documentFolderUrl,
     }
   })
 }
@@ -781,8 +786,8 @@ export async function updateProjectScheduleOverride(projectId: string, patch: Pr
   await query(
     `INSERT INTO project_schedule_overrides (
       project_id, project_name, pm, phase, install_onsite, substantial_completion,
-      next_date, next_date_label, deployment_status, notes, updated_by, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+      next_date, next_date_label, deployment_status, notes, document_folder_url, updated_by, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
     ON CONFLICT (project_id) DO UPDATE SET
       project_name = EXCLUDED.project_name,
       pm = EXCLUDED.pm,
@@ -793,6 +798,7 @@ export async function updateProjectScheduleOverride(projectId: string, patch: Pr
       next_date_label = EXCLUDED.next_date_label,
       deployment_status = EXCLUDED.deployment_status,
       notes = EXCLUDED.notes,
+      document_folder_url = EXCLUDED.document_folder_url,
       updated_by = EXCLUDED.updated_by,
       updated_at = NOW()`,
     [
@@ -806,6 +812,7 @@ export async function updateProjectScheduleOverride(projectId: string, patch: Pr
       patch.nextDateLabel ?? project.nextDateLabel,
       patch.deploymentStatus ?? project.deploymentStatus,
       patch.notes ?? project.notes,
+      patch.documentFolderUrl ?? project.documentFolderUrl,
       updatedBy,
     ],
   )
