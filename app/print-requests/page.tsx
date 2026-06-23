@@ -297,7 +297,12 @@ export default function PrintRequestsPage() {
         return
       }
 
-      showToast(editingId ? 'Print request updated' : 'Print request created', 'success')
+      showToast(
+        json.routed_to_internal_hours
+          ? 'Spec sheet routed to Internal Hours'
+          : editingId ? 'Print request updated' : 'Print request created',
+        'success',
+      )
       setModalOpen(false)
       resetForm()
       await fetchData(clientFilter)

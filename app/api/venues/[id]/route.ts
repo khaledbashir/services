@@ -7,6 +7,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { geocodeAddress } from '@/lib/geocode'
 import { twentyClient } from '@/lib/twenty-client'
 import { formatVenueEventSummary } from '@/lib/event-display'
+import { SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
 
 async function getVenuePrimaryClientId(venueId: string): Promise<string | null> {
   const result = await query(
@@ -184,7 +185,10 @@ export async function GET(
         query(
           `SELECT id, job_title, client_name, status, ship_date, arrival_date,
                   TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-           FROM print_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+           FROM print_requests
+           WHERE venue_id = $1
+             AND NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('print_requests')}
+           ORDER BY created_at DESC LIMIT 50`,
           [venueId]
         ),
         query(

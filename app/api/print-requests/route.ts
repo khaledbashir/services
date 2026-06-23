@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { isSpecSheetWork, SPEC_SHEET_INTERNAL_CATEGORY, SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
 
 type ClientRow = { id: string; name: string }
 type TwentyCompany = { id: string; name: string }
@@ -193,7 +194,9 @@ async function listTwentyPrintRequests(request: NextRequest) {
     })
 
     for (const item of page.items) {
-      items.push(reshapeTwentyPrintRequest(item))
+      if (!isSpecSheetWork(item.name, item.printClient?.name, item.britainNotes)) {
+        items.push(reshapeTwentyPrintRequest(item))
+      }
     }
 
     if (!page.hasNextPage || !page.nextCursor) break
@@ -213,7 +216,7 @@ async function listLegacyPrintRequests(request: NextRequest) {
   const statusFilter = searchParams.get('status')
   const clientId = searchParams.get('client_id')
 
-  const conditions: string[] = []
+  const conditions: string[] = [`NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('pr')}`]
   const params: unknown[] = []
 
   if (statusFilter && statusFilter !== 'all') {
@@ -296,6 +299,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'job_title is required' }, { status: 400 })
     }
 
+    const clientName = body.client_name?.trim() || (await getClientNameFromLocalId(body.client_id || null)) || null
+    const resolvedVenueId = body.venue_id || await resolveVenueIdFromTriCode(body.venue_tricode || body.tricode)
+
+    if (isSpecSheetWork(jobTitle, clientName, body.notes)) {
+      const created = await query(
+        `WITH inserted AS (
+          INSERT INTO design_requests (
+            venue_id, company_name, client_name, job_title, notes, status,
+            hours_estimated, hours_spent, due_date, created_at, updated_at
+          ) VALUES (
+            $1, $2, $2, $3, $4, 'request_submitted',
+            NULL, 0, $5, NOW(), NOW()
+          )
+          RETURNING id, venue_id, company_name, client_name, job_title, notes, status, hours_spent, due_date, created_at, updated_at
+        ),
+        tagged AS (
+          INSERT INTO design_request_internal_categories (design_request_id, category, notes, set_at)
+          SELECT id::text, $6, 'Auto-routed from print request because the title/client/notes identify spec-sheet work.', NOW()
+          FROM inserted
+          ON CONFLICT (design_request_id) DO UPDATE
+          SET category = EXCLUDED.category, notes = EXCLUDED.notes, set_at = NOW()
+        )
+        SELECT * FROM inserted`,
+        [
+          resolvedVenueId || null,
+          clientName,
+          jobTitle,
+          body.notes?.trim() || null,
+          body.arrival_date || body.ship_date || null,
+          SPEC_SHEET_INTERNAL_CATEGORY,
+        ],
+      )
+
+      return NextResponse.json({
+        routed_to_internal_hours: true,
+        design_request: created.rows[0],
+      }, { status: 201 })
+    }
+
     if (isTwentyBackedEnabled('PRINT_REQUESTS')) {
       const created = await PrintRequests.create({
         name: jobTitle,
@@ -313,8 +355,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(created) })
     }
 
-    const resolvedVenueId = body.venue_id || await resolveVenueIdFromTriCode(body.venue_tricode || body.tricode)
-
     const result = await query(
       `INSERT INTO print_requests (
         venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date,
@@ -326,7 +366,7 @@ export async function POST(request: NextRequest) {
       RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
       [
         resolvedVenueId || null,
-        body.client_name?.trim() || (await getClientNameFromLocalId(body.client_id || null)) || null,
+        clientName,
         jobTitle,
         body.notes?.trim() || null,
         body.shipping_address?.trim() || null,

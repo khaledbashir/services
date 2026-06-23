@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { isSpecSheetWork, SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
 
 type TwentyCompany = { id: string; name: string }
 
@@ -147,6 +148,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (isTwentyBackedEnabled('PRINT_REQUESTS')) {
       const printRequest = await PrintRequests.get(params.id)
       if (!printRequest) return NextResponse.json({ error: 'Print request not found' }, { status: 404 })
+      if (isSpecSheetWork(printRequest.name, printRequest.printClient?.name, printRequest.britainNotes)) {
+        return NextResponse.json({ error: 'Print request not found' }, { status: 404 })
+      }
       return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(printRequest) })
     }
 
@@ -156,7 +160,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
               pr.status, pr.created_at, pr.updated_at
        FROM print_requests pr
        LEFT JOIN venues v ON v.id = pr.venue_id
-       WHERE pr.id = $1`,
+       WHERE pr.id = $1
+         AND NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('pr')}`,
       [params.id],
     )
 

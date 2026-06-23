@@ -422,7 +422,8 @@ function classifyWrikeTask(task: JsonRecord, lineage: string[], workflowName: st
   if (haystack.includes('parts ordering') || haystack.includes('internal parts ordering')) return 'parts_orders'
   if (haystack.includes('cg design') || workflowName.toLowerCase().includes('cg workflow')) return 'cg_design_requests'
   if (workflowName.toLowerCase().includes('places scheduling') || haystack.includes('places scheduling') || haystack.includes('content review schdule')) return 'content_schedules'
-  if (workflowName.toLowerCase().includes('britten') || /\bprint\b|\breprint\b|spec sheet|printers/i.test(task.title || '')) return 'print_requests'
+  if (/\bspec\s*sheet(s)?\b/i.test(task.title || '') || haystack.includes('anc spec sheets')) return 'design_requests'
+  if (workflowName.toLowerCase().includes('britten') || /\bprint\b|\breprint\b|printers/i.test(task.title || '')) return 'print_requests'
   if (haystack.includes('creative services') || workflowName.toLowerCase().includes('default workflow') || workflowName.toLowerCase().includes('stat workflow')) return 'design_requests'
 
   return null
@@ -570,6 +571,7 @@ function importWrikeTasks() {
     cg_design_requests: [],
     content_schedules: [],
   }
+  const pendingInternalCategories: JsonRecord[] = []
 
   for (const task of tasks) {
     const lineage = wrikeLineage(task)
@@ -577,6 +579,8 @@ function importWrikeTasks() {
     const statusMeta = wrikeStatusById.get(task.customStatusId) || { name: task.status || '', workflow: '', group: '' }
     const target = classifyWrikeTask(task, lineage, statusMeta.workflow)
     if (!target) continue
+    const taskHaystack = `${lineage.join(' > ')} ${task.title || ''} ${statusMeta.workflow || ''}`.toLowerCase()
+    const isSpecSheet = /\bspec\s*sheet(s)?\b/i.test(String(task.title || '')) || taskHaystack.includes('anc spec sheets')
 
     const stats = bucket('wrike', target)
     if (existingByTable[target as keyof typeof existingByTable].has(task.id)) {
@@ -642,6 +646,13 @@ function importWrikeTasks() {
           created_at: createdAt,
           updated_at: toTimestamp(task.updatedDate) || createdAt,
         })
+        if (isSpecSheet) {
+          pendingInternalCategories.push({
+            external_id: task.id,
+            category: 'spec_sheets',
+            notes: 'Imported from Wrike as internal spec-sheet work.',
+          })
+        }
         break
       }
       case 'print_requests':
@@ -776,6 +787,24 @@ function importWrikeTasks() {
         WHERE NOT EXISTS (SELECT 1 FROM design_requests d WHERE d.external_id = i.external_id)
       `)
       bucket('wrike', 'design_requests').new += part.length
+    }
+  }
+
+  if (pendingInternalCategories.length) {
+    for (const part of chunk(pendingInternalCategories, 100)) {
+      execSql(`
+        WITH input AS (${jsonRecordset([
+          'external_id text', 'category text', 'notes text',
+        ], part)})
+        INSERT INTO design_request_internal_categories (design_request_id, category, notes, set_at)
+        SELECT d.id::text, i.category, NULLIF(i.notes, ''), NOW()
+        FROM input i
+        JOIN design_requests d ON d.external_id = i.external_id
+        ON CONFLICT (design_request_id) DO UPDATE
+        SET category = EXCLUDED.category,
+            notes = EXCLUDED.notes,
+            set_at = NOW()
+      `)
     }
   }
 

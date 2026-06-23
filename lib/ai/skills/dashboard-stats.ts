@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import type { Skill } from '@/lib/ai/types'
+import { SPEC_SHEET_PRINT_SQL } from '@/lib/spec-sheet-work'
 
 const skill: Skill = {
   name: 'dashboard_stats',
@@ -26,7 +27,7 @@ const skill: Skill = {
         (SELECT COUNT(*) FROM tickets WHERE priority IN ('high','critical') AND status NOT IN ('closed','resolved')) AS urgent_open_tickets,
         (SELECT COUNT(*) FROM design_requests WHERE status NOT IN ('approved','done')) AS open_design_requests,
         (SELECT COUNT(*) FROM cg_design_requests WHERE status NOT IN ('approved','done')) AS open_cg_design_requests,
-        (SELECT COUNT(*) FROM print_requests WHERE status NOT IN ('approved','done','delivered')) AS open_print_requests,
+        (SELECT COUNT(*) FROM print_requests WHERE status NOT IN ('approved','done','delivered') AND NOT ${SPEC_SHEET_PRINT_SQL}) AS open_print_requests,
         (SELECT COUNT(*) FROM content_schedules WHERE status NOT IN ('done','completed','cancelled')) AS open_content_schedules,
         (SELECT COUNT(*) FROM maintenance_logs WHERE status NOT IN ('completed','cancelled')) AS open_maintenance,
         (SELECT COUNT(*) FROM walkthrough_logs WHERE log_date >= CURRENT_DATE - INTERVAL '7 days') AS walkthroughs_last_7_days,
