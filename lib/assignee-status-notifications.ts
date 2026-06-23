@@ -43,9 +43,9 @@ export async function getDesignRequestAssigneeIds(recordId: string, fallbackIds:
        UNION
        SELECT enterprise_contact_id::text AS staff_id FROM design_requests WHERE id::text = $1 AND enterprise_contact_id IS NOT NULL
        UNION
-       SELECT staff_id::text FROM design_request_designers WHERE design_request_id = $1
+       SELECT staff_id::text FROM design_request_designers WHERE design_request_id::text = $1
        UNION
-       SELECT staff_id::text FROM design_request_enterprise_contacts WHERE design_request_id = $1
+       SELECT staff_id::text FROM design_request_enterprise_contacts WHERE design_request_id::text = $1
      ) assignees
      WHERE staff_id IS NOT NULL`,
     [recordId],
@@ -59,9 +59,9 @@ export async function getCgDesignAssigneeIds(recordId: string, fallbackIds: Arra
      FROM (
        SELECT designer_id::text AS staff_id FROM cg_design_requests WHERE id::text = $1 AND designer_id IS NOT NULL
        UNION
-       SELECT staff_id::text FROM cg_design_designers WHERE cg_design_request_id = $1
+       SELECT staff_id::text FROM cg_design_designers WHERE cg_design_request_id::text = $1
        UNION
-       SELECT staff_id::text FROM cg_design_enterprise_contacts WHERE cg_design_request_id = $1
+       SELECT staff_id::text FROM cg_design_enterprise_contacts WHERE cg_design_request_id::text = $1
      ) assignees
      WHERE staff_id IS NOT NULL`,
     [recordId],
@@ -75,9 +75,9 @@ export async function getContentScheduleAssigneeIds(recordId: string, fallbackId
      FROM (
        SELECT operator_id::text AS staff_id FROM content_schedules WHERE id::text = $1 AND operator_id IS NOT NULL
        UNION
-       SELECT staff_id::text FROM content_schedule_operators WHERE content_schedule_id = $1
+       SELECT staff_id::text FROM content_schedule_operators WHERE content_schedule_id::text = $1
        UNION
-       SELECT staff_id::text FROM content_schedule_enterprise_contacts WHERE content_schedule_id = $1
+       SELECT staff_id::text FROM content_schedule_enterprise_contacts WHERE content_schedule_id::text = $1
      ) assignees
      WHERE staff_id IS NOT NULL`,
     [recordId],
