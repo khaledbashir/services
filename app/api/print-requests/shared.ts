@@ -212,7 +212,7 @@ export function shapeTwentyPrintRequest(
     assignee_id: null,
     assignee_name: null,
     anc_cost: null,
-    britten_cost: moneyToNumber(record.invoiceAmount),
+    britten_cost: moneyToNumber(record.brittenPrice),
   }
 }
 
@@ -225,7 +225,14 @@ export function buildTwentyPrintRequestPatch(body: Record<string, unknown>): Rec
   if (body.ship_date !== undefined) patch.shipDate = body.ship_date || null
   if (body.arrival_date !== undefined) patch.arrivalDate = body.arrival_date || null
   if (body.invoice_amount !== undefined) {
-    patch.invoiceAmount = body.invoice_amount === '' || body.invoice_amount == null ? null : Number(body.invoice_amount)
+    patch.invoiceAmount = body.invoice_amount === '' || body.invoice_amount == null
+      ? null
+      : { amountMicros: Math.round(Number(body.invoice_amount) * 1_000_000), currencyCode: 'USD' }
+  }
+  if (body.britten_cost !== undefined) {
+    patch.brittenPrice = body.britten_cost === '' || body.britten_cost == null
+      ? null
+      : { amountMicros: Math.round(Number(body.britten_cost) * 1_000_000), currencyCode: 'USD' }
   }
   if (body.notes !== undefined) patch.britainNotes = String(body.notes || '').trim() || null
   if (body.tracking_number !== undefined) patch.trackingNumber = String(body.tracking_number || '').trim() || null
