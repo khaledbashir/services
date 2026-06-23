@@ -6,6 +6,25 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, TwentyPrintRequest } from '@/lib/twenty-ops'
 import * as xlsx from 'xlsx'
 
+function moneyToNumber(value: any): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'object' && 'amountMicros' in value) {
+    const micros = value.amountMicros
+    if (micros === null || micros === undefined) return null
+    const n = Number(micros)
+    return Number.isFinite(n) ? n / 1_000_000 : null
+  }
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function emailToString(value: any): string {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  return value.primaryEmail || ''
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
@@ -43,20 +62,54 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = items.map(req => {
+    const raw = req as any
     return {
+      status: raw.status || '',
+      assignee: raw.printAssignee?.name || '',
+      date: raw.dueDate ? new Date(raw.dueDate).toISOString().slice(0, 10) : '',
+      author: raw.createdBy?.name || '',
+      'submitted by': raw.submittedBy || '',
+      email: emailToString(raw.requesterEmail),
       client: req.printClient?.name || '',
+      HP: raw.homePlate ?? '',
+      BL: raw.baselines ?? '',
+      SHP: raw.smallHomePlate ?? '',
+      'other qty': raw.otherQty ?? '',
       'job title': req.name || '',
       'shipping address': req.shippingAddress || '',
-      'ship date': req.shipDate ? new Date(req.shipDate).toISOString().slice(0, 10) : '',
-      status: req.status || '',
-      'invoice amount': req.invoiceAmount == null ? '' : String(req.invoiceAmount),
+      'date shipped': req.shipDate ? new Date(req.shipDate).toISOString().slice(0, 10) : '',
+      'arrival date': req.arrivalDate ? new Date(req.arrivalDate).toISOString().slice(0, 10) : '',
+      'tracking #': raw.trackingNumber || '',
+      'SF Number': raw.sfNumber || '',
+      reprint: raw.reprint ? 'Yes' : 'No',
+      'rush request': raw.rushRequest ? 'Yes' : 'No',
+      'ANC Price': moneyToNumber(raw.ancPrice) ?? '',
+      'Install Fee': moneyToNumber(raw.installFee) ?? '',
+      'Rush Fee': moneyToNumber(raw.rushFee) ?? '',
+      'Shipping Fee': moneyToNumber(raw.shippingFee) ?? '',
+      'Britten Price': moneyToNumber(raw.brittenPrice) ?? '',
+      'Britten Rush Fee': moneyToNumber(raw.brittenRushFee) ?? '',
+      'Britten Shipping': moneyToNumber(raw.brittenShipping) ?? '',
+      'Order Total': moneyToNumber(raw.invoiceAmount) ?? '',
+      'invoice number': raw.invoiceNumber || '',
+      'invoice date': raw.invoiceDate ? new Date(raw.invoiceDate).toISOString().slice(0, 10) : '',
+      'bill to': raw.billTo || '',
+      'billing notes': raw.billingNotes || '',
+      'ANC Class': raw.ancClass || '',
       'created at': req.createdAt ? new Date(req.createdAt).toISOString() : '',
       notes: req.britainNotes || ''
     }
   })
 
   // Basic CSV conversion
-  const headers = ['client', 'job title', 'shipping address', 'ship date', 'status', 'invoice amount', 'created at', 'notes']
+  const headers = [
+    'status', 'assignee', 'date', 'author', 'submitted by', 'email', 'client',
+    'HP', 'BL', 'SHP', 'other qty', 'job title', 'shipping address', 'date shipped',
+    'arrival date', 'tracking #', 'SF Number', 'reprint', 'rush request',
+    'ANC Price', 'Install Fee', 'Rush Fee', 'Shipping Fee', 'Britten Price',
+    'Britten Rush Fee', 'Britten Shipping', 'Order Total', 'invoice number',
+    'invoice date', 'bill to', 'billing notes', 'ANC Class', 'created at', 'notes',
+  ]
   
   const todayStr = new Date().toISOString().slice(0, 10)
   

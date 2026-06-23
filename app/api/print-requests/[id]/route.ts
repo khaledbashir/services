@@ -85,6 +85,41 @@ function normalizeInvoiceAmount(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function normalizeInteger(value: unknown): number | null {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : null
+}
+
+function moneyToNumber(v: any): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'object' && 'amountMicros' in v) {
+    const micros = v.amountMicros
+    if (micros === null || micros === undefined) return null
+    const n = Number(micros)
+    return Number.isFinite(n) ? n / 1_000_000 : null
+  }
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function moneyPatch(value: unknown) {
+  const amount = normalizeInvoiceAmount(value)
+  return amount == null ? null : { amountMicros: Math.round(amount * 1_000_000), currencyCode: 'USD' }
+}
+
+function emailToString(value: any): string | null {
+  if (!value) return null
+  if (typeof value === 'string') return value.trim() || null
+  return value.primaryEmail || null
+}
+
+function emailPatch(value: unknown) {
+  const email = String(value || '').trim()
+  return { primaryEmail: email, additionalEmails: [] }
+}
+
 async function getClientNameFromLocalId(clientId: string | null | undefined): Promise<string | null> {
   if (!clientId) return null
   const result = await query('SELECT name FROM clients WHERE id = $1 LIMIT 1', [clientId])
@@ -106,32 +141,56 @@ async function resolveTwentyCompanyId(clientId: string | null | undefined, clien
 }
 
 async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
-  const clientName = record.printClient?.name || null
-  const proofLinks = parseProofLinks(record.proofLinks)
+  const raw = record as any
+  const clientName = raw.printClient?.name || null
+  const proofLinks = parseProofLinks(raw.proofLinks)
   return {
-    id: record.id,
+    id: raw.id,
     venue_id: null,
     venue_name: null,
     client_id: await findLocalClientIdByName(clientName),
     client_name: clientName,
-    print_client_id: record.printClientId || null,
-    job_title: record.name || '(untitled)',
-    status: normalizeStatus(record.status),
-    shipping_address: record.shippingAddress || null,
-    shipping_info: record.shippingAddress || null,
-    ship_date: record.shipDate || null,
-    arrival_date: record.arrivalDate || null,
-    invoice_amount: record.invoiceAmount ?? null,
-    britten_cost: record.invoiceAmount ?? null,
-    notes: record.britainNotes || null,
-    britain_notes: record.britainNotes || null,
+    print_client_id: raw.printClientId || null,
+    job_title: raw.name || '(untitled)',
+    status: normalizeStatus(raw.status),
+    shipping_address: raw.shippingAddress || null,
+    shipping_info: raw.shippingAddress || null,
+    ship_date: raw.shipDate || null,
+    arrival_date: raw.arrivalDate || null,
+    due_date: raw.dueDate || null,
+    invoice_amount: moneyToNumber(raw.invoiceAmount),
+    invoice_number: raw.invoiceNumber || null,
+    invoice_date: raw.invoiceDate || null,
+    britten_cost: moneyToNumber(raw.brittenPrice),
+    britten_rush_fee: moneyToNumber(raw.brittenRushFee),
+    britten_shipping: moneyToNumber(raw.brittenShipping),
+    anc_price: moneyToNumber(raw.ancPrice),
+    install_fee: moneyToNumber(raw.installFee),
+    rush_fee: moneyToNumber(raw.rushFee),
+    shipping_fee: moneyToNumber(raw.shippingFee),
+    sales_tax: moneyToNumber(raw.salesTax),
+    bill_to: raw.billTo || null,
+    billing_notes: raw.billingNotes || null,
+    anc_class: raw.ancClass || null,
+    home_plate: raw.homePlate ?? null,
+    baselines: raw.baselines ?? null,
+    small_home_plate: raw.smallHomePlate ?? null,
+    other_qty: raw.otherQty ?? null,
+    submitted_by: raw.submittedBy || null,
+    requester_email: emailToString(raw.requesterEmail),
+    reprint: Boolean(raw.reprint),
+    rush_request: Boolean(raw.rushRequest),
+    sf_number: raw.sfNumber || null,
+    wrike_task_id: raw.wrikeTaskId || null,
+    notes: raw.britainNotes || null,
+    britain_notes: raw.britainNotes || null,
     proof_links: proofLinks,
     proof_links_json: JSON.stringify(proofLinks),
-    tracking_number: record.trackingNumber || null,
+    tracking_number: raw.trackingNumber || null,
     assignee_id: null,
     assignee_name: null,
-    created_at: record.createdAt,
-    updated_at: record.updatedAt,
+    created_at: raw.createdAt,
+    updated_at: raw.updatedAt,
   }
 }
 
@@ -218,7 +277,30 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('shipping_address' in body) patch.shippingAddress = body.shipping_address?.trim() || null
       if ('ship_date' in body) patch.shipDate = body.ship_date || null
       if ('arrival_date' in body) patch.arrivalDate = body.arrival_date || null
-      if ('invoice_amount' in body) patch.invoiceAmount = normalizeInvoiceAmount(body.invoice_amount)
+      if ('due_date' in body) patch.dueDate = body.due_date || null
+      if ('invoice_amount' in body) patch.invoiceAmount = moneyPatch(body.invoice_amount)
+      if ('invoice_number' in body) patch.invoiceNumber = body.invoice_number?.trim() || null
+      if ('invoice_date' in body) patch.invoiceDate = body.invoice_date || null
+      if ('anc_price' in body) patch.ancPrice = moneyPatch(body.anc_price)
+      if ('install_fee' in body) patch.installFee = moneyPatch(body.install_fee)
+      if ('rush_fee' in body) patch.rushFee = moneyPatch(body.rush_fee)
+      if ('shipping_fee' in body) patch.shippingFee = moneyPatch(body.shipping_fee)
+      if ('sales_tax' in body) patch.salesTax = moneyPatch(body.sales_tax)
+      if ('britten_cost' in body) patch.brittenPrice = moneyPatch(body.britten_cost)
+      if ('britten_rush_fee' in body) patch.brittenRushFee = moneyPatch(body.britten_rush_fee)
+      if ('britten_shipping' in body) patch.brittenShipping = moneyPatch(body.britten_shipping)
+      if ('bill_to' in body) patch.billTo = body.bill_to?.trim() || null
+      if ('billing_notes' in body) patch.billingNotes = body.billing_notes?.trim() || null
+      if ('anc_class' in body) patch.ancClass = body.anc_class?.trim() || null
+      if ('home_plate' in body) patch.homePlate = normalizeInteger(body.home_plate)
+      if ('baselines' in body) patch.baselines = normalizeInteger(body.baselines)
+      if ('small_home_plate' in body) patch.smallHomePlate = normalizeInteger(body.small_home_plate)
+      if ('other_qty' in body) patch.otherQty = normalizeInteger(body.other_qty)
+      if ('submitted_by' in body) patch.submittedBy = body.submitted_by?.trim() || null
+      if ('requester_email' in body) patch.requesterEmail = emailPatch(body.requester_email)
+      if ('reprint' in body) patch.reprint = Boolean(body.reprint)
+      if ('rush_request' in body) patch.rushRequest = Boolean(body.rush_request)
+      if ('sf_number' in body) patch.sfNumber = body.sf_number?.trim() || null
       if ('notes' in body) patch.britainNotes = body.notes?.trim() || null
       if ('proof_links' in body) patch.proofLinks = JSON.stringify(parseProofLinks(body.proof_links))
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null

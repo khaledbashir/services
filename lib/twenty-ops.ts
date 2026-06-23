@@ -271,11 +271,35 @@ export interface TwentyPrintRequest {
   shippingAddress: string | null
   shipDate: string | null
   arrivalDate: string | null
-  invoiceAmount: number | null
+  dueDate?: string | null
+  invoiceAmount: unknown
+  ancPrice?: unknown
+  installFee?: unknown
+  rushFee?: unknown
+  shippingFee?: unknown
+  salesTax?: unknown
+  brittenPrice?: unknown
+  brittenRushFee?: unknown
+  brittenShipping?: unknown
+  invoiceNumber?: string | null
+  invoiceDate?: string | null
+  billTo?: string | null
+  billingNotes?: string | null
+  ancClass?: string | null
   britainNotes: string | null
   notes: { blocknote?: string; markdown?: string } | string | null
   proofLinks: string | null
   trackingNumber: string | null
+  submittedBy?: string | null
+  requesterEmail?: { primaryEmail?: string | null; additionalEmails?: string[] | null } | string | null
+  reprint?: boolean | null
+  rushRequest?: boolean | null
+  sfNumber?: string | null
+  wrikeTaskId?: string | null
+  homePlate?: number | null
+  baselines?: number | null
+  smallHomePlate?: number | null
+  otherQty?: number | null
   createdAt: string
   updatedAt: string
 }

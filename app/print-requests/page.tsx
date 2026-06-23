@@ -35,7 +35,30 @@ interface PrintRequestRecord {
   shipping_address: string | null
   ship_date: string | null
   arrival_date: string | null
+  due_date: string | null
   invoice_amount: number | null
+  invoice_number: string | null
+  invoice_date: string | null
+  britten_cost: number | null
+  britten_rush_fee: number | null
+  britten_shipping: number | null
+  anc_price: number | null
+  install_fee: number | null
+  rush_fee: number | null
+  shipping_fee: number | null
+  sales_tax: number | null
+  bill_to: string | null
+  billing_notes: string | null
+  anc_class: string | null
+  home_plate: number | null
+  baselines: number | null
+  small_home_plate: number | null
+  other_qty: number | null
+  submitted_by: string | null
+  requester_email: string | null
+  reprint: boolean
+  rush_request: boolean
+  sf_number: string | null
   notes: string | null
   proof_links: string[]
   tracking_number: string | null
@@ -65,7 +88,30 @@ const EMPTY_FORM = {
   shipping_address: '',
   ship_date: '',
   arrival_date: '',
+  due_date: '',
   invoice_amount: '',
+  invoice_number: '',
+  invoice_date: '',
+  britten_cost: '',
+  britten_rush_fee: '',
+  britten_shipping: '',
+  anc_price: '',
+  install_fee: '',
+  rush_fee: '',
+  shipping_fee: '',
+  sales_tax: '',
+  bill_to: '',
+  billing_notes: '',
+  anc_class: '',
+  home_plate: '',
+  baselines: '',
+  small_home_plate: '',
+  other_qty: '',
+  submitted_by: '',
+  requester_email: '',
+  reprint: false,
+  rush_request: false,
+  sf_number: '',
   notes: '',
   tracking_number: '',
 }
@@ -238,7 +284,30 @@ export default function PrintRequestsPage() {
       shipping_address: record.shipping_address || '',
       ship_date: record.ship_date ? record.ship_date.slice(0, 10) : '',
       arrival_date: record.arrival_date ? record.arrival_date.slice(0, 10) : '',
+      due_date: record.due_date ? record.due_date.slice(0, 10) : '',
       invoice_amount: record.invoice_amount == null ? '' : String(record.invoice_amount),
+      invoice_number: record.invoice_number || '',
+      invoice_date: record.invoice_date ? record.invoice_date.slice(0, 10) : '',
+      britten_cost: record.britten_cost == null ? '' : String(record.britten_cost),
+      britten_rush_fee: record.britten_rush_fee == null ? '' : String(record.britten_rush_fee),
+      britten_shipping: record.britten_shipping == null ? '' : String(record.britten_shipping),
+      anc_price: record.anc_price == null ? '' : String(record.anc_price),
+      install_fee: record.install_fee == null ? '' : String(record.install_fee),
+      rush_fee: record.rush_fee == null ? '' : String(record.rush_fee),
+      shipping_fee: record.shipping_fee == null ? '' : String(record.shipping_fee),
+      sales_tax: record.sales_tax == null ? '' : String(record.sales_tax),
+      bill_to: record.bill_to || '',
+      billing_notes: record.billing_notes || '',
+      anc_class: record.anc_class || '',
+      home_plate: record.home_plate == null ? '' : String(record.home_plate),
+      baselines: record.baselines == null ? '' : String(record.baselines),
+      small_home_plate: record.small_home_plate == null ? '' : String(record.small_home_plate),
+      other_qty: record.other_qty == null ? '' : String(record.other_qty),
+      submitted_by: record.submitted_by || '',
+      requester_email: record.requester_email || '',
+      reprint: Boolean(record.reprint),
+      rush_request: Boolean(record.rush_request),
+      sf_number: record.sf_number || '',
       notes: record.notes || '',
       tracking_number: record.tracking_number || '',
     })
@@ -277,7 +346,30 @@ export default function PrintRequestsPage() {
         shipping_address: form.shipping_address.trim() || null,
         ship_date: form.ship_date || null,
         arrival_date: form.arrival_date || null,
+        due_date: form.due_date || null,
         invoice_amount: form.invoice_amount === '' ? null : Number(form.invoice_amount),
+        invoice_number: form.invoice_number.trim() || null,
+        invoice_date: form.invoice_date || null,
+        britten_cost: form.britten_cost === '' ? null : Number(form.britten_cost),
+        britten_rush_fee: form.britten_rush_fee === '' ? null : Number(form.britten_rush_fee),
+        britten_shipping: form.britten_shipping === '' ? null : Number(form.britten_shipping),
+        anc_price: form.anc_price === '' ? null : Number(form.anc_price),
+        install_fee: form.install_fee === '' ? null : Number(form.install_fee),
+        rush_fee: form.rush_fee === '' ? null : Number(form.rush_fee),
+        shipping_fee: form.shipping_fee === '' ? null : Number(form.shipping_fee),
+        sales_tax: form.sales_tax === '' ? null : Number(form.sales_tax),
+        bill_to: form.bill_to.trim() || null,
+        billing_notes: form.billing_notes.trim() || null,
+        anc_class: form.anc_class.trim() || null,
+        home_plate: form.home_plate === '' ? null : Number(form.home_plate),
+        baselines: form.baselines === '' ? null : Number(form.baselines),
+        small_home_plate: form.small_home_plate === '' ? null : Number(form.small_home_plate),
+        other_qty: form.other_qty === '' ? null : Number(form.other_qty),
+        submitted_by: form.submitted_by.trim() || null,
+        requester_email: form.requester_email.trim() || null,
+        reprint: form.reprint,
+        rush_request: form.rush_request,
+        sf_number: form.sf_number.trim() || null,
         notes: form.notes.trim() || null,
         tracking_number: form.tracking_number.trim() || null,
       }
@@ -570,6 +662,57 @@ export default function PrintRequestsPage() {
                   </div>
 
                   <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">SF Number</label>
+                    <input
+                      type="text"
+                      value={form.sf_number}
+                      onChange={(event) => setForm((current) => ({ ...current, sf_number: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Submitted By</label>
+                    <input
+                      type="text"
+                      value={form.submitted_by}
+                      onChange={(event) => setForm((current) => ({ ...current, submitted_by: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Email</label>
+                    <input
+                      type="email"
+                      value={form.requester_email}
+                      onChange={(event) => setForm((current) => ({ ...current, requester_email: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 grid gap-3 sm:grid-cols-2">
+                    <label className="flex items-center gap-3 rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm font-medium text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={form.reprint}
+                        onChange={(event) => setForm((current) => ({ ...current, reprint: event.target.checked }))}
+                        className="h-4 w-4 rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                      />
+                      Reprint
+                    </label>
+                    <label className="flex items-center gap-3 rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm font-medium text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={form.rush_request}
+                        onChange={(event) => setForm((current) => ({ ...current, rush_request: event.target.checked }))}
+                        className="h-4 w-4 rounded border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                      />
+                      Rush Request
+                    </label>
+                  </div>
+
+                  <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Venue</label>
                     <select
                       value={form.venue_id}
@@ -624,16 +767,6 @@ export default function PrintRequestsPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship Date</label>
-                    <input
-                      type="date"
-                      value={form.ship_date}
-                      onChange={(event) => setForm((current) => ({ ...current, ship_date: event.target.value }))}
-                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
-                    />
-                  </div>
-
-                  <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival Date</label>
                     <input
                       type="date"
@@ -644,13 +777,33 @@ export default function PrintRequestsPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice Amount</label>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Date</label>
+                    <input
+                      type="date"
+                      value={form.due_date}
+                      onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Date Shipped</label>
+                    <input
+                      type="date"
+                      value={form.ship_date}
+                      onChange={(event) => setForm((current) => ({ ...current, ship_date: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Britten Price</label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      value={form.invoice_amount}
-                      onChange={(event) => setForm((current) => ({ ...current, invoice_amount: event.target.value }))}
+                      value={form.britten_cost}
+                      onChange={(event) => setForm((current) => ({ ...current, britten_cost: event.target.value }))}
                       className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
                     />
                   </div>
@@ -661,6 +814,101 @@ export default function PrintRequestsPage() {
                       type="text"
                       value={form.tracking_number}
                       onChange={(event) => setForm((current) => ({ ...current, tracking_number: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 grid gap-5 sm:grid-cols-4">
+                    {[
+                      ['home_plate', 'HP'],
+                      ['baselines', 'BL'],
+                      ['small_home_plate', 'SHP'],
+                      ['other_qty', 'Other Qty'],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">{label}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={(form as any)[key]}
+                          onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+                          className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="md:col-span-2 grid gap-5 sm:grid-cols-3">
+                    {[
+                      ['anc_price', 'ANC Price'],
+                      ['install_fee', 'Install Fee'],
+                      ['rush_fee', 'Rush Fee'],
+                      ['shipping_fee', 'Shipping Fee'],
+                      ['britten_rush_fee', 'Britten Rush Fee'],
+                      ['britten_shipping', 'Britten Shipping'],
+                      ['sales_tax', 'Sales Tax'],
+                      ['invoice_amount', 'Order Total'],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">{label}</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={(form as any)[key]}
+                          onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+                          className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice Number</label>
+                    <input
+                      type="text"
+                      value={form.invoice_number}
+                      onChange={(event) => setForm((current) => ({ ...current, invoice_number: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice Date</label>
+                    <input
+                      type="date"
+                      value={form.invoice_date}
+                      onChange={(event) => setForm((current) => ({ ...current, invoice_date: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Bill To</label>
+                    <input
+                      type="text"
+                      value={form.bill_to}
+                      onChange={(event) => setForm((current) => ({ ...current, bill_to: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">ANC Class</label>
+                    <input
+                      type="text"
+                      value={form.anc_class}
+                      onChange={(event) => setForm((current) => ({ ...current, anc_class: event.target.value }))}
+                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Billing Notes</label>
+                    <textarea
+                      value={form.billing_notes}
+                      onChange={(event) => setForm((current) => ({ ...current, billing_notes: event.target.value }))}
+                      rows={3}
                       className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
                     />
                   </div>

@@ -114,6 +114,19 @@ function stringifyRichText(value: TwentyPrintRequest['notes']): string | null {
   return null
 }
 
+function moneyToNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'object' && 'amountMicros' in value) {
+    const micros = (value as { amountMicros?: unknown }).amountMicros
+    if (micros === null || micros === undefined) return null
+    const parsed = Number(micros)
+    return Number.isFinite(parsed) ? parsed / 1_000_000 : null
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function normalizePrintRequestStatus(input: string | null | undefined): PrintRequestStatus {
   return TWENTY_TO_DASHBOARD_STATUS[input || ''] || 'new_job'
 }
@@ -186,7 +199,7 @@ export function shapeTwentyPrintRequest(
     shipping_info: record.shippingAddress || null,
     ship_date: record.shipDate || null,
     arrival_date: record.arrivalDate || null,
-    invoice_amount: record.invoiceAmount ?? null,
+    invoice_amount: moneyToNumber(record.invoiceAmount),
     notes: record.britainNotes || stringifyRichText(record.notes),
     proof_links: parseProofLinks(record.proofLinks),
     tracking_number: record.trackingNumber || null,
@@ -199,7 +212,7 @@ export function shapeTwentyPrintRequest(
     assignee_id: null,
     assignee_name: null,
     anc_cost: null,
-    britten_cost: record.invoiceAmount ?? null,
+    britten_cost: moneyToNumber(record.invoiceAmount),
   }
 }
 
