@@ -325,12 +325,24 @@ export default function DesignsPage() {
 
   const fetchData = async (sort: string = sortKey) => {
     try {
-      const [dr, vd, sd] = await Promise.all([
-        fetch(`/api/design-requests?sort=${encodeURIComponent(sort)}`).then((r) => r.json()),
+      const designFetches = [
+        fetch(`/api/design-requests?sort=${encodeURIComponent(sort)}&limit=500`).then((r) => r.json()),
+        ...statusColumns.map((status) =>
+          fetch(`/api/design-requests?status=${encodeURIComponent(status.key)}&sort=${encodeURIComponent(sort)}&limit=120`)
+            .then((r) => r.json())
+            .catch(() => ({ design_requests: [] })),
+        ),
+      ]
+      const [designPages, vd, sd] = await Promise.all([
+        Promise.all(designFetches),
         fetch('/api/venues').then((r) => r.json()),
         fetch('/api/staff').then((r) => r.json()),
       ])
-      setDesignRequests(dr.design_requests || [])
+      const byId = new Map<string, DesignRequest>()
+      for (const page of designPages) {
+        for (const row of page.design_requests || []) byId.set(row.id, row)
+      }
+      setDesignRequests(Array.from(byId.values()))
       setVenues(vd.venues || [])
       setStaff(sd.staff || [])
     } catch (err) {

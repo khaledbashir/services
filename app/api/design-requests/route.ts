@@ -142,7 +142,10 @@ export async function GET(request: NextRequest) {
       const requestedLimit = Number(searchParams.get('limit')) || 200
       const limit = Math.min(Math.max(requestedLimit, 1), 500)
       const filters: string[] = []
-      if (statusFilter && statusFilter !== 'all') filters.push(`status[eq]:"${statusFilter}"`)
+      if (statusFilter && statusFilter !== 'all') {
+        const twentyStatus = statusFilter.startsWith('STATUS_') ? statusFilter : toTwentyStatus(statusFilter)
+        filters.push(`status[eq]:"${twentyStatus}"`)
+      }
       const items: any[] = []
       let cursor: string | null = null
       while (items.length < limit) {

@@ -45,7 +45,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
 
   const containerClass = layout === 'stacked'
     ? 'space-y-4'
-    : 'grid gap-3 overflow-x-auto pb-2'
+    : 'grid gap-3 overflow-x-auto pb-2 h-[calc(100vh-18rem)] min-h-[420px] max-h-[900px]'
   const containerStyle = layout === 'stacked'
     ? undefined
     : { gridTemplateColumns: `repeat(${columns.length}, minmax(240px, 1fr))` }
@@ -71,7 +71,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
               }
             }}
             className={`rounded-xl ring-1 transition-colors flex flex-col overflow-hidden ${
-              layout === 'stacked' ? '' : 'min-h-72'
+              layout === 'stacked' ? '' : 'h-full min-h-0'
             } ${
               isHover
                 ? 'ring-[#0A52EF] bg-[#0A52EF]/[0.04] dark:bg-[#0A52EF]/[0.10]'
@@ -87,8 +87,8 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                 {list.length}
               </span>
             </div>
-            <div className={`p-2 flex-1 bg-zinc-50/40 dark:bg-zinc-900/20 ${
-              layout === 'stacked' ? 'grid gap-2' : 'space-y-2'
+            <div className={`p-2 flex-1 min-h-0 bg-zinc-50/40 dark:bg-zinc-900/20 ${
+              layout === 'stacked' ? 'grid gap-2' : 'space-y-2 overflow-y-auto'
             }`} style={layout === 'stacked' ? { gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' } : undefined}>
               {list.map(item => {
                 const k = keyOf(item)
