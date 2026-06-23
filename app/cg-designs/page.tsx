@@ -109,7 +109,7 @@ export default function CgDesignsPage() {
       const [cg, vd, sd] = await Promise.all([
         fetch('/api/cg-designs').then((r) => r.json()),
         fetch('/api/venues').then((r) => r.json()),
-        fetch('/api/staff').then((r) => r.json()),
+        fetch('/api/staff?assignable=project').then((r) => r.json()),
       ])
       setItems(cg.cg_design_requests || [])
       setVenues(vd.venues || [])

@@ -12,6 +12,10 @@ import {
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
 import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
+import {
+  getContentScheduleAssigneeIds,
+  notifyAssigneesOfStatusChange,
+} from '@/lib/assignee-status-notifications'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -157,7 +161,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
       const updated = await ContentScheduleFacade.update(params.id, payload as Partial<TwentyContentSchedule>)
       const reshaped = await reshapeTwentyToDashboard(updated)
-      return NextResponse.json({ content_schedule: reshaped })
+      const previousStatus = normalizeContentScheduleStatus((existing as any).status)
+      const nextStatus = body.status !== undefined ? normalizeContentScheduleStatus(body.status) : null
+      const notificationSummary = nextStatus && nextStatus !== previousStatus
+        ? await notifyAssigneesOfStatusChange({
+            kind: 'Content Schedule',
+            recordId: params.id,
+            title: reshaped.content_name,
+            previousStatus,
+            status: nextStatus,
+            path: `/content-schedules/${params.id}`,
+            assigneeIds: await getContentScheduleAssigneeIds(params.id, [
+              (existing as any).operatorId,
+              (updated as any).operatorId,
+            ]),
+          })
+        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+      return NextResponse.json({ content_schedule: reshaped, assignee_notifications: notificationSummary })
     }
 
     // ── Legacy path ──
@@ -168,6 +188,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     const body = await request.json()
+    const normalizedNextStatus = body.status !== undefined ? normalizeContentScheduleStatus(body.status) : null
     const updates: string[] = []
     const values: any[] = []
     let index = 1
@@ -193,7 +214,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values,
     )
 
-    return NextResponse.json({ content_schedule: result.rows[0] })
+    const notificationSummary = normalizedNextStatus && normalizedNextStatus !== access.record.status
+      ? await notifyAssigneesOfStatusChange({
+          kind: 'Content Schedule',
+          recordId: params.id,
+          title: access.record.content_name,
+          previousStatus: access.record.status,
+          status: normalizedNextStatus,
+          path: `/content-schedules/${params.id}`,
+          assigneeIds: await getContentScheduleAssigneeIds(params.id),
+        })
+      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+
+    return NextResponse.json({ content_schedule: result.rows[0], assignee_notifications: notificationSummary })
   } catch (err) {
     console.error('Error updating content schedule:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

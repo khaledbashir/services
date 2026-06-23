@@ -67,7 +67,7 @@ export default function DesignTemplatesPage() {
       const [t, v, s] = await Promise.all([
         fetch('/api/design-request-templates').then((r) => r.json()),
         fetch('/api/venues').then((r) => r.json()),
-        fetch('/api/staff').then((r) => r.json()),
+        fetch('/api/staff?assignable=project').then((r) => r.json()),
       ])
       setTemplates(t.templates || [])
       setVenues(v.venues || [])

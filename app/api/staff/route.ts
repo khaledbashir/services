@@ -5,12 +5,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { buildAssignableStaffWhere } from '@/lib/assignable-staff'
 import bcrypt from 'bcryptjs'
 
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const assignable = searchParams.get('assignable')
+    const filter = buildAssignableStaffWhere(assignable)
     const result = await query(
-      'SELECT id, full_name, email, phone, role, title, city, profile_image, is_active FROM staff ORDER BY full_name'
+      `SELECT id, full_name, email, phone, role, title, city, profile_image, is_active
+       FROM staff
+       ${filter.clause}
+       ORDER BY full_name`,
+      filter.params,
     )
 
     return NextResponse.json({ staff: result.rows })

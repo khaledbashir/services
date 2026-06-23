@@ -336,7 +336,7 @@ export default function DesignsPage() {
       const [designPages, vd, sd] = await Promise.all([
         Promise.all(designFetches),
         fetch('/api/venues').then((r) => r.json()),
-        fetch('/api/staff').then((r) => r.json()),
+        fetch('/api/staff?assignable=project').then((r) => r.json()),
       ])
       const byId = new Map<string, DesignRequest>()
       for (const page of designPages) {

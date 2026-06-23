@@ -108,7 +108,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     try {
       const [drRes, staffRes] = await Promise.all([
         fetch(`/api/design-requests/${params.id}`),
-        fetch('/api/staff'),
+        fetch('/api/staff?assignable=project'),
       ])
       if (!drRes.ok) { setLoading(false); return }
       const drData = await drRes.json()

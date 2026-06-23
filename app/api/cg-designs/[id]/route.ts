@@ -6,6 +6,10 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled } from '@/lib/twenty-ops'
+import {
+  getCgDesignAssigneeIds,
+  notifyAssigneesOfStatusChange,
+} from '@/lib/assignee-status-notifications'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -104,6 +108,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const auth = await requireRole(request, 'technician')
       if (isAuthError(auth)) return auth
       const body = await request.json()
+      const prior = await CgDesigns.get(params.id)
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.clientTriCode = body.job_title?.trim() || null
       if ('team_name' in body) patch.teamName = body.team_name?.trim() || null
@@ -111,7 +116,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('league' in body) patch.sport = body.league?.trim() || null
       if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
       const updated = await CgDesigns.update(params.id, patch)
-      return NextResponse.json({ cg_design_request: { id: updated.id, job_title: updated.clientTriCode, status: updated.status } })
+      const priorStatus = (prior as any)?.status || null
+      const notificationSummary = body.status && ALLOWED_STATUSES.has(body.status) && body.status !== priorStatus
+        ? await notifyAssigneesOfStatusChange({
+            kind: 'CG Request',
+            recordId: params.id,
+            title: (updated as any).name || (updated as any).clientTriCode || (prior as any)?.clientTriCode || params.id,
+            previousStatus: priorStatus,
+            status: body.status,
+            path: `/cg-designs/${params.id}`,
+            assigneeIds: await getCgDesignAssigneeIds(params.id, [
+              (updated as any).cgDesignerId,
+              (prior as any)?.cgDesignerId,
+            ]),
+          })
+        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+      return NextResponse.json({ cg_design_request: { id: updated.id, job_title: updated.clientTriCode, status: updated.status }, assignee_notifications: notificationSummary })
     }
 
     const access = await getAccessibleRecord(request, params.id)
@@ -121,6 +141,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     const body = await request.json()
+    const normalizedNextStatus = ALLOWED_STATUSES.has(body.status) ? body.status : null
     const updates: string[] = []
     const values: any[] = []
     let index = 1
@@ -146,7 +167,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values,
     )
 
-    return NextResponse.json({ cg_design_request: result.rows[0] })
+    const notificationSummary = normalizedNextStatus && normalizedNextStatus !== access.record.status
+      ? await notifyAssigneesOfStatusChange({
+          kind: 'CG Request',
+          recordId: params.id,
+          title: access.record.job_title,
+          previousStatus: access.record.status,
+          status: normalizedNextStatus,
+          path: `/cg-designs/${params.id}`,
+          assigneeIds: await getCgDesignAssigneeIds(params.id),
+        })
+      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+
+    return NextResponse.json({ cg_design_request: result.rows[0], assignee_notifications: notificationSummary })
   } catch (err) {
     console.error('Error updating CG design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

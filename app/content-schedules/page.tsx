@@ -113,7 +113,7 @@ export default function ContentSchedulesPage() {
       const [cs, vd, sd, tpl] = await Promise.all([
         fetch('/api/content-schedules').then((r) => r.json()),
         fetch('/api/venues').then((r) => r.json()),
-        fetch('/api/staff').then((r) => r.json()),
+        fetch('/api/staff?assignable=project').then((r) => r.json()),
         fetch('/api/content-schedule-templates').then((r) => r.ok ? r.json() : { templates: [] }),
       ])
       setItems(cs.content_schedules || [])

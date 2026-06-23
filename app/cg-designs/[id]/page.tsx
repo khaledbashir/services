@@ -51,7 +51,7 @@ export default function CgDesignDetailPage({ params }: { params: { id: string } 
     try {
       const [res, staffRes] = await Promise.all([
         fetch(`/api/cg-designs/${params.id}`),
-        fetch('/api/staff'),
+        fetch('/api/staff?assignable=project'),
       ])
       if (!res.ok) {
         setLoading(false)

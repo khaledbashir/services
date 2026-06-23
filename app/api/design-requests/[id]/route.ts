@@ -8,6 +8,10 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
+import {
+  getDesignRequestAssigneeIds,
+  notifyAssigneesOfStatusChange,
+} from '@/lib/assignee-status-notifications'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -213,6 +217,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const priorStatusDashboard = (prior?.status || '').toString().replace(/^STATUS_/i, '').toLowerCase()
       const transitioningToClientReview =
         body.status === 'client_review' && priorStatusDashboard !== 'client_review'
+      const normalizedNextStatus = ALLOWED_STATUSES.has(body.status) ? body.status : null
 
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.name = body.job_title?.trim() || null
@@ -253,6 +258,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
       }
 
+      const notificationSummary = normalizedNextStatus && normalizedNextStatus !== priorStatusDashboard
+        ? await notifyAssigneesOfStatusChange({
+            kind: 'Design Request',
+            recordId: params.id,
+            title: (updated as any).name || (prior as any)?.name || params.id,
+            previousStatus: priorStatusDashboard || null,
+            status: normalizedNextStatus,
+            path: `/designs/${params.id}`,
+            assigneeIds: await getDesignRequestAssigneeIds(params.id, [
+              (updated as any).designAssigneeId,
+              (prior as any)?.designAssigneeId,
+            ]),
+          })
+        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+
       return NextResponse.json({
         // Normalize Twenty's STATUS_* back to dashboard vocab so the
         // kanban's optimistic setState doesn't flash a wrong-lane card.
@@ -262,6 +282,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           status: ((updated.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted',
         },
         proof_share: proofShare,
+        assignee_notifications: notificationSummary,
       })
     }
 
@@ -290,6 +311,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const transitioningToClientReview =
       body.status === 'client_review' && access.record.status !== 'client_review'
+    const normalizedNextStatus = ALLOWED_STATUSES.has(body.status) ? body.status : null
 
     const previousThresholdState = getBudgetThresholdState(access.record.hours_spent, access.record.hours_estimated)
     const nextHoursSpent = body.hours_spent !== undefined ? normalizeValue('hours_spent', body.hours_spent) : access.record.hours_spent
@@ -349,7 +371,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
-    return NextResponse.json({ design_request: result.rows[0], proof_share: proofShare })
+    const notificationSummary = normalizedNextStatus && normalizedNextStatus !== access.record.status
+      ? await notifyAssigneesOfStatusChange({
+          kind: 'Design Request',
+          recordId: params.id,
+          title: access.record.job_title,
+          previousStatus: access.record.status,
+          status: normalizedNextStatus,
+          path: `/designs/${params.id}`,
+          assigneeIds: await getDesignRequestAssigneeIds(params.id),
+        })
+      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+
+    return NextResponse.json({ design_request: result.rows[0], proof_share: proofShare, assignee_notifications: notificationSummary })
   } catch (err) {
     console.error('Error updating design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

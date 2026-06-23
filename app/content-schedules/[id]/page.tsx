@@ -50,7 +50,7 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
     try {
       const [res, staffRes] = await Promise.all([
         fetch(`/api/content-schedules/${params.id}`),
-        fetch('/api/staff'),
+        fetch('/api/staff?assignable=project'),
       ])
       if (!res.ok) {
         setLoading(false)
