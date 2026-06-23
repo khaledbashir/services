@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { formatDate } from '@/lib/format-date'
+import { CONTENT_SCHEDULE_STATUSES, isContentLiveStatus, labelForContentScheduleStatus } from '@/lib/content-schedule-status'
 
 interface ContentSchedule {
   id: string
@@ -25,6 +26,19 @@ interface ContentSchedule {
 
 interface Venue { id: string; name: string; aliases?: string[] | null }
 interface Staff { id: string; full_name: string }
+interface ContentScheduleTemplate {
+  id: string
+  name: string
+  description: string | null
+  venue_id: string | null
+  venue_name: string | null
+  company_name: string | null
+  content_name: string
+  operator_id: string | null
+  files_ready: boolean
+  file_location: string | null
+  notes: string | null
+}
 
 function normalizeTriCode(value: string): string {
   const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
@@ -38,15 +52,7 @@ function venueTriCodeOptions(venue: Venue | null | undefined): string[] {
   return Array.from(new Set(options))
 }
 
-const statusColumns = [
-  { key: 'ready', label: 'Ready' },
-  { key: 'in_queue', label: 'In Queue' },
-  { key: 'scheduled_to_launch', label: 'Scheduled To Launch' },
-  { key: 'content_live', label: 'Content Live' },
-  { key: 'confirmed_live', label: 'Confirmed Live with Client' },
-  { key: 'content_removed', label: 'Content Removed' },
-  { key: 'done', label: 'Done' },
-] as const
+const statusColumns = CONTENT_SCHEDULE_STATUSES
 
 const statusTone: Record<string, string> = {
   ready: 'bg-green-50 text-green-700',
@@ -54,12 +60,14 @@ const statusTone: Record<string, string> = {
   scheduled_to_launch: 'bg-amber-50 text-amber-700',
   content_live: 'bg-blue-50 text-blue-700',
   confirmed_live: 'bg-emerald-50 text-emerald-700',
-  content_removed: 'bg-rose-50 text-rose-700',
+  removed: 'bg-rose-50 text-rose-700',
+  confirmed_removed: 'bg-pink-50 text-pink-700',
   done: 'bg-zinc-100 text-zinc-600',
 }
 
 export default function ContentSchedulesPage() {
   const [items, setItems] = useState<ContentSchedule[]>([])
+  const [templates, setTemplates] = useState<ContentScheduleTemplate[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,6 +78,8 @@ export default function ContentSchedulesPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
   const [formData, setFormData] = useState({
     venue_id: '',
     company_name: '',
@@ -100,14 +110,16 @@ export default function ContentSchedulesPage() {
 
   const fetchData = async () => {
     try {
-      const [cs, vd, sd] = await Promise.all([
+      const [cs, vd, sd, tpl] = await Promise.all([
         fetch('/api/content-schedules').then((r) => r.json()),
         fetch('/api/venues').then((r) => r.json()),
         fetch('/api/staff').then((r) => r.json()),
+        fetch('/api/content-schedule-templates').then((r) => r.ok ? r.json() : { templates: [] }),
       ])
       setItems(cs.content_schedules || [])
       setVenues(vd.venues || [])
       setStaff(sd.staff || [])
+      setTemplates(tpl.templates || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -118,6 +130,24 @@ export default function ContentSchedulesPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  const resetForm = () => {
+    setFormData({
+      venue_id: '',
+      company_name: '',
+      venue_tricode: '',
+      content_name: '',
+      launch_date: '',
+      end_date: '',
+      operator_id: '',
+      operator_ids: [],
+      enterprise_contact_ids: [],
+      files_ready: false,
+      file_location: '',
+      notes: '',
+    })
+    setSelectedTemplateId('')
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -138,20 +168,7 @@ export default function ContentSchedulesPage() {
         }),
       })
       if (res.ok) {
-        setFormData({
-          venue_id: '',
-          company_name: '',
-          venue_tricode: '',
-          content_name: '',
-          launch_date: '',
-          end_date: '',
-          operator_id: '',
-          operator_ids: [],
-          enterprise_contact_ids: [],
-          files_ready: false,
-          file_location: '',
-          notes: '',
-        })
+        resetForm()
         setShowForm(false)
         await fetchData()
       }
@@ -190,6 +207,60 @@ export default function ContentSchedulesPage() {
   const counts: Record<string, number> = { all: items.length }
   for (const status of statusColumns) counts[status.key] = items.filter((item) => item.status === status.key).length
 
+  const applyTemplateToForm = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId)
+    if (!template) return
+    const codes = template.venue_id ? venueTriCodeOptions(venueById.get(template.venue_id)) : []
+    setFormData((prev) => ({
+      ...prev,
+      venue_id: template.venue_id || '',
+      venue_tricode: codes.length === 1 ? codes[0] : '',
+      company_name: template.company_name || '',
+      content_name: template.content_name || '',
+      operator_id: template.operator_id || '',
+      operator_ids: template.operator_id ? [template.operator_id] : [],
+      files_ready: template.files_ready,
+      file_location: template.file_location || '',
+      notes: template.notes || '',
+    }))
+    setSelectedTemplateId(templateId)
+    setShowForm(true)
+  }
+
+  const saveCurrentAsTemplate = async () => {
+    if (!formData.content_name.trim()) return
+    const name = window.prompt('Template name', `${formData.content_name.trim()} template`)
+    if (!name?.trim()) return
+
+    setSavingTemplate(true)
+    try {
+      const res = await fetch('/api/content-schedule-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          venue_id: formData.venue_id || null,
+          company_name: formData.company_name || null,
+          content_name: formData.content_name.trim(),
+          operator_id: formData.operator_ids[0] || formData.operator_id || null,
+          files_ready: formData.files_ready,
+          file_location: formData.file_location || null,
+          notes: formData.notes || null,
+        }),
+      })
+      if (res.ok) await fetchData()
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  const previewDate = (item: ContentSchedule) => {
+    if (isContentLiveStatus(item.status)) {
+      return item.end_date ? `End ${formatDate(item.end_date)}` : 'End date not set'
+    }
+    return item.launch_date ? `Launch ${formatDate(item.launch_date)}` : 'Launch date not set'
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -222,9 +293,15 @@ export default function ContentSchedulesPage() {
             <h1 className="text-2xl font-semibold text-zinc-900">Content Schedules</h1>
             <p className="text-sm text-zinc-500 mt-0.5">{counts.all} total schedules</p>
           </div>
-          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
-            {showForm ? 'Cancel' : 'New Content Schedule'}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select value={selectedTemplateId} onChange={(e) => applyTemplateToForm(e.target.value)} className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-400">
+              <option value="">Templates...</option>
+              {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            </select>
+            <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
+              {showForm ? 'Cancel' : 'New Content Schedule'}
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -350,9 +427,14 @@ export default function ContentSchedulesPage() {
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Notes</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} rows={4} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" />
               </div>
-              <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
-                {submitting ? 'Creating...' : 'Create Content Schedule'}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
+                  {submitting ? 'Creating...' : 'Create Content Schedule'}
+                </button>
+                <button type="button" onClick={saveCurrentAsTemplate} disabled={savingTemplate || !formData.content_name.trim()} className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
+                  {savingTemplate ? 'Saving...' : 'Save as Template'}
+                </button>
+              </div>
             </form>
           </div>
         )}
@@ -408,14 +490,14 @@ export default function ContentSchedulesPage() {
                     <Link key={item.id} href={`/content-schedules/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.content_name}</h3>
-                        <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{column.label}</span>
+                        <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{labelForContentScheduleStatus(item.status)}</span>
                       </div>
                       <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
                         <p>{item.company_name || 'No company'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
                         <p>{item.operator_name || 'No operator assigned'}</p>
                         {item.file_location && <p className="truncate">{item.file_location}</p>}
-                        {item.launch_date && <p>Launch {formatDate(item.launch_date)}</p>}
+                        <p>{previewDate(item)}</p>
                         <p>{item.files_ready ? 'Files ready' : 'Files pending'}</p>
                       </div>
                     </Link>

@@ -11,6 +11,7 @@ import {
   isTwentyBackedEnabled,
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
+import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -25,23 +26,13 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'file_location',
 ])
 
-const ALLOWED_STATUSES = new Set([
-  'ready',
-  'in_queue',
-  'scheduled_to_launch',
-  'content_live',
-  'confirmed_live',
-  'content_removed',
-  'done',
-])
-
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'operator_id'].includes(key)) return value || null
   if (['company_name', 'content_name', 'notes', 'file_location'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
-  if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
+  if (key === 'status') return normalizeContentScheduleStatus(value)
   if (key === 'files_ready') return Boolean(value)
   if (key === 'launch_date' || key === 'end_date') return value || null
   return value
@@ -98,7 +89,7 @@ async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
     operator_id: null,
     operator_name: raw.operator || null,
     files_ready: !!raw.filesReady,
-    status: (raw.status || '').toString().replace(/^STATUS_/i, '').toLowerCase() || 'in_queue',
+    status: normalizeContentScheduleStatus(raw.status),
     notes: notesText,
     proof_link: raw.proofLink || null,
     file_location: raw.ftpLocation || null,
@@ -148,7 +139,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (body.content_name?.trim()) payload.name = body.content_name.trim()
       if (body.launch_date !== undefined) payload.runStartDate = body.launch_date || null
       if (body.end_date !== undefined) payload.runEndDate = body.end_date || null
-      if (body.status !== undefined && ALLOWED_STATUSES.has(body.status)) payload.status = body.status
+      if (body.status !== undefined) payload.status = normalizeContentScheduleStatus(body.status)
       if (body.notes !== undefined) payload.notes = body.notes?.trim() || null
       if (body.file_location !== undefined) payload.ftpLocation = body.file_location?.trim() || null
       if (body.venue_id !== undefined) {

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { CONTENT_SCHEDULE_STATUSES } from '@/lib/content-schedule-status'
 
 interface ContentScheduleDetail {
   id: string
@@ -26,15 +27,7 @@ interface ContentScheduleDetail {
 
 interface Staff { id: string; full_name: string }
 
-const statusOptions = [
-  { value: 'ready', label: 'Ready' },
-  { value: 'in_queue', label: 'In Queue' },
-  { value: 'scheduled_to_launch', label: 'Scheduled To Launch' },
-  { value: 'content_live', label: 'Content Live' },
-  { value: 'confirmed_live', label: 'Confirmed Live with Client' },
-  { value: 'content_removed', label: 'Content Removed' },
-  { value: 'done', label: 'Done' },
-]
+const statusOptions = CONTENT_SCHEDULE_STATUSES.map((status) => ({ value: status.key, label: status.label }))
 
 function toDateInputValue(value: unknown) {
   if (!value) return ''

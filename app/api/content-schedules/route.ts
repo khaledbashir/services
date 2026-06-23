@@ -13,43 +13,12 @@ import {
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
-
-const ALLOWED_STATUSES = new Set([
-  'ready',
-  'in_queue',
-  'scheduled_to_launch',
-  'content_live',
-  'confirmed_live',
-  'content_removed',
-  'done',
-])
-
-function normalizeStatus(status: string | null | undefined) {
-  if (!status) return 'in_queue'
-  return ALLOWED_STATUSES.has(status) ? status : 'in_queue'
-}
+import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
 
 // ── Twenty ↔ Dashboard field reshaping ───────────────────────────────────────
 
 function mapContentStatus(raw: string | null | undefined): string {
-  if (!raw) return 'in_queue'
-  const stripped = raw.toString().replace(/^STATUS_/i, '').toLowerCase()
-  const map: Record<string, string> = {
-    ready: 'ready',
-    in_queue: 'in_queue',
-    queued: 'in_queue',
-    scheduled_to_launch: 'scheduled_to_launch',
-    scheduled: 'scheduled_to_launch',
-    content_live: 'content_live',
-    live: 'content_live',
-    confirmed_live: 'confirmed_live',
-    confirmed: 'confirmed_live',
-    done: 'confirmed_live',
-    completed: 'confirmed_live',
-    content_removed: 'content_removed',
-    removed: 'content_removed',
-  }
-  return map[stripped] || stripped || 'in_queue'
+  return normalizeContentScheduleStatus(raw)
 }
 
 async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
@@ -200,7 +169,7 @@ export async function POST(request: NextRequest) {
           name: content_name.trim(),
           runStartDate: launch_date || null,
           runEndDate: end_date || null,
-          status: normalizeStatus(status),
+          status: normalizeContentScheduleStatus(status),
           notes: notes?.trim() || null,
           ftpLocation: file_location?.trim() || null,
         }
@@ -246,7 +215,7 @@ export async function POST(request: NextRequest) {
         end_date || null,
         (Array.isArray(operator_ids) && operator_ids[0]) || operator_id || null,
         Boolean(files_ready),
-        normalizeStatus(status),
+        normalizeContentScheduleStatus(status),
         file_location?.trim() || null,
         notes?.trim() || null,
       ],
