@@ -12,6 +12,11 @@ interface ClientOption {
   name: string
 }
 
+interface PrintShippingAddress {
+  client: string
+  address: string
+}
+
 interface PrintRequestRecord {
   id: string
   client_id: string | null
@@ -56,6 +61,15 @@ const EMPTY_FORM = {
   tracking_number: '',
 }
 
+function normalizeClientName(value: string | null | undefined) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function formatShortDate(value: string | null) {
   if (!value) return '—'
   try {
@@ -76,6 +90,7 @@ export default function PrintRequestsPage() {
 
   const [records, setRecords] = useState<PrintRequestRecord[]>([])
   const [clients, setClients] = useState<ClientOption[]>([])
+  const [shippingAddresses, setShippingAddresses] = useState<PrintShippingAddress[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<ViewMode>('list')
   const [clientFilter, setClientFilter] = useState('all')
@@ -111,6 +126,31 @@ export default function PrintRequestsPage() {
     fetchData(clientFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientFilter])
+
+  useEffect(() => {
+    fetch('/api/print-shipping-addresses')
+      .then((response) => response.ok ? response.json() : { addresses: [] })
+      .then((data) => setShippingAddresses(data.addresses || []))
+      .catch(() => setShippingAddresses([]))
+  }, [])
+
+  const addressByClient = useMemo(() => {
+    const map = new Map<string, string>()
+    shippingAddresses.forEach((item) => map.set(normalizeClientName(item.client), item.address))
+    return map
+  }, [shippingAddresses])
+
+  function findShippingAddressForClient(clientName: string | null | undefined) {
+    const needle = normalizeClientName(clientName)
+    if (!needle) return null
+    const exact = addressByClient.get(needle)
+    if (exact) return exact
+    const match = shippingAddresses.find((item) => {
+      const candidate = normalizeClientName(item.client)
+      return candidate.includes(needle) || needle.includes(candidate)
+    })
+    return match?.address || null
+  }
 
   const filteredRecords = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -173,10 +213,14 @@ export default function PrintRequestsPage() {
 
   function handleClientChange(clientId: string) {
     const client = clients.find((item) => item.id === clientId)
+    const nextAddress = findShippingAddressForClient(client?.name || '')
     setForm((current) => ({
       ...current,
       client_id: clientId,
       client_name: client?.name || '',
+      shipping_address: nextAddress && (!current.shipping_address.trim() || Boolean(findShippingAddressForClient(current.client_name)))
+        ? nextAddress
+        : current.shipping_address,
     }))
   }
 
@@ -491,6 +535,9 @@ export default function PrintRequestsPage() {
                       rows={3}
                       className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
                     />
+                    {form.client_name && findShippingAddressForClient(form.client_name) ? (
+                      <p className="mt-1.5 text-xs text-zinc-500">Address populated from the print shipping address list.</p>
+                    ) : null}
                   </div>
 
                   <div>

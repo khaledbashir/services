@@ -1,11 +1,47 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+interface PrintShippingAddress {
+  client: string
+  address: string
+}
+
+function normalizeClientName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export default function PrintRequestFormPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState<{ id: string; name: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [addresses, setAddresses] = useState<PrintShippingAddress[]>([])
+  const [clientName, setClientName] = useState('')
+  const [shippingAddress, setShippingAddress] = useState('')
+
+  const addressByClient = useMemo(() => {
+    const map = new Map<string, string>()
+    addresses.forEach((item) => map.set(normalizeClientName(item.client), item.address))
+    return map
+  }, [addresses])
+
+  useEffect(() => {
+    fetch('/api/print-shipping-addresses')
+      .then((res) => res.ok ? res.json() : { addresses: [] })
+      .then((data) => setAddresses(data.addresses || []))
+      .catch(() => setAddresses([]))
+  }, [])
+
+  function handleClientChange(value: string) {
+    setClientName(value)
+    const nextAddress = addressByClient.get(normalizeClientName(value))
+    if (nextAddress) setShippingAddress(nextAddress)
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -16,7 +52,7 @@ export default function PrintRequestFormPage() {
     const payload = {
       submittedBy: fd.get('submittedBy'),
       requesterEmail: fd.get('email'),
-      clientName: fd.get('client'),
+      clientName,
       sfNumber: fd.get('sfNumber'),
       dueDate: fd.get('dueDate'),
       reprint: fd.get('reprint') === 'on',
@@ -26,7 +62,7 @@ export default function PrintRequestFormPage() {
       smallHomePlate: Number(fd.get('smallHomePlate') || 0),
       otherQty: Number(fd.get('otherQty') || 0),
       notes: fd.get('notes'),
-      shippingAddress: fd.get('shippingAddress'),
+      shippingAddress,
     }
 
     try {
@@ -78,7 +114,25 @@ export default function PrintRequestFormPage() {
           <Field label="Email" name="email" type="email" required />
         </div>
 
-        <Field label="Client / team" name="client" placeholder="e.g. Boston Red Sox" required />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Client / team<span className="text-red-500 ml-0.5">*</span>
+          </label>
+          <input
+            list="print-shipping-clients"
+            name="client"
+            value={clientName}
+            onChange={(event) => handleClientChange(event.target.value)}
+            placeholder="e.g. Boston Red Sox"
+            required
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--anc-brand)] focus:border-transparent"
+          />
+          <datalist id="print-shipping-clients">
+            {addresses.map((item) => (
+              <option key={item.client} value={item.client} />
+            ))}
+          </datalist>
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="SF Number" name="sfNumber" placeholder="Optional" />
@@ -100,10 +154,13 @@ export default function PrintRequestFormPage() {
           </div>
         </div>
 
-        <Field
+        <Textarea
           label="Shipping address"
           name="shippingAddress"
           placeholder="Where should Britten ship to?"
+          rows={3}
+          value={shippingAddress}
+          onChange={setShippingAddress}
         />
 
         <Textarea
@@ -171,14 +228,16 @@ function Checkbox({ label, name }: any) {
   )
 }
 
-function Textarea({ label, name, placeholder }: any) {
+function Textarea({ label, name, placeholder, rows = 4, value, onChange }: any) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <textarea
         name={name}
-        rows={4}
+        rows={rows}
         placeholder={placeholder}
+        value={value}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--anc-brand)] focus:border-transparent"
       />
     </div>
