@@ -7,6 +7,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled, type TwentyCgDesignRequest } from '@/lib/twenty-ops'
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { loadCgAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
 
 // Map Twenty's STATUS_* enum values onto the kanban lane keys the UI renders.
 // Without this every record ends up lumped into 'request_submitted' (or a lane
@@ -96,6 +97,14 @@ export async function GET(request: NextRequest) {
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
+      const assignmentMap = await loadCgAssignmentSummaries(items.map((item) => item.id))
+      for (const item of items) {
+        const split = splitDesignAssignments(assignmentMap.get(item.id))
+        item.designers = split.designers.length
+          ? split.designers
+          : (item.designer_id && item.designer_name ? [{ id: item.designer_id, full_name: item.designer_name, role: 'designer', is_primary: true }] : [])
+        item.enterprise_contacts = split.enterprise_contacts
+      }
       return NextResponse.json({ cg_design_requests: items })
     }
 
@@ -135,7 +144,15 @@ export async function GET(request: NextRequest) {
       params,
     )
 
-    return NextResponse.json({ cg_design_requests: result.rows })
+    const rows = result.rows
+    const assignmentMap = await loadCgAssignmentSummaries(rows.map((row) => row.id))
+    for (const row of rows) {
+      const split = splitDesignAssignments(assignmentMap.get(row.id))
+      row.designers = split.designers
+      row.enterprise_contacts = split.enterprise_contacts
+    }
+
+    return NextResponse.json({ cg_design_requests: rows })
   } catch (err) {
     console.error('Error fetching CG design requests:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

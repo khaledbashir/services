@@ -19,11 +19,22 @@ interface CgDesignRequest {
   venue_id: string | null
   designer_name: string | null
   designer_id: string | null
+  designers?: AssignmentPerson[]
+  enterprise_contacts?: AssignmentPerson[]
   created_date: string
 }
 
+interface AssignmentPerson { id: string; full_name: string; is_primary?: boolean }
 interface Venue { id: string; name: string; aliases?: string[] | null }
 interface Staff { id: string; full_name: string }
+
+function assignmentNames(people: AssignmentPerson[] | undefined, fallback?: string | null) {
+  const names = (people || []).map((person) => person.full_name).filter(Boolean)
+  if (!names.length && fallback) names.push(fallback)
+  if (!names.length) return ''
+  if (names.length <= 2) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+}
 
 function normalizeTriCode(value: string): string {
   const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
@@ -395,7 +406,11 @@ export default function CgDesignsPage() {
                 </div>
                 <div className="p-3 space-y-3">
                   {columnItems.length === 0 && <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No requests</div>}
-                  {columnItems.map((item) => (
+                  {columnItems.map((item) => {
+                    const designerNames = assignmentNames(item.designers, item.designer_name)
+                    const enterpriseNames = assignmentNames(item.enterprise_contacts)
+                    const assigneeText = [designerNames || 'No designer assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
+                    return (
                     <Link key={item.id} href={`/cg-designs/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.job_title}</h3>
@@ -405,11 +420,11 @@ export default function CgDesignsPage() {
                         <p>{item.team_name || 'No team'}</p>
                         <p className="font-mono">{item.tricode || 'No tri-code'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
-                        <p>{item.designer_name || 'No designer assigned'}</p>
+                        <p>{assigneeText}</p>
                         {item.due_date && <p>Due {formatDate(item.due_date)}</p>}
                       </div>
                     </Link>
-                  ))}
+                  )})}
                 </div>
               </div>
             )

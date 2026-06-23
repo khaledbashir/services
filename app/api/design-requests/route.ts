@@ -7,6 +7,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { Designs, isTwentyBackedEnabled, type TwentyDesignRequest } from '@/lib/twenty-ops'
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { loadDesignAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
 
 function normalizeTwentyStatus(raw: string | null | undefined): string {
   if (!raw) return 'request_submitted'
@@ -160,9 +161,15 @@ export async function GET(request: NextRequest) {
         loadInternalCategoryMap(ids),
         loadPriorityMap(ids),
       ])
+      const assignmentMap = await loadDesignAssignmentSummaries(ids)
       for (const item of items) {
         item.internal_category = tagMap.get(item.id) || null
         item.priority = priorityMap.get(item.id) || null
+        const split = splitDesignAssignments(assignmentMap.get(item.id))
+        item.designers = split.designers.length
+          ? split.designers
+          : (item.designer_id && item.designer_name ? [{ id: item.designer_id, full_name: item.designer_name, role: 'designer', is_primary: true }] : [])
+        item.enterprise_contacts = split.enterprise_contacts
       }
       return NextResponse.json({ design_requests: items, total: items.length, limit })
     }
@@ -239,8 +246,16 @@ export async function GET(request: NextRequest) {
       params.slice(0, -1),
     )
 
+    const rows = result.rows
+    const assignmentMap = await loadDesignAssignmentSummaries(rows.map((row) => row.id))
+    for (const row of rows) {
+      const split = splitDesignAssignments(assignmentMap.get(row.id))
+      row.designers = split.designers
+      row.enterprise_contacts = split.enterprise_contacts
+    }
+
     return NextResponse.json({
-      design_requests: result.rows,
+      design_requests: rows,
       total: Number(countResult.rows[0]?.count || 0),
       limit,
     })

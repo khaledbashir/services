@@ -14,6 +14,7 @@ import {
 } from '@/lib/twenty-ops'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
+import { loadContentAssignmentSummaries, splitContentAssignments } from '@/lib/work-assignment-summaries'
 
 // ── Twenty ↔ Dashboard field reshaping ───────────────────────────────────────
 
@@ -87,6 +88,15 @@ export async function GET(request: NextRequest) {
           cursor = page.nextCursor
         }
 
+        const assignmentMap = await loadContentAssignmentSummaries(items.map((item) => item.id))
+        for (const item of items) {
+          const split = splitContentAssignments(assignmentMap.get(item.id))
+          item.operators = split.operators.length
+            ? split.operators
+            : (item.operator_id && item.operator_name ? [{ id: item.operator_id, full_name: item.operator_name, role: 'operator', is_primary: true }] : [])
+          item.enterprise_contacts = split.enterprise_contacts
+        }
+
         return NextResponse.json({ content_schedules: items })
       } catch (err) {
         console.error('[content-schedules GET twenty-backed] error:', err)
@@ -127,7 +137,15 @@ export async function GET(request: NextRequest) {
       params,
     )
 
-    return NextResponse.json({ content_schedules: result.rows })
+    const rows = result.rows
+    const assignmentMap = await loadContentAssignmentSummaries(rows.map((row) => row.id))
+    for (const row of rows) {
+      const split = splitContentAssignments(assignmentMap.get(row.id))
+      row.operators = split.operators
+      row.enterprise_contacts = split.enterprise_contacts
+    }
+
+    return NextResponse.json({ content_schedules: rows })
   } catch (err) {
     console.error('Error fetching content schedules:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

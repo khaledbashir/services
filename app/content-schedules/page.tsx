@@ -21,11 +21,22 @@ interface ContentSchedule {
   venue_id: string | null
   operator_name: string | null
   operator_id: string | null
+  operators?: AssignmentPerson[]
+  enterprise_contacts?: AssignmentPerson[]
   created_date: string
 }
 
+interface AssignmentPerson { id: string; full_name: string; is_primary?: boolean }
 interface Venue { id: string; name: string; aliases?: string[] | null }
 interface Staff { id: string; full_name: string }
+
+function assignmentNames(people: AssignmentPerson[] | undefined, fallback?: string | null) {
+  const names = (people || []).map((person) => person.full_name).filter(Boolean)
+  if (!names.length && fallback) names.push(fallback)
+  if (!names.length) return ''
+  if (names.length <= 2) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+}
 interface ContentScheduleTemplate {
   id: string
   name: string
@@ -486,7 +497,11 @@ export default function ContentSchedulesPage() {
                 </div>
                 <div className="p-3 space-y-3">
                   {columnItems.length === 0 && <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No schedules</div>}
-                  {columnItems.map((item) => (
+                  {columnItems.map((item) => {
+                    const operatorNames = assignmentNames(item.operators, item.operator_name)
+                    const enterpriseNames = assignmentNames(item.enterprise_contacts)
+                    const assigneeText = [operatorNames || 'No operator assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
+                    return (
                     <Link key={item.id} href={`/content-schedules/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.content_name}</h3>
@@ -495,13 +510,13 @@ export default function ContentSchedulesPage() {
                       <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
                         <p>{item.company_name || 'No company'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>
-                        <p>{item.operator_name || 'No operator assigned'}</p>
+                        <p>{assigneeText}</p>
                         {item.file_location && <p className="truncate">{item.file_location}</p>}
                         <p>{previewDate(item)}</p>
                         <p>{item.files_ready ? 'Files ready' : 'Files pending'}</p>
                       </div>
                     </Link>
-                  ))}
+                  )})}
                 </div>
               </div>
             )

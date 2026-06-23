@@ -30,6 +30,8 @@ interface DesignRequest {
   designer_id: string | null
   enterprise_contact_name: string | null
   enterprise_contact_id: string | null
+  designers?: AssignmentPerson[]
+  enterprise_contacts?: AssignmentPerson[]
   status: string
   hours_estimated: number | null
   hours_spent: number | null
@@ -42,6 +44,7 @@ interface DesignRequest {
   priority?: string | null
 }
 
+interface AssignmentPerson { id: string; full_name: string; is_primary?: boolean }
 interface Venue {
   id: string
   name: string
@@ -50,6 +53,14 @@ interface Venue {
   aliases?: string[] | null
 }
 interface Staff { id: string; full_name: string }
+
+function assignmentNames(people: AssignmentPerson[] | undefined, fallback?: string | null) {
+  const names = (people || []).map((person) => person.full_name).filter(Boolean)
+  if (!names.length && fallback) names.push(fallback)
+  if (!names.length) return ''
+  if (names.length <= 2) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+}
 
 // League buckets Alexis named on the 2026-04-29 call: "college / venue / places,
 // MLB, MiLB, NBA, WNBA, Pro Hockey, NFL." Order matters — the rail renders
@@ -1276,9 +1287,13 @@ export default function DesignsPage() {
               : isDueSoon ? 'bg-amber-50 text-amber-700 ring-amber-200'
               : 'bg-zinc-50 text-zinc-600 ring-zinc-200'
 
-            const designerInitials = item.designer_name
-              ? item.designer_name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
+            const primaryDesignerName = item.designers?.[0]?.full_name || item.designer_name
+            const designerInitials = primaryDesignerName
+              ? primaryDesignerName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
               : null
+            const designerNames = assignmentNames(item.designers, item.designer_name)
+            const enterpriseNames = assignmentNames(item.enterprise_contacts, item.enterprise_contact_name)
+            const assigneeText = [designerNames || 'Unassigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
 
             const selected = bulkSelected.has(item.id)
             return (
@@ -1363,7 +1378,7 @@ export default function DesignsPage() {
                       </div>
                     )}
                     <span className="text-[11.5px] text-zinc-600 truncate">
-                      {item.designer_name || 'Unassigned'}
+                      {assigneeText}
                     </span>
                   </div>
                   {dueIso && (
