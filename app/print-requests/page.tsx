@@ -67,7 +67,6 @@ const EMPTY_FORM = {
   arrival_date: '',
   invoice_amount: '',
   notes: '',
-  proof_links: '',
   tracking_number: '',
 }
 
@@ -241,7 +240,6 @@ export default function PrintRequestsPage() {
       arrival_date: record.arrival_date ? record.arrival_date.slice(0, 10) : '',
       invoice_amount: record.invoice_amount == null ? '' : String(record.invoice_amount),
       notes: record.notes || '',
-      proof_links: (record.proof_links || []).join('\n'),
       tracking_number: record.tracking_number || '',
     })
     setModalOpen(true)
@@ -281,7 +279,6 @@ export default function PrintRequestsPage() {
         arrival_date: form.arrival_date || null,
         invoice_amount: form.invoice_amount === '' ? null : Number(form.invoice_amount),
         notes: form.notes.trim() || null,
-        proof_links: form.proof_links,
         tracking_number: form.tracking_number.trim() || null,
       }
 
@@ -444,7 +441,6 @@ export default function PrintRequestsPage() {
                         <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Ship</th>
                         <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Arrival</th>
                         <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Invoice</th>
-                        <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Proofs</th>
                         <th className="px-5 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Updated</th>
                       </tr>
                     </thead>
@@ -462,7 +458,6 @@ export default function PrintRequestsPage() {
                           <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
                           <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.arrival_date)}</td>
                           <td className="px-5 py-3.5 text-zinc-900">{formatMoney(record.invoice_amount)}</td>
-                          <td className="px-5 py-3.5 text-zinc-600">{record.proof_links.length}</td>
                           <td className="px-5 py-3.5 text-right text-zinc-500">{formatShortDate(record.updated_at)}</td>
                         </tr>
                       ))}
@@ -499,7 +494,7 @@ export default function PrintRequestsPage() {
                         {record.venue_name && <div className="mt-1 text-xs text-zinc-400">{record.venue_name}</div>}
                         <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
                           <span>Ship {formatShortDate(record.ship_date)}</span>
-                          <span>{record.proof_links.length} proof{record.proof_links.length === 1 ? '' : 's'}</span>
+                          <span>{formatShortDate(record.arrival_date)} arrival</span>
                         </div>
                         <div className="mt-3 text-xs font-medium text-zinc-700">{formatMoney(record.invoice_amount)}</div>
                       </button>
@@ -676,17 +671,6 @@ export default function PrintRequestsPage() {
                       value={form.notes}
                       onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
                       rows={5}
-                      className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Proof Links</label>
-                    <textarea
-                      value={form.proof_links}
-                      onChange={(event) => setForm((current) => ({ ...current, proof_links: event.target.value }))}
-                      rows={4}
-                      placeholder="One URL per line"
                       className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
                     />
                   </div>

@@ -6,16 +6,6 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, TwentyPrintRequest } from '@/lib/twenty-ops'
 import * as xlsx from 'xlsx'
 
-function parseProofLinks(raw: any): string[] {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed
-  } catch (e) {}
-  return [String(raw)]
-}
-
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
   if (isAuthError(auth)) return auth
@@ -53,7 +43,6 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = items.map(req => {
-    const proofs = parseProofLinks(req.proofLinks).join('; ')
     return {
       client: req.printClient?.name || '',
       'job title': req.name || '',
@@ -62,13 +51,12 @@ export async function GET(request: NextRequest) {
       status: req.status || '',
       'invoice amount': req.invoiceAmount == null ? '' : String(req.invoiceAmount),
       'created at': req.createdAt ? new Date(req.createdAt).toISOString() : '',
-      notes: req.britainNotes || '',
-      'proof URLs': proofs
+      notes: req.britainNotes || ''
     }
   })
 
   // Basic CSV conversion
-  const headers = ['client', 'job title', 'shipping address', 'ship date', 'status', 'invoice amount', 'created at', 'notes', 'proof URLs']
+  const headers = ['client', 'job title', 'shipping address', 'ship date', 'status', 'invoice amount', 'created at', 'notes']
   
   const todayStr = new Date().toISOString().slice(0, 10)
   
