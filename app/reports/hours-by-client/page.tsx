@@ -7,6 +7,9 @@ import { Skeleton } from '@/components/skeleton'
 
 interface ClientRow {
   client_name: string
+  tricode: string | null
+  company_name: string | null
+  venue_name: string | null
   jobs: number
   total_hours: number
   designers_worked: number
@@ -47,9 +50,9 @@ export default function HoursByClientReport() {
   useEffect(() => { load() }, [load])
 
   const exportCsv = () => {
-    const header = ['Client', 'Jobs', 'Hours', 'Share %', 'Designers', 'First Entry', 'Last Entry']
+    const header = ['Tri-Code', 'Venue', 'Client', 'Jobs', 'Hours', 'Share %', 'Designers', 'First Entry', 'Last Entry']
     const rows = clients.map(c => [
-      c.client_name, c.jobs, c.total_hours, c.share_pct, c.designers_worked,
+      c.client_name, c.venue_name || '', c.company_name || '', c.jobs, c.total_hours, c.share_pct, c.designers_worked,
       c.first_entry || '', c.last_entry || '',
     ])
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -57,7 +60,7 @@ export default function HoursByClientReport() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `hours-by-client-${from}-to-${to}.csv`
+    a.download = `hours-by-tricode-${from}-to-${to}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -67,8 +70,8 @@ export default function HoursByClientReport() {
       <div className="max-w-6xl mx-auto space-y-6 py-2">
         <div>
           <Link href="/reports" className="text-xs text-zinc-400 hover:text-zinc-700">← All reports</Link>
-          <h1 className="mt-1 text-2xl font-semibold text-zinc-900">Hours by Client</h1>
-          <p className="text-sm text-zinc-500">Designer time spent per client across the selected window.</p>
+          <h1 className="mt-1 text-2xl font-semibold text-zinc-900">Hours by Tri-Code</h1>
+          <p className="text-sm text-zinc-500">Designer time spent by venue tri-code across the selected window.</p>
         </div>
 
         <div className="flex items-end gap-3 flex-wrap">
@@ -102,7 +105,7 @@ export default function HoursByClientReport() {
             <table className="w-full text-sm">
               <thead className="bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                 <tr>
-                  <th className="text-left px-5 py-3">Client</th>
+                  <th className="text-left px-5 py-3">Tri-Code</th>
                   <th className="text-right px-5 py-3">Jobs</th>
                   <th className="text-right px-5 py-3">Hours</th>
                   <th className="text-right px-5 py-3">Share</th>
@@ -120,6 +123,11 @@ export default function HoursByClientReport() {
                       >
                         {c.client_name}
                       </Link>
+                      {(c.venue_name || c.company_name) && (
+                        <div className="mt-0.5 text-[11px] font-normal text-zinc-500">
+                          {[c.venue_name, c.company_name].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-right text-zinc-600">{c.jobs}</td>
                     <td className="px-5 py-3 text-right font-semibold text-zinc-900">{c.total_hours.toFixed(2)}</td>

@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/skeleton'
 interface RequestRow {
   id: string
   job_title: string
+  company_name: string | null
+  tricode: string | null
+  venue_name: string | null
   status: string | null
   due_date: string | null
   created_at: string | null
@@ -71,9 +74,9 @@ export default function HoursByClientDetail() {
   useEffect(() => { load() }, [load])
 
   const exportCsv = () => {
-    const header = ['Job', 'Status', 'Hours', 'Share %', 'Designers', 'Entries', 'First Entry', 'Last Entry', 'Due', 'Created']
+    const header = ['Job', 'Tri-Code', 'Venue', 'Client', 'Status', 'Hours', 'Share %', 'Designers', 'Entries', 'First Entry', 'Last Entry', 'Due', 'Created']
     const rows = requests.map(r => [
-      r.job_title, statusLabel(r.status), r.total_hours, r.share_pct,
+      r.job_title, r.tricode || '', r.venue_name || '', r.company_name || '', statusLabel(r.status), r.total_hours, r.share_pct,
       r.designers_worked, r.entries,
       r.first_entry || '', r.last_entry || '',
       r.due_date || '', r.created_at?.slice(0, 10) || '',
@@ -94,9 +97,9 @@ export default function HoursByClientDetail() {
     <DashboardLayout>
       <div className="max-w-6xl mx-auto space-y-6 py-2">
         <div>
-          <Link href={`/reports/hours-by-client?${parentQs}`} className="text-xs text-zinc-400 hover:text-zinc-700">← Hours by Client</Link>
+          <Link href={`/reports/hours-by-client?${parentQs}`} className="text-xs text-zinc-400 hover:text-zinc-700">← Hours by Tri-Code</Link>
           <h1 className="mt-1 text-2xl font-semibold text-zinc-900">{clientName}</h1>
-          <p className="text-sm text-zinc-500">Design requests with logged hours in the selected window.</p>
+          <p className="text-sm text-zinc-500">Design requests with logged hours for this venue tri-code.</p>
         </div>
 
         <div className="flex items-end gap-3 flex-wrap">
@@ -131,6 +134,7 @@ export default function HoursByClientDetail() {
               <thead className="bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                 <tr>
                   <th className="text-left px-5 py-3">Job</th>
+                  <th className="text-left px-5 py-3">Venue</th>
                   <th className="text-left px-5 py-3">Status</th>
                   <th className="text-right px-5 py-3">Hours</th>
                   <th className="text-right px-5 py-3">Share</th>
@@ -146,6 +150,10 @@ export default function HoursByClientDetail() {
                       <Link href={`/designs/${r.id}`} className="text-[#0A52EF] hover:underline">
                         {r.job_title}
                       </Link>
+                    </td>
+                    <td className="px-5 py-3 text-zinc-600">
+                      <div>{r.venue_name || r.company_name || '—'}</div>
+                      {r.tricode && <div className="mt-0.5 font-mono text-[11px] text-zinc-400">{r.tricode}</div>}
                     </td>
                     <td className="px-5 py-3 text-zinc-600">{statusLabel(r.status)}</td>
                     <td className="px-5 py-3 text-right font-semibold text-zinc-900">{r.total_hours.toFixed(2)}</td>

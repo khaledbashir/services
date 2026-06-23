@@ -9,7 +9,8 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 // each client does. Are we able to create those?"
 //
 // GET /api/reports/hours-by-client?from=YYYY-MM-DD&to=YYYY-MM-DD
-// Returns per-client totals + optional per-designer breakdown.
+// Returns per-venue-tricode totals. Alexis 2026-06-23: hour counts should
+// follow the tri-code associated with each venue, not the typed client name.
 
 export async function GET(request: NextRequest) {
   const auth = await requireRole(request, 'manager')
@@ -27,7 +28,17 @@ export async function GET(request: NextRequest) {
 
   const r = await query(
     `SELECT
-       COALESCE(NULLIF(TRIM(dr.company_name), ''), '(no client)') AS client_name,
+       COALESCE(
+         NULLIF(TRIM(dr.tricode), ''),
+         NULLIF(TRIM(venue_code.tricode), ''),
+         '(no tri-code)'
+       ) AS client_name,
+       COALESCE(
+         NULLIF(TRIM(dr.tricode), ''),
+         NULLIF(TRIM(venue_code.tricode), '')
+       ) AS tricode,
+       MIN(NULLIF(TRIM(dr.company_name), '')) AS company_name,
+       MIN(v.name) AS venue_name,
        COUNT(DISTINCT dr.id) AS jobs,
        SUM(te.hours)::float8 AS total_hours,
        COUNT(DISTINCT te.designer_id) AS designers_worked,
@@ -35,8 +46,20 @@ export async function GET(request: NextRequest) {
        MAX(te.entry_date)::text AS last_entry
      FROM designer_time_entries te
      JOIN design_requests dr ON dr.id = te.design_request_id
+     LEFT JOIN venues v ON v.id = dr.venue_id
+     LEFT JOIN LATERAL (
+       SELECT alias.value AS tricode
+       FROM unnest(COALESCE(v.aliases, '{}'::text[])) WITH ORDINALITY alias(value, ord)
+       ORDER BY
+         CASE
+           WHEN regexp_replace(upper(alias.value), '[^A-Z-]', '', 'g') ~ '^[A-Z]{1,3}(-[A-Z]{1,3})?$' THEN 0
+           ELSE 1
+         END,
+         alias.ord
+       LIMIT 1
+     ) venue_code ON true
      ${where}
-     GROUP BY 1
+     GROUP BY 1, 2
      ORDER BY total_hours DESC`,
     params
   )
@@ -45,6 +68,9 @@ export async function GET(request: NextRequest) {
     from, to,
     clients: r.rows.map((row: any) => ({
       client_name: row.client_name,
+      tricode: row.tricode || null,
+      company_name: row.company_name || null,
+      venue_name: row.venue_name || null,
       jobs: Number(row.jobs || 0),
       total_hours: Number(Number(row.total_hours || 0).toFixed(2)),
       designers_worked: Number(row.designers_worked || 0),
