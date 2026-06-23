@@ -231,6 +231,17 @@ async function handle(request: NextRequest, params: { id: string }) {
 
   const baseUrl = request.nextUrl.origin
   const downloadUrl = `${baseUrl}/api/design-requests/${params.id}/proofs/${inserted.rows[0].id}/download`
+  await query(
+    `UPDATE design_requests SET ftp_proof_link = $1, updated_at = NOW() WHERE id = $2`,
+    [downloadUrl, params.id],
+  )
+  if (isTwentyBackedEnabled('DESIGNS')) {
+    try {
+      await Designs.update(params.id, { proofLink: downloadUrl })
+    } catch (err) {
+      console.error('[generate-ai-proof] Twenty proof link update failed:', err)
+    }
+  }
 
   return NextResponse.json({
     proof: {

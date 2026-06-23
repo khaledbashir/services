@@ -360,10 +360,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           createdByName: access.auth.fullName || null,
           createdByEmail: access.auth.email || null,
         })
-        // Keep the denormalized ftp_proof_link field in sync so the detail
-        // page shows the generated URL immediately without a refetch.
+        // Keep the denormalized ftp_proof_link field in sync with the client
+        // review URL. Uploads may temporarily place an internal download URL
+        // here; the Client Review transition should always replace it with
+        // the public proof-share link.
         await query(
-          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2 AND (ftp_proof_link IS NULL OR ftp_proof_link = '')`,
+          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2`,
           [proofShare.url, params.id]
         )
       } catch (err) {

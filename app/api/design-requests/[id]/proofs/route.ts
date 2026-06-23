@@ -32,6 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       size_bytes: Number(r.size_bytes || 0),
       backend: r.storage_backend,
       has_storage_key: Boolean(r.storage_key),
+      proof_location: r.storage_key ? `anc-proofs/${r.storage_key}` : 'database://design_request_files',
       uploaded_at: r.created_at,
       version: Number(r.version || 1),
       last_viewed_at: r.last_viewed_at,
@@ -156,6 +157,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     `UPDATE design_requests SET ftp_proof_link = $1, updated_at = NOW() WHERE id = $2`,
     [downloadUrl, params.id]
   )
+  if (isTwentyBackedEnabled('DESIGNS')) {
+    try {
+      await Designs.update(params.id, { proofLink: downloadUrl })
+    } catch (err) {
+      console.error('[proofs POST] Twenty proof link update failed:', err)
+    }
+  }
 
   // Per Alexis (2026-04-23 meeting): uploading a proof does NOT auto-send it
   // to the client. The designer uploads, Alexis (Enterprise Solutions) runs

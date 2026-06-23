@@ -18,6 +18,7 @@ interface Proof {
   size_bytes: number
   backend: 's3' | 'postgres_bytea'
   has_storage_key: boolean
+  proof_location?: string | null
   uploaded_at: string
   version: number
   last_viewed_at: string | null
@@ -190,6 +191,9 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
                         {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
                         <span className="ml-2 text-zinc-400">· {formatRelativeView(p.last_viewed_at)} · {p.view_count} view{p.view_count === 1 ? '' : 's'}</span>
                       </div>
+                      {p.proof_location && (
+                        <div className="mt-1 text-[10.5px] text-zinc-400 truncate font-mono">{p.proof_location}</div>
+                      )}
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       <a href={downloadUrl} target="_blank" rel="noopener noreferrer"
@@ -236,6 +240,9 @@ export function DesignProofUpload({ designRequestId }: { designRequestId: string
                       {p.backend === 's3' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">MinIO</span>}
                       {p.backend === 'postgres_bytea' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px] font-medium">Legacy</span>}
                     </div>
+                    {p.proof_location && (
+                      <div className="text-[10.5px] text-zinc-400 truncate font-mono">{p.proof_location}</div>
+                    )}
                     <div className="text-[11px] text-zinc-400 truncate">
                       Last viewed: {formatRelativeView(p.last_viewed_at)}{` · ${p.view_count} view${p.view_count === 1 ? '' : 's'}`}
                     </div>
