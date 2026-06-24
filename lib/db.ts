@@ -1517,6 +1517,59 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_item_overrides_project ON project_schedule_item_overrides(project_id)`)
 
+    // Submittal lifecycle extension columns (ANC Letter-of-Transmittal dispositions + ball-in-court tracking).
+    // Backward compatible: existing rows keep their current `status`; the new columns default to NULL.
+    await client.query(`ALTER TABLE project_schedule_item_overrides ADD COLUMN IF NOT EXISTS disposition TEXT`)
+    await client.query(`ALTER TABLE project_schedule_item_overrides ADD COLUMN IF NOT EXISTS ball_in_court TEXT`)
+    await client.query(`ALTER TABLE project_schedule_item_overrides ADD COLUMN IF NOT EXISTS submitted_date TEXT`)
+    await client.query(`ALTER TABLE project_schedule_item_overrides ADD COLUMN IF NOT EXISTS returned_date TEXT`)
+
+    // Real editable task model for the project schedule (Gantt-style task tree).
+    await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_tasks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      duration INTEGER,
+      start_date TEXT,
+      end_date TEXT,
+      phase TEXT,
+      parent_id TEXT,
+      is_milestone BOOLEAN NOT NULL DEFAULT FALSE,
+      is_submittal_milestone BOOLEAN NOT NULL DEFAULT FALSE,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_tasks_project ON project_schedule_tasks(project_id, order_index)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_tasks_parent ON project_schedule_tasks(parent_id)`)
+
+    // ANC Letter of Transmittal records (derivable from a submittal, persisted for reprint/audit).
+    await client.query(`CREATE TABLE IF NOT EXISTS project_transmittals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      submittal_id TEXT,
+      transmittal_to TEXT,
+      transmittal_from TEXT,
+      transmittal_date TEXT,
+      project_name TEXT,
+      submittal_no TEXT,
+      sending_items TEXT,
+      transmitted_as TEXT,
+      items JSONB NOT NULL DEFAULT '[]'::jsonb,
+      remarks TEXT,
+      remarks_by TEXT,
+      copies_to TEXT,
+      signed_by TEXT,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_transmittals_project ON project_transmittals(project_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_transmittals_submittal ON project_transmittals(submittal_id)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

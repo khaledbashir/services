@@ -720,9 +720,18 @@ export default function ProjectScheduleClient({ data: initialData }: { data: Pro
               PM sync workspace for schedule, submittals, latest revisions, logistics, install readiness, project package gaps, and exportable meeting cuts.
             </p>
           </div>
-          <div className="text-left text-xs text-zinc-500 lg:text-right">
-            <div>Source: {data.sourceFile}</div>
-            <div>Refreshed {new Date(data.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <Link
+              href="/project-schedule/new"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-[#0A52EF] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0A52EF]/90"
+            >
+              <CalendarDays className="h-4 w-4" />
+              New project schedule
+            </Link>
+            <div className="text-left text-xs text-zinc-500 lg:text-right">
+              <div>Source: {data.sourceFile}</div>
+              <div>Refreshed {new Date(data.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+            </div>
           </div>
         </div>
 

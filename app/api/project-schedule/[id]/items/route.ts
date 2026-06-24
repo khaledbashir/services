@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthError, requireRole } from '@/lib/rbac'
 import {
+  BALL_IN_COURT_VALUES,
+  SUBMITTAL_DISPOSITIONS,
   updateProjectScheduleDeploymentDocumentOverride,
   updateProjectScheduleSubmittalOverride,
+  type BallInCourt,
   type DeploymentDocumentPatch,
   type DeploymentDocumentStatus,
+  type SubmittalDisposition,
   type SubmittalItemPatch,
   type SubmittalStatus,
 } from '@/lib/project-schedule'
 
 const SUBMITTAL_STATUSES = new Set<SubmittalStatus>(['needed', 'submitted', 'returned', 'approved'])
 const DOCUMENT_STATUSES = new Set<DeploymentDocumentStatus>(['ready', 'watch', 'missing'])
+const DISPOSITIONS = new Set<SubmittalDisposition>(SUBMITTAL_DISPOSITIONS)
+const BALL_IN_COURT = new Set<BallInCourt>(BALL_IN_COURT_VALUES)
 
 function cleanString(value: unknown) {
   if (value === null || value === undefined) return undefined
@@ -53,6 +59,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
       const dueDate = cleanString(body.dueDate)
       if (dueDate !== undefined) patch.dueDate = dueDate
+
+      if (body.disposition !== undefined) {
+        const disposition = cleanString(body.disposition) as SubmittalDisposition | undefined
+        if (disposition && !DISPOSITIONS.has(disposition)) {
+          return NextResponse.json({ error: 'Invalid submittal disposition' }, { status: 400 })
+        }
+        if (disposition) patch.disposition = disposition
+      }
+
+      if (body.ballInCourt !== undefined) {
+        const ballInCourt = cleanString(body.ballInCourt) as BallInCourt | undefined
+        if (ballInCourt && !BALL_IN_COURT.has(ballInCourt)) {
+          return NextResponse.json({ error: 'Invalid ball-in-court value' }, { status: 400 })
+        }
+        if (ballInCourt) patch.ballInCourt = ballInCourt
+      }
+
+      const submittedDate = cleanString(body.submittedDate)
+      if (submittedDate !== undefined) patch.submittedDate = submittedDate
+
+      const returnedDate = cleanString(body.returnedDate)
+      if (returnedDate !== undefined) patch.returnedDate = returnedDate
 
       const data = await updateProjectScheduleSubmittalOverride(params.id, itemKey, patch, updatedBy)
       if (!data) return NextResponse.json({ error: 'Submittal not found' }, { status: 404 })

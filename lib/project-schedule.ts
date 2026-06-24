@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import * as XLSX from 'xlsx'
 import { query } from '@/lib/db'
 
@@ -8,7 +9,32 @@ const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
 export type ScheduleRisk = 'critical' | 'watch' | 'ready' | 'done'
 export type DeploymentStatus = 'blocked' | 'needs-docs' | 'needs-update' | 'ready' | 'complete'
 export type DeploymentDocumentStatus = 'ready' | 'watch' | 'missing'
+// Legacy/internal submittal status (kept for backward compatibility with derived rows).
 export type SubmittalStatus = 'needed' | 'submitted' | 'returned' | 'approved'
+
+// ANC Letter-of-Transmittal dispositions. Superset of the legacy SubmittalStatus —
+// existing rows that only carry a legacy status remain valid.
+export type SubmittalDisposition =
+  | 'for-approval'
+  | 'approved-as-submitted'
+  | 'approved-as-noted'
+  | 'returned-for-corrections'
+  | 'resubmit'
+  | 'approved'
+
+export const SUBMITTAL_DISPOSITIONS: readonly SubmittalDisposition[] = [
+  'for-approval',
+  'approved-as-submitted',
+  'approved-as-noted',
+  'returned-for-corrections',
+  'resubmit',
+  'approved',
+]
+
+// Which party currently holds the submittal ("ball in court").
+export type BallInCourt = 'anc' | 'owner' | 'engineer' | 'qad' | 'none'
+
+export const BALL_IN_COURT_VALUES: readonly BallInCourt[] = ['anc', 'owner', 'engineer', 'qad', 'none']
 
 export interface DeploymentDocument {
   key: string
@@ -38,6 +64,11 @@ export interface SubmittalRegisterItem {
   latestRevision: boolean
   source: string
   documentStatus: DeploymentDocumentStatus
+  // ANC Letter-of-Transmittal lifecycle (override-driven; null until set on a row).
+  disposition: SubmittalDisposition | null
+  ballInCourt: BallInCourt
+  submittedDate: string
+  returnedDate: string
 }
 
 export interface ActiveProject {
@@ -160,6 +191,10 @@ export interface SubmittalItemPatch {
   packageType?: string
   owner?: string
   dueDate?: string
+  disposition?: SubmittalDisposition
+  ballInCourt?: BallInCourt
+  submittedDate?: string
+  returnedDate?: string
 }
 
 export interface DeploymentDocumentPatch {
@@ -179,6 +214,10 @@ interface ProjectScheduleItemOverrideRow {
   due_date: string | null
   label: string | null
   detail: string | null
+  disposition: string | null
+  ball_in_court: string | null
+  submitted_date: string | null
+  returned_date: string | null
   updated_at: Date | string
 }
 
@@ -476,8 +515,34 @@ function deriveSubmittals(
       latestRevision: true,
       source: document.detail,
       documentStatus: document.status,
+      disposition: defaultDisposition(status),
+      ballInCourt: defaultBallInCourt(status),
+      submittedDate: status === 'needed' ? '' : receivedDate,
+      returnedDate: status === 'returned' ? receivedDate : '',
     }
   })
+}
+
+// Map a legacy SubmittalStatus to a sensible default ANC disposition / ball-in-court
+// so existing (un-overridden) rows render coherently in the new lifecycle UI.
+function defaultDisposition(status: SubmittalStatus): SubmittalDisposition | null {
+  switch (status) {
+    case 'submitted': return 'for-approval'
+    case 'returned': return 'returned-for-corrections'
+    case 'approved': return 'approved'
+    case 'needed':
+    default: return null
+  }
+}
+
+function defaultBallInCourt(status: SubmittalStatus): BallInCourt {
+  switch (status) {
+    case 'needed': return 'anc'
+    case 'submitted': return 'owner'
+    case 'returned': return 'anc'
+    case 'approved': return 'none'
+    default: return 'none'
+  }
 }
 
 function classifyRisk(project: Partial<ActiveProject>, installDate: Date | null, completionDate: Date | null): { risk: ScheduleRisk; reasons: string[] } {
@@ -825,6 +890,10 @@ function applyItemOverrides(projects: ActiveProject[], overrides: ProjectSchedul
         packageType: override.package_type ?? item.packageType,
         owner: override.owner ?? item.owner,
         dueDate: override.due_date ?? item.dueDate,
+        disposition: (override.disposition as SubmittalDisposition | null) ?? item.disposition,
+        ballInCourt: (override.ball_in_court as BallInCourt | null) ?? item.ballInCourt,
+        submittedDate: override.submitted_date ?? item.submittedDate,
+        returnedDate: override.returned_date ?? item.returnedDate,
       }
     })
 
@@ -877,14 +946,19 @@ export async function updateProjectScheduleSubmittalOverride(
 
   await query(
     `INSERT INTO project_schedule_item_overrides (
-      project_id, item_kind, item_key, status, title, package_type, owner, due_date, label, detail, updated_by, updated_at
-    ) VALUES ($1,'submittal',$2,$3,$4,$5,$6,$7,NULL,NULL,$8,NOW())
+      project_id, item_kind, item_key, status, title, package_type, owner, due_date,
+      label, detail, disposition, ball_in_court, submitted_date, returned_date, updated_by, updated_at
+    ) VALUES ($1,'submittal',$2,$3,$4,$5,$6,$7,NULL,NULL,$8,$9,$10,$11,$12,NOW())
     ON CONFLICT (project_id, item_kind, item_key) DO UPDATE SET
       status = EXCLUDED.status,
       title = EXCLUDED.title,
       package_type = EXCLUDED.package_type,
       owner = EXCLUDED.owner,
       due_date = EXCLUDED.due_date,
+      disposition = EXCLUDED.disposition,
+      ball_in_court = EXCLUDED.ball_in_court,
+      submitted_date = EXCLUDED.submitted_date,
+      returned_date = EXCLUDED.returned_date,
       updated_by = EXCLUDED.updated_by,
       updated_at = NOW()`,
     [
@@ -895,6 +969,10 @@ export async function updateProjectScheduleSubmittalOverride(
       patch.packageType ?? submittal.packageType,
       patch.owner ?? submittal.owner,
       patch.dueDate ?? submittal.dueDate,
+      patch.disposition ?? submittal.disposition,
+      patch.ballInCourt ?? submittal.ballInCourt,
+      patch.submittedDate ?? submittal.submittedDate,
+      patch.returnedDate ?? submittal.returnedDate,
       updatedBy,
     ],
   )
@@ -1009,4 +1087,527 @@ export async function getProjectScheduleProjectLive(projectId: string) {
     return normalized.split(/\s+/).filter((part) => part.length > 3).some((part) => text.includes(part))
   }).slice(0, 6)
   return { data, project, onsiteAssignments, opportunities }
+}
+// ============================================================================
+// PROJECT SCHEDULE TASKS — real editable task model (Gantt task tree)
+// ============================================================================
+
+export interface ProjectScheduleTask {
+  id: string
+  projectId: string
+  name: string
+  duration: number | null
+  start: string | null
+  end: string | null
+  phase: string | null
+  parentId: string | null
+  isMilestone: boolean
+  isSubmittalMilestone: boolean
+  orderIndex: number
+}
+
+export interface ProjectScheduleTaskInput {
+  name: string
+  duration?: number | null
+  start?: string | null
+  end?: string | null
+  phase?: string | null
+  parentId?: string | null
+  isMilestone?: boolean
+  isSubmittalMilestone?: boolean
+  orderIndex?: number
+}
+
+export type ProjectScheduleTaskPatch = Partial<ProjectScheduleTaskInput>
+
+interface ProjectScheduleTaskRow {
+  id: string
+  project_id: string
+  name: string
+  duration: number | null
+  start_date: string | null
+  end_date: string | null
+  phase: string | null
+  parent_id: string | null
+  is_milestone: boolean
+  is_submittal_milestone: boolean
+  order_index: number
+}
+
+function mapTaskRow(row: ProjectScheduleTaskRow): ProjectScheduleTask {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    duration: row.duration,
+    start: row.start_date,
+    end: row.end_date,
+    phase: row.phase,
+    parentId: row.parent_id,
+    isMilestone: row.is_milestone,
+    isSubmittalMilestone: row.is_submittal_milestone,
+    orderIndex: row.order_index,
+  }
+}
+
+export async function listProjectScheduleTasks(projectId: string): Promise<ProjectScheduleTask[]> {
+  const result = await query(
+    `SELECT * FROM project_schedule_tasks WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC`,
+    [projectId],
+  )
+  return result.rows.map(mapTaskRow)
+}
+
+export async function createProjectScheduleTask(
+  projectId: string,
+  input: ProjectScheduleTaskInput,
+  createdBy = 'dashboard',
+): Promise<ProjectScheduleTask> {
+  const id = randomUUID()
+  let orderIndex = input.orderIndex
+  if (orderIndex === undefined || orderIndex === null) {
+    const max = await query(
+      `SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM project_schedule_tasks WHERE project_id = $1`,
+      [projectId],
+    )
+    orderIndex = Number(max.rows[0]?.next ?? 0)
+  }
+  const result = await query(
+    `INSERT INTO project_schedule_tasks (
+      id, project_id, name, duration, start_date, end_date, phase, parent_id,
+      is_milestone, is_submittal_milestone, order_index, created_by, updated_by
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
+    RETURNING *`,
+    [
+      id,
+      projectId,
+      input.name,
+      input.duration ?? null,
+      input.start ?? null,
+      input.end ?? null,
+      input.phase ?? null,
+      input.parentId ?? null,
+      input.isMilestone ?? false,
+      input.isSubmittalMilestone ?? false,
+      orderIndex,
+      createdBy,
+    ],
+  )
+  return mapTaskRow(result.rows[0])
+}
+
+export async function updateProjectScheduleTask(
+  taskId: string,
+  patch: ProjectScheduleTaskPatch,
+  updatedBy = 'dashboard',
+): Promise<ProjectScheduleTask | null> {
+  const sets: string[] = []
+  const values: unknown[] = []
+  let i = 1
+  const push = (column: string, value: unknown) => {
+    sets.push(`${column} = $${i++}`)
+    values.push(value)
+  }
+  if (patch.name !== undefined) push('name', patch.name)
+  if (patch.duration !== undefined) push('duration', patch.duration)
+  if (patch.start !== undefined) push('start_date', patch.start)
+  if (patch.end !== undefined) push('end_date', patch.end)
+  if (patch.phase !== undefined) push('phase', patch.phase)
+  if (patch.parentId !== undefined) push('parent_id', patch.parentId)
+  if (patch.isMilestone !== undefined) push('is_milestone', patch.isMilestone)
+  if (patch.isSubmittalMilestone !== undefined) push('is_submittal_milestone', patch.isSubmittalMilestone)
+  if (patch.orderIndex !== undefined) push('order_index', patch.orderIndex)
+
+  if (!sets.length) {
+    const existing = await query(`SELECT * FROM project_schedule_tasks WHERE id = $1`, [taskId])
+    return existing.rows[0] ? mapTaskRow(existing.rows[0]) : null
+  }
+
+  push('updated_by', updatedBy)
+  sets.push(`updated_at = NOW()`)
+  values.push(taskId)
+  const result = await query(
+    `UPDATE project_schedule_tasks SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+    values,
+  )
+  return result.rows[0] ? mapTaskRow(result.rows[0]) : null
+}
+
+export async function deleteProjectScheduleTask(taskId: string): Promise<boolean> {
+  // Cascade to direct children so a deleted parent never orphans rows.
+  const result = await query(
+    `DELETE FROM project_schedule_tasks WHERE id = $1 OR parent_id = $1`,
+    [taskId],
+  )
+  return (result.rowCount ?? 0) > 0
+}
+
+// --- ANC LED-install schedule template generator ---------------------------
+// Reverse-engineered from ANC's real World Trade Center LED-install schedule.
+
+export interface ScheduleGeneratorInput {
+  projectName: string
+  startDate: string // ISO or M/D/YYYY
+  displays: string[]
+}
+
+interface TemplateNode {
+  name: string
+  duration: number // elapsed days; milestones use 0
+  phase: string
+  isMilestone?: boolean
+  isSubmittalMilestone?: boolean
+  children?: TemplateNode[]
+}
+
+// Top-level phases (sequential). Per-display install blocks expand after LED Shipping.
+const LED_INSTALL_TEMPLATE: TemplateNode[] = [
+  { name: 'Notice to Proceed', duration: 0, phase: 'Award', isMilestone: true },
+  {
+    name: 'Design & Development / Engineering & Submittals',
+    duration: 0,
+    phase: 'Engineering & Submittals',
+    children: [
+      { name: 'Secondary Structural Design', duration: 15, phase: 'Engineering & Submittals' },
+      { name: 'Electrical & Data Design', duration: 12, phase: 'Engineering & Submittals' },
+      { name: 'Control Room Design', duration: 10, phase: 'Engineering & Submittals' },
+      { name: 'LED Submittals', duration: 7, phase: 'Engineering & Submittals', isSubmittalMilestone: true },
+      { name: 'Owner Review & Approval - LED', duration: 10, phase: 'Engineering & Submittals', isSubmittalMilestone: true },
+      { name: 'QAD Submittal', duration: 5, phase: 'Engineering & Submittals', isSubmittalMilestone: true },
+      { name: 'QAD Approval to Proceed', duration: 10, phase: 'Engineering & Submittals', isSubmittalMilestone: true },
+    ],
+  },
+  { name: 'LED Manufacturing', duration: 45, phase: 'Manufacturing' },
+  { name: 'LED Shipping', duration: 14, phase: 'Logistics' },
+  // INSTALL blocks expanded per display below.
+  { name: 'Closeout', duration: 10, phase: 'Closeout' },
+]
+
+// Per-display install block (reverse-engineered from the WTC install sequence).
+const INSTALL_BLOCK: TemplateNode[] = [
+  { name: 'Barricade Setup', duration: 1, phase: 'Install' },
+  { name: 'Demolition & Disposal', duration: 3, phase: 'Install' },
+  { name: 'Secondary Steel/Brackets', duration: 4, phase: 'Install' },
+  { name: 'Infrastructure (Power/Data)', duration: 4, phase: 'Install' },
+  { name: 'LED Install', duration: 5, phase: 'Install' },
+  { name: 'Commissioning', duration: 2, phase: 'Install' },
+  { name: 'Finishes & Trim / Site Cleanup', duration: 2, phase: 'Install' },
+  { name: 'Punch Walk', duration: 1, phase: 'Install', isMilestone: true },
+  { name: 'Punch Completion', duration: 2, phase: 'Install', isMilestone: true },
+]
+
+function parseStart(input: string): Date {
+  const coerced = coerceDate(input)
+  if (coerced) return coerced
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+}
+
+function isoDate(input: Date): string {
+  return input.toISOString().slice(0, 10)
+}
+
+interface StructuredTask {
+  name: string
+  duration: number
+  start: string
+  end: string
+  phase: string
+  parentIndex: number | null
+  isMilestone: boolean
+  isSubmittalMilestone: boolean
+}
+
+// Build a flat, dated, sequential task list from the template + displays.
+// Parentage is tracked by array index so it maps cleanly onto DB rows.
+export function buildScheduleFromTemplate(input: ScheduleGeneratorInput): StructuredTask[] {
+  const out: StructuredTask[] = []
+  let cursor = parseStart(input.startDate)
+
+  const emit = (node: TemplateNode, parentIndex: number | null, advance: boolean): number => {
+    const start = new Date(cursor)
+    const duration = node.isMilestone || node.duration === 0 ? 0 : node.duration
+    const end = duration > 0 ? addDays(start, duration - 1) : start
+    out.push({
+      name: node.name,
+      duration,
+      start: isoDate(start),
+      end: isoDate(end),
+      phase: node.phase,
+      parentIndex,
+      isMilestone: Boolean(node.isMilestone),
+      isSubmittalMilestone: Boolean(node.isSubmittalMilestone),
+    })
+    const index = out.length - 1
+    if (advance && duration > 0) cursor = addDays(end, 1)
+    else if (advance && node.isMilestone) cursor = addDays(start, 1)
+    return index
+  }
+
+  for (const node of LED_INSTALL_TEMPLATE) {
+    if (node.children) {
+      const parentIndex = emit({ ...node, duration: 0 }, null, false)
+      for (const child of node.children) emit(child, parentIndex, true)
+    } else {
+      emit(node, null, true)
+    }
+
+    if (node.name === 'LED Shipping') {
+      const displays = input.displays.length ? input.displays : ['Display 1']
+      for (const display of displays) {
+        const blockParent = emit({ name: `Install — ${display}`, duration: 0, phase: 'Install' }, null, false)
+        for (const step of INSTALL_BLOCK) emit(step, blockParent, true)
+      }
+    }
+  }
+
+  return out
+}
+
+// Persist a generated template as real task rows (replaces existing tasks for the project).
+export async function generateProjectScheduleFromTemplate(
+  projectId: string,
+  input: ScheduleGeneratorInput,
+  createdBy = 'dashboard',
+): Promise<ProjectScheduleTask[]> {
+  const structured = buildScheduleFromTemplate(input)
+
+  await query(`DELETE FROM project_schedule_tasks WHERE project_id = $1`, [projectId])
+
+  const ids = structured.map(() => randomUUID())
+  for (let idx = 0; idx < structured.length; idx++) {
+    const node = structured[idx]
+    const realParent = node.parentIndex === null ? null : ids[node.parentIndex]
+    await query(
+      `INSERT INTO project_schedule_tasks (
+        id, project_id, name, duration, start_date, end_date, phase, parent_id,
+        is_milestone, is_submittal_milestone, order_index, created_by, updated_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+      [
+        ids[idx],
+        projectId,
+        node.name,
+        node.duration,
+        node.start,
+        node.end,
+        node.phase,
+        realParent,
+        node.isMilestone,
+        node.isSubmittalMilestone,
+        idx,
+        createdBy,
+      ],
+    )
+  }
+
+  return listProjectScheduleTasks(projectId)
+}
+
+// ============================================================================
+// TRANSMITTAL RECORDS — ANC Letter of Transmittal
+// ============================================================================
+
+export interface TransmittalItem {
+  n: number
+  description: string
+}
+
+export interface Transmittal {
+  id: string
+  projectId: string
+  submittalId: string | null
+  to: string
+  from: string
+  date: string
+  project: string
+  submittalNo: string
+  sendingItems: string
+  transmittedAs: string
+  items: TransmittalItem[]
+  remarks: string
+  remarksBy: string
+  copiesTo: string
+  signedBy: string
+}
+
+export interface TransmittalInput {
+  submittalId?: string | null
+  to?: string
+  from?: string
+  date?: string
+  project?: string
+  submittalNo?: string
+  sendingItems?: string
+  transmittedAs?: string
+  items?: TransmittalItem[]
+  remarks?: string
+  remarksBy?: string
+  copiesTo?: string
+  signedBy?: string
+}
+
+interface TransmittalRow {
+  id: string
+  project_id: string
+  submittal_id: string | null
+  transmittal_to: string | null
+  transmittal_from: string | null
+  transmittal_date: string | null
+  project_name: string | null
+  submittal_no: string | null
+  sending_items: string | null
+  transmitted_as: string | null
+  items: TransmittalItem[] | string | null
+  remarks: string | null
+  remarks_by: string | null
+  copies_to: string | null
+  signed_by: string | null
+}
+
+function mapTransmittalRow(row: TransmittalRow): Transmittal {
+  let items: TransmittalItem[] = []
+  if (Array.isArray(row.items)) items = row.items
+  else if (typeof row.items === 'string') {
+    try { items = JSON.parse(row.items) } catch { items = [] }
+  }
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    submittalId: row.submittal_id,
+    to: row.transmittal_to ?? '',
+    from: row.transmittal_from ?? '',
+    date: row.transmittal_date ?? '',
+    project: row.project_name ?? '',
+    submittalNo: row.submittal_no ?? '',
+    sendingItems: row.sending_items ?? '',
+    transmittedAs: row.transmitted_as ?? '',
+    items,
+    remarks: row.remarks ?? '',
+    remarksBy: row.remarks_by ?? '',
+    copiesTo: row.copies_to ?? '',
+    signedBy: row.signed_by ?? '',
+  }
+}
+
+export async function listProjectTransmittals(projectId: string): Promise<Transmittal[]> {
+  const result = await query(
+    `SELECT * FROM project_transmittals WHERE project_id = $1 ORDER BY created_at DESC`,
+    [projectId],
+  )
+  return result.rows.map(mapTransmittalRow)
+}
+
+export async function getProjectTransmittal(id: string): Promise<Transmittal | null> {
+  const result = await query(`SELECT * FROM project_transmittals WHERE id = $1`, [id])
+  return result.rows[0] ? mapTransmittalRow(result.rows[0]) : null
+}
+
+// Derive a Letter-of-Transmittal draft from a submittal row (no persistence).
+export async function deriveTransmittalFromSubmittal(
+  projectId: string,
+  submittalId: string,
+): Promise<TransmittalInput | null> {
+  const data = await getProjectScheduleInsightsLive()
+  const project = data.activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+  const submittal = project.submittals.find((item) => item.id === submittalId)
+  if (!submittal) return null
+
+  const transmittedAsMap: Record<string, string> = {
+    'for-approval': 'For Approval',
+    'approved-as-submitted': 'Approved as Submitted',
+    'approved-as-noted': 'Approved as Noted',
+    'returned-for-corrections': 'Returned for Corrections',
+    'resubmit': 'Resubmit',
+    'approved': 'Approved',
+  }
+
+  return {
+    submittalId: submittal.id,
+    to: submittal.owner || 'Owner',
+    from: project.pm || 'ANC Sports',
+    date: new Date().toISOString().slice(0, 10),
+    project: project.project,
+    submittalNo: submittal.submittalNo,
+    sendingItems: submittal.packageType,
+    transmittedAs: submittal.disposition ? (transmittedAsMap[submittal.disposition] ?? 'For Approval') : 'For Approval',
+    items: [{ n: 1, description: `${submittal.title} (${submittal.revision})` }],
+    remarks: submittal.source || '',
+    remarksBy: project.pm || '',
+    copiesTo: '',
+    signedBy: project.pm || '',
+  }
+}
+
+export async function saveProjectTransmittal(
+  projectId: string,
+  input: TransmittalInput,
+  id: string | null,
+  savedBy = 'dashboard',
+): Promise<Transmittal> {
+  const items = JSON.stringify(input.items ?? [])
+  if (id) {
+    const result = await query(
+      `UPDATE project_transmittals SET
+        submittal_id = $2, transmittal_to = $3, transmittal_from = $4, transmittal_date = $5,
+        project_name = $6, submittal_no = $7, sending_items = $8, transmitted_as = $9,
+        items = $10::jsonb, remarks = $11, remarks_by = $12, copies_to = $13, signed_by = $14,
+        updated_by = $15, updated_at = NOW()
+      WHERE id = $1 AND project_id = $16
+      RETURNING *`,
+      [
+        id,
+        input.submittalId ?? null,
+        input.to ?? null,
+        input.from ?? null,
+        input.date ?? null,
+        input.project ?? null,
+        input.submittalNo ?? null,
+        input.sendingItems ?? null,
+        input.transmittedAs ?? null,
+        items,
+        input.remarks ?? null,
+        input.remarksBy ?? null,
+        input.copiesTo ?? null,
+        input.signedBy ?? null,
+        savedBy,
+        projectId,
+      ],
+    )
+    return mapTransmittalRow(result.rows[0])
+  }
+
+  const newId = randomUUID()
+  const result = await query(
+    `INSERT INTO project_transmittals (
+      id, project_id, submittal_id, transmittal_to, transmittal_from, transmittal_date,
+      project_name, submittal_no, sending_items, transmitted_as, items, remarks, remarks_by,
+      copies_to, signed_by, created_by, updated_by
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$16)
+    RETURNING *`,
+    [
+      newId,
+      projectId,
+      input.submittalId ?? null,
+      input.to ?? null,
+      input.from ?? null,
+      input.date ?? null,
+      input.project ?? null,
+      input.submittalNo ?? null,
+      input.sendingItems ?? null,
+      input.transmittedAs ?? null,
+      items,
+      input.remarks ?? null,
+      input.remarksBy ?? null,
+      input.copiesTo ?? null,
+      input.signedBy ?? null,
+      savedBy,
+    ],
+  )
+  return mapTransmittalRow(result.rows[0])
+}
+
+export async function deleteProjectTransmittal(id: string): Promise<boolean> {
+  const result = await query(`DELETE FROM project_transmittals WHERE id = $1`, [id])
+  return (result.rowCount ?? 0) > 0
 }

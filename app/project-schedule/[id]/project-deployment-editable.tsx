@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Pencil, Save, X } from 'lucide-react'
+import Link from 'next/link'
+import { FileText, Pencil, Save, Send, X } from 'lucide-react'
 import type {
   ActiveProject,
   DeploymentDocument,
@@ -95,6 +96,7 @@ export function ProjectDeploymentEditable({ project: initialProject }: { project
                 <SubmittalRow
                   key={item.id}
                   item={item}
+                  projectId={project.id}
                   isEditing={editingId === item.id}
                   isSaving={savingId === item.id}
                   onEdit={() => { setEditingId(item.id); setError(null) }}
@@ -132,6 +134,7 @@ export function ProjectDeploymentEditable({ project: initialProject }: { project
 
 function SubmittalRow({
   item,
+  projectId,
   isEditing,
   isSaving,
   onEdit,
@@ -139,6 +142,7 @@ function SubmittalRow({
   onSave,
 }: {
   item: SubmittalRegisterItem
+  projectId: string
   isEditing: boolean
   isSaving: boolean
   onEdit: () => void
@@ -173,9 +177,17 @@ function SubmittalRow({
         <td className="min-w-[160px] px-5 py-3 text-sm text-zinc-700"><EmptyDash value={item.owner} /></td>
         <td className="min-w-[130px] px-5 py-3 text-sm text-zinc-700"><EmptyDash value={item.dueDate} /></td>
         <td className="px-5 py-3 text-right">
-          <button type="button" onClick={startEdit} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E8E8E8] px-2.5 text-xs font-semibold text-zinc-600 opacity-0 transition group-hover:opacity-100 hover:border-[#0A52EF]/40 hover:text-[#0A52EF]">
-            <Pencil className="h-3.5 w-3.5" /> Edit
-          </button>
+          <div className="flex items-center justify-end gap-1.5">
+            <Link
+              href={`/project-schedule/${projectId}/transmittal/${item.id}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E8E8E8] px-2.5 text-xs font-semibold text-zinc-600 opacity-0 transition group-hover:opacity-100 hover:border-[#0A52EF]/40 hover:text-[#0A52EF]"
+            >
+              <Send className="h-3.5 w-3.5" /> Generate transmittal
+            </Link>
+            <button type="button" onClick={startEdit} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E8E8E8] px-2.5 text-xs font-semibold text-zinc-600 opacity-0 transition group-hover:opacity-100 hover:border-[#0A52EF]/40 hover:text-[#0A52EF]">
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </button>
+          </div>
         </td>
       </tr>
     )
