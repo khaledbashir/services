@@ -27,13 +27,37 @@ const inputClass =
 
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500'
 
+// Standard ANC LED display types. "Custom…" is the escape hatch that reveals a
+// free-text input so nothing is locked out.
+const CUSTOM_DISPLAY = 'Custom…'
+const DISPLAY_TYPES = [
+  'Main Videoboard',
+  'Auxiliary Videoboard',
+  'Ribbon Board',
+  'Fascia Board',
+  'Endzone Board',
+  'Center-Hung',
+  'Marquee',
+  'Courtside',
+  'Tunnel Display',
+  'Field-Level Ribbon',
+  'Concourse Display',
+  'Mesh Display',
+] as const
+
+// First standard type not already used in the current rows (falls back to the
+// first type, then Custom if every standard option is taken).
+function nextUnusedDisplay(current: string[]): string {
+  return DISPLAY_TYPES.find((type) => !current.includes(type)) ?? CUSTOM_DISPLAY
+}
+
 export function NewScheduleClient({ projects }: { projects: ProjectOption[] }) {
   const router = useRouter()
   const [mode, setMode] = useState<'existing' | 'named'>(projects.length ? 'existing' : 'named')
   const [existingId, setExistingId] = useState(projects[0]?.id ?? '')
   const [projectName, setProjectName] = useState('')
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [displays, setDisplays] = useState<string[]>(['Main Display'])
+  const [displays, setDisplays] = useState<string[]>(['Main Videoboard'])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,7 +76,7 @@ export function NewScheduleClient({ projects }: { projects: ProjectOption[] }) {
     setDisplays((prev) => prev.map((item, i) => (i === index ? value : item)))
   }
   function addDisplay() {
-    setDisplays((prev) => [...prev, ''])
+    setDisplays((prev) => [...prev, nextUnusedDisplay(prev)])
   }
   function removeDisplay(index: number) {
     setDisplays((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev))
@@ -177,28 +201,49 @@ export function NewScheduleClient({ projects }: { projects: ProjectOption[] }) {
               finishes, and punch.
             </p>
             <div className="space-y-2">
-              {displays.map((display, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Monitor className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-                    <input
-                      value={display}
-                      onChange={(e) => updateDisplay(index, e.target.value)}
-                      placeholder={`Display ${index + 1}`}
-                      className={`${inputClass} pl-9`}
-                    />
+              {displays.map((display, index) => {
+                const isCustom = !(DISPLAY_TYPES as readonly string[]).includes(display)
+                return (
+                  <div key={index} className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Monitor className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+                      <select
+                        value={isCustom ? CUSTOM_DISPLAY : display}
+                        onChange={(e) =>
+                          updateDisplay(index, e.target.value === CUSTOM_DISPLAY ? '' : e.target.value)
+                        }
+                        className={`${inputClass} pl-9`}
+                        aria-label={`Display ${index + 1} type`}
+                      >
+                        {DISPLAY_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                        <option value={CUSTOM_DISPLAY}>{CUSTOM_DISPLAY}</option>
+                      </select>
+                    </div>
+                    {isCustom ? (
+                      <input
+                        value={display}
+                        onChange={(e) => updateDisplay(index, e.target.value)}
+                        placeholder="Custom display name"
+                        className={`${inputClass} flex-1`}
+                        aria-label={`Display ${index + 1} custom name`}
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => removeDisplay(index)}
+                      disabled={displays.length <= 1}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#E8E8E8] bg-white text-zinc-400 transition hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Remove display"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeDisplay(index)}
-                    disabled={displays.length <= 1}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#E8E8E8] bg-white text-zinc-400 transition hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Remove display"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <button
               type="button"
