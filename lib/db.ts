@@ -1499,6 +1499,24 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_pm ON project_schedule_overrides(pm)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_overrides_phase ON project_schedule_overrides(phase)`)
 
+    // Item-level overrides for submittal register rows + deployment package documents.
+    await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_item_overrides (
+      project_id TEXT NOT NULL,
+      item_kind TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      status TEXT,
+      title TEXT,
+      package_type TEXT,
+      owner TEXT,
+      due_date TEXT,
+      label TEXT,
+      detail TEXT,
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (project_id, item_kind, item_key)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_item_overrides_project ON project_schedule_item_overrides(project_id)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

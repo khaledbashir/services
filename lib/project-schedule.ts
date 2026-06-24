@@ -151,6 +151,37 @@ export type ProjectScheduleEditableField =
 
 export type ProjectSchedulePatch = Partial<Pick<ActiveProject, ProjectScheduleEditableField>>
 
+// --- Item-level (submittal + deployment document) override layer ---
+export type ProjectScheduleItemKind = 'submittal' | 'deployment-document'
+
+export interface SubmittalItemPatch {
+  status?: SubmittalStatus
+  title?: string
+  packageType?: string
+  owner?: string
+  dueDate?: string
+}
+
+export interface DeploymentDocumentPatch {
+  status?: DeploymentDocumentStatus
+  label?: string
+  detail?: string
+}
+
+interface ProjectScheduleItemOverrideRow {
+  project_id: string
+  item_kind: ProjectScheduleItemKind
+  item_key: string
+  status: string | null
+  title: string | null
+  package_type: string | null
+  owner: string | null
+  due_date: string | null
+  label: string | null
+  detail: string | null
+  updated_at: Date | string
+}
+
 interface ProjectScheduleOverrideRow {
   project_id: string
   project_name: string
@@ -772,10 +803,138 @@ function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOve
   })
 }
 
+// Item override key: `${projectId}::${itemKind}::${itemKey}`.
+// itemKey for submittals = the submittal item id; for deployment documents = the document key.
+function itemOverrideKey(projectId: string, kind: ProjectScheduleItemKind, itemKey: string) {
+  return `${projectId}::${kind}::${itemKey}`
+}
+
+function applyItemOverrides(projects: ActiveProject[], overrides: ProjectScheduleItemOverrideRow[]) {
+  if (!overrides.length) return projects
+  const byKey = new Map(overrides.map((row) => [itemOverrideKey(row.project_id, row.item_kind, row.item_key), row]))
+  return projects.map((project) => {
+    let submittalsChanged = false
+    const submittals = project.submittals.map((item) => {
+      const override = byKey.get(itemOverrideKey(project.id, 'submittal', item.id))
+      if (!override) return item
+      submittalsChanged = true
+      return {
+        ...item,
+        status: (override.status as SubmittalStatus | null) ?? item.status,
+        title: override.title ?? item.title,
+        packageType: override.package_type ?? item.packageType,
+        owner: override.owner ?? item.owner,
+        dueDate: override.due_date ?? item.dueDate,
+      }
+    })
+
+    let docsChanged = false
+    const deploymentDocuments = project.deploymentDocuments.map((doc) => {
+      const override = byKey.get(itemOverrideKey(project.id, 'deployment-document', doc.key))
+      if (!override) return doc
+      docsChanged = true
+      return {
+        ...doc,
+        status: (override.status as DeploymentDocumentStatus | null) ?? doc.status,
+        label: override.label ?? doc.label,
+        detail: override.detail ?? doc.detail,
+      }
+    })
+
+    if (!submittalsChanged && !docsChanged) return project
+    return {
+      ...project,
+      submittals,
+      deploymentDocuments,
+      submittalGapCount: submittals.filter((item) => item.status === 'needed' || item.status === 'returned').length,
+      documentGapCount: deploymentDocuments.filter((item) => item.status !== 'ready').length,
+    }
+  })
+}
+
 export async function getProjectScheduleInsightsLive(): Promise<ProjectScheduleInsights> {
   const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
-  const overrides = await query(`SELECT * FROM project_schedule_overrides`)
-  return buildInsights(applyOverrides(activeProjects, overrides.rows), onsiteAssignments, opportunities)
+  const [overrides, itemOverrides] = await Promise.all([
+    query(`SELECT * FROM project_schedule_overrides`),
+    query(`SELECT * FROM project_schedule_item_overrides`),
+  ])
+  const withProjectOverrides = applyOverrides(activeProjects, overrides.rows)
+  const withItemOverrides = applyItemOverrides(withProjectOverrides, itemOverrides.rows)
+  return buildInsights(withItemOverrides, onsiteAssignments, opportunities)
+}
+
+export async function updateProjectScheduleSubmittalOverride(
+  projectId: string,
+  submittalId: string,
+  patch: SubmittalItemPatch,
+  updatedBy = 'dashboard',
+) {
+  const { activeProjects } = readWorkbookData()
+  const project = activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+  const submittal = project.submittals.find((item) => item.id === submittalId)
+  if (!submittal) return null
+
+  await query(
+    `INSERT INTO project_schedule_item_overrides (
+      project_id, item_kind, item_key, status, title, package_type, owner, due_date, label, detail, updated_by, updated_at
+    ) VALUES ($1,'submittal',$2,$3,$4,$5,$6,$7,NULL,NULL,$8,NOW())
+    ON CONFLICT (project_id, item_kind, item_key) DO UPDATE SET
+      status = EXCLUDED.status,
+      title = EXCLUDED.title,
+      package_type = EXCLUDED.package_type,
+      owner = EXCLUDED.owner,
+      due_date = EXCLUDED.due_date,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()`,
+    [
+      project.id,
+      submittal.id,
+      patch.status ?? submittal.status,
+      patch.title ?? submittal.title,
+      patch.packageType ?? submittal.packageType,
+      patch.owner ?? submittal.owner,
+      patch.dueDate ?? submittal.dueDate,
+      updatedBy,
+    ],
+  )
+
+  return getProjectScheduleInsightsLive()
+}
+
+export async function updateProjectScheduleDeploymentDocumentOverride(
+  projectId: string,
+  documentKey: string,
+  patch: DeploymentDocumentPatch,
+  updatedBy = 'dashboard',
+) {
+  const { activeProjects } = readWorkbookData()
+  const project = activeProjects.find((item) => item.id === projectId)
+  if (!project) return null
+  const doc = project.deploymentDocuments.find((item) => item.key === documentKey)
+  if (!doc) return null
+
+  await query(
+    `INSERT INTO project_schedule_item_overrides (
+      project_id, item_kind, item_key, status, title, package_type, owner, due_date, label, detail, updated_by, updated_at
+    ) VALUES ($1,'deployment-document',$2,$3,NULL,NULL,NULL,NULL,$4,$5,$6,NOW())
+    ON CONFLICT (project_id, item_kind, item_key) DO UPDATE SET
+      status = EXCLUDED.status,
+      label = EXCLUDED.label,
+      detail = EXCLUDED.detail,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()`,
+    [
+      project.id,
+      doc.key,
+      patch.status ?? doc.status,
+      patch.label ?? doc.label,
+      patch.detail ?? doc.detail,
+      updatedBy,
+    ],
+  )
+
+  return getProjectScheduleInsightsLive()
 }
 
 export async function updateProjectScheduleOverride(projectId: string, patch: ProjectSchedulePatch, updatedBy = 'dashboard') {

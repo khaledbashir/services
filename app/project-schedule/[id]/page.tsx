@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CalendarDays, CheckCircle2, ExternalLink, FileText, FolderKanban, Truck } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { getProjectScheduleProjectLive, type DeploymentDocumentStatus, type DeploymentStatus, type SubmittalStatus } from '@/lib/project-schedule'
+import { getProjectScheduleProjectLive, type DeploymentDocumentStatus, type DeploymentStatus } from '@/lib/project-schedule'
+import { ProjectDeploymentEditable } from './project-deployment-editable'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -27,20 +28,6 @@ const documentStyles: Record<DeploymentDocumentStatus, string> = {
   ready: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
   watch: 'bg-amber-50 text-amber-700 ring-amber-100',
   missing: 'bg-rose-50 text-rose-700 ring-rose-100',
-}
-
-const submittalLabels: Record<SubmittalStatus, string> = {
-  needed: 'Needed',
-  submitted: 'Submitted',
-  returned: 'Returned',
-  approved: 'Approved',
-}
-
-const submittalStyles: Record<SubmittalStatus, string> = {
-  needed: 'bg-rose-50 text-rose-700 ring-rose-100',
-  submitted: 'bg-blue-50 text-blue-700 ring-blue-100',
-  returned: 'bg-amber-50 text-amber-700 ring-amber-100',
-  approved: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
 }
 
 function Badge({ children, className }: { children: React.ReactNode; className: string }) {
@@ -90,57 +77,7 @@ export default async function ProjectDeploymentPage({ params }: { params: { id: 
 
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
           <div className="space-y-6">
-            <section className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
-                <h2 className="text-sm font-semibold text-zinc-950">Submittal Register</h2>
-                <FileText className="h-4 w-4 text-orange-600" />
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-zinc-50">
-                    <tr className="border-b border-[#E8E8E8]">
-                      {['No.', 'Package', 'Rev', 'Status', 'Owner', 'Due', 'Latest'].map((header) => (
-                        <th key={header} className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{header}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {project.submittals.map((item) => (
-                      <tr key={item.id} className="border-b border-[#E8E8E8] last:border-b-0">
-                        <td className="px-5 py-3 text-sm font-semibold text-zinc-900">{item.submittalNo}</td>
-                        <td className="min-w-[220px] px-5 py-3">
-                          <div className="text-sm font-medium text-zinc-950">{item.packageType}</div>
-                          <div className="mt-1 text-xs text-zinc-500">{item.title}</div>
-                        </td>
-                        <td className="px-5 py-3 text-sm text-zinc-700">{item.revision}</td>
-                        <td className="px-5 py-3"><Badge className={submittalStyles[item.status]}>{submittalLabels[item.status]}</Badge></td>
-                        <td className="min-w-[160px] px-5 py-3 text-sm text-zinc-700"><EmptyDash value={item.owner} /></td>
-                        <td className="min-w-[130px] px-5 py-3 text-sm text-zinc-700"><EmptyDash value={item.dueDate} /></td>
-                        <td className="px-5 py-3 text-sm text-zinc-700">{item.latestRevision ? 'Yes' : 'No'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
-                <h2 className="text-sm font-semibold text-zinc-950">Submittal / Document Package</h2>
-                <FileText className="h-4 w-4 text-[#0A52EF]" />
-              </div>
-              <div className="divide-y divide-[#E8E8E8]">
-                {project.deploymentDocuments.map((doc) => (
-                  <div key={doc.key} className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
-                    <div>
-                      <div className="text-sm font-medium text-zinc-950">{doc.label}</div>
-                      <div className="mt-1 text-sm text-zinc-500">{doc.detail}</div>
-                    </div>
-                    <Badge className={documentStyles[doc.status]}>{doc.status}</Badge>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <ProjectDeploymentEditable project={project} />
 
             <section className="rounded-md border border-[#E8E8E8] bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-[#E8E8E8] px-5 py-4">
