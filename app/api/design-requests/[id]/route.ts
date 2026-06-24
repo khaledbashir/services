@@ -46,6 +46,7 @@ const ALLOWED_STATUSES = new Set([
   'client_review',
   'approved',
   'done',
+  'cancelled',
 ])
 
 function normalizeValue(key: string, value: any) {
@@ -93,7 +94,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
      LEFT JOIN staff ec ON dr.enterprise_contact_id = ec.id
      LEFT JOIN design_request_internal_categories ic ON ic.design_request_id = dr.id::text
      LEFT JOIN design_request_priorities prio ON prio.design_request_id = dr.id::text
-     WHERE dr.id = $1 ${vf.clause}`,
+     WHERE dr.id = $1 AND dr.deleted_at IS NULL ${vf.clause}`,
     params,
   )
 
@@ -414,6 +415,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (isTwentyBackedEnabled('DESIGNS')) {
       const auth = await requireRole(request, 'admin')
       if (isAuthError(auth)) return auth
+      // Twenty's REST DELETE is a soft-delete: it stamps deletedAt and the
+      // record drops out of all default (non-withDeleted) queries — recoverable.
       await Designs.delete(params.id)
       return NextResponse.json({ success: true })
     }
@@ -424,7 +427,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
     }
 
-    await query('DELETE FROM design_requests WHERE id = $1', [params.id])
+    // Soft-delete: stamp deleted_at so the row disappears from every view but
+    // stays recoverable. GET queries already filter deleted_at IS NULL.
+    await query('UPDATE design_requests SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [params.id])
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('Error deleting design request:', err)

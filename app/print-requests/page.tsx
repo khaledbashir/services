@@ -82,7 +82,11 @@ const STATUS_COLUMNS = [
   { key: 'in_production', label: 'In Production', tone: 'bg-orange-50 text-orange-700 border-orange-200' },
   { key: 'shipped', label: 'Shipped', tone: 'bg-sky-50 text-sky-700 border-sky-200' },
   { key: 'invoiced', label: 'Invoiced', tone: 'bg-zinc-100 text-zinc-700 border-zinc-200' },
+  { key: 'cancelled', label: 'Cancelled', tone: 'bg-rose-50 text-rose-700 border-rose-200' },
 ] as const
+
+// Terminal statuses hidden from the default "Active" pipeline view.
+const PRINT_INACTIVE_STATUSES = new Set<string>(['invoiced', 'cancelled'])
 
 const EMPTY_FORM = {
   client_id: '',
@@ -172,6 +176,9 @@ export default function PrintRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<ViewMode>('list')
   const [clientFilter, setClientFilter] = useState('all')
+  // Active (default) hides terminal lanes (invoiced + cancelled); All shows
+  // every lane; Cancelled isolates cancelled requests so they stay findable.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'cancelled'>('active')
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -257,7 +264,10 @@ export default function PrintRequestsPage() {
   }, [records, search])
 
   const counts = useMemo(() => {
-    const base: Record<string, number> = { all: records.length, active: records.filter((record) => record.status !== 'invoiced').length }
+    const base: Record<string, number> = {
+      all: records.length,
+      active: records.filter((record) => !PRINT_INACTIVE_STATUSES.has(record.status)).length,
+    }
     for (const column of STATUS_COLUMNS) {
       base[column.key] = records.filter((record) => record.status === column.key).length
     }
@@ -266,11 +276,20 @@ export default function PrintRequestsPage() {
 
   const grouped = useMemo(
     () =>
-      STATUS_COLUMNS.map((column) => ({
-        ...column,
-        items: filteredRecords.filter((record) => record.status === column.key),
-      })),
-    [filteredRecords],
+      STATUS_COLUMNS
+        // Active hides terminal lanes; Cancelled shows only the cancelled lane.
+        .filter((column) =>
+          statusFilter === 'all'
+            ? true
+            : statusFilter === 'cancelled'
+              ? column.key === 'cancelled'
+              : !PRINT_INACTIVE_STATUSES.has(column.key),
+        )
+        .map((column) => ({
+          ...column,
+          items: filteredRecords.filter((record) => record.status === column.key),
+        })),
+    [filteredRecords, statusFilter],
   )
 
   function resetForm() {
@@ -528,6 +547,24 @@ export default function PrintRequestsPage() {
                 placeholder="Search print requests, clients, notes, tracking..."
                 className="w-full rounded-lg border border-[#E6ECF5] bg-[#FBFDFF] py-2.5 pl-10 pr-4 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
               />
+            </div>
+
+            <div className="inline-flex items-center rounded-lg border border-[#E6ECF5] bg-white p-1">
+              {([
+                { key: 'active', label: 'Active' },
+                { key: 'all', label: 'All' },
+                { key: 'cancelled', label: 'Cancelled' },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.key)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${statusFilter === tab.key ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'}`}
+                >
+                  {tab.label}
+                  <span className={`ml-1.5 text-[11px] tabular-nums ${statusFilter === tab.key ? 'text-white/80' : 'text-zinc-400'}`}>{counts[tab.key] ?? 0}</span>
+                </button>
+              ))}
             </div>
 
             <select

@@ -71,7 +71,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
      FROM content_schedules cs
      LEFT JOIN venues v ON cs.venue_id = v.id
      LEFT JOIN staff s ON cs.operator_id = s.id
-     WHERE cs.id = $1 ${vf.clause}`,
+     WHERE cs.id = $1 AND cs.deleted_at IS NULL ${vf.clause}`,
     params,
   )
 
@@ -272,6 +272,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
     try {
+      // Twenty's REST DELETE is a soft-delete (stamps deletedAt, recoverable).
       await ContentScheduleFacade.delete(params.id)
       return NextResponse.json({ ok: true })
     } catch (err) {
@@ -280,5 +281,22 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
   }
 
-  return NextResponse.json({ error: 'Delete not supported' }, { status: 405 })
+  // ── Legacy path ──
+  const auth = await requireRole(request, 'manager')
+  if (isAuthError(auth)) return auth
+
+  try {
+    // Soft-delete: stamp deleted_at; row drops out of every view, recoverable.
+    const result = await query(
+      'UPDATE content_schedules SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id',
+      [params.id],
+    )
+    if (!result.rows[0]) {
+      return NextResponse.json({ error: 'Content schedule not found' }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('Error deleting content schedule:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

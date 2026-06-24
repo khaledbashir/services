@@ -28,6 +28,8 @@ function normalizeTwentyStatus(raw: string | null | undefined): string {
     approved: 'approved',
     done: 'done',
     completed: 'done',
+    cancelled: 'cancelled',
+    canceled: 'cancelled',
   }
   return map[stripped] || stripped || 'request_submitted'
 }
@@ -81,7 +83,12 @@ const ALLOWED_STATUSES = new Set([
   'client_review',
   'approved',
   'done',
+  'cancelled',
 ])
+
+// Terminal statuses excluded from the default "active" view (mirrors how `done`
+// is excluded). Cancelled requests are findable via the explicit "all" filter.
+const INACTIVE_STATUSES = new Set(['done', 'cancelled'])
 
 function normalizeStatus(status: string | null | undefined) {
   if (!status) return 'request_submitted'
@@ -184,7 +191,7 @@ export async function GET(request: NextRequest) {
     const venueIds = await getStaffVenueIds(auth.userId, auth.role)
     const vf = buildVenueFilterClause(venueIds, 'dr.venue_id', 1)
 
-    const conditions: string[] = []
+    const conditions: string[] = ['dr.deleted_at IS NULL']
     const params: any[] = [...vf.params]
 
     if (vf.clause) conditions.push(vf.clause.replace(/^AND /, ''))

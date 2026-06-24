@@ -20,6 +20,7 @@ const DASHBOARD_TO_TWENTY_STATUS: Record<string, string> = {
   in_production: 'STATUS_IN_PRODUCTION',
   shipped: 'STATUS_SHIPPED',
   invoiced: 'STATUS_INVOICED',
+  cancelled: 'STATUS_CANCELLED',
 }
 
 const TWENTY_TO_DASHBOARD_STATUS = Object.fromEntries(
@@ -280,7 +281,7 @@ async function listLegacyPrintRequests(request: NextRequest) {
   const statusFilter = searchParams.get('status')
   const clientId = searchParams.get('client_id')
 
-  const conditions: string[] = [`NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('pr')}`]
+  const conditions: string[] = [`pr.deleted_at IS NULL`, `NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('pr')}`]
   const params: unknown[] = []
 
   if (statusFilter && statusFilter !== 'all') {
@@ -742,12 +743,14 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
     if (isTwentyBackedEnabled('PRINT_REQUESTS')) {
+      // Soft-delete via Twenty's REST DELETE (stamps deletedAt, recoverable).
+      // Keep the tri-code side row so a restore comes back intact.
       await PrintRequests.delete(id)
-      await query('DELETE FROM print_request_tricodes WHERE print_request_id = $1', [id]).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
-    await query('DELETE FROM print_requests WHERE id = $1', [id])
+    // Soft-delete: stamp deleted_at; row drops out of every view, recoverable.
+    await query('UPDATE print_requests SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [id])
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Error deleting print request:', err)

@@ -33,6 +33,8 @@ function mapTwentyStatus(raw: string | null | undefined): string {
     completed: 'posted',
     request_closed: 'posted',
     closed: 'posted',
+    cancelled: 'cancelled',
+    canceled: 'cancelled',
   }
   return map[stripped] || stripped || 'request_submitted'
 }
@@ -65,6 +67,7 @@ const ALLOWED_STATUSES = new Set([
   'revisions',
   'approved',
   'posted',
+  'cancelled',
 ])
 
 function normalizeStatus(status: string | null | undefined) {
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
     const venueIds = await getStaffVenueIds(auth.userId, auth.role)
     const vf = buildVenueFilterClause(venueIds, 'cg.venue_id', 1)
 
-    const conditions: string[] = []
+    const conditions: string[] = ['cg.deleted_at IS NULL']
     const params: any[] = [...vf.params]
 
     if (vf.clause) conditions.push(vf.clause.replace(/^AND /, ''))

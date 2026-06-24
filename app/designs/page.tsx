@@ -131,6 +131,7 @@ const statusTone: Record<string, string> = {
   client_review: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
   approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   done: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300',
+  cancelled: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
 }
 
 export default function DesignsPage() {
@@ -138,6 +139,7 @@ export default function DesignsPage() {
   const { showToast } = useToast()
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>([])
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
@@ -343,6 +345,11 @@ export default function DesignsPage() {
             .then((r) => r.json())
             .catch(() => ({ design_requests: [] })),
         ),
+        // Cancelled is a terminal status with no Kanban lane — fetch it
+        // explicitly so the Cancelled tab + counts populate.
+        fetch(`/api/design-requests?status=cancelled&sort=${encodeURIComponent(sort)}&limit=120`)
+          .then((r) => r.json())
+          .catch(() => ({ design_requests: [] })),
       ]
       const [designPages, vd, sd] = await Promise.all([
         Promise.all(designFetches),
@@ -410,6 +417,26 @@ export default function DesignsPage() {
       alert('Could not duplicate this request')
     } finally {
       setDuplicatingId(null)
+    }
+  }
+
+  const deleteRequest = async (id: string) => {
+    if (deletingId) return
+    if (!confirm('Delete this design request? It will be removed from all views but can be recovered.')) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/design-requests/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast(err?.error || 'Could not delete this request', 'error')
+        return
+      }
+      setDesignRequests((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      console.error(err)
+      showToast('Could not delete this request', 'error')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -504,7 +531,7 @@ export default function DesignsPage() {
 
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'active' && item.status !== 'done') ||
+        (statusFilter === 'active' && item.status !== 'done' && item.status !== 'cancelled') ||
         item.status === statusFilter
 
       const matchesDesigner =
@@ -569,8 +596,9 @@ export default function DesignsPage() {
   }, [venues, designRequests, venueById, venueByLowerName])
 
   const counts: Record<string, number> = {
-    active: designRequests.filter((item) => item.status !== 'done').length,
+    active: designRequests.filter((item) => item.status !== 'done' && item.status !== 'cancelled').length,
     all: designRequests.length,
+    cancelled: designRequests.filter((item) => item.status === 'cancelled').length,
   }
 
   for (const status of statusColumns) {
@@ -1142,6 +1170,7 @@ export default function DesignsPage() {
               { key: 'active', label: 'Active' },
               { key: 'all', label: 'All' },
               { key: 'done', label: 'Done' },
+              { key: 'cancelled', label: 'Cancelled' },
             ].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
@@ -1423,6 +1452,25 @@ export default function DesignsPage() {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <rect x="9" y="9" width="11" height="11" rx="2" />
                     <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteRequest(item.id) }}
+                disabled={deletingId === item.id}
+                className="absolute top-0 right-7 p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                title="Delete this request (recoverable)"
+                aria-label="Delete request"
+              >
+                {deletingId === item.id ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 )}
               </button>

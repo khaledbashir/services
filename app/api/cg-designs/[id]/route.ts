@@ -31,6 +31,7 @@ const ALLOWED_STATUSES = new Set([
   'revisions',
   'approved',
   'posted',
+  'cancelled',
 ])
 
 function normalizeValue(key: string, value: any) {
@@ -64,7 +65,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
      FROM cg_design_requests cg
      LEFT JOIN venues v ON cg.venue_id = v.id
      LEFT JOIN staff s ON cg.designer_id = s.id
-     WHERE cg.id = $1 ${vf.clause}`,
+     WHERE cg.id = $1 AND cg.deleted_at IS NULL ${vf.clause}`,
     params,
   )
 
@@ -186,6 +187,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_request: NextRequest) {
-  return NextResponse.json({ error: 'Delete not supported' }, { status: 405 })
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    if (isTwentyBackedEnabled('CG_DESIGNS')) {
+      const auth = await requireRole(request, 'admin')
+      if (isAuthError(auth)) return auth
+      // Twenty's REST DELETE is a soft-delete (stamps deletedAt, recoverable).
+      await CgDesigns.delete(params.id)
+      return NextResponse.json({ success: true })
+    }
+
+    const access = await getAccessibleRecord(request, params.id)
+    if (access instanceof NextResponse) return access
+    if (!access.record) {
+      return NextResponse.json({ error: 'CG design request not found' }, { status: 404 })
+    }
+
+    // Soft-delete: stamp deleted_at; row drops out of every view, recoverable.
+    await query('UPDATE cg_design_requests SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [params.id])
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Error deleting CG design request:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

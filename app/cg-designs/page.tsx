@@ -57,6 +57,7 @@ const statusColumns = [
   { key: 'approved', label: 'Approved' },
   { key: 'on_hold', label: 'On Hold' },
   { key: 'request_closed', label: 'Request Closed' },
+  { key: 'cancelled', label: 'Cancelled' },
 ] as const
 
 // User dashboard groupings (Alexis 2026-06-11): Requested / Active / Completed
@@ -72,6 +73,7 @@ const statusTone: Record<string, string> = {
   approved: 'bg-emerald-50 text-emerald-700',
   on_hold: 'bg-rose-50 text-rose-700',
   request_closed: 'bg-zinc-100 text-zinc-600',
+  cancelled: 'bg-rose-50 text-rose-700',
 }
 
 export default function CgDesignsPage() {
@@ -79,6 +81,7 @@ export default function CgDesignsPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [search, setSearch] = useState('')
   // Per-designer filter — mirror the /designs page pattern so Alexis can
@@ -138,6 +141,26 @@ export default function CgDesignsPage() {
     window.addEventListener('anc:data-refresh', onRefresh)
     return () => window.removeEventListener('anc:data-refresh', onRefresh)
   }, [])
+
+  const deleteRequest = async (id: string) => {
+    if (deletingId) return
+    if (!confirm('Delete this CG request? It will be removed from all views but can be recovered.')) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/cg-designs/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not delete this request')
+        return
+      }
+      setItems((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      console.error(err)
+      alert('Could not delete this request')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -367,7 +390,7 @@ export default function CgDesignsPage() {
 
         <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-1 overflow-x-auto">
-            {[{ key: 'requested', label: 'Requested' }, { key: 'active', label: 'Active' }, { key: 'completed', label: 'Completed' }, { key: 'all', label: 'All' }].map((tab) => {
+            {[{ key: 'requested', label: 'Requested' }, { key: 'active', label: 'Active' }, { key: 'completed', label: 'Completed' }, { key: 'cancelled', label: 'Cancelled' }, { key: 'all', label: 'All' }].map((tab) => {
               const isActive = statusFilter === tab.key
               return (
                 <button key={tab.key} onClick={() => setStatusFilter(tab.key)} className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${isActive ? 'bg-[#0A52EF] text-white' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'}`}>
@@ -394,7 +417,11 @@ export default function CgDesignsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {statusColumns.map((column) => {
+          {statusColumns
+            // Cancelled is terminal — only surface its lane on the All or
+            // Cancelled tab so it stays out of the active board.
+            .filter((column) => column.key !== 'cancelled' || statusFilter === 'all' || statusFilter === 'cancelled')
+            .map((column) => {
             const columnItems = filtered.filter((item) => item.status === column.key)
             return (
               <div key={column.key} className="rounded-xl border border-zinc-200 bg-zinc-50 min-h-[18rem] overflow-hidden">
@@ -411,9 +438,10 @@ export default function CgDesignsPage() {
                     const enterpriseNames = assignmentNames(item.enterprise_contacts)
                     const assigneeText = [designerNames || 'No designer assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
                     return (
-                    <Link key={item.id} href={`/cg-designs/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
+                    <div key={item.id} className="group relative">
+                    <Link href={`/cg-designs/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.job_title}</h3>
+                        <h3 className="text-sm font-medium text-zinc-900 leading-snug pr-5">{item.job_title}</h3>
                         <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{column.label}</span>
                       </div>
                       <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
@@ -424,6 +452,26 @@ export default function CgDesignsPage() {
                         {item.due_date && <p>Due {formatDate(item.due_date)}</p>}
                       </div>
                     </Link>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteRequest(item.id) }}
+                      disabled={deletingId === item.id}
+                      className="absolute top-2 left-2 p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      title="Delete this request (recoverable)"
+                      aria-label="Delete request"
+                    >
+                      {deletingId === item.id ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                          <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                    </div>
                   )})}
                 </div>
               </div>

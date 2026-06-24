@@ -457,6 +457,13 @@ async function runMigrations() {
     await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS small_home_plate INT`)
     await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS other_qty INT`)
     await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS margin NUMERIC`)
+    // Soft-delete (Alexis 2026-06-24): deleting a request hides it from every
+    // view but keeps the row recoverable. All GET queries filter deleted_at IS
+    // NULL; the [id] DELETE handlers stamp NOW(). Additive, backward-compatible.
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE content_schedules ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
     await client.query(`CREATE TABLE IF NOT EXISTS print_request_tricodes (
       print_request_id TEXT PRIMARY KEY,
       tricode TEXT,

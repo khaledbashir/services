@@ -59,7 +59,10 @@ const STAGES = [
 
 type StageKey = typeof STAGES[number]['key']
 
-const STATUS_OPTIONS = STAGES.map((s) => ({ value: s.key, label: s.label }))
+// Cancelled is a terminal status, not a pipeline stage — keep it out of the
+// STAGES timeline but selectable in the status dropdown so a request can be
+// cancelled. Cancelled requests drop out of the active dashboard views.
+const STATUS_OPTIONS = [...STAGES.map((s) => ({ value: s.key, label: s.label })), { value: 'cancelled', label: 'Cancelled' }]
 
 function formatDate(s: string | null | undefined): string {
   if (!s) return '—'

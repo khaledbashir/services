@@ -138,10 +138,11 @@ export async function GET(request: NextRequest) {
                 '/designs/' || dr.id::text as href
          FROM design_requests dr
          LEFT JOIN venues v ON v.id = dr.venue_id
-         WHERE COALESCE(dr.job_title, '') ILIKE $1 ESCAPE '\\'
+         WHERE dr.deleted_at IS NULL
+           AND (COALESCE(dr.job_title, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(dr.company_name, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(dr.notes, '') ILIKE $1 ESCAPE '\\'
-            OR COALESCE(v.name, '') ILIKE $1 ESCAPE '\\'
+            OR COALESCE(v.name, '') ILIKE $1 ESCAPE '\\')
          ORDER BY COALESCE(dr.due_date, CURRENT_DATE + INTERVAL '365 days'), dr.created_at DESC
          LIMIT 5`,
         [like],

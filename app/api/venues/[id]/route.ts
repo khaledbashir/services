@@ -173,13 +173,13 @@ export async function GET(
         query(
           `SELECT id, job_title, status, due_date, hours_estimated, hours_spent,
                   TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-           FROM design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+           FROM design_requests WHERE venue_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50`,
           [venueId]
         ),
         query(
           `SELECT id, job_title, league, team_name, status, due_date,
                   TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-           FROM cg_design_requests WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+           FROM cg_design_requests WHERE venue_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50`,
           [venueId]
         ),
         query(
@@ -187,6 +187,7 @@ export async function GET(
                   TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
            FROM print_requests
            WHERE venue_id = $1
+             AND deleted_at IS NULL
              AND NOT ${SPEC_SHEET_PRINT_SQL_WITH_ALIAS('print_requests')}
            ORDER BY created_at DESC LIMIT 50`,
           [venueId]
@@ -194,7 +195,7 @@ export async function GET(
         query(
           `SELECT id, content_name, company_name, status, launch_date, end_date,
                   TO_CHAR(created_at, 'YYYY-MM-DD') as created_at
-           FROM content_schedules WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 50`,
+           FROM content_schedules WHERE venue_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 50`,
           [venueId]
         ),
       ])

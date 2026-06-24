@@ -9,9 +9,15 @@ export const PRINT_REQUEST_STATUS_ORDER = [
   'in_production',
   'shipped',
   'invoiced',
+  'cancelled',
 ] as const
 
 export type PrintRequestStatus = typeof PRINT_REQUEST_STATUS_ORDER[number]
+
+// Terminal statuses excluded from the default "active" pipeline view. `invoiced`
+// is the natural pipeline end; `cancelled` is the new explicit terminal state.
+// Both stay findable via the "all" filter.
+export const PRINT_REQUEST_INACTIVE_STATUSES = new Set<string>(['invoiced', 'cancelled'])
 
 const DASHBOARD_TO_TWENTY_STATUS: Record<PrintRequestStatus, string> = {
   new_job: 'STATUS_NEW_JOB',
@@ -21,6 +27,7 @@ const DASHBOARD_TO_TWENTY_STATUS: Record<PrintRequestStatus, string> = {
   in_production: 'STATUS_IN_PRODUCTION',
   shipped: 'STATUS_SHIPPED',
   invoiced: 'STATUS_INVOICED',
+  cancelled: 'STATUS_CANCELLED',
 }
 
 const TWENTY_TO_DASHBOARD_STATUS: Record<string, PrintRequestStatus> = {
@@ -31,6 +38,7 @@ const TWENTY_TO_DASHBOARD_STATUS: Record<string, PrintRequestStatus> = {
   STATUS_IN_PRODUCTION: 'in_production',
   STATUS_SHIPPED: 'shipped',
   STATUS_INVOICED: 'invoiced',
+  STATUS_CANCELLED: 'cancelled',
   new_job: 'new_job',
   awaiting_layout: 'awaiting_layout',
   awaiting_approval: 'awaiting_approval',
@@ -38,6 +46,8 @@ const TWENTY_TO_DASHBOARD_STATUS: Record<string, PrintRequestStatus> = {
   in_production: 'in_production',
   shipped: 'shipped',
   invoiced: 'invoiced',
+  cancelled: 'cancelled',
+  canceled: 'cancelled',
   new_request: 'new_job',
 }
 

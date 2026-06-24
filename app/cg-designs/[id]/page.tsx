@@ -35,6 +35,7 @@ const statusOptions = [
   { value: 'approved', label: 'Approved' },
   { value: 'on_hold', label: 'On Hold' },
   { value: 'request_closed', label: 'Request Closed' },
+  { value: 'cancelled', label: 'Cancelled' },
 ]
 
 export default function CgDesignDetailPage({ params }: { params: { id: string } }) {

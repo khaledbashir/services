@@ -83,6 +83,7 @@ export default function ContentSchedulesPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [venueFilter, setVenueFilter] = useState<string>('all')
   const [clientFilter, setClientFilter] = useState<string>('all')
@@ -142,6 +143,26 @@ export default function ContentSchedulesPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  const deleteSchedule = async (id: string) => {
+    if (deletingId) return
+    if (!confirm('Delete this content schedule? It will be removed from all views but can be recovered.')) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/content-schedules/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not delete this content schedule')
+        return
+      }
+      setItems((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      console.error(err)
+      alert('Could not delete this content schedule')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const resetForm = () => {
     setFormData({
@@ -504,9 +525,10 @@ export default function ContentSchedulesPage() {
                     const enterpriseNames = assignmentNames(item.enterprise_contacts)
                     const assigneeText = [operatorNames || 'No operator assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
                     return (
-                    <Link key={item.id} href={`/content-schedules/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
+                    <div key={item.id} className="group relative">
+                    <Link href={`/content-schedules/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.content_name}</h3>
+                        <h3 className="text-sm font-medium text-zinc-900 leading-snug pr-5">{item.content_name}</h3>
                         <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{labelForContentScheduleStatus(item.status)}</span>
                       </div>
                       {item.tricode && (
@@ -521,6 +543,26 @@ export default function ContentSchedulesPage() {
                         <p>{item.files_ready ? 'Files ready' : 'Files pending'}</p>
                       </div>
                     </Link>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteSchedule(item.id) }}
+                      disabled={deletingId === item.id}
+                      className="absolute top-2 left-2 p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      title="Delete this content schedule (recoverable)"
+                      aria-label="Delete content schedule"
+                    >
+                      {deletingId === item.id ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                          <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                    </div>
                   )})}
                 </div>
               </div>

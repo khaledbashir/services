@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     const venueIds = await getStaffVenueIds(auth.userId, auth.role)
     const vf = buildVenueFilterClause(venueIds, 'cs.venue_id', 1)
 
-    const conditions: string[] = []
+    const conditions: string[] = ['cs.deleted_at IS NULL']
     const params: any[] = [...vf.params]
 
     if (vf.clause) conditions.push(vf.clause.replace(/^AND /, ''))
