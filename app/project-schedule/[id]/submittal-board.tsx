@@ -38,6 +38,7 @@ import type {
   SubmittalDisposition,
   SubmittalRegisterItem,
 } from '@/lib/project-schedule'
+import { SubmittalOcrUpload } from './submittal-ocr-upload'
 
 // Mirror the lib's exported enums locally — a value import from
 // lib/project-schedule would pull the server-only db module into the client
@@ -306,7 +307,12 @@ export function SubmittalBoard({
         <div className="flex flex-col items-center rounded-md border border-dashed border-[#E8E8E8] bg-white p-10 text-center">
           <FileText className="h-7 w-7 text-zinc-300" />
           <h3 className="mt-3 text-sm font-semibold text-zinc-950">No submittals logged</h3>
-          <p className="mt-1 text-sm text-zinc-500">Submittals derive from this project&apos;s deployment package.</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Submittals derive from this project&apos;s deployment package — or upload drawings to auto-create them.
+          </p>
+          <div className="mt-4">
+            <SubmittalOcrUpload projectId={projectId} onCreated={setProject} />
+          </div>
         </div>
       </div>
     )
@@ -390,6 +396,8 @@ export function SubmittalBoard({
         >
           <Download className="h-4 w-4" /> CSV
         </button>
+
+        <SubmittalOcrUpload projectId={projectId} onCreated={setProject} />
       </div>
 
       {view === 'board' ? (

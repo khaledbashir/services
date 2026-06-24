@@ -1570,6 +1570,32 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_transmittals_project ON project_transmittals(project_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_transmittals_submittal ON project_transmittals(submittal_id)`)
 
+    // OCR auto-created submittal register rows. The base register is derived
+    // from the workbook's deployment package; these are net-new entries produced
+    // by uploading drawing PDFs and OCR-ing their title blocks. They merge into
+    // project.submittals and reuse the existing override + transmittal layers.
+    await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_extra_submittals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      submittal_no TEXT,
+      package_type TEXT,
+      title TEXT NOT NULL,
+      revision TEXT,
+      status TEXT,
+      owner TEXT,
+      due_date TEXT,
+      disposition TEXT,
+      ball_in_court TEXT,
+      submitted_date TEXT,
+      returned_date TEXT,
+      source TEXT,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_extra_submittals_project ON project_schedule_extra_submittals(project_id)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

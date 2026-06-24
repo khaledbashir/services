@@ -921,14 +921,161 @@ function applyItemOverrides(projects: ActiveProject[], overrides: ProjectSchedul
   })
 }
 
+// ----------------------------------------------------------------------------
+// OCR-created "extra" submittals.
+//
+// The base submittal register is derived from the workbook's deployment package
+// (5 discipline rows per project), then refined via the item-override layer.
+// That model has no slot for brand-new register entries, which is exactly what
+// the OCR auto-create flow produces ("create the submittals from what we
+// upload"). Rather than fork the derived model, OCR-detected items are
+// persisted as real SubmittalRegisterItem rows in their own table and merged
+// into project.submittals here. They flow through the SAME board UI, the SAME
+// item-override PATCH path, and the SAME transmittal derivation — no new shapes.
+// ----------------------------------------------------------------------------
+
+interface ExtraSubmittalRow {
+  id: string
+  project_id: string
+  submittal_no: string | null
+  package_type: string | null
+  title: string | null
+  revision: string | null
+  status: string | null
+  owner: string | null
+  due_date: string | null
+  disposition: string | null
+  ball_in_court: string | null
+  submitted_date: string | null
+  returned_date: string | null
+  source: string | null
+}
+
+export interface ExtraSubmittalInput {
+  submittalNo?: string
+  packageType?: string
+  title: string
+  revision?: string
+  owner?: string
+  dueDate?: string
+  source?: string
+}
+
+function extraRowToItem(row: ExtraSubmittalRow, projectName: string): SubmittalRegisterItem {
+  const status = (row.status as SubmittalStatus | null) ?? 'needed'
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    project: projectName,
+    submittalNo: row.submittal_no ?? 'TBD',
+    packageType: row.package_type ?? 'General',
+    title: row.title ?? '',
+    revision: row.revision ?? 'Initial',
+    status,
+    owner: row.owner ?? '',
+    dueDate: row.due_date ?? '',
+    receivedDate: '',
+    latestRevision: true,
+    source: row.source ?? 'OCR auto-create',
+    documentStatus: 'watch',
+    disposition: (row.disposition as SubmittalDisposition | null) ?? defaultDisposition(status),
+    ballInCourt: (row.ball_in_court as BallInCourt | null) ?? defaultBallInCourt(status),
+    submittedDate: row.submitted_date ?? '',
+    returnedDate: row.returned_date ?? '',
+  }
+}
+
+function applyExtraSubmittals(projects: ActiveProject[], rows: ExtraSubmittalRow[]): ActiveProject[] {
+  if (!rows.length) return projects
+  const byProject = new Map<string, ExtraSubmittalRow[]>()
+  for (const row of rows) {
+    if (!byProject.has(row.project_id)) byProject.set(row.project_id, [])
+    byProject.get(row.project_id)!.push(row)
+  }
+  return projects.map((project) => {
+    const extras = byProject.get(project.id)
+    if (!extras || !extras.length) return project
+    const extraItems = extras.map((row) => extraRowToItem(row, project.project))
+    const submittals = [...project.submittals, ...extraItems]
+    return {
+      ...project,
+      submittals,
+      submittalGapCount: submittals.filter((item) => item.status === 'needed' || item.status === 'returned').length,
+    }
+  })
+}
+
+export async function listExtraSubmittals(projectId: string): Promise<SubmittalRegisterItem[]> {
+  const { activeProjects } = readWorkbookData()
+  const project = activeProjects.find((item) => item.id === projectId)
+  const projectName = project?.project ?? projectId
+  const result = await query(
+    `SELECT * FROM project_schedule_extra_submittals WHERE project_id = $1 ORDER BY created_at ASC`,
+    [projectId],
+  )
+  return result.rows.map((row: ExtraSubmittalRow) => extraRowToItem(row, projectName))
+}
+
+// Persist a batch of OCR-detected submittals as real register rows. Returns the
+// refreshed live insights so the caller can re-render the board immediately.
+export async function createExtraSubmittals(
+  projectId: string,
+  inputs: ExtraSubmittalInput[],
+  createdBy = 'dashboard',
+): Promise<{ created: SubmittalRegisterItem[]; data: ProjectScheduleInsights }> {
+  const { activeProjects } = readWorkbookData()
+  const project = activeProjects.find((item) => item.id === projectId)
+  const projectName = project?.project ?? projectId
+
+  const created: SubmittalRegisterItem[] = []
+  for (const input of inputs) {
+    const title = (input.title || '').trim()
+    if (!title) continue
+    const id = `ocr-${randomUUID()}`
+    const result = await query(
+      `INSERT INTO project_schedule_extra_submittals (
+        id, project_id, submittal_no, package_type, title, revision, status, owner,
+        due_date, disposition, ball_in_court, submitted_date, returned_date, source, created_by, updated_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,'needed',$7,$8,NULL,'anc','','',$9,$10,$10)
+      RETURNING *`,
+      [
+        id,
+        projectId,
+        (input.submittalNo || '').trim() || 'TBD',
+        (input.packageType || '').trim() || 'General',
+        title,
+        (input.revision || '').trim() || 'Initial',
+        (input.owner || '').trim() || (project?.pm ?? ''),
+        (input.dueDate || '').trim() || '',
+        (input.source || '').trim() || 'OCR auto-create',
+        createdBy,
+      ],
+    )
+    created.push(extraRowToItem(result.rows[0], projectName))
+  }
+
+  const data = await getProjectScheduleInsightsLive()
+  return { created, data }
+}
+
+export async function deleteExtraSubmittal(projectId: string, submittalId: string): Promise<boolean> {
+  const result = await query(
+    `DELETE FROM project_schedule_extra_submittals WHERE id = $1 AND project_id = $2`,
+    [submittalId, projectId],
+  )
+  return (result.rowCount ?? 0) > 0
+}
+
 export async function getProjectScheduleInsightsLive(): Promise<ProjectScheduleInsights> {
   const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
-  const [overrides, itemOverrides] = await Promise.all([
+  const [overrides, itemOverrides, extraSubmittals] = await Promise.all([
     query(`SELECT * FROM project_schedule_overrides`),
     query(`SELECT * FROM project_schedule_item_overrides`),
+    query(`SELECT * FROM project_schedule_extra_submittals`),
   ])
   const withProjectOverrides = applyOverrides(activeProjects, overrides.rows)
-  const withItemOverrides = applyItemOverrides(withProjectOverrides, itemOverrides.rows)
+  const withExtras = applyExtraSubmittals(withProjectOverrides, extraSubmittals.rows)
+  const withItemOverrides = applyItemOverrides(withExtras, itemOverrides.rows)
   return buildInsights(withItemOverrides, onsiteAssignments, opportunities)
 }
 
@@ -938,8 +1085,11 @@ export async function updateProjectScheduleSubmittalOverride(
   patch: SubmittalItemPatch,
   updatedBy = 'dashboard',
 ) {
-  const { activeProjects } = readWorkbookData()
-  const project = activeProjects.find((item) => item.id === projectId)
+  // Use the live insights (not the bare workbook) so OCR-created "extra"
+  // submittals resolve here too — they're real register rows, just persisted
+  // in project_schedule_extra_submittals rather than derived from the workbook.
+  const live = await getProjectScheduleInsightsLive()
+  const project = live.activeProjects.find((item) => item.id === projectId)
   if (!project) return null
   const submittal = project.submittals.find((item) => item.id === submittalId)
   if (!submittal) return null
