@@ -190,18 +190,26 @@ export async function sendTicketDistributionEmail(opts: {
       ${opts.resolution ? `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Resolution:</strong> ${opts.resolution}</p>` : ''}`
   }
 
-  try {
-    await sendSupportMailboxEmail({
-      to: venue.distribution_emails,
-      subject: subjectMap[opts.type],
-      html: ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent),
-      replyTo,
-    })
-    return { sent: true, recipient_count: venue.distribution_emails.length }
-  } catch (e) {
-    console.error('[email] Failed to send ticket distribution through CRM support mailbox:', e)
+  // Outbound ticket distribution goes through SendGrid (transactional).
+  // replyTo is set to the monitored support mailbox so client replies thread
+  // back into the support inbox via the inbound webhook (matched on the
+  // "Case NNNNNNNN —" subject token, not the sender). This intentionally does
+  // NOT send *from* the support mailbox: that path reads Twenty's encrypted
+  // connectedAccount tokens (enc:v2:...) raw and cannot authenticate to Graph,
+  // so every send silently failed (AADSTS9002313). SendGrid is decoupled from
+  // Twenty's token store and is already the outbound transactional provider.
+  const html = ticketEmailHtml(caseNum, opts.ticketTitle, venue.name, bodyContent)
+  const ok = await sendEmail(
+    venue.distribution_emails,
+    subjectMap[opts.type],
+    html,
+    replyTo,
+  )
+  if (!ok) {
+    console.error('[email] Ticket distribution send failed via SendGrid for case', caseNum)
     return { sent: false, recipient_count: venue.distribution_emails.length, reason: 'send_failed' }
   }
+  return { sent: true, recipient_count: venue.distribution_emails.length }
 }
 
 export async function sendTicketReplyEmail(opts: {
