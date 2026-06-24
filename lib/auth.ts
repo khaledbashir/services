@@ -57,8 +57,11 @@ export async function authenticateUser(email: string, password: string): Promise
     if (hashResult.rows.length === 0) return null
     
     const passwordHash = hashResult.rows[0].password_hash
+    // Guard: a null/non-string hash (SSO-only or never-set password) must not
+    // crash bcrypt ("Illegal arguments: string, object" -> 500). Reject cleanly.
+    if (!passwordHash || typeof passwordHash !== 'string') return null
     const isValidPassword = await bcrypt.compare(password, passwordHash)
-    
+
     if (!isValidPassword) return null
     
     return {

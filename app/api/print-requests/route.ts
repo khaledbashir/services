@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
-import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { loadTriCodeMap, upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import { isSpecSheetWork, SPEC_SHEET_INTERNAL_CATEGORY, SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
 
 type ClientRow = { id: string; name: string }
@@ -148,7 +149,22 @@ function moneyToNumber(v: any): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
+// Margin = what ANC bills the client minus what Britten charges ANC (Alexis
+// notes pages 10/11). Derived read-only unless a manual override is stored.
+function computeMargin(
+  ancPrice: number | null,
+  brittenPrice: number | null,
+  brittenRushFee: number | null,
+  brittenShipping: number | null,
+  override?: number | null,
+): number | null {
+  if (override != null && Number.isFinite(override)) return override
+  if (ancPrice == null) return null
+  const brittenTotal = (brittenPrice || 0) + (brittenRushFee || 0) + (brittenShipping || 0)
+  return Number((ancPrice - brittenTotal).toFixed(2))
+}
+
+async function reshapeTwentyPrintRequest(record: TwentyPrintRequest, tricode: string | null = null) {
   const raw = record as any
   const clientName = raw.printClient?.name || null
   const proofLinks = parseProofLinks(raw.proofLinks)
@@ -156,6 +172,10 @@ async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
   const notesText = typeof raw.notes === 'object'
     ? (raw.notes?.markdown || raw.notes?.blocknote || '')
     : (raw.notes || '')
+  const ancPrice = moneyToNumber(raw.ancPrice)
+  const brittenPrice = moneyToNumber(raw.brittenPrice)
+  const brittenRushFee = moneyToNumber(raw.brittenRushFee)
+  const brittenShipping = moneyToNumber(raw.brittenShipping)
   return {
     id: record.id,
     client_id: await findLocalClientIdByName(clientName),
@@ -171,21 +191,27 @@ async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
     invoice_amount: moneyToNumber(raw.invoiceAmount),
     invoice_number: raw.invoiceNumber || null,
     invoice_date: raw.invoiceDate || null,
-    britten_cost: moneyToNumber(raw.brittenPrice),
-    britten_rush_fee: moneyToNumber(raw.brittenRushFee),
-    britten_shipping: moneyToNumber(raw.brittenShipping),
-    anc_price: moneyToNumber(raw.ancPrice),
+    britten_cost: brittenPrice,
+    britten_rush_fee: brittenRushFee,
+    britten_shipping: brittenShipping,
+    anc_price: ancPrice,
     install_fee: moneyToNumber(raw.installFee),
     rush_fee: moneyToNumber(raw.rushFee),
     shipping_fee: moneyToNumber(raw.shippingFee),
     sales_tax: moneyToNumber(raw.salesTax),
+    margin: computeMargin(ancPrice, brittenPrice, brittenRushFee, brittenShipping),
     bill_to: raw.billTo || null,
     billing_notes: raw.billingNotes || null,
     anc_class: raw.ancClass || null,
+    tricode: tricode,
     home_plate: raw.homePlate ?? null,
     baselines: raw.baselines ?? null,
     small_home_plate: raw.smallHomePlate ?? null,
     other_qty: raw.otherQty ?? null,
+    a_frames: raw.aFrames ?? null,
+    courtsides: raw.courtsides ?? null,
+    dasherboards: raw.dasherboards ?? null,
+    spring_hp: raw.springHp ?? null,
     submitted_by: raw.submittedBy || null,
     requester_email: emailToString(raw.requesterEmail),
     reprint: Boolean(raw.reprint),
@@ -219,7 +245,7 @@ async function listTwentyPrintRequests(request: NextRequest) {
     filters.push(`printClientId[eq]:"${companyId}"`)
   }
 
-  const items: ReturnType<typeof reshapeTwentyPrintRequest>[] = []
+  const records: TwentyPrintRequest[] = []
   let cursor: string | null = null
 
   for (let pageIndex = 0; pageIndex < 50; pageIndex++) {
@@ -232,7 +258,7 @@ async function listTwentyPrintRequests(request: NextRequest) {
 
     for (const item of page.items) {
       if (!isSpecSheetWork(item.name, item.printClient?.name, item.britainNotes)) {
-        items.push(reshapeTwentyPrintRequest(item))
+        records.push(item)
       }
     }
 
@@ -240,7 +266,8 @@ async function listTwentyPrintRequests(request: NextRequest) {
     cursor = page.nextCursor
   }
 
-  return Promise.all(items)
+  const triCodeMap = await loadTriCodeMap('print_request_tricodes', records.map((r) => r.id))
+  return Promise.all(records.map((r) => reshapeTwentyPrintRequest(r, triCodeMap.get(r.id) || null)))
 }
 
 function legacyStatusForDb(status: string | null | undefined): string {
@@ -271,7 +298,10 @@ async function listLegacyPrintRequests(request: NextRequest) {
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const result = await query(
     `SELECT pr.id, pr.venue_id, v.name as venue_name, pr.client_name, pr.job_title, pr.notes, pr.shipping_info, pr.ship_date, pr.arrival_date,
-            pr.britten_cost, pr.tracking_number, pr.status, pr.created_at, pr.updated_at
+            pr.britten_cost, pr.tracking_number, pr.status, pr.tricode, pr.margin,
+            pr.home_plate, pr.baselines, pr.small_home_plate, pr.other_qty,
+            pr.a_frames, pr.courtsides, pr.dasherboards, pr.spring_hp,
+            pr.created_at, pr.updated_at
      FROM print_requests pr
      LEFT JOIN venues v ON v.id = pr.venue_id
      ${whereClause}
@@ -280,29 +310,42 @@ async function listLegacyPrintRequests(request: NextRequest) {
   )
 
   return Promise.all(
-    result.rows.map(async (row) => ({
-      id: row.id,
-      client_id: await findLocalClientIdByName(row.client_name || null),
-      client_name: row.client_name,
-      print_client_id: null,
-      venue_id: row.venue_id,
-      venue_name: row.venue_name,
-      job_title: row.job_title,
-      status: normalizeStatus(row.status),
-      shipping_address: row.shipping_info,
-      shipping_info: row.shipping_info,
-      ship_date: row.ship_date,
-      arrival_date: row.arrival_date,
-      invoice_amount: row.britten_cost,
-      britten_cost: row.britten_cost,
-      notes: row.notes,
-      britain_notes: row.notes,
-      proof_links: [],
-      proof_links_json: '[]',
-      tracking_number: row.tracking_number,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    })),
+    result.rows.map(async (row) => {
+      const ancPrice = row.britten_cost != null ? Number(row.britten_cost) : null
+      return {
+        id: row.id,
+        client_id: await findLocalClientIdByName(row.client_name || null),
+        client_name: row.client_name,
+        print_client_id: null,
+        venue_id: row.venue_id,
+        venue_name: row.venue_name,
+        tricode: row.tricode || null,
+        job_title: row.job_title,
+        status: normalizeStatus(row.status),
+        shipping_address: row.shipping_info,
+        shipping_info: row.shipping_info,
+        ship_date: row.ship_date,
+        arrival_date: row.arrival_date,
+        invoice_amount: row.britten_cost,
+        britten_cost: row.britten_cost,
+        margin: row.margin != null ? Number(row.margin) : null,
+        home_plate: row.home_plate ?? null,
+        baselines: row.baselines ?? null,
+        small_home_plate: row.small_home_plate ?? null,
+        other_qty: row.other_qty ?? null,
+        a_frames: row.a_frames ?? null,
+        courtsides: row.courtsides ?? null,
+        dasherboards: row.dasherboards ?? null,
+        spring_hp: row.spring_hp ?? null,
+        notes: row.notes,
+        britain_notes: row.notes,
+        proof_links: [],
+        proof_links_json: '[]',
+        tracking_number: row.tracking_number,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }
+    }),
   )
 }
 
@@ -412,19 +455,26 @@ export async function POST(request: NextRequest) {
         trackingNumber: body.tracking_number?.trim() || null,
       })
 
+      // Tri-code has no native field on Twenty's printRequests — persist in the
+      // side table keyed by the new record id.
+      const savedTriCode = await upsertTriCode('print_request_tricodes', created.id, body.venue_tricode || body.tricode)
       const saved = await PrintRequests.get(created.id)
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || created) })
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || created, savedTriCode) })
     }
 
     const result = await query(
       `INSERT INTO print_requests (
         venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date,
-        britten_cost, tracking_number, status, updated_at
+        britten_cost, tracking_number, status, tricode, margin,
+        home_plate, baselines, small_home_plate, other_qty,
+        a_frames, courtsides, dasherboards, spring_hp, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, NOW()
+        $8, $9, $10, $11, $12,
+        $13, $14, $15, $16,
+        $17, $18, $19, $20, NOW()
       )
-      RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
+      RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, tricode, margin, home_plate, baselines, small_home_plate, other_qty, a_frames, courtsides, dasherboards, spring_hp, created_at, updated_at`,
       [
         resolvedVenueId || null,
         clientName,
@@ -436,6 +486,16 @@ export async function POST(request: NextRequest) {
         normalizeInvoiceAmount(body.invoice_amount),
         body.tracking_number?.trim() || null,
         legacyStatusForDb(body.status),
+        normalizeVenueTriCode(body.venue_tricode || body.tricode),
+        normalizeInvoiceAmount(body.margin),
+        normalizeInteger(body.home_plate),
+        normalizeInteger(body.baselines),
+        normalizeInteger(body.small_home_plate),
+        normalizeInteger(body.other_qty),
+        normalizeInteger(body.a_frames),
+        normalizeInteger(body.courtsides),
+        normalizeInteger(body.dasherboards),
+        normalizeInteger(body.spring_hp),
       ],
     )
 
@@ -451,6 +511,7 @@ export async function POST(request: NextRequest) {
         print_client_id: null,
         venue_id: row.venue_id,
         venue_name: venueName,
+        tricode: row.tricode || null,
         job_title: row.job_title,
         status: normalizeStatus(row.status),
         shipping_address: row.shipping_info,
@@ -459,6 +520,15 @@ export async function POST(request: NextRequest) {
         arrival_date: row.arrival_date,
         invoice_amount: row.britten_cost,
         britten_cost: row.britten_cost,
+        margin: row.margin != null ? Number(row.margin) : null,
+        home_plate: row.home_plate ?? null,
+        baselines: row.baselines ?? null,
+        small_home_plate: row.small_home_plate ?? null,
+        other_qty: row.other_qty ?? null,
+        a_frames: row.a_frames ?? null,
+        courtsides: row.courtsides ?? null,
+        dasherboards: row.dasherboards ?? null,
+        spring_hp: row.spring_hp ?? null,
         notes: row.notes,
         britain_notes: row.notes,
         proof_links: [],
@@ -520,10 +590,18 @@ export async function PATCH(request: NextRequest) {
       if ('notes' in body) patch.britainNotes = body.notes?.trim() || null
       if ('proof_links' in body) patch.proofLinks = JSON.stringify(parseProofLinks(body.proof_links))
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null
+      if ('home_plate' in body) patch.homePlate = normalizeInteger(body.home_plate)
 
       const updated = await PrintRequests.update(id, patch)
+      // Tri-code side table (Twenty has no native field).
+      let triCode: string | null
+      if ('venue_tricode' in body || 'tricode' in body) {
+        triCode = await upsertTriCode('print_request_tricodes', id, body.venue_tricode ?? body.tricode)
+      } else {
+        triCode = await getTriCode('print_request_tricodes', id)
+      }
       const saved = await PrintRequests.get(updated.id)
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated) })
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated, triCode) })
     }
 
     const updates: string[] = []
@@ -565,6 +643,35 @@ export async function PATCH(request: NextRequest) {
       values.push(legacyStatusForDb(body.status))
       updates.push(`status = $${values.length}`)
     }
+    if ('venue_tricode' in body || 'tricode' in body) {
+      values.push(normalizeVenueTriCode(body.venue_tricode ?? body.tricode))
+      updates.push(`tricode = $${values.length}`)
+      // Keep venue derivable from the tri-code (backward-compatible link).
+      const resolvedVenueId = await resolveVenueIdFromTriCode(body.venue_tricode ?? body.tricode)
+      if (resolvedVenueId) {
+        values.push(resolvedVenueId)
+        updates.push(`venue_id = $${values.length}`)
+      }
+    }
+    if ('margin' in body) {
+      values.push(normalizeInvoiceAmount(body.margin))
+      updates.push(`margin = $${values.length}`)
+    }
+    for (const [bodyKey, column] of [
+      ['home_plate', 'home_plate'],
+      ['baselines', 'baselines'],
+      ['small_home_plate', 'small_home_plate'],
+      ['other_qty', 'other_qty'],
+      ['a_frames', 'a_frames'],
+      ['courtsides', 'courtsides'],
+      ['dasherboards', 'dasherboards'],
+      ['spring_hp', 'spring_hp'],
+    ] as const) {
+      if (bodyKey in body) {
+        values.push(normalizeInteger(body[bodyKey]))
+        updates.push(`${column} = $${values.length}`)
+      }
+    }
 
     if (!updates.length) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
@@ -575,19 +682,25 @@ export async function PATCH(request: NextRequest) {
       `UPDATE print_requests
        SET ${updates.join(', ')}, updated_at = NOW()
        WHERE id = $${values.length}
-       RETURNING id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
+       RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, tricode, margin, home_plate, baselines, small_home_plate, other_qty, a_frames, courtsides, dasherboards, spring_hp, created_at, updated_at`,
       values,
     )
 
     if (!result.rows[0]) return NextResponse.json({ error: 'Print request not found' }, { status: 404 })
 
     const row = result.rows[0]
+    const venueName = row.venue_id
+      ? (await query('SELECT name FROM venues WHERE id = $1 LIMIT 1', [row.venue_id])).rows[0]?.name || null
+      : null
     return NextResponse.json({
       print_request: {
         id: row.id,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,
+        venue_id: row.venue_id,
+        venue_name: venueName,
+        tricode: row.tricode || null,
         job_title: row.job_title,
         status: normalizeStatus(row.status),
         shipping_address: row.shipping_info,
@@ -596,6 +709,15 @@ export async function PATCH(request: NextRequest) {
         arrival_date: row.arrival_date,
         invoice_amount: row.britten_cost,
         britten_cost: row.britten_cost,
+        margin: row.margin != null ? Number(row.margin) : null,
+        home_plate: row.home_plate ?? null,
+        baselines: row.baselines ?? null,
+        small_home_plate: row.small_home_plate ?? null,
+        other_qty: row.other_qty ?? null,
+        a_frames: row.a_frames ?? null,
+        courtsides: row.courtsides ?? null,
+        dasherboards: row.dasherboards ?? null,
+        spring_hp: row.spring_hp ?? null,
         notes: row.notes,
         britain_notes: row.notes,
         proof_links: [],
@@ -621,6 +743,7 @@ export async function DELETE(request: NextRequest) {
 
     if (isTwentyBackedEnabled('PRINT_REQUESTS')) {
       await PrintRequests.delete(id)
+      await query('DELETE FROM print_request_tricodes WHERE print_request_id = $1', [id]).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 

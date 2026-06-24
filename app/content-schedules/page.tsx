@@ -17,6 +17,7 @@ interface ContentSchedule {
   file_location: string | null
   status: string
   notes: string | null
+  tricode: string | null
   venue_name: string | null
   venue_id: string | null
   operator_name: string | null
@@ -198,6 +199,7 @@ export default function ContentSchedulesPage() {
         item.content_name.toLowerCase().includes(q) ||
         (item.company_name || '').toLowerCase().includes(q) ||
         (item.venue_name || '').toLowerCase().includes(q) ||
+        (item.tricode || '').toLowerCase().includes(q) ||
         (item.operator_name || '').toLowerCase().includes(q)
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter
       const matchesVenue = venueFilter === 'all' || item.venue_id === venueFilter
@@ -507,6 +509,9 @@ export default function ContentSchedulesPage() {
                         <h3 className="text-sm font-medium text-zinc-900 leading-snug">{item.content_name}</h3>
                         <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{labelForContentScheduleStatus(item.status)}</span>
                       </div>
+                      {item.tricode && (
+                        <span className="mt-2 inline-block rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-zinc-600">{item.tricode}</span>
+                      )}
                       <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
                         <p>{item.company_name || 'No company'}</p>
                         <p>{item.venue_name || 'No venue linked'}</p>

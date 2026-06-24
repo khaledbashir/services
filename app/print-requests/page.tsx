@@ -30,6 +30,7 @@ interface PrintRequestRecord {
   print_client_id: string | null
   venue_id: string | null
   venue_name: string | null
+  tricode: string | null
   job_title: string
   status: string
   shipping_address: string | null
@@ -54,6 +55,11 @@ interface PrintRequestRecord {
   baselines: number | null
   small_home_plate: number | null
   other_qty: number | null
+  a_frames: number | null
+  courtsides: number | null
+  dasherboards: number | null
+  spring_hp: number | null
+  margin: number | null
   submitted_by: string | null
   requester_email: string | null
   reprint: boolean
@@ -107,6 +113,10 @@ const EMPTY_FORM = {
   baselines: '',
   small_home_plate: '',
   other_qty: '',
+  a_frames: '',
+  courtsides: '',
+  dasherboards: '',
+  spring_hp: '',
   submitted_by: '',
   requester_email: '',
   reprint: false,
@@ -238,6 +248,7 @@ export default function PrintRequestsPage() {
         record.job_title.toLowerCase().includes(q) ||
         (record.client_name || '').toLowerCase().includes(q) ||
         (record.venue_name || '').toLowerCase().includes(q) ||
+        (record.tricode || '').toLowerCase().includes(q) ||
         (record.shipping_address || '').toLowerCase().includes(q) ||
         (record.notes || '').toLowerCase().includes(q) ||
         (record.tracking_number || '').toLowerCase().includes(q)
@@ -278,7 +289,7 @@ export default function PrintRequestsPage() {
       client_id: record.client_id || '',
       client_name: record.client_name || '',
       venue_id: record.venue_id || '',
-      venue_tricode: '',
+      venue_tricode: record.tricode || '',
       job_title: record.job_title,
       status: record.status,
       shipping_address: record.shipping_address || '',
@@ -303,6 +314,10 @@ export default function PrintRequestsPage() {
       baselines: record.baselines == null ? '' : String(record.baselines),
       small_home_plate: record.small_home_plate == null ? '' : String(record.small_home_plate),
       other_qty: record.other_qty == null ? '' : String(record.other_qty),
+      a_frames: record.a_frames == null ? '' : String(record.a_frames),
+      courtsides: record.courtsides == null ? '' : String(record.courtsides),
+      dasherboards: record.dasherboards == null ? '' : String(record.dasherboards),
+      spring_hp: record.spring_hp == null ? '' : String(record.spring_hp),
       submitted_by: record.submitted_by || '',
       requester_email: record.requester_email || '',
       reprint: Boolean(record.reprint),
@@ -325,6 +340,26 @@ export default function PrintRequestsPage() {
         ? nextAddress
         : current.shipping_address,
     }))
+  }
+
+  // Tri-code drives address auto-populate (Alexis 2026-06-24). Set the tri-code,
+  // then resolve the shipping address by tri-code (override map → venue → client
+  // fuzzy match) and fill it only if the address field is empty or was itself
+  // auto-filled — never clobber a manually edited address.
+  async function handleTriCodeChange(rawTriCode: string) {
+    const tricode = normalizeTriCode(rawTriCode)
+    setForm((current) => ({ ...current, venue_tricode: rawTriCode }))
+    if (!tricode) return
+    try {
+      const params = new URLSearchParams({ tricode })
+      const res = await fetch(`/api/print-shipping-addresses?${params}`).then((r) => r.json())
+      const address = res?.match?.address as string | undefined
+      if (!address) return
+      setForm((current) => {
+        const canFill = !current.shipping_address.trim() || Boolean(findShippingAddressForClient(current.client_name))
+        return canFill ? { ...current, shipping_address: address } : current
+      })
+    } catch {}
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -365,6 +400,10 @@ export default function PrintRequestsPage() {
         baselines: form.baselines === '' ? null : Number(form.baselines),
         small_home_plate: form.small_home_plate === '' ? null : Number(form.small_home_plate),
         other_qty: form.other_qty === '' ? null : Number(form.other_qty),
+        a_frames: form.a_frames === '' ? null : Number(form.a_frames),
+        courtsides: form.courtsides === '' ? null : Number(form.courtsides),
+        dasherboards: form.dasherboards === '' ? null : Number(form.dasherboards),
+        spring_hp: form.spring_hp === '' ? null : Number(form.spring_hp),
         submitted_by: form.submitted_by.trim() || null,
         requester_email: form.requester_email.trim() || null,
         reprint: form.reprint,
@@ -544,7 +583,12 @@ export default function PrintRequestsPage() {
                             <div className="mt-1 line-clamp-1 text-xs text-zinc-500">{record.shipping_address || 'No shipping address yet'}</div>
                           </td>
                           <td className="px-5 py-3.5 text-zinc-700">
-                            <div>{record.client_name || 'Unlinked'}</div>
+                            <div className="flex items-center gap-2">
+                              <span>{record.client_name || 'Unlinked'}</span>
+                              {record.tricode && (
+                                <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-zinc-600">{record.tricode}</span>
+                              )}
+                            </div>
                             {record.venue_name && <div className="mt-0.5 text-xs text-zinc-400">{record.venue_name}</div>}
                           </td>
                           <td className="px-5 py-3.5 text-zinc-600">{formatShortDate(record.ship_date)}</td>
@@ -735,7 +779,7 @@ export default function PrintRequestsPage() {
                     {selectedVenueTriCodes.length > 0 ? (
                       <select
                         value={form.venue_tricode}
-                        onChange={(event) => setForm((current) => ({ ...current, venue_tricode: event.target.value }))}
+                        onChange={(event) => handleTriCodeChange(event.target.value)}
                         className="w-full rounded-xl border border-[#E6ECF5] bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10 font-mono uppercase"
                       >
                         <option value="">Select code...</option>
@@ -745,12 +789,13 @@ export default function PrintRequestsPage() {
                       <input
                         type="text"
                         value={form.venue_tricode}
-                        onChange={(event) => setForm((current) => ({ ...current, venue_tricode: normalizeTriCode(event.target.value) }))}
+                        onChange={(event) => handleTriCodeChange(event.target.value)}
                         maxLength={7}
                         placeholder="BSX-FEN"
                         className="w-full rounded-xl border border-[#E6ECF5] bg-[#FBFDFF] px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10 font-mono uppercase"
                       />
                     )}
+                    <p className="mt-1.5 text-xs text-zinc-500">Selecting a tri-code links the venue and pulls the shipping address from the tri-code mapping.</p>
                   </div>
 
                   <div className="md:col-span-2">
@@ -823,6 +868,10 @@ export default function PrintRequestsPage() {
                       ['home_plate', 'HP'],
                       ['baselines', 'BL'],
                       ['small_home_plate', 'SHP'],
+                      ['spring_hp', 'Spring HP'],
+                      ['a_frames', 'A-Frames'],
+                      ['courtsides', 'Courtsides'],
+                      ['dasherboards', 'Dasherboards'],
                       ['other_qty', 'Other Qty'],
                     ].map(([key, label]) => (
                       <div key={key}>
@@ -861,6 +910,22 @@ export default function PrintRequestsPage() {
                         />
                       </div>
                     ))}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Margin (ANC Price − Britten Total)</label>
+                    <div className="w-full rounded-xl border border-[#E6ECF5] bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-900 tabular-nums">
+                      {(() => {
+                        const anc = form.anc_price === '' ? null : Number(form.anc_price)
+                        if (anc == null || !Number.isFinite(anc)) return <span className="font-normal text-zinc-400">—</span>
+                        const brittenTotal =
+                          (form.britten_cost === '' ? 0 : Number(form.britten_cost)) +
+                          (form.britten_rush_fee === '' ? 0 : Number(form.britten_rush_fee)) +
+                          (form.britten_shipping === '' ? 0 : Number(form.britten_shipping))
+                        const margin = anc - brittenTotal
+                        return `$${margin.toFixed(2)}`
+                      })()}
+                    </div>
                   </div>
 
                   <div>

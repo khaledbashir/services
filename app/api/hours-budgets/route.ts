@@ -5,8 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { HoursBudgets, isTwentyBackedEnabled, type TwentyDesignerHoursBudget } from '@/lib/twenty-ops'
+import { loadTriCodeMap, upsertTriCode } from '@/lib/tricode-side-tables'
 
-function reshapeHoursBudget(b: TwentyDesignerHoursBudget) {
+function reshapeHoursBudget(b: TwentyDesignerHoursBudget, tricode: string | null = null) {
   const raw = b as any
   // Twenty stores the cap as `contractedHours`; earlier reshape hardcoded 0.
   const totalHours = Number(raw.contractedHours ?? raw.totalHoursBudgeted ?? 0)
@@ -14,6 +15,7 @@ function reshapeHoursBudget(b: TwentyDesignerHoursBudget) {
   return {
     id: b.id,
     client_name: raw.budgetClient?.name || raw.name || '(unknown client)',
+    tricode,
     venue_id: null,
     venue_name: null,
     league: null,
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
 
   if (isTwentyBackedEnabled('HOURS_BUDGETS')) {
     try {
-      const items: any[] = []
+      const records: TwentyDesignerHoursBudget[] = []
       let cursor: string | null = null
       for (let p = 0; p < 10; p++) {
         const page = await HoursBudgets.list({
@@ -63,10 +65,12 @@ export async function GET(request: NextRequest) {
           startingAfter: cursor || undefined,
           orderBy: 'updatedAt[DescNullsLast]',
         })
-        for (const b of page.items) items.push(reshapeHoursBudget(b))
+        for (const b of page.items) records.push(b)
         if (!page.hasNextPage || !page.nextCursor) break
         cursor = page.nextCursor
       }
+      const triCodeMap = await loadTriCodeMap('hours_budget_tricodes', records.map((r) => r.id))
+      const items = records.map((b) => reshapeHoursBudget(b, triCodeMap.get(b.id) || null))
       return NextResponse.json({ hours_budgets: items })
     } catch (err) {
       console.error('[hours-budgets GET twenty-backed] error:', err)
@@ -105,7 +109,8 @@ export async function POST(request: NextRequest) {
           currentHoursUsed: 0,
           alert50Pct: false,
         })
-        return NextResponse.json({ hours_budget: reshapeHoursBudget(created) })
+        const savedTriCode = await upsertTriCode('hours_budget_tricodes', created.id, body.tricode)
+        return NextResponse.json({ hours_budget: reshapeHoursBudget(created, savedTriCode) })
       } catch (err) {
         console.error('[hours-budgets POST twenty-backed] error:', err)
         return NextResponse.json({ error: 'Failed to create hours budget in Twenty' }, { status: 500 })

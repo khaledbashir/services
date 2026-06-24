@@ -300,6 +300,14 @@ export interface TwentyPrintRequest {
   baselines?: number | null
   smallHomePlate?: number | null
   otherQty?: number | null
+  // Print field-parity additions (Alexis notes pages 10/11). These map to
+  // Twenty custom fields only if they exist on the printRequests object; the
+  // create/patch paths do NOT send them to Twenty to avoid 400s on a workspace
+  // that hasn't added them yet. Reads are defensive (`raw.x ?? null`).
+  aFrames?: number | null
+  courtsides?: number | null
+  dasherboards?: number | null
+  springHp?: number | null
   createdAt: string
   updatedAt: string
 }

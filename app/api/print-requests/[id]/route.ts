@@ -5,8 +5,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { PrintRequests, fetchAllTwenty, isTwentyBackedEnabled, type TwentyPrintRequest } from '@/lib/twenty-ops'
-import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import { isSpecSheetWork, SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
+
+function computeMargin(
+  ancPrice: number | null,
+  brittenPrice: number | null,
+  brittenRushFee: number | null,
+  brittenShipping: number | null,
+  override?: number | null,
+): number | null {
+  if (override != null && Number.isFinite(override)) return override
+  if (ancPrice == null) return null
+  const brittenTotal = (brittenPrice || 0) + (brittenRushFee || 0) + (brittenShipping || 0)
+  return Number((ancPrice - brittenTotal).toFixed(2))
+}
 
 type TwentyCompany = { id: string; name: string }
 
@@ -140,12 +154,17 @@ async function resolveTwentyCompanyId(clientId: string | null | undefined, clien
   return index.byExactName.get(resolvedName)?.id || index.byLowerName.get(resolvedName.toLowerCase())?.id || null
 }
 
-async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
+async function reshapeTwentyPrintRequest(record: TwentyPrintRequest, tricode: string | null = null) {
   const raw = record as any
   const clientName = raw.printClient?.name || null
   const proofLinks = parseProofLinks(raw.proofLinks)
+  const ancPrice = moneyToNumber(raw.ancPrice)
+  const brittenPrice = moneyToNumber(raw.brittenPrice)
+  const brittenRushFee = moneyToNumber(raw.brittenRushFee)
+  const brittenShipping = moneyToNumber(raw.brittenShipping)
   return {
     id: raw.id,
+    tricode,
     venue_id: null,
     venue_name: null,
     client_id: await findLocalClientIdByName(clientName),
@@ -161,14 +180,15 @@ async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
     invoice_amount: moneyToNumber(raw.invoiceAmount),
     invoice_number: raw.invoiceNumber || null,
     invoice_date: raw.invoiceDate || null,
-    britten_cost: moneyToNumber(raw.brittenPrice),
-    britten_rush_fee: moneyToNumber(raw.brittenRushFee),
-    britten_shipping: moneyToNumber(raw.brittenShipping),
-    anc_price: moneyToNumber(raw.ancPrice),
+    britten_cost: brittenPrice,
+    britten_rush_fee: brittenRushFee,
+    britten_shipping: brittenShipping,
+    anc_price: ancPrice,
     install_fee: moneyToNumber(raw.installFee),
     rush_fee: moneyToNumber(raw.rushFee),
     shipping_fee: moneyToNumber(raw.shippingFee),
     sales_tax: moneyToNumber(raw.salesTax),
+    margin: computeMargin(ancPrice, brittenPrice, brittenRushFee, brittenShipping),
     bill_to: raw.billTo || null,
     billing_notes: raw.billingNotes || null,
     anc_class: raw.ancClass || null,
@@ -176,6 +196,10 @@ async function reshapeTwentyPrintRequest(record: TwentyPrintRequest) {
     baselines: raw.baselines ?? null,
     small_home_plate: raw.smallHomePlate ?? null,
     other_qty: raw.otherQty ?? null,
+    a_frames: raw.aFrames ?? null,
+    courtsides: raw.courtsides ?? null,
+    dasherboards: raw.dasherboards ?? null,
+    spring_hp: raw.springHp ?? null,
     submitted_by: raw.submittedBy || null,
     requester_email: emailToString(raw.requesterEmail),
     reprint: Boolean(raw.reprint),
@@ -210,13 +234,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (isSpecSheetWork(printRequest.name, printRequest.printClient?.name, printRequest.britainNotes)) {
         return NextResponse.json({ error: 'Print request not found' }, { status: 404 })
       }
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(printRequest) })
+      const tricode = await getTriCode('print_request_tricodes', params.id)
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(printRequest, tricode) })
     }
 
     const result = await query(
       `SELECT pr.id, pr.venue_id, v.name as venue_name, pr.client_name, pr.job_title, pr.notes,
               pr.shipping_info, pr.ship_date, pr.arrival_date, pr.britten_cost, pr.tracking_number,
-              pr.status, pr.created_at, pr.updated_at
+              pr.status, pr.tricode, pr.margin,
+              pr.home_plate, pr.baselines, pr.small_home_plate, pr.other_qty,
+              pr.a_frames, pr.courtsides, pr.dasherboards, pr.spring_hp,
+              pr.created_at, pr.updated_at
        FROM print_requests pr
        LEFT JOIN venues v ON v.id = pr.venue_id
        WHERE pr.id = $1
@@ -232,6 +260,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         id: row.id,
         venue_id: row.venue_id,
         venue_name: row.venue_name,
+        tricode: row.tricode || null,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,
@@ -243,6 +272,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         arrival_date: row.arrival_date,
         invoice_amount: row.britten_cost,
         britten_cost: row.britten_cost,
+        margin: row.margin != null ? Number(row.margin) : null,
+        home_plate: row.home_plate ?? null,
+        baselines: row.baselines ?? null,
+        small_home_plate: row.small_home_plate ?? null,
+        other_qty: row.other_qty ?? null,
+        a_frames: row.a_frames ?? null,
+        courtsides: row.courtsides ?? null,
+        dasherboards: row.dasherboards ?? null,
+        spring_hp: row.spring_hp ?? null,
         notes: row.notes,
         britain_notes: row.notes,
         proof_links: [],
@@ -306,8 +344,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('tracking_number' in body) patch.trackingNumber = body.tracking_number?.trim() || null
 
       const updated = await PrintRequests.update(params.id, patch)
+      // Tri-code side table (Twenty has no native field).
+      let triCode: string | null
+      if ('venue_tricode' in body || 'tricode' in body) {
+        triCode = await upsertTriCode('print_request_tricodes', params.id, body.venue_tricode ?? body.tricode)
+      } else {
+        triCode = await getTriCode('print_request_tricodes', params.id)
+      }
       const saved = await PrintRequests.get(updated.id)
-      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated) })
+      return NextResponse.json({ print_request: await reshapeTwentyPrintRequest(saved || updated, triCode) })
     }
 
     const updates: string[] = []
@@ -320,6 +365,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if ('venue_id' in body || 'venue_tricode' in body || 'tricode' in body) {
       values.push(body.venue_id || await resolveVenueIdFromTriCode(body.venue_tricode || body.tricode))
       updates.push(`venue_id = $${values.length}`)
+    }
+    if ('venue_tricode' in body || 'tricode' in body) {
+      values.push(normalizeVenueTriCode(body.venue_tricode ?? body.tricode))
+      updates.push(`tricode = $${values.length}`)
+    }
+    if ('margin' in body) {
+      values.push(normalizeInvoiceAmount(body.margin))
+      updates.push(`margin = $${values.length}`)
     }
     if ('job_title' in body) {
       values.push(body.job_title?.trim() || null)
@@ -353,6 +406,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values.push(legacyStatusForDb(body.status))
       updates.push(`status = $${values.length}`)
     }
+    for (const [bodyKey, column] of [
+      ['home_plate', 'home_plate'],
+      ['baselines', 'baselines'],
+      ['small_home_plate', 'small_home_plate'],
+      ['other_qty', 'other_qty'],
+      ['a_frames', 'a_frames'],
+      ['courtsides', 'courtsides'],
+      ['dasherboards', 'dasherboards'],
+      ['spring_hp', 'spring_hp'],
+    ] as const) {
+      if (bodyKey in body) {
+        values.push(normalizeInteger(body[bodyKey]))
+        updates.push(`${column} = $${values.length}`)
+      }
+    }
 
     if (!updates.length) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
@@ -363,7 +431,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       `UPDATE print_requests
        SET ${updates.join(', ')}, updated_at = NOW()
        WHERE id = $${values.length}
-       RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, created_at, updated_at`,
+       RETURNING id, venue_id, client_name, job_title, notes, shipping_info, ship_date, arrival_date, britten_cost, tracking_number, status, tricode, margin, home_plate, baselines, small_home_plate, other_qty, a_frames, courtsides, dasherboards, spring_hp, created_at, updated_at`,
       values,
     )
 
@@ -378,6 +446,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         id: row.id,
         venue_id: row.venue_id,
         venue_name: venueName,
+        tricode: row.tricode || null,
         client_id: await findLocalClientIdByName(row.client_name || null),
         client_name: row.client_name,
         print_client_id: null,
@@ -389,6 +458,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         arrival_date: row.arrival_date,
         invoice_amount: row.britten_cost,
         britten_cost: row.britten_cost,
+        margin: row.margin != null ? Number(row.margin) : null,
+        home_plate: row.home_plate ?? null,
+        baselines: row.baselines ?? null,
+        small_home_plate: row.small_home_plate ?? null,
+        other_qty: row.other_qty ?? null,
+        a_frames: row.a_frames ?? null,
+        courtsides: row.courtsides ?? null,
+        dasherboards: row.dasherboards ?? null,
+        spring_hp: row.spring_hp ?? null,
         notes: row.notes,
         britain_notes: row.notes,
         proof_links: [],
@@ -413,6 +491,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     if (isTwentyBackedEnabled('PRINT_REQUESTS')) {
       await PrintRequests.delete(params.id)
+      await query('DELETE FROM print_request_tricodes WHERE print_request_id = $1', [params.id]).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 

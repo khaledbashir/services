@@ -12,6 +12,8 @@ import {
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
 import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
   getContentScheduleAssigneeIds,
   notifyAssigneesOfStatusChange,
@@ -28,6 +30,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'status',
   'notes',
   'file_location',
+  'tricode',
 ])
 
 function normalizeValue(key: string, value: any) {
@@ -36,6 +39,7 @@ function normalizeValue(key: string, value: any) {
   if (['company_name', 'content_name', 'notes', 'file_location'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
+  if (key === 'tricode') return normalizeVenueTriCode(value)
   if (key === 'status') return normalizeContentScheduleStatus(value)
   if (key === 'files_ready') return Boolean(value)
   if (key === 'launch_date' || key === 'end_date') return value || null
@@ -62,7 +66,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
     `SELECT cs.id, cs.venue_id, cs.company_name, cs.content_name,
             CASE WHEN cs.launch_date IS NULL THEN NULL ELSE to_char(cs.launch_date::date, 'YYYY-MM-DD') END as launch_date,
             CASE WHEN cs.end_date IS NULL THEN NULL ELSE to_char(cs.end_date::date, 'YYYY-MM-DD') END as end_date,
-            cs.operator_id, cs.files_ready, cs.file_location,
+            cs.operator_id, cs.files_ready, cs.file_location, cs.tricode,
             cs.status, cs.notes, cs.created_at, cs.updated_at, v.name as venue_name, s.full_name as operator_name
      FROM content_schedules cs
      LEFT JOIN venues v ON cs.venue_id = v.id
@@ -76,13 +80,14 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
 
 // ── Twenty ↔ Dashboard reshape ───────────────────────────────────────────────
 
-async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
+async function reshapeTwentyToDashboard(cs: TwentyContentSchedule, tricode: string | null = null) {
   const raw = cs as any
   const notesText = typeof raw.notes === 'object'
     ? (raw.notes?.markdown || raw.notes?.blocknote || '')
     : (raw.notes || '')
   return {
     id: cs.id,
+    tricode,
     // contentSchedules has no venue relation — surface client as the locality label.
     venue_id: null,
     venue_name: raw.scheduleClient?.name || null,
@@ -111,7 +116,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (isAuthError(auth)) return auth
       const cs = await ContentScheduleFacade.get(params.id)
       if (!cs) return NextResponse.json({ error: 'Content schedule not found' }, { status: 404 })
-      const reshaped = await reshapeTwentyToDashboard(cs)
+      const reshaped = await reshapeTwentyToDashboard(cs, await getTriCode('content_schedule_tricodes', params.id))
       return NextResponse.json({ content_schedule: reshaped })
     }
 
@@ -154,13 +159,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           payload.contentScheduleVenueId = null
         }
       }
+      // Tri-code drives the venue link. If a tri-code is supplied and no explicit
+      // venue, resolve it so the Twenty record's venue stays derivable.
+      if (body.tricode !== undefined && body.venue_id === undefined && body.tricode) {
+        const resolvedVenueId = await resolveVenueIdFromTriCode(body.tricode)
+        if (resolvedVenueId) {
+          const twentyVenueId = await dashboardVenueIdToTwentyId(resolvedVenueId)
+          if (twentyVenueId) payload.contentScheduleVenueId = twentyVenueId
+        }
+      }
 
-      if (Object.keys(payload).length === 0) {
+      let nextTriCode: string | null
+      if (body.tricode !== undefined) {
+        nextTriCode = await upsertTriCode('content_schedule_tricodes', params.id, body.tricode)
+      } else {
+        nextTriCode = await getTriCode('content_schedule_tricodes', params.id)
+      }
+
+      if (Object.keys(payload).length === 0 && body.tricode === undefined) {
         return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
       }
 
-      const updated = await ContentScheduleFacade.update(params.id, payload as Partial<TwentyContentSchedule>)
-      const reshaped = await reshapeTwentyToDashboard(updated)
+      const updated = Object.keys(payload).length
+        ? await ContentScheduleFacade.update(params.id, payload as Partial<TwentyContentSchedule>)
+        : (existing as TwentyContentSchedule)
+      const reshaped = await reshapeTwentyToDashboard(updated, nextTriCode)
       const previousStatus = normalizeContentScheduleStatus((existing as any).status)
       const nextStatus = body.status !== undefined ? normalizeContentScheduleStatus(body.status) : null
       const notificationSummary = nextStatus && nextStatus !== previousStatus
@@ -201,6 +224,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values.push(value)
     }
 
+    // Tri-code drives the venue link — re-derive venue_id when a tri-code is set
+    // and no explicit venue_id was provided (backward-compatible).
+    if (body.tricode !== undefined && body.venue_id === undefined && body.tricode) {
+      const resolvedVenueId = await resolveVenueIdFromTriCode(body.tricode)
+      if (resolvedVenueId) {
+        updates.push(`venue_id = $${index++}`)
+        values.push(resolvedVenueId)
+      }
+    }
+
     if (!updates.length) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
@@ -210,7 +243,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       `UPDATE content_schedules
        SET ${updates.join(', ')}, updated_at = NOW()
        WHERE id = $${index}
-       RETURNING id, content_name, status, updated_at`,
+       RETURNING id, content_name, status, tricode, updated_at`,
       values,
     )
 

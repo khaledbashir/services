@@ -612,3 +612,30 @@ body {
 .anc-beam-base::after{content:'';position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(249,97,103,0.5);
   animation:anc-live-pulse 2.6s ease-out infinite;}
 .leaflet-container.anc-map-dark{background:#070912;}
+
+/* ===========================================================================
+   Letter of Transmittal — print-to-PDF
+   Renders the .transmittal-page article alone, at US Letter, color-accurate.
+   =========================================================================== */
+.transmittal-page,
+.transmittal-page * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.6in;
+  }
+  html, body {
+    background: #ffffff !important;
+  }
+  .transmittal-page {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

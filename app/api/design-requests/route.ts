@@ -8,6 +8,7 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { Designs, isTwentyBackedEnabled, type TwentyDesignRequest } from '@/lib/twenty-ops'
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { loadDesignAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
+import { loadTriCodeMap, upsertTriCode } from '@/lib/tricode-side-tables'
 
 function normalizeTwentyStatus(raw: string | null | undefined): string {
   if (!raw) return 'request_submitted'
@@ -157,14 +158,16 @@ export async function GET(request: NextRequest) {
         cursor = page.nextCursor
       }
       const ids = items.map((i) => i.id)
-      const [tagMap, priorityMap] = await Promise.all([
+      const [tagMap, priorityMap, triCodeMap] = await Promise.all([
         loadInternalCategoryMap(ids),
         loadPriorityMap(ids),
+        loadTriCodeMap('design_request_tricodes', ids),
       ])
       const assignmentMap = await loadDesignAssignmentSummaries(ids)
       for (const item of items) {
         item.internal_category = tagMap.get(item.id) || null
         item.priority = priorityMap.get(item.id) || null
+        item.tricode = triCodeMap.get(item.id) || item.tricode || null
         const split = splitDesignAssignments(assignmentMap.get(item.id))
         item.designers = split.designers.length
           ? split.designers
@@ -308,7 +311,9 @@ export async function POST(request: NextRequest) {
           localFilePath: final_file_name?.trim() || null,
           status: toTwentyStatus(status) as any,
         })
-        return NextResponse.json({ design_request: { id: created.id, job_title: created.name, status: created.status } })
+        // Twenty's designRequests has no tri-code field — persist via side table.
+        const savedTriCode = await upsertTriCode('design_request_tricodes', created.id, tricode)
+        return NextResponse.json({ design_request: { id: created.id, job_title: created.name, status: created.status, tricode: savedTriCode } })
       } catch (err) {
         console.error('[design-requests POST twenty-backed] error:', err)
         return NextResponse.json({ error: 'Failed to create design request in Twenty' }, { status: 500 })

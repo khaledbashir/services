@@ -12,9 +12,10 @@ import {
   isTwentyBackedEnabled,
   type TwentyContentSchedule,
 } from '@/lib/twenty-ops'
-import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
 import { loadContentAssignmentSummaries, splitContentAssignments } from '@/lib/work-assignment-summaries'
+import { loadTriCodeMap, upsertTriCode } from '@/lib/tricode-side-tables'
 
 // ── Twenty ↔ Dashboard field reshaping ───────────────────────────────────────
 
@@ -22,13 +23,14 @@ function mapContentStatus(raw: string | null | undefined): string {
   return normalizeContentScheduleStatus(raw)
 }
 
-async function reshapeTwentyToDashboard(cs: TwentyContentSchedule) {
+async function reshapeTwentyToDashboard(cs: TwentyContentSchedule, tricode: string | null = null) {
   const raw = cs as any
   const notesText = typeof raw.notes === 'object'
     ? (raw.notes?.markdown || raw.notes?.blocknote || '')
     : (raw.notes || '')
   return {
     id: cs.id,
+    tricode,
     company_name: raw.scheduleClient?.name || null,
     content_name: raw.contentTitle || raw.name || '(unnamed)',
     launch_date: raw.startDate || null,
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
           filters.push(`status[eq]:"${statusFilter}"`)
         }
 
-        const items: any[] = []
+        const records: TwentyContentSchedule[] = []
         let cursor: string | null = null
         for (let p = 0; p < 50; p++) {
           const page = await ContentScheduleFacade.list({
@@ -83,10 +85,14 @@ export async function GET(request: NextRequest) {
             // name threw a silent 400 and the list came back empty.
             orderBy: 'startDate[AscNullsLast]',
           })
-          for (const cs of page.items) items.push(await reshapeTwentyToDashboard(cs))
+          for (const cs of page.items) records.push(cs)
           if (!page.hasNextPage || !page.nextCursor) break
           cursor = page.nextCursor
         }
+
+        const triCodeMap = await loadTriCodeMap('content_schedule_tricodes', records.map((r) => r.id))
+        const items: any[] = []
+        for (const cs of records) items.push(await reshapeTwentyToDashboard(cs, triCodeMap.get(cs.id) || null))
 
         const assignmentMap = await loadContentAssignmentSummaries(items.map((item) => item.id))
         for (const item of items) {
@@ -124,7 +130,7 @@ export async function GET(request: NextRequest) {
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const result = await query(
-      `SELECT cs.id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.files_ready, cs.status, cs.file_location, cs.notes,
+      `SELECT cs.id, cs.company_name, cs.content_name, cs.launch_date, cs.end_date, cs.files_ready, cs.status, cs.file_location, cs.notes, cs.tricode,
               TO_CHAR(cs.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(cs.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
@@ -203,7 +209,8 @@ export async function POST(request: NextRequest) {
         }
 
         const created = await ContentScheduleFacade.create(payload as Partial<TwentyContentSchedule>)
-        const reshaped = await reshapeTwentyToDashboard(created)
+        const savedTriCode = await upsertTriCode('content_schedule_tricodes', created.id, venue_tricode)
+        const reshaped = await reshapeTwentyToDashboard(created, savedTriCode)
         return NextResponse.json({ content_schedule: reshaped })
       } catch (err) {
         console.error('[content-schedules POST twenty-backed] error:', err)
@@ -220,11 +227,11 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO content_schedules (
-        venue_id, company_name, content_name, launch_date, end_date, operator_id, files_ready, status, file_location, notes, updated_at
+        venue_id, company_name, content_name, launch_date, end_date, operator_id, files_ready, status, file_location, notes, tricode, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()
       )
-      RETURNING id, content_name, status`,
+      RETURNING id, content_name, status, tricode`,
       [
         resolvedVenueId || null,
         company_name?.trim() || null,
@@ -236,6 +243,7 @@ export async function POST(request: NextRequest) {
         normalizeContentScheduleStatus(status),
         file_location?.trim() || null,
         notes?.trim() || null,
+        normalizeVenueTriCode(venue_tricode),
       ],
     )
 

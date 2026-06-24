@@ -12,6 +12,9 @@ interface ClientRow {
   venue_name: string | null
   jobs: number
   total_hours: number
+  budget_hours: number | null
+  hours_remaining: number | null
+  pct_used: number | null
   designers_worked: number
   first_entry: string | null
   last_entry: string | null
@@ -50,9 +53,11 @@ export default function HoursByClientReport() {
   useEffect(() => { load() }, [load])
 
   const exportCsv = () => {
-    const header = ['Tri-Code', 'Venue', 'Client', 'Jobs', 'Hours', 'Share %', 'Designers', 'First Entry', 'Last Entry']
+    const header = ['Tri-Code', 'Venue', 'Client', 'Jobs', 'Hours', 'Budget', 'Remaining', '% Used', 'Share %', 'Designers', 'First Entry', 'Last Entry']
     const rows = clients.map(c => [
-      c.client_name, c.venue_name || '', c.company_name || '', c.jobs, c.total_hours, c.share_pct, c.designers_worked,
+      c.client_name, c.venue_name || '', c.company_name || '', c.jobs, c.total_hours,
+      c.budget_hours ?? '', c.hours_remaining ?? '', c.pct_used ?? '',
+      c.share_pct, c.designers_worked,
       c.first_entry || '', c.last_entry || '',
     ])
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -108,6 +113,9 @@ export default function HoursByClientReport() {
                   <th className="text-left px-5 py-3">Tri-Code</th>
                   <th className="text-right px-5 py-3">Jobs</th>
                   <th className="text-right px-5 py-3">Hours</th>
+                  <th className="text-right px-5 py-3">Budget</th>
+                  <th className="text-right px-5 py-3">Remaining</th>
+                  <th className="text-right px-5 py-3">% Used</th>
                   <th className="text-right px-5 py-3">Share</th>
                   <th className="text-right px-5 py-3">Designers</th>
                   <th className="text-right px-5 py-3">Window</th>
@@ -131,6 +139,19 @@ export default function HoursByClientReport() {
                     </td>
                     <td className="px-5 py-3 text-right text-zinc-600">{c.jobs}</td>
                     <td className="px-5 py-3 text-right font-semibold text-zinc-900">{c.total_hours.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right text-zinc-600 tabular-nums">
+                      {c.budget_hours != null ? c.budget_hours.toFixed(2) : <span className="text-zinc-300">—</span>}
+                    </td>
+                    <td className={`px-5 py-3 text-right tabular-nums ${c.hours_remaining != null && c.hours_remaining < 0 ? 'text-red-600 font-semibold' : 'text-zinc-600'}`}>
+                      {c.hours_remaining != null ? c.hours_remaining.toFixed(2) : <span className="text-zinc-300">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      {c.pct_used != null ? (
+                        <span className={c.pct_used >= 100 ? 'text-red-600 font-semibold' : c.pct_used >= 75 ? 'text-amber-600 font-medium' : 'text-zinc-600'}>
+                          {c.pct_used}%
+                        </span>
+                      ) : <span className="text-zinc-300">—</span>}
+                    </td>
                     <td className="px-5 py-3 text-right">
                       <div className="inline-flex items-center gap-2 justify-end">
                         <div className="w-16 h-1.5 bg-zinc-100 rounded-full overflow-hidden">

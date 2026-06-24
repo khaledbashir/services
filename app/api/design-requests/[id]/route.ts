@@ -8,6 +8,8 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
+import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
+import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
   getDesignRequestAssigneeIds,
   notifyAssigneesOfStatusChange,
@@ -158,7 +160,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           // so the header + sidebar don't read "No client / No venue".
           venue_name: companyName,
           venue_id: null,
-          tricode: d.clientTriCode || null,
+          tricode: (await getTriCode('design_request_tricodes', d.id)) || d.clientTriCode || null,
           status,
           notes: notesText,
           ai_prompt: d.aiPrompt || null,
@@ -229,6 +231,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         patch.status = `STATUS_${String(body.status).toUpperCase()}`
       }
       const updated = await Designs.update(params.id, patch)
+
+      // Tri-code side table (Twenty has no native field on designRequests).
+      if ('tricode' in body) {
+        await upsertTriCode('design_request_tricodes', params.id, body.tricode)
+      }
 
       if ((body.status === 'done' || body.status === 'approved') && priorStatusDashboard !== body.status) {
         const designerId = (updated as any).designAssigneeId || (prior as any)?.designAssigneeId
@@ -303,6 +310,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (value === undefined) continue
       updates.push(`${key} = $${index++}`)
       values.push(value)
+    }
+
+    // Tri-code drives the venue link — re-derive venue_id when a tri-code is set
+    // and no explicit venue_id was provided (backward-compatible).
+    if (body.tricode !== undefined && body.venue_id === undefined && body.tricode) {
+      const resolvedVenueId = await resolveVenueIdFromTriCode(body.tricode)
+      if (resolvedVenueId) {
+        updates.push(`venue_id = $${index++}`)
+        values.push(resolvedVenueId)
+      }
     }
 
     if (!updates.length) {

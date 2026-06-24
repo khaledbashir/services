@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
+import { getSupportMailboxHandle } from '@/lib/crm-support-email'
 import { buildNewsletterHtml, publicBaseUrl, requestIp } from '@/lib/marketing'
 
 export async function GET(request: NextRequest) {
@@ -19,6 +20,13 @@ export async function GET(request: NextRequest) {
 
     let sent = 0
     let failed = 0
+
+    // Newsletter sends go through SendGrid (the transactional/marketing provider),
+    // NOT the CRM support mailbox — that path reads Twenty's encrypted
+    // connectedAccount tokens raw and cannot authenticate to Graph (AADSTS9002313),
+    // so every send silently failed. Reply-to falls back to the monitored support
+    // mailbox (support@anc.com) so recipient replies have a real destination.
+    const fallbackReplyTo = getSupportMailboxHandle()
 
     for (const campaign of campaignsRes.rows) {
       const recipientsRes = await query(
@@ -57,7 +65,7 @@ export async function GET(request: NextRequest) {
             recipientId: recipient.id,
             baseUrl: publicBaseUrl(request),
           }),
-          campaign.reply_to || undefined,
+          campaign.reply_to || fallbackReplyTo,
         )
         if (ok) {
           sent += 1

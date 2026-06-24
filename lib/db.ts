@@ -441,6 +441,42 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_attachments_request ON cg_design_attachments(cg_design_request_id, created_at DESC)`)
     await client.query(`ALTER TABLE content_schedules ADD COLUMN IF NOT EXISTS file_location TEXT`)
+    // Tri-code linking (Alexis 2026-06-24): tri-code is the canonical link to a
+    // venue. Persist it on the legacy tables; the Twenty-backed paths use the
+    // *_tricodes side tables (lib/tricode-side-tables.ts) created on first write.
+    await client.query(`ALTER TABLE content_schedules ADD COLUMN IF NOT EXISTS tricode TEXT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS tricode TEXT`)
+    // Print field parity (Alexis notes pages 10/11 — match Wrike fields,
+    // ClickUp look): net-new quantity fields + derived margin.
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS a_frames INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS courtsides INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS dasherboards INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS spring_hp INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS home_plate INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS baselines INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS small_home_plate INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS other_qty INT`)
+    await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS margin NUMERIC`)
+    await client.query(`CREATE TABLE IF NOT EXISTS print_request_tricodes (
+      print_request_id TEXT PRIMARY KEY,
+      tricode TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS design_request_tricodes (
+      design_request_id TEXT PRIMARY KEY,
+      tricode TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_tricodes (
+      content_schedule_id TEXT PRIMARY KEY,
+      tricode TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS hours_budget_tricodes (
+      hours_budget_id TEXT PRIMARY KEY,
+      tricode TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
     await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_operators (
       content_schedule_id UUID NOT NULL REFERENCES content_schedules(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
