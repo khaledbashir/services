@@ -2,8 +2,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install Python and required system packages
-RUN apk add --no-cache python3 py3-pip postgresql-client
+# Install Python and required system packages (poppler-utils=pdftoppm/pdfinfo, ghostscript=gs for OCR PDF->image)
+RUN apk add --no-cache python3 py3-pip postgresql-client poppler-utils ghostscript
 
 # Copy package files
 COPY package*.json ./
