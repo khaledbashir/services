@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const codexShouldCapture = shouldHandleEvent(body.event, botUserId) && shouldCaptureCodexMention(body.event, botUserId)
+  const codexShouldCapture = shouldCaptureCodexMention(body.event, botUserId)
   if (codexShouldCapture) {
     void captureCodexMention(body.event, botUserId).catch((err) => {
       console.error('Codex request inbox capture failed:', err)
