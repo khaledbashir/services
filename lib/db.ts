@@ -265,6 +265,31 @@ async function runMigrations() {
       event_id TEXT PRIMARY KEY,
       processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS codex_request_inbox (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      status TEXT NOT NULL DEFAULT 'new',
+      requester_slack_user_id TEXT,
+      requester_name TEXT,
+      channel_id TEXT,
+      channel_name TEXT,
+      thread_ts TEXT,
+      message_ts TEXT,
+      source_url TEXT UNIQUE,
+      raw_text TEXT NOT NULL,
+      cleaned_text TEXT,
+      title TEXT,
+      suggested_skill TEXT,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      owner TEXT NOT NULL DEFAULT 'Ahmad',
+      verification_required BOOLEAN NOT NULL DEFAULT true,
+      codex_notes TEXT,
+      processed_at TIMESTAMPTZ
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_status ON codex_request_inbox(status, created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_created ON codex_request_inbox(created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_source_url ON codex_request_inbox(source_url) WHERE source_url IS NOT NULL`)
 
     // Slack-native service desk configuration. This is the Ravenna-style
     // channel binding layer for ANC: a Slack channel can be connected to a

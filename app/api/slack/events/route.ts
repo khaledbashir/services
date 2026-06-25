@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cleanSlackPrompt, markSlackEventProcessed, resolveSlackCaller, runSlackAssistantTurn, verifySlackSignature } from '@/lib/slack-assistant'
 import { sendSlackMessage } from '@/lib/slack'
 import { handleSlackReactionAdded, captureDirectMessageToInbox } from '@/lib/slack-inbox'
+import { captureCodexMention, shouldCaptureCodexMention } from '@/lib/codex-request-inbox'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -101,7 +102,14 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  if (shouldHandleEvent(body.event, botUserId)) {
+  const codexShouldCapture = shouldHandleEvent(body.event, botUserId) && shouldCaptureCodexMention(body.event, botUserId)
+  if (codexShouldCapture) {
+    void captureCodexMention(body.event, botUserId).catch((err) => {
+      console.error('Codex request inbox capture failed:', err)
+    })
+  }
+
+  if (shouldHandleEvent(body.event, botUserId) && !codexShouldCapture) {
     void processSlackEvent(body.event, botUserId).catch((err) => {
       console.error('Slack assistant event failed:', err)
     })
