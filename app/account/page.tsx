@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuth } from '@/lib/useAuth'
 
@@ -12,6 +12,37 @@ export default function AccountPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  // Email signature (appended to ticket replies this tech sends)
+  const [signature, setSignature] = useState('')
+  const [sigSaving, setSigSaving] = useState(false)
+  const [sigSaved, setSigSaved] = useState(false)
+
+  useEffect(() => {
+    let on = true
+    fetch('/api/account/signature')
+      .then((r) => r.json())
+      .then((d) => { if (on && typeof d?.signature === 'string') setSignature(d.signature) })
+      .catch(() => {})
+    return () => { on = false }
+  }, [])
+
+  const saveSignature = async () => {
+    setSigSaving(true)
+    setSigSaved(false)
+    try {
+      const res = await fetch('/api/account/signature', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature }),
+      })
+      if (res.ok) setSigSaved(true)
+    } catch {
+      /* no-op */
+    } finally {
+      setSigSaving(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -120,6 +151,37 @@ export default function AccountPage() {
             {submitting ? 'Updating…' : 'Update Password'}
           </button>
         </form>
+
+        <div className="rounded-2xl border border-[#E8E8E8] bg-white p-5 shadow-sm space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Email Signature</h2>
+            <p className="text-xs text-zinc-500 mt-1">
+              Added automatically to the bottom of replies you send from a ticket. Replies go out from the shared ANC support address, but your signature is attached to the ones you send.
+            </p>
+          </div>
+
+          <textarea
+            value={signature}
+            onChange={(e) => { setSignature(e.target.value); setSigSaved(false) }}
+            rows={5}
+            maxLength={2000}
+            placeholder={'Jane Doe\nField Technician, ANC\n(555) 123-4567'}
+            className="w-full border border-[#E8E8E8] rounded px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none font-mono"
+          />
+
+          {sigSaved && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">Signature saved.</div>
+          )}
+
+          <button
+            type="button"
+            onClick={saveSignature}
+            disabled={sigSaving}
+            className="inline-flex items-center justify-center rounded-xl bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0840C0] disabled:opacity-60"
+          >
+            {sigSaving ? 'Saving…' : 'Save Signature'}
+          </button>
+        </div>
       </div>
     </DashboardLayout>
   )

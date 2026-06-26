@@ -178,6 +178,15 @@ export async function POST(
     const recipientLabel = recipients.join(', ')
 
     const authorName = user.fullName || user.userName || 'ANC Support'
+    // The sender's own signature (each tech sets theirs in the dashboard),
+    // appended to this reply even though it goes out from the shared mailbox.
+    let signature: string | null = null
+    try {
+      const sigRes = await query('SELECT email_signature FROM staff WHERE id = $1', [user.userId])
+      signature = sigRes.rows[0]?.email_signature ?? null
+    } catch {
+      signature = null
+    }
     const emailResult = await sendTicketReplyEmail({
       to: recipients,
       ticketTitle: ticket.title,
@@ -185,6 +194,7 @@ export async function POST(
       venueName: ticket.venue_name || 'ANC Support',
       body: replyBody,
       authorName,
+      signature,
     })
 
     if (!emailResult.sent) {

@@ -94,6 +94,9 @@ async function runMigrations() {
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sf_case_number TEXT`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS twenty_ticket_id TEXT`)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_twenty_ticket_id ON tickets(twenty_ticket_id) WHERE twenty_ticket_id IS NOT NULL`)
+    // Per-tech email signature, appended to ticket replies they send (which all
+    // go out from the shared support@anc.com mailbox).
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email_signature TEXT`)
     await client.query(`CREATE TABLE IF NOT EXISTS ticket_comments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

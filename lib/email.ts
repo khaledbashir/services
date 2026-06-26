@@ -236,6 +236,7 @@ export async function sendTicketReplyEmail(opts: {
   venueName: string
   body: string
   authorName: string
+  signature?: string | null
 }): Promise<{ sent: boolean; from?: string; provider?: string; error?: string }> {
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
   const supportMailbox = getSupportMailboxHandle()
@@ -243,9 +244,17 @@ export async function sendTicketReplyEmail(opts: {
   const toList = (Array.isArray(opts.to) ? opts.to : [opts.to])
     .map((e) => String(e || '').trim())
     .filter((e) => e.includes('@'))
+  // Per-tech signature: each technician sets their own in the dashboard; it is
+  // appended here so their name/signature appears even though every reply is
+  // sent from the shared support mailbox. Rendered safely (escaped + newlines).
+  const sig = (opts.signature || '').trim()
+  const signatureBlock = sig
+    ? `<div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:13px;color:#334155">${plainTextToHtml(sig)}</div>`
+    : ''
   const bodyContent = `
     <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
     <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
+    ${signatureBlock}
   `
 
   const ok = await sendEmail(
