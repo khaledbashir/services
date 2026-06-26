@@ -436,20 +436,24 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     .reverse()
     .map(extractInboundEmail)
     .find(Boolean) || null
-  const venueDistributionEmail = Array.isArray(ticket.venue_distribution_emails)
-    ? ticket.venue_distribution_emails.find(email => email && email.includes('@'))
-    : null
-  const replyTarget = ticket.contact_email
-    ? { email: ticket.contact_email, source: 'Ticket contact' }
-    : latestInboundEmail
-      ? { email: latestInboundEmail, source: 'Latest inbound email' }
+  const allDistributionEmails = Array.isArray(ticket.venue_distribution_emails)
+    ? ticket.venue_distribution_emails.filter(email => email && email.includes('@'))
+    : []
+  // Mirror the email-reply route: a reply goes to whoever is actually
+  // corresponding (latest inbound) plus the venue's distribution list; the
+  // single stored contact is only a fallback when there is no real recipient.
+  const replyRecipients = Array.from(new Set(
+    [latestInboundEmail, ...allDistributionEmails].filter((e): e is string => !!e && e.includes('@'))
+  ))
+  const replyTarget = replyRecipients.length
+    ? { email: replyRecipients.join(', '), source: replyRecipients.length > 1 ? 'Venue contact list' : 'Ticket correspondent' }
+    : ticket.contact_email
+      ? { email: ticket.contact_email, source: 'Ticket contact' }
       : ticket.venue_contact_email
         ? { email: ticket.venue_contact_email, source: 'Venue primary contact' }
-        : venueDistributionEmail
-          ? { email: venueDistributionEmail, source: 'Venue distribution list' }
-          : extractEmail(ticket.original_message) || extractEmail(ticket.description)
-            ? { email: extractEmail(ticket.original_message) || extractEmail(ticket.description)!, source: 'Original message' }
-            : null
+        : extractEmail(ticket.original_message) || extractEmail(ticket.description)
+          ? { email: (extractEmail(ticket.original_message) || extractEmail(ticket.description))!, source: 'Original message' }
+          : null
   const displayAttachments: TicketAttachment[] = [
     ...(ticket.image_url ? [{
       id: 'original-ticket-image',
