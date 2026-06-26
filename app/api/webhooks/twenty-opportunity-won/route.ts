@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { query } from '@/lib/db'
 
@@ -39,12 +40,35 @@ interface OpportunityRecord {
 }
 
 export async function POST(request: NextRequest) {
-  if (request.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) {
+  // Read the raw body once: Twenty's HMAC is computed over `${timestamp}:${body}`,
+  // so we must hash the exact bytes it sent, then parse.
+  const rawBody = await request.text()
+
+  // Auth. Twenty does NOT send a plain secret header — it signs each webhook:
+  //   X-Twenty-Webhook-Signature = HMAC-SHA256(secret, `${timestamp}:${body}`)
+  //   X-Twenty-Webhook-Timestamp = <ms>
+  // (the old `x-webhook-secret` check rejected every real Twenty delivery with
+  // 401, which is why no win alert ever fired.) Accept the HMAC signature, and
+  // still accept a plain x-webhook-secret header for manual/test calls.
+  const plainSecret = request.headers.get('x-webhook-secret')
+  const sig = request.headers.get('x-twenty-webhook-signature')
+  const ts = request.headers.get('x-twenty-webhook-timestamp')
+  let authed = plainSecret != null && plainSecret === WEBHOOK_SECRET
+  if (!authed && sig && ts) {
+    const expected = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(`${ts}:${rawBody}`)
+      .digest('hex')
+    authed =
+      expected.length === sig.length &&
+      crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))
+  }
+  if (!authed) {
     return NextResponse.json({ error: 'auth' }, { status: 401 })
   }
 
   try {
-    const payload = await request.json()
+    const payload = JSON.parse(rawBody || '{}')
 
     // Twenty webhook shape: { eventName: 'opportunity.updated', objectMetadata: {...},
     //                        record: {...}, previousRecord: {...} }
