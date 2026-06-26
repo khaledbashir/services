@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendSupportMailboxEmail } from '@/lib/crm-support-email'
+import { sendEmail } from '@/lib/email'
 import { query } from '@/lib/db'
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
@@ -9,6 +9,11 @@ const WIN_NOTIFY_TO = [
   'jireh.billings@anc.com',
   'alexis.ventarola@anc.com',
 ]
+// A deal whose name contains this sentinel routes the alert to the test
+// inbox only (used to verify the pipeline end-to-end without emailing the
+// real recipients). Real deals never contain it.
+const WIN_TEST_SENTINEL = 'ZZWEBHOOKTEST'
+const WIN_TEST_TO = ['ahmadbasheerr@gmail.com']
 
 const TWENTY_BASE = 'https://crm.ancsports.net'
 
@@ -23,6 +28,7 @@ interface OpportunityRecord {
   id: string
   name?: string | null
   stage?: string | null
+  bidStatus?: string | null
   opportunityNumber?: string | null
   amount?: { amountMicros?: number; currencyCode?: string } | null
   dealValue?: { amountMicros?: number; currencyCode?: string } | null
@@ -50,13 +56,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ skipped: true, reason: 'not an opportunity event' })
     }
 
-    const newStage = record.stage || ''
-    const prevStage = previousRecord.stage || ''
-    const justWon = newStage === 'WON' && prevStage !== 'WON'
+    // A deal is "Closed/Won" via the bidStatus field ("Opportunity Status"),
+    // NOT stage — stage has no WON value, so the old stage check could never
+    // fire. Fire only on a genuine transition into WON so bulk edits of
+    // already-won deals don't re-notify: prefer the webhook's updatedFields
+    // signal (bidStatus actually changed on this update), fall back to the
+    // previous-record diff when present. The idempotency table below is the
+    // hard backstop (one alert per opportunity, ever).
+    const newStatus = (record.bidStatus || '').toUpperCase()
+    const prevStatus = (previousRecord.bidStatus || '').toUpperCase()
+    const updatedFields: string[] = Array.isArray((payload as { updatedFields?: unknown }).updatedFields)
+      ? ((payload as { updatedFields: string[] }).updatedFields)
+      : []
+    const bidStatusChanged = updatedFields.length
+      ? updatedFields.includes('bidStatus')
+      : prevStatus
+        ? prevStatus !== 'WON'
+        : true
+    const justWon = newStatus === 'WON' && bidStatusChanged
+
+    console.log('[twenty-opportunity-won]', JSON.stringify({
+      event: eventName,
+      payloadKeys: Object.keys(payload || {}),
+      hasUpdatedFields: updatedFields.length > 0,
+      updatedFields,
+      newStatus,
+      prevStatus,
+      bidStatusChanged,
+      justWon,
+    }))
 
     if (!justWon) {
-      return NextResponse.json({ skipped: true, reason: `stage ${prevStage} → ${newStage}` })
+      return NextResponse.json({ skipped: true, reason: `bidStatus ${prevStatus || '?'} → ${newStatus || '?'}` })
     }
+
+    // Test deals (name contains the sentinel) route to the test inbox and skip
+    // the idempotency gate so the pipeline can be re-verified on demand.
+    const isTest = (record.name || '').toUpperCase().includes(WIN_TEST_SENTINEL)
+    const notifyTo = isTest ? WIN_TEST_TO : WIN_NOTIFY_TO
 
     // Idempotency: don't double-send. Track sent notifications.
     await query(
@@ -67,12 +104,14 @@ export async function POST(request: NextRequest) {
       [],
     )
 
-    const existing = await query(
-      'SELECT 1 FROM opportunity_win_notifications WHERE opportunity_id = $1',
-      [record.id],
-    )
-    if (existing.rows.length) {
-      return NextResponse.json({ skipped: true, reason: 'already notified', id: record.id })
+    if (!isTest) {
+      const existing = await query(
+        'SELECT 1 FROM opportunity_win_notifications WHERE opportunity_id = $1',
+        [record.id],
+      )
+      if (existing.rows.length) {
+        return NextResponse.json({ skipped: true, reason: 'already notified', id: record.id })
+      }
     }
 
     const oppNum = record.opportunityNumber || '—'
@@ -106,19 +145,20 @@ export async function POST(request: NextRequest) {
       </div>
     `
 
-    await sendSupportMailboxEmail({
-      to: WIN_NOTIFY_TO,
-      subject,
-      html,
-    })
+    const sent = await sendEmail(notifyTo, subject, html)
+    if (!sent) {
+      console.error('[twenty-opportunity-won] win alert email failed to send for', record.id)
+    }
 
-    await query(
-      `INSERT INTO opportunity_win_notifications (opportunity_id) VALUES ($1)
-       ON CONFLICT (opportunity_id) DO NOTHING`,
-      [record.id],
-    )
+    if (!isTest) {
+      await query(
+        `INSERT INTO opportunity_win_notifications (opportunity_id) VALUES ($1)
+         ON CONFLICT (opportunity_id) DO NOTHING`,
+        [record.id],
+      )
+    }
 
-    return NextResponse.json({ sent: true, to: WIN_NOTIFY_TO, opp: record.id })
+    return NextResponse.json({ sent: true, to: notifyTo, opp: record.id, test: isTest })
   } catch (err) {
     console.error('[twenty-opportunity-won] error:', err)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'unexpected' }, { status: 500 })
