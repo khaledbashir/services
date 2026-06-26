@@ -230,7 +230,7 @@ export async function sendTicketDistributionEmail(opts: {
  * so we can legitimately send as support@anc.com.
  */
 export async function sendTicketReplyEmail(opts: {
-  to: string
+  to: string | string[]
   ticketTitle: string
   ticketNumber: number
   venueName: string
@@ -240,13 +240,16 @@ export async function sendTicketReplyEmail(opts: {
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
   const supportMailbox = getSupportMailboxHandle()
   const replyTo = ticketReplyAddress(opts.ticketNumber)
+  const toList = (Array.isArray(opts.to) ? opts.to : [opts.to])
+    .map((e) => String(e || '').trim())
+    .filter((e) => e.includes('@'))
   const bodyContent = `
     <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
     <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
   `
 
   const ok = await sendEmail(
-    [opts.to],
+    toList,
     `Re: Case ${caseNum} — ${opts.ticketTitle}`,
     ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
     replyTo,

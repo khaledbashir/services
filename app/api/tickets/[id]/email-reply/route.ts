@@ -131,27 +131,55 @@ export async function POST(
     const latestInboundEmail = commentsResult.rows
       .map((row: { body: string | null }) => extractInboundEmail(row.body))
       .find(Boolean)
-    const venueDistributionEmail = Array.isArray(ticket.distribution_emails)
-      ? ticket.distribution_emails.find((email: string) => email && email.includes('@'))
-      : null
+    const norm = (e: unknown) => String(e || '').trim()
+    const isEmail = (e: string) => e.includes('@')
 
-    const recipient = String(
-      to ||
-      ticket.contact_email ||
-      latestInboundEmail ||
-      ticket.primary_contact_email ||
-      venueDistributionEmail ||
-      extractEmail(ticket.original_message) ||
-      extractEmail(ticket.description) ||
-      ''
-    ).trim()
-    if (!recipient || !recipient.includes('@')) {
+    const distributionEmails = Array.isArray(ticket.distribution_emails)
+      ? ticket.distribution_emails.map(norm).filter(isEmail)
+      : []
+
+    // Who should receive a reply on this ticket, by intent:
+    //  1. an address the agent explicitly typed in the reply box
+    //  2. the people actually corresponding on this ticket — whoever last
+    //     emailed in, plus the venue's distribution list (the venue's ANC
+    //     contacts who get this venue's ticket mail)
+    //  3. ONLY if there is no real correspondent: the single stored contact on
+    //     the ticket/venue. contact_email is frequently a generic company
+    //     address (e.g. info@<team>.com) that bounces, so it must never
+    //     outrank the real people on the thread.
+    const explicit = norm(to)
+    let recipients: string[]
+    if (explicit && isEmail(explicit)) {
+      recipients = [explicit]
+    } else {
+      recipients = [norm(latestInboundEmail), ...distributionEmails].filter(isEmail)
+      if (recipients.length === 0) {
+        const fallback = [
+          ticket.contact_email,
+          ticket.primary_contact_email,
+          extractEmail(ticket.original_message),
+          extractEmail(ticket.description),
+        ].map(norm).filter(isEmail)
+        if (fallback.length) recipients = [fallback[0]]
+      }
+    }
+    // De-dupe case-insensitively, preserving the first form seen.
+    const seen = new Set<string>()
+    recipients = recipients.filter((e) => {
+      const k = e.toLowerCase()
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+
+    if (recipients.length === 0) {
       return NextResponse.json({ error: 'Add a contact email before replying' }, { status: 400 })
     }
+    const recipientLabel = recipients.join(', ')
 
     const authorName = user.fullName || user.userName || 'ANC Support'
     const emailResult = await sendTicketReplyEmail({
-      to: recipient,
+      to: recipients,
       ticketTitle: ticket.title,
       ticketNumber: ticket.ticket_number,
       venueName: ticket.venue_name || 'ANC Support',
@@ -164,7 +192,7 @@ export async function POST(
     }
 
     const sentFrom = emailResult.from || 'support@anc.com'
-    const commentBody = `Email sent to ${recipient} from ${sentFrom} by ${authorName}:\n\n${replyBody}`
+    const commentBody = `Email sent to ${recipientLabel} from ${sentFrom} by ${authorName}:\n\n${replyBody}`
     const commentResult = await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
        VALUES ($1, $2, $3, false, NOW())
@@ -187,7 +215,7 @@ export async function POST(
       [params.id, user.userId, JSON.stringify({
         entity_name: ticket.title,
         venue_name: ticket.venue_name,
-        to: recipient,
+        to: recipientLabel,
         from: sentFrom,
         provider: emailResult.provider,
       })]
@@ -198,14 +226,14 @@ export async function POST(
         ticketId: ticket.twenty_ticket_id,
         body: commentBody,
         authorName,
-        recipient,
+        recipient: recipientLabel,
       }).catch(() => {})
     }
 
     return NextResponse.json({
       ok: true,
       comment: commentResult.rows[0],
-      to: recipient,
+      to: recipientLabel,
       from: sentFrom,
       provider: emailResult.provider,
     })
