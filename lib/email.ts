@@ -1,5 +1,5 @@
 import { query } from '@/lib/db'
-import { sendSupportMailboxEmail, getSupportMailboxHandle } from '@/lib/crm-support-email'
+import { getSupportMailboxHandle } from '@/lib/crm-support-email'
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
@@ -37,7 +37,7 @@ export async function sendEmail(
   subject: string,
   html: string,
   replyTo?: string,
-  opts?: { cc?: string[]; bcc?: string[]; attachments?: { filename: string; content: string; type?: string }[] }
+  opts?: { cc?: string[]; bcc?: string[]; attachments?: { filename: string; content: string; type?: string }[]; from?: { email: string; name?: string } }
 ): Promise<boolean> {
   const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || process.env.EMAIL_SMTP_PASSWORD || ''
   if (!SENDGRID_API_KEY) {
@@ -47,7 +47,12 @@ export async function sendEmail(
 
   if (!to || to.length === 0) return false
 
-  const from = resolveFrom()
+  // Caller may override the From identity (e.g. ticket replies send from the
+  // support mailbox). Only honor it when the address shares the authenticated
+  // sending domain, otherwise SendGrid rejects it / it fails DMARC.
+  const from = opts?.from?.email && opts.from.email.toLowerCase().endsWith(`@${resolveFrom().email.split('@')[1]}`)
+    ? { email: opts.from.email, name: opts.from.name || resolveFrom().name }
+    : resolveFrom()
 
   const personalization: any = { to: to.map((email) => ({ email })) }
   if (opts?.cc && opts.cc.length > 0) personalization.cc = opts.cc.map((email) => ({ email }))
@@ -212,6 +217,18 @@ export async function sendTicketDistributionEmail(opts: {
   return { sent: true, recipient_count: venue.distribution_emails.length }
 }
 
+/**
+ * Send a ticket reply email to the client.
+ *
+ * Sends through SendGrid (the outbound transactional provider) as the support
+ * mailbox, with reply-to also set to the support mailbox so client replies
+ * thread back into the support inbox via the inbound webhook ("Case NNNNNNNN"
+ * subject token). This does NOT go through Microsoft Graph: that path read
+ * Twenty's encrypted connectedAccount tokens (enc:v2:...) raw and could not
+ * authenticate, so every send failed with AADSTS9002313. SendGrid is decoupled
+ * from Twenty's token store and the anc.com sending domain is authenticated,
+ * so we can legitimately send as support@anc.com.
+ */
 export async function sendTicketReplyEmail(opts: {
   to: string
   ticketTitle: string
@@ -221,27 +238,25 @@ export async function sendTicketReplyEmail(opts: {
   authorName: string
 }): Promise<{ sent: boolean; from?: string; provider?: string; error?: string }> {
   const caseNum = String(opts.ticketNumber).padStart(8, '0')
+  const supportMailbox = getSupportMailboxHandle()
   const replyTo = ticketReplyAddress(opts.ticketNumber)
   const bodyContent = `
     <p style="margin:0 0 12px;font-size:13px;color:#64748b">Reply from ${escapeHtml(opts.authorName)}</p>
     <div style="background:#f8fafc;border-radius:6px;padding:12px">${plainTextToHtml(opts.body)}</div>
   `
 
-  try {
-    const result = await sendSupportMailboxEmail({
-      to: [opts.to],
-      subject: `Re: Case ${caseNum} — ${opts.ticketTitle}`,
-      html: ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
-      replyTo,
-    })
-    return { sent: true, from: result.from, provider: result.provider }
-  } catch (err) {
-    console.error('[email] Failed to send ticket reply through CRM support mailbox:', err)
-    return {
-      sent: false,
-      error: err instanceof Error ? err.message : 'CRM support mailbox send failed',
-    }
+  const ok = await sendEmail(
+    [opts.to],
+    `Re: Case ${caseNum} — ${opts.ticketTitle}`,
+    ticketEmailHtml(caseNum, opts.ticketTitle, opts.venueName || 'ANC Support', bodyContent),
+    replyTo,
+    { from: { email: supportMailbox, name: 'ANC Support' } },
+  )
+
+  if (!ok) {
+    return { sent: false, error: 'Email could not be sent' }
   }
+  return { sent: true, from: supportMailbox, provider: 'sendgrid' }
 }
 
 export async function sendTicketReplyEmailViaResend(opts: {
