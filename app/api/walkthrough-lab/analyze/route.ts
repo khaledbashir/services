@@ -12,6 +12,8 @@ type FileSummary = {
   size: number
   kind: 'video' | 'audio' | 'image' | 'text' | 'document' | 'other'
   extractedText?: string
+  transcriptStatus?: 'transcribed' | 'skipped' | 'failed'
+  transcriptNote?: string
 }
 
 type WalkthroughAnalysis = {
@@ -63,6 +65,61 @@ function splitLines(text: string) {
 
 function unique(values: string[]) {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))]
+}
+
+function mediaCanBeTranscribed(file: FileSummary) {
+  if (file.kind === 'audio') return true
+  if (file.kind !== 'video') return false
+  const ext = file.name.toLowerCase().split('.').pop() || ''
+  return ['mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'mp3'].includes(ext)
+}
+
+function transcriptionConfig() {
+  const openAiKey = process.env.OPENAI_API_KEY || ''
+  if (openAiKey) {
+    return {
+      baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      apiKey: openAiKey,
+      model: process.env.WALKTHROUGH_TRANSCRIPTION_MODEL || process.env.OPENAI_TRANSCRIPTION_MODEL || 'whisper-1',
+    }
+  }
+
+  const provider = loadProviders().find((candidate) => /openai/i.test(`${candidate.name} ${candidate.baseUrl}`))
+  if (!provider) return null
+  return {
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    model: process.env.WALKTHROUGH_TRANSCRIPTION_MODEL || process.env.OPENAI_TRANSCRIPTION_MODEL || 'whisper-1',
+  }
+}
+
+async function transcribeMedia(file: File): Promise<{ text: string; note?: string }> {
+  const config = transcriptionConfig()
+  if (!config) return { text: '', note: 'No transcription provider is configured on the server.' }
+  if (file.size > 26_000_000) {
+    return { text: '', note: 'File is larger than the current transcription limit. Export captions or upload a shorter clip.' }
+  }
+
+  const form = new FormData()
+  form.set('model', config.model)
+  form.set('file', file, file.name)
+  form.set('response_format', 'json')
+
+  const res = await fetch(`${config.baseUrl.replace(/\/$/, '')}/audio/transcriptions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+    body: form,
+    signal: AbortSignal.timeout(110000),
+  })
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    return { text: '', note: `Transcription failed (${res.status})${detail ? `: ${detail.slice(0, 180)}` : ''}` }
+  }
+
+  const data = await res.json().catch(() => null)
+  const text = typeof data?.text === 'string' ? cleanText(data.text) : ''
+  return { text, note: text ? undefined : 'Transcription completed but returned no readable text.' }
 }
 
 function detectPlatforms(text: string) {
@@ -258,6 +315,7 @@ export async function POST(request: NextRequest) {
 
     const summaries: FileSummary[] = []
     const extracted: string[] = []
+    const transcribed: string[] = []
 
     for (const file of files.slice(0, 8)) {
       const type = file.type || 'application/octet-stream'
@@ -270,10 +328,28 @@ export async function POST(request: NextRequest) {
         extracted.push(summary.extractedText)
       }
 
+      if ((kind === 'video' || kind === 'audio') && mediaCanBeTranscribed(summary)) {
+        const result = await transcribeMedia(file).catch((err) => ({
+          text: '',
+          note: err instanceof Error ? err.message : 'Transcription failed.',
+        }))
+        if (result.text) {
+          summary.transcriptStatus = 'transcribed'
+          summary.extractedText = result.text.slice(0, 40_000)
+          transcribed.push(summary.extractedText)
+        } else {
+          summary.transcriptStatus = result.note?.startsWith('No transcription provider') ? 'skipped' : 'failed'
+          summary.transcriptNote = result.note || 'Unable to transcribe this media file.'
+        }
+      } else if (kind === 'video' || kind === 'audio') {
+        summary.transcriptStatus = 'skipped'
+        summary.transcriptNote = 'This media type is not supported by the current transcription provider.'
+      }
+
       summaries.push(summary)
     }
 
-    const transcript = cleanText([pastedTranscript, ...extracted].join('\n\n')).slice(0, 80_000)
+    const transcript = cleanText([pastedTranscript, ...extracted, ...transcribed].join('\n\n')).slice(0, 80_000)
     const fallback = fallbackAnalysis({ title, transcript, notes, files: summaries })
     const ai = await runAi(analysisPrompt({ title, platform, intendedAudience, transcript, notes, files: summaries })).catch((err) => {
       console.warn('[walkthrough-lab] AI analysis failed:', err)
@@ -285,6 +361,8 @@ export async function POST(request: NextRequest) {
       ok: true,
       source: ai ? 'ai' : 'fallback',
       files: summaries,
+      transcript,
+      transcriptSource: pastedTranscript ? 'pasted' : transcribed.length ? 'transcribed_media' : extracted.length ? 'uploaded_text' : 'missing',
       analysis,
     })
   } catch (error) {

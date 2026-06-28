@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { FileAudio, FileImage, FileText, FileVideo, Loader2, UploadCloud } from 'lucide-react'
+import { FileAudio, FileImage, FileText, FileVideo, Loader2, MessageSquare, Send, UploadCloud } from 'lucide-react'
 import { useAuth } from '@/lib/useAuth'
 
 type Analysis = {
@@ -25,12 +25,21 @@ type FileSummary = {
   size: number
   kind: 'video' | 'audio' | 'image' | 'text' | 'document' | 'other'
   extractedText?: string
+  transcriptStatus?: 'transcribed' | 'skipped' | 'failed'
+  transcriptNote?: string
 }
 
 type Result = {
   source: 'ai' | 'fallback'
   files: FileSummary[]
+  transcript: string
+  transcriptSource: 'pasted' | 'transcribed_media' | 'uploaded_text' | 'missing'
   analysis: Analysis
+}
+
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
 }
 
 const platforms = [
@@ -65,6 +74,13 @@ function statusClass(status: Analysis['status']) {
   return 'border-blue-200 bg-blue-50 text-blue-700'
 }
 
+function transcriptSourceLabel(source: Result['transcriptSource']) {
+  if (source === 'transcribed_media') return 'Generated from uploaded media'
+  if (source === 'pasted') return 'Using pasted transcript'
+  if (source === 'uploaded_text') return 'Using uploaded captions/text'
+  return 'No transcript yet'
+}
+
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
@@ -89,6 +105,10 @@ export default function WalkthroughLabPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<Result | null>(null)
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatError, setChatError] = useState('')
 
   const fileSummary = useMemo(() => files.map((file) => ({
     name: file.name,
@@ -112,6 +132,8 @@ export default function WalkthroughLabPage() {
     event.preventDefault()
     setError('')
     setResult(null)
+    setChatMessages([])
+    setChatError('')
     setLoading(true)
 
     try {
@@ -130,10 +152,45 @@ export default function WalkthroughLabPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || `Analysis failed (${res.status})`)
       setResult(data)
+      if (data.transcript && typeof data.transcript === 'string') {
+        setTranscript(data.transcript)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function askWalkthrough(questionOverride?: string) {
+    const question = (questionOverride || chatInput).trim()
+    if (!question || !result || chatLoading) return
+
+    setChatInput('')
+    setChatError('')
+    const nextMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: question }]
+    setChatMessages(nextMessages)
+    setChatLoading(true)
+
+    try {
+      const res = await fetch('/api/walkthrough-lab/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          transcript,
+          notes,
+          analysis: result.analysis,
+          history: chatMessages,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Chat failed (${res.status})`)
+      setChatMessages([...nextMessages, { role: 'assistant', content: data.answer || 'No answer returned.' }])
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : 'Chat failed')
+    } finally {
+      setChatLoading(false)
     }
   }
 
@@ -151,6 +208,11 @@ export default function WalkthroughLabPage() {
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-500 shadow-sm">
             AI source: <span className="font-semibold text-zinc-900">{result?.source === 'ai' ? 'Configured model' : 'Fallback ready'}</span>
+            {result ? (
+              <span className="ml-3 border-l border-zinc-200 pl-3 font-semibold text-zinc-900">
+                {transcriptSourceLabel(result.transcriptSource)}
+              </span>
+            ) : null}
           </div>
         </header>
 
@@ -274,7 +336,7 @@ export default function WalkthroughLabPage() {
                   className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-4 text-sm font-semibold text-white transition hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {loading ? 'Analyzing walkthrough...' : 'Analyze walkthrough'}
+                  {loading ? 'Transcribing and analyzing...' : 'Analyze walkthrough'}
                 </button>
               </div>
             </Panel>
@@ -306,11 +368,119 @@ export default function WalkthroughLabPage() {
                         {result.analysis.status.replace(/_/g, ' ')}
                       </span>
                     </div>
+                    {result.files.some((file) => file.transcriptStatus) ? (
+                      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                        <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">Media transcription</h3>
+                        <div className="space-y-2">
+                          {result.files.filter((file) => file.transcriptStatus).map((file) => (
+                            <div key={`${file.name}-${file.size}`} className="flex gap-2 text-xs leading-5 text-zinc-600">
+                              <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                                file.transcriptStatus === 'transcribed' ? 'bg-emerald-500' : file.transcriptStatus === 'failed' ? 'bg-rose-500' : 'bg-amber-500'
+                              }`} />
+                              <span>
+                                <span className="font-semibold text-zinc-900">{file.name}</span>
+                                {' '}
+                                {file.transcriptStatus === 'transcribed' ? 'transcribed successfully.' : file.transcriptNote || file.transcriptStatus}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       {result.analysis.detectedPlatforms.map((item) => (
                         <span key={item} className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-600">{item}</span>
                       ))}
                     </div>
+                  </div>
+                </Panel>
+
+                <Panel title="Transcript">
+                  {result.transcript ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-600">
+                          {transcriptSourceLabel(result.transcriptSource)}
+                        </span>
+                        <span className="text-xs font-medium text-zinc-400">{result.transcript.length.toLocaleString()} characters</span>
+                      </div>
+                      <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-6 text-zinc-700">
+                        {result.transcript}
+                      </pre>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-6 text-zinc-500">No transcript is available yet. Upload captions, paste transcript text, or use a supported audio/video file.</p>
+                  )}
+                </Panel>
+
+                <Panel title="Chat with this walkthrough">
+                  <div className="space-y-4">
+                    <div className="min-h-44 space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                      {chatMessages.length === 0 ? (
+                        <div className="flex min-h-36 flex-col items-center justify-center text-center">
+                          <MessageSquare className="h-7 w-7 text-[#0A52EF]" />
+                          <h3 className="mt-3 text-sm font-semibold text-zinc-950">Ask the transcript what to do next</h3>
+                          <p className="mt-1 max-w-md text-xs leading-5 text-zinc-500">
+                            Use it to build a recording order, clean up client-facing wording, find missing steps, or turn the walkthrough into a training article.
+                          </p>
+                        </div>
+                      ) : (
+                        chatMessages.map((message, index) => (
+                          <div
+                            key={`${message.role}-${index}`}
+                            className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                              message.role === 'user' ? 'ml-auto max-w-[86%] bg-[#0A52EF] text-white' : 'mr-auto max-w-[92%] border border-zinc-200 bg-white text-zinc-700'
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                        ))
+                      )}
+                      {chatLoading ? (
+                        <div className="mr-auto inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Reading walkthrough...
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {['What should I record first?', 'Make this client-safe.', 'What is missing?'].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => askWalkthrough(prompt)}
+                          disabled={chatLoading}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 transition hover:border-[#0A52EF]/40 hover:text-[#0A52EF] disabled:opacity-50"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        askWalkthrough()
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        value={chatInput}
+                        onChange={(event) => setChatInput(event.target.value)}
+                        placeholder="Ask about the video, transcript, chapters, or KB article..."
+                        className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#0A52EF] focus:ring-2 focus:ring-[#0A52EF]/15"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!chatInput.trim() || chatLoading}
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Send"
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
+                    </form>
+                    {chatError ? <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{chatError}</div> : null}
                   </div>
                 </Panel>
 
