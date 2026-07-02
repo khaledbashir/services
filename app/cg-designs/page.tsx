@@ -36,6 +36,12 @@ function assignmentNames(people: AssignmentPerson[] | undefined, fallback?: stri
   return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 }
 
+function hasAssignment(item: CgDesignRequest, staffId: string | null | undefined) {
+  if (!staffId) return false
+  if (item.designer_id === staffId) return true
+  return [...(item.designers || []), ...(item.enterprise_contacts || [])].some((person) => person.id === staffId)
+}
+
 function normalizeTriCode(value: string): string {
   const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
   return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
@@ -93,6 +99,7 @@ export default function CgDesignsPage() {
   }, [])
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     venue_id: '',
     team_name: '',
@@ -166,6 +173,7 @@ export default function CgDesignsPage() {
     e.preventDefault()
     if (!formData.job_title.trim()) return
     setSubmitting(true)
+    setFormError(null)
     try {
       const res = await fetch('/api/cg-designs', {
         method: 'POST',
@@ -179,23 +187,26 @@ export default function CgDesignsPage() {
           due_date: formData.due_date || null,
         }),
       })
-      if (res.ok) {
-        setFormData({
-          venue_id: '',
-          team_name: '',
-          tricode: '',
-          job_title: '',
-          notes: '',
-          designer_id: '',
-          designer_ids: [],
-          enterprise_contact_ids: [],
-          due_date: '',
-        })
-        setShowForm(false)
-        await fetchData()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `Could not create CG request (${res.status})`)
       }
+      setFormData({
+        venue_id: '',
+        team_name: '',
+        tricode: '',
+        job_title: '',
+        notes: '',
+        designer_id: '',
+        designer_ids: [],
+        enterprise_contact_ids: [],
+        due_date: '',
+      })
+      setShowForm(false)
+      await fetchData()
     } catch (err) {
       console.error(err)
+      setFormError(err instanceof Error ? err.message : 'Could not create CG request')
     } finally {
       setSubmitting(false)
     }
@@ -221,7 +232,7 @@ export default function CgDesignsPage() {
         item.status === statusFilter
 
       const matchesDesigner =
-        designerFilter === 'all' || (targetDesignerId && item.designer_id === targetDesignerId)
+        designerFilter === 'all' || (targetDesignerId && hasAssignment(item, targetDesignerId))
 
       return matchesSearch && matchesStatus && matchesDesigner
     })
@@ -276,6 +287,11 @@ export default function CgDesignsPage() {
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5">
             <h3 className="text-sm font-semibold text-zinc-900 mb-4">Create CG Design Request</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {formError}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Job Title *</label>
                 <input type="text" value={formData.job_title} onChange={(e) => setFormData((prev) => ({ ...prev, job_title: e.target.value }))} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 focus:border-zinc-400 outline-none bg-white" required />

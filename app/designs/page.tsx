@@ -62,6 +62,12 @@ function assignmentNames(people: AssignmentPerson[] | undefined, fallback?: stri
   return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
 }
 
+function hasAssignment(item: DesignRequest, staffId: string | null | undefined) {
+  if (!staffId) return false
+  if (item.designer_id === staffId || item.enterprise_contact_id === staffId) return true
+  return [...(item.designers || []), ...(item.enterprise_contacts || [])].some((person) => person.id === staffId)
+}
+
 // League buckets Alexis named on the 2026-04-29 call: "college / venue / places,
 // MLB, MiLB, NBA, WNBA, Pro Hockey, NFL." Order matters — the rail renders
 // these in the order listed here so familiar groups stay near the top.
@@ -148,6 +154,7 @@ export default function DesignsPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   // Per-designer + randos filters added 2026-04-23 per Alexis's ask:
   //   "The ability to have dashboards specific to the person will be very helpful."
   // `designerFilter` = 'all' | 'mine' | <staff_id>
@@ -444,6 +451,7 @@ export default function DesignsPage() {
     e.preventDefault()
     if (!formData.job_title.trim()) return
     setSubmitting(true)
+    setFormError(null)
     try {
       const res = await fetch('/api/design-requests', {
         method: 'POST',
@@ -459,30 +467,35 @@ export default function DesignsPage() {
           hours_estimated: null,
         }),
       })
-      if (res.ok) {
-        setFormData({
-          venue_id: '',
-          company_name: '',
-          job_title: '',
-          tricode: '',
-          boards_requested: '',
-          sizes_requested: '',
-          designer_id: '',
-          designer_ids: [],
-          enterprise_contact_id: '',
-          enterprise_contact_ids: [],
-          due_date: '',
-          hours_estimated: '',
-          ftp_final_link: '',
-          ftp_proof_link: '',
-          notes: '',
-          is_rando: false,
-        })
-        setShowForm(false)
-        await fetchData()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `Could not create request (${res.status})`)
       }
+      setFormData({
+        venue_id: '',
+        company_name: '',
+        job_title: '',
+        tricode: '',
+        boards_requested: '',
+        sizes_requested: '',
+        designer_id: '',
+        designer_ids: [],
+        enterprise_contact_id: '',
+        enterprise_contact_ids: [],
+        due_date: '',
+        hours_estimated: '',
+        ftp_final_link: '',
+        ftp_proof_link: '',
+        notes: '',
+        is_rando: false,
+      })
+      setShowForm(false)
+      await fetchData()
     } catch (err) {
       console.error(err)
+      const message = err instanceof Error ? err.message : 'Could not create request'
+      setFormError(message)
+      showToast(message, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -536,9 +549,7 @@ export default function DesignsPage() {
 
       const matchesDesigner =
         designerFilter === 'all' ||
-        (targetDesignerId &&
-          (item.designer_id === targetDesignerId ||
-           item.enterprise_contact_id === targetDesignerId))
+        (targetDesignerId && hasAssignment(item, targetDesignerId))
 
       const matchesRando =
         randoFilter === 'all' ||
@@ -767,6 +778,11 @@ export default function DesignsPage() {
               </div>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
+              {formError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {formError}
+                </div>
+              )}
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Job Title <span className="text-red-500">*</span></label>
                 <input

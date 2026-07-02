@@ -34,13 +34,13 @@ const EMPTY_RESULTS: SearchResponse = {
 }
 
 const GROUPS: Array<{ key: keyof SearchResponse; label: string }> = [
+  { key: 'designs', label: 'Design Requests' },
   { key: 'events', label: 'Events' },
   { key: 'clients', label: 'Clients' },
   { key: 'venues', label: 'Venues' },
   { key: 'staff', label: 'Staff' },
   { key: 'tickets', label: 'Tickets' },
   { key: 'maintenance', label: 'Maintenance' },
-  { key: 'designs', label: 'Design Requests' },
   { key: 'parts', label: 'Parts' },
 ]
 

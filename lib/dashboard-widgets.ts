@@ -131,6 +131,14 @@ interface FilterableRequest {
   venue_name?: string | null
   tricode?: string | null
   created_date?: string
+  designers?: Array<{ id: string }>
+  enterprise_contacts?: Array<{ id: string }>
+}
+
+function hasAssignment(item: FilterableRequest, staffId: string | null | undefined) {
+  if (!staffId) return false
+  if (item.designer_id === staffId || item.enterprise_contact_id === staffId) return true
+  return [...(item.designers || []), ...(item.enterprise_contacts || [])].some((person) => person.id === staffId)
 }
 
 export function applyWidget<T extends FilterableRequest>(
@@ -148,12 +156,12 @@ export function applyWidget<T extends FilterableRequest>(
 
     if (f.assignee && f.assignee !== 'any') {
       if (f.assignee === 'unassigned') {
-        if (item.designer_id || item.enterprise_contact_id) return false
+        if (item.designer_id || item.enterprise_contact_id || item.designers?.length || item.enterprise_contacts?.length) return false
       } else if (f.assignee === 'me') {
         if (!ctx.currentUserId) return false
-        if (item.designer_id !== ctx.currentUserId && item.enterprise_contact_id !== ctx.currentUserId) return false
+        if (!hasAssignment(item, ctx.currentUserId)) return false
       } else {
-        if (item.designer_id !== f.assignee && item.enterprise_contact_id !== f.assignee) return false
+        if (!hasAssignment(item, f.assignee)) return false
       }
     }
 

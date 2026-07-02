@@ -49,7 +49,7 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
           </div>
         ) : (
           <div className="flex-1 overflow-auto">
-            <div className="p-4 pt-16 lg:p-8 lg:pt-8 max-w-screen-xl">
+            <div className="w-full p-4 pt-16 lg:p-8 lg:pt-8">
               <div className="mb-4 flex justify-end lg:mb-6">
                 <GlobalSearch />
               </div>
