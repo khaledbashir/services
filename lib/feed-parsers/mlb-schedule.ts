@@ -1,6 +1,35 @@
 import { dedupeFeedEvents } from '@/lib/feed-parsers/shared'
 import type { FeedEvent } from '@/lib/feed-parsers/types'
 
+const MLB_VENUE_TEAM_ABBR: Record<string, string> = {
+  'angel stadium': 'laa',
+  'busch stadium': 'stl',
+  'camden yards': 'bal',
+  'chase field': 'ari',
+  'citi field': 'nym',
+  'citizens bank park': 'phi',
+  'coors field': 'col',
+  'dodger stadium': 'lad',
+  'fenway park': 'bos',
+  'globe life field': 'tex',
+  'great american ball park': 'cin',
+  'guaranteed rate field': 'chw',
+  'kauffman stadium': 'kc',
+  'loanDepot park': 'mia',
+  'minute maid park': 'hou',
+  'nationals park': 'wsh',
+  'oracle park': 'sf',
+  'petco park': 'sd',
+  'pnc park': 'pit',
+  'progressive field': 'cle',
+  'rogers centre': 'tor',
+  't-mobile park': 'sea',
+  'target field': 'min',
+  'truist park': 'atl',
+  'wrigley field': 'chc',
+  'yankee stadium': 'nyy',
+}
+
 /**
  * Pulls the full MLB schedule from the Stats API and returns events
  * matching a specific venue name. Used as a master schedule source
@@ -33,7 +62,11 @@ export async function parseMlbScheduleFeed(params: {
     signal: AbortSignal.timeout(20000),
     cache: 'no-store',
   })
-  if (!res.ok) throw new Error(`MLB Schedule API failed: ${res.status}`)
+  if (!res.ok) {
+    const fallbackEvents = await parseEspnMlbScheduleFeed(params.venueName)
+    if (fallbackEvents.length > 0) return fallbackEvents
+    throw new Error(`MLB Schedule API failed: ${res.status}`)
+  }
   const payload = await res.json()
 
   const venueNorm = params.venueName.toLowerCase().trim()
@@ -68,6 +101,89 @@ export async function parseMlbScheduleFeed(params: {
   }
 
   return dedupeFeedEvents(events)
+}
+
+async function parseEspnMlbScheduleFeed(venueName: string): Promise<FeedEvent[]> {
+  const teamAbbr = getEspnTeamAbbrForVenue(venueName)
+  if (!teamAbbr) return []
+
+  const season = new Date().getUTCFullYear()
+  const url = `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${teamAbbr}/schedule?season=${season}`
+  const res = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)',
+    },
+    signal: AbortSignal.timeout(20000),
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+
+  const payload = await res.json() as EspnSchedulePayload
+  const events: FeedEvent[] = []
+
+  for (const event of payload.events || []) {
+    const competition = event.competitions?.[0]
+    const eventVenue = competition?.venue?.fullName || ''
+    if (!eventVenue || !venueMatches(eventVenue.toLowerCase().trim(), venueName.toLowerCase().trim())) continue
+
+    const competitors = competition?.competitors || []
+    const home = competitors.find((competitor) => competitor.homeAway === 'home')?.team?.displayName || null
+    const away = competitors.find((competitor) => competitor.homeAway === 'away')?.team?.displayName || null
+    if (!home || !away || !event.date) continue
+
+    const eventDate = new Date(event.date)
+    if (Number.isNaN(eventDate.getTime())) continue
+
+    events.push({
+      name: `${away} vs ${home}`,
+      date: eventDate.toISOString().split('T')[0],
+      time: null,
+      startIso: eventDate.toISOString(),
+      teams: [away, home],
+      eventType: 'game',
+      league: 'MLB',
+      source: 'league_schedule',
+      confidence: 0.94,
+      sourceUrl: `https://www.espn.com/mlb/team/schedule/_/name/${teamAbbr}`,
+      sourceLabel: 'MLB Schedule',
+      evidenceSnippet: `${away} at ${home} - ${eventVenue} - ${eventDate.toISOString().split('T')[0]}`,
+    })
+  }
+
+  return dedupeFeedEvents(events)
+}
+
+function getEspnTeamAbbrForVenue(venueName: string): string | null {
+  const normalizedVenue = normalizeVenueKey(venueName)
+  for (const [venue, teamAbbr] of Object.entries(MLB_VENUE_TEAM_ABBR)) {
+    if (normalizeVenueKey(venue) === normalizedVenue) return teamAbbr
+  }
+  return null
+}
+
+function normalizeVenueKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+interface EspnSchedulePayload {
+  events?: EspnScheduleEvent[]
+}
+
+interface EspnScheduleEvent {
+  date?: string
+  competitions?: Array<{
+    venue?: { fullName?: string }
+    competitors?: Array<{
+      homeAway?: 'home' | 'away' | string
+      team?: { displayName?: string }
+    }>
+  }>
 }
 
 /**
