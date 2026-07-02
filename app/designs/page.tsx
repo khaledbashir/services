@@ -44,6 +44,24 @@ interface DesignRequest {
   priority?: string | null
 }
 
+interface CgWidgetRequest {
+  id: string
+  status: string
+  designer_id: string | null
+  designer_name: string | null
+  enterprise_contact_id: string | null
+  enterprise_contact_name?: string | null
+  venue_id: string | null
+  venue_name: string | null
+  due_date: string | null
+  job_title: string
+  company_name?: string | null
+  tricode?: string | null
+  created_date?: string
+  designers?: AssignmentPerson[]
+  enterprise_contacts?: AssignmentPerson[]
+}
+
 interface AssignmentPerson { id: string; full_name: string; is_primary?: boolean }
 interface Venue {
   id: string
@@ -179,6 +197,7 @@ export default function DesignsPage() {
 
   const [viewMode, setViewMode] = useState<'kanban' | 'board'>('kanban')
   const [widgets, setWidgets] = useState<DashboardWidget[]>([])
+  const [cgWidgetRequests, setCgWidgetRequests] = useState<CgWidgetRequest[]>([])
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
   useEffect(() => {
     loadLayoutPrefs('designs.view').then(p => {
@@ -370,6 +389,26 @@ export default function DesignsPage() {
       setDesignRequests(Array.from(byId.values()))
       setVenues(vd.venues || [])
       setStaff(sd.staff || [])
+      if (viewMode === 'board') {
+        const cg = await fetch('/api/cg-designs').then((r) => r.json()).catch(() => ({ cg_design_requests: [] }))
+        setCgWidgetRequests((cg.cg_design_requests || []).map((item: any) => ({
+          id: item.id,
+          status: item.status,
+          designer_id: item.designer_id || null,
+          designer_name: item.designer_name || null,
+          enterprise_contact_id: item.enterprise_contact_id || null,
+          enterprise_contact_name: item.enterprise_contact_name || null,
+          venue_id: item.venue_id || null,
+          venue_name: item.venue_name || item.team_name || null,
+          due_date: item.due_date || null,
+          job_title: item.job_title,
+          company_name: item.team_name || item.league || null,
+          tricode: item.tricode || null,
+          created_date: item.created_date,
+          designers: item.designers || [],
+          enterprise_contacts: item.enterprise_contacts || [],
+        })))
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -383,6 +422,11 @@ export default function DesignsPage() {
     window.addEventListener('anc:data-refresh', onRefresh)
     return () => window.removeEventListener('anc:data-refresh', onRefresh)
   }, [sortKey])
+
+  useEffect(() => {
+    if (viewMode === 'board') fetchData(sortKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode])
 
   const updateStatus = async (item: DesignRequest, status: string) => {
     try {
@@ -1035,11 +1079,12 @@ export default function DesignsPage() {
         )}
 
         {viewMode === 'board' && (
-          <DesignsWidgetBoard
-            designRequests={designRequests}
-            staff={staff}
-            venues={venues}
-            widgets={widgets}
+            <DesignsWidgetBoard
+              designRequests={designRequests}
+              cgDesignRequests={cgWidgetRequests}
+              staff={staff}
+              venues={venues}
+              widgets={widgets}
             currentUserId={currentUserId}
             todayIso={todayIso}
             onEditWidget={setEditingWidget}
@@ -1550,6 +1595,7 @@ export default function DesignsPage() {
 
 interface WidgetBoardProps {
   designRequests: DesignRequest[]
+  cgDesignRequests: CgWidgetRequest[]
   staff: Staff[]
   venues: Venue[]
   widgets: DashboardWidget[]
@@ -1563,6 +1609,7 @@ interface WidgetBoardProps {
 
 function DesignsWidgetBoard({
   designRequests,
+  cgDesignRequests,
   staff,
   venues,
   widgets,
@@ -1602,7 +1649,7 @@ function DesignsWidgetBoard({
           <DashboardWidgetCard
             key={widget.id}
             widget={widget}
-            items={designRequests as any}
+            items={(widget.source === 'cg-designs' ? cgDesignRequests : designRequests) as any}
             ctx={ctx}
             onEdit={() => onEditWidget(widget)}
             onDelete={() => onDeleteWidget(widget.id)}

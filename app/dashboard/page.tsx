@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { DashboardLayoutSettings, applyLayoutPrefs, loadLayoutPrefs, DEFAULT_LAYOUT_PREFS, type DashboardLayoutPrefs } from '@/components/dashboard-layout-settings'
 import { Skeleton, CardSkeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
 
@@ -63,6 +64,22 @@ const workflowStatusColors: Record<string, { dot: string; bg: string; text: stri
   post_game_submitted: { dot: 'bg-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700', label: 'Submitted', border: '#3b82f6' },
 }
 
+const DASHBOARD_CARD_OPTIONS = [
+  { key: 'events', label: "Today's Events" },
+  { key: 'staff', label: 'Staff' },
+  { key: 'tickets', label: 'Open Tickets' },
+  { key: 'workflows', label: 'Pending Workflows' },
+  { key: 'labor-hours', label: 'Est. Labor Hours' },
+]
+
+const DASHBOARD_SECTION_OPTIONS = [
+  { key: 'cards', label: 'Top Cards' },
+  { key: 'automation', label: 'Automation Coverage' },
+  { key: 'alerts', label: 'Alerts' },
+  { key: 'operations', label: 'Operations Panels' },
+  { key: 'markets', label: 'Markets This Week' },
+]
+
 export default function DashboardPage() {
   const auth = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
@@ -82,7 +99,14 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<Array<{ type: string; severity: string; title: string; detail: string; count?: number }>>([])
   const [loading, setLoading] = useState(true)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
+  const [cardPrefs, setCardPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
+  const [sectionPrefs, setSectionPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
   const router = useRouter()
+
+  useEffect(() => {
+    loadLayoutPrefs('dashboard.cards').then(setCardPrefs)
+    loadLayoutPrefs('dashboard.sections').then(setSectionPrefs)
+  }, [])
 
   useEffect(() => {
     if (auth.loaded && !auth.isManager) {
@@ -184,26 +208,52 @@ export default function DashboardPage() {
     if (!label || label.toLowerCase() === 'unknown') return 'Unassigned Market'
     return label
   }
+  const visibleCards = applyLayoutPrefs(DASHBOARD_CARD_OPTIONS, cardPrefs).map((item) => item.key)
+  const visibleSections = new Set(applyLayoutPrefs(DASHBOARD_SECTION_OPTIONS, sectionPrefs).map((item) => item.key))
+  const sectionOrder = (key: string) => {
+    const ordered = applyLayoutPrefs(DASHBOARD_SECTION_OPTIONS, sectionPrefs).map((item) => item.key)
+    const idx = ordered.indexOf(key)
+    return idx < 0 ? 99 : idx
+  }
+  const cardOrder = (key: string) => {
+    const idx = visibleCards.indexOf(key)
+    return idx < 0 ? 99 : idx
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="flex flex-col gap-8">
         {/* SECTION 1: Welcome Header */}
         <div className="flex justify-between items-baseline">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Welcome back{auth.loaded && auth.userName ? `, ${auth.userName.split(' ')[0]}` : ''}</h1>
             <p className="text-zinc-500 text-sm mt-1">Here's your operations overview</p>
           </div>
-          <p className="text-xs text-zinc-400">{todayFormatted}</p>
+          <div className="flex items-center gap-2">
+            <DashboardLayoutSettings
+              storageKey="dashboard.cards"
+              columns={DASHBOARD_CARD_OPTIONS}
+              prefs={cardPrefs}
+              onChange={setCardPrefs}
+            />
+            <DashboardLayoutSettings
+              storageKey="dashboard.sections"
+              columns={DASHBOARD_SECTION_OPTIONS}
+              prefs={sectionPrefs}
+              onChange={setSectionPrefs}
+            />
+            <p className="text-xs text-zinc-400">{todayFormatted}</p>
+          </div>
         </div>
 
         {/* SECTION 2: Stat Cards (5-column grid) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" />
-          <StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" />
-          <StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" />
-          <StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=pending_workflow" />
-          <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all">
+        {visibleSections.has('cards') && (
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${cardPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-5'}`} style={{ order: sectionOrder('cards') }}>
+          {visibleCards.includes('events') && <div style={{ order: cardOrder('events') }}><StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" /></div>}
+          {visibleCards.includes('staff') && <div style={{ order: cardOrder('staff') }}><StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" /></div>}
+          {visibleCards.includes('tickets') && <div style={{ order: cardOrder('tickets') }}><StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" /></div>}
+          {visibleCards.includes('workflows') && <div style={{ order: cardOrder('workflows') }}><StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=pending_workflow" /></div>}
+          {visibleCards.includes('labor-hours') && <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all" style={{ order: cardOrder('labor-hours') }}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Est. Labor Hours</p>
@@ -212,10 +262,12 @@ export default function DashboardPage() {
               </div>
               <div className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: '#8b5cf6' }}></div>
             </div>
-          </div>
+          </div>}
         </div>
+        )}
 
-        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+        {visibleSections.has('automation') && (
+        <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6" style={{ order: sectionOrder('automation') }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Automation Coverage</p>
@@ -247,10 +299,11 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* SECTION 2.5: Alerts */}
-        {!loading && alerts.length > 0 && (
-          <div className="space-y-2">
+        {!loading && alerts.length > 0 && visibleSections.has('alerts') && (
+          <div className="space-y-2" style={{ order: sectionOrder('alerts') }}>
             {alerts.map((alert, idx) => {
               const styles = {
                 critical: { bg: 'bg-rose-50 dark:bg-rose-500/10', border: 'border-rose-200 dark:border-rose-500/30', text: 'text-rose-800 dark:text-rose-200', dot: 'bg-rose-500' },
@@ -282,7 +335,8 @@ export default function DashboardPage() {
         )}
 
         {/* SECTION 3: Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {visibleSections.has('operations') && (
+        <div className={`grid grid-cols-1 gap-6 ${sectionPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`} style={{ order: sectionOrder('operations') }}>
           {/* LEFT COLUMN (col-span-2) */}
           <div className="lg:col-span-2 space-y-6">
             {/* Today's Timeline */}
@@ -498,10 +552,11 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* SECTION 4: Markets Overview */}
-        {!loading && chartData && chartData.eventsByMarket.length > 0 && (
-          <div className="space-y-4">
+        {!loading && chartData && chartData.eventsByMarket.length > 0 && visibleSections.has('markets') && (
+          <div className="space-y-4" style={{ order: sectionOrder('markets') }}>
             <h2 className="text-lg font-semibold text-zinc-900">Markets This Week</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {chartData.eventsByMarket.map((market) => (

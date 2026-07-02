@@ -21,7 +21,7 @@ interface Props {
 }
 
 const STATUS_KEYS: Array<keyof typeof STATUS_LABEL> = [
-  'request_submitted', 'in_queue', 'in_progress', 'in_qc', 'client_review', 'approved', 'done',
+  'request_submitted', 'in_queue', 'in_progress', 'in_qc', 'submitted_internally', 'client_review', 'revisions', 'on_hold', 'approved', 'request_closed', 'done', 'cancelled',
 ]
 const DUE_BUCKETS: DueBucket[] = ['overdue', 'today', 'tomorrow', 'this_week', 'next_week', 'later', 'no_due']
 
@@ -100,6 +100,18 @@ export function DashboardWidgetConfig({ widget, staff, venues, onClose, onSave }
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               className="w-full h-10 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
             />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-1.5">View source</label>
+            <select
+              value={draft.source}
+              onChange={(e) => setDraft({ ...draft, source: e.target.value as DashboardWidget['source'], filters: { ...draft.filters, status: [] } })}
+              className="w-full h-10 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            >
+              <option value="design-requests">Design Requests</option>
+              <option value="cg-designs">CG Design</option>
+            </select>
           </div>
 
           <div>

@@ -2,7 +2,7 @@
 // Persisted per-user in user_preferences (key: designs.widgets.v1).
 // Schema is forward-compatible: bump the key suffix when shape changes.
 
-export type WidgetSource = 'design-requests'
+export type WidgetSource = 'design-requests' | 'cg-designs'
 
 export type DueBucket = 'overdue' | 'today' | 'tomorrow' | 'this_week' | 'next_week' | 'no_due' | 'later'
 
@@ -88,6 +88,11 @@ export const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In Progress',
   in_qc: 'In QC',
   client_review: 'Client Review',
+  submitted_internally: 'Submitted Internally',
+  revisions: 'Revisions',
+  on_hold: 'On Hold',
+  request_closed: 'Request Closed',
+  cancelled: 'Cancelled',
   approved: 'Approved',
   done: 'Done',
 }

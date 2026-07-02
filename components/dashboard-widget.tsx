@@ -194,7 +194,7 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
                     return (
                       <li key={item.id}>
                         <Link
-                          href={`/designs/${item.id}`}
+                          href={widget.source === 'cg-designs' ? `/cg-designs/${item.id}` : `/designs/${item.id}`}
                           className="px-4 py-2.5 flex items-center gap-2.5 hover:bg-zinc-50 transition-colors"
                         >
                           <span
