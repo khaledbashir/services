@@ -36,6 +36,8 @@ function addDays(iso: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 export default function TimeEntriesPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
@@ -51,6 +53,9 @@ export default function TimeEntriesPage() {
     hours: '',
     description: '',
   })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState({ entry_date: '', designer_id: '', hours: '', description: '' })
+  const [rowBusy, setRowBusy] = useState<string | null>(null)
 
   const fetchData = async () => {
     try {
@@ -83,6 +88,42 @@ export default function TimeEntriesPage() {
       if (currentUserId) setDraft((prev) => ({ ...prev, designer_id: prev.designer_id || currentUserId }))
     } catch {}
   }, [])
+
+  const shiftWeek = (weeks: number) => {
+    const base = fromDate || currentMondayStart()
+    const monday = addDays(base, weeks * 7)
+    setFromDate(monday)
+    setToDate(addDays(monday, 6))
+  }
+
+  const goCurrentWeek = () => {
+    const monday = currentMondayStart()
+    setFromDate(monday)
+    setToDate(addDays(monday, 6))
+  }
+
+  // The filter window is a Monday-start week whenever from→to spans exactly 7 days.
+  const weekDays = useMemo(() => {
+    if (!fromDate || !toDate) return null
+    if (addDays(fromDate, 6) !== toDate) return null
+    return Array.from({ length: 7 }, (_, i) => addDays(fromDate, i))
+  }, [fromDate, toDate])
+
+  // designer rows × day columns → hours
+  const weekGrid = useMemo(() => {
+    if (!weekDays) return null
+    const byDesigner = new Map<string, { name: string; days: number[]; total: number }>()
+    for (const e of entries) {
+      const key = e.designer_id || 'unassigned'
+      if (!byDesigner.has(key)) byDesigner.set(key, { name: e.designer_name || 'Unassigned', days: [0, 0, 0, 0, 0, 0, 0], total: 0 })
+      const row = byDesigner.get(key)!
+      const idx = weekDays.indexOf((e.entry_date || '').slice(0, 10))
+      if (idx >= 0) { row.days[idx] += Number(e.hours || 0); row.total += Number(e.hours || 0) }
+    }
+    const rows = [...byDesigner.entries()].map(([id, r]) => ({ id, ...r })).sort((a, b) => a.name.localeCompare(b.name))
+    const dayTotals = weekDays.map((_, i) => rows.reduce((s, r) => s + r.days[i], 0))
+    return { rows, dayTotals, grand: dayTotals.reduce((s, v) => s + v, 0) }
+  }, [entries, weekDays])
 
   const saveEntry = async () => {
     const hours = Number(draft.hours)
@@ -117,6 +158,72 @@ export default function TimeEntriesPage() {
     }
   }
 
+  const startEdit = (entry: TimeEntry) => {
+    setEditingId(entry.id)
+    setEditDraft({
+      entry_date: (entry.entry_date || '').slice(0, 10),
+      designer_id: entry.designer_id || '',
+      hours: String(entry.hours ?? ''),
+      description: entry.description || '',
+    })
+  }
+
+  const saveEdit = async (id: string) => {
+    const hours = Number(editDraft.hours)
+    if (!Number.isFinite(hours) || hours <= 0) {
+      setEntryError('Enter hours greater than 0.')
+      return
+    }
+    setRowBusy(id)
+    setEntryError(null)
+    try {
+      const res = await fetch(`/api/time-entries/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entry_date: editDraft.entry_date,
+          designer_id: editDraft.designer_id || null,
+          hours,
+          description: editDraft.description.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `Could not update entry (${res.status})`)
+      }
+      setEditingId(null)
+      await fetchData()
+    } catch (err) {
+      console.error(err)
+      setEntryError(err instanceof Error ? err.message : 'Could not update entry')
+    } finally {
+      setRowBusy(null)
+    }
+  }
+
+  const deleteEntry = async (id: string) => {
+    setRowBusy(id)
+    setEntryError(null)
+    try {
+      const res = await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `Could not delete entry (${res.status})`)
+      }
+      if (editingId === id) setEditingId(null)
+      await fetchData()
+    } catch (err) {
+      console.error(err)
+      setEntryError(err instanceof Error ? err.message : 'Could not delete entry')
+    } finally {
+      setRowBusy(null)
+    }
+  }
+
+  const prefillCell = (designer: string, date: string) => {
+    setDraft((prev) => ({ ...prev, designer_id: designer === 'unassigned' ? '' : designer, entry_date: date }))
+  }
+
   const totals = useMemo(() => {
     const hours = entries.reduce((sum, item) => sum + Number(item.hours || 0), 0)
     return { hours, count: entries.length }
@@ -134,6 +241,9 @@ export default function TimeEntriesPage() {
     )
   }
 
+  const inputCls = 'min-w-0 border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400'
+  const editInputCls = 'w-full min-w-0 border border-zinc-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400'
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -142,27 +252,23 @@ export default function TimeEntriesPage() {
             <h1 className="text-xl font-semibold text-zinc-900">Time Entries</h1>
             <p className="mt-1 text-sm text-zinc-500">{totals.count} entries · {totals.hours.toFixed(2)} hours · week starts Monday</p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const monday = currentMondayStart()
-              setFromDate(monday)
-              setToDate(addDays(monday, 6))
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-300 hover:text-zinc-900"
-          >
-            Current week
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => shiftWeek(-1)} aria-label="Previous week"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-300 hover:text-zinc-900">←</button>
+            <button type="button" onClick={goCurrentWeek}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-300 hover:text-zinc-900">
+              Current week
+            </button>
+            <button type="button" onClick={() => shiftWeek(1)} aria-label="Next week"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-300 hover:text-zinc-900">→</button>
+          </div>
         </div>
 
         <div className="grid gap-4 rounded-2xl border border-zinc-200 bg-white p-4 md:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">Designer</label>
-            <select
-              value={designerId}
-              onChange={(e) => setDesignerId(e.target.value)}
-              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            >
+            <select value={designerId} onChange={(e) => setDesignerId(e.target.value)}
+              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400">
               <option value="">All designers</option>
               {staff.map((person) => (
                 <option key={person.id} value={person.id}>{person.full_name}</option>
@@ -171,100 +277,160 @@ export default function TimeEntriesPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">From</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            />
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-600">To</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            />
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+              className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400" />
           </div>
         </div>
+
+        {weekGrid && weekDays && (
+          <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  <th className="px-4 py-3 text-left">Designer</th>
+                  {weekDays.map((d, i) => (
+                    <th key={d} className="px-2 py-3 text-right">
+                      {DAY_LABELS[i]}
+                      <span className="ml-1 font-normal normal-case tracking-normal text-zinc-400">
+                        {new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {weekGrid.rows.length === 0 && (
+                  <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-zinc-400">No hours logged this week yet — add the first entry below</td></tr>
+                )}
+                {weekGrid.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{row.name}</td>
+                    {row.days.map((h, i) => (
+                      <td key={i} className="px-2 py-2.5 text-right">
+                        <button type="button" onClick={() => prefillCell(row.id, weekDays[i])}
+                          title={`Log hours for ${row.name} on ${weekDays[i]}`}
+                          className={`w-full rounded px-1 py-0.5 text-right tabular-nums hover:bg-zinc-100 ${h ? 'text-zinc-900' : 'text-zinc-300'}`}>
+                          {h ? h.toFixed(2) : '—'}
+                        </button>
+                      </td>
+                    ))}
+                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-zinc-900">{row.total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {weekGrid.rows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-zinc-200 bg-zinc-50 font-semibold text-zinc-900">
+                    <td className="px-4 py-2.5">All designers</td>
+                    {weekGrid.dayTotals.map((h, i) => (
+                      <td key={i} className="px-2 py-2.5 text-right tabular-nums">{h ? h.toFixed(2) : '—'}</td>
+                    ))}
+                    <td className="px-4 py-2.5 text-right tabular-nums">{weekGrid.grand.toFixed(2)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
           {entryError && (
             <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{entryError}</div>
           )}
           <div className="grid gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-sm md:grid-cols-[0.9fr,1.1fr,0.55fr,1.8fr,auto]">
-            <input
-              type="date"
-              value={draft.entry_date}
-              onChange={(e) => setDraft((prev) => ({ ...prev, entry_date: e.target.value }))}
-              className="min-w-0 border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            />
-            <select
-              value={draft.designer_id}
-              onChange={(e) => setDraft((prev) => ({ ...prev, designer_id: e.target.value }))}
-              className="min-w-0 border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            >
+            <input type="date" value={draft.entry_date}
+              onChange={(e) => setDraft((prev) => ({ ...prev, entry_date: e.target.value }))} className={inputCls} />
+            <select value={draft.designer_id}
+              onChange={(e) => setDraft((prev) => ({ ...prev, designer_id: e.target.value }))} className={inputCls}>
               <option value="">Designer...</option>
               {staff.map((person) => (
                 <option key={person.id} value={person.id}>{person.full_name}</option>
               ))}
             </select>
-            <input
-              type="number"
-              min="0"
-              step="0.25"
-              placeholder="Hours"
-              value={draft.hours}
-              onChange={(e) => setDraft((prev) => ({ ...prev, hours: e.target.value }))}
-              className="min-w-0 border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            />
-            <input
-              type="text"
-              placeholder="Description"
-              value={draft.description}
+            <input type="number" min="0" step="0.25" placeholder="Hours" value={draft.hours}
+              onChange={(e) => setDraft((prev) => ({ ...prev, hours: e.target.value }))} className={inputCls} />
+            <input type="text" placeholder="Description" value={draft.description}
               onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveEntry()
-              }}
-              className="min-w-0 border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            />
-            <button
-              type="button"
-              onClick={saveEntry}
-              disabled={saving}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+              onKeyDown={(e) => { if (e.key === 'Enter') saveEntry() }} className={inputCls} />
+            <button type="button" onClick={saveEntry} disabled={saving}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60">
               {saving ? 'Saving...' : 'Add'}
             </button>
           </div>
-          <div className="grid grid-cols-[0.85fr,1.2fr,1fr,0.6fr,1.8fr] gap-4 border-b border-zinc-200 bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+          <div className="grid grid-cols-[0.85fr,1.2fr,1fr,0.6fr,1.5fr,auto] gap-4 border-b border-zinc-200 bg-white px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
             <div>Date</div>
             <div>Budget / Client</div>
             <div>Designer</div>
             <div>Hours</div>
             <div>Description</div>
+            <div className="text-right">Actions</div>
           </div>
           <div className="divide-y divide-zinc-200">
             {entries.length === 0 && (
               <div className="px-4 py-10 text-center text-sm text-zinc-400">No entries match the current filters</div>
             )}
             {entries.map((entry) => (
-              <div key={entry.id} className="grid grid-cols-[0.85fr,1.2fr,1fr,0.6fr,1.8fr] gap-4 px-4 py-4 text-sm">
-                <div className="text-zinc-600">{entry.entry_date ? new Date(`${entry.entry_date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'}</div>
-                <div className="min-w-0">
-                  <p className="font-medium text-zinc-900">{entry.budget_client_name || 'No budget linked'}</p>
-                  <p className="mt-1 text-xs text-zinc-400">{entry.venue_name || 'No venue'}</p>
-                  {entry.budget_id && (
-                    <Link href={`/hours-budgets/${entry.budget_id}`} className="mt-1 inline-block text-xs font-medium text-blue-600 hover:text-blue-800">
-                      View budget
-                    </Link>
-                  )}
+              editingId === entry.id ? (
+                <div key={entry.id} className="grid grid-cols-[0.85fr,1.2fr,1fr,0.6fr,1.5fr,auto] items-center gap-4 bg-zinc-50 px-4 py-3 text-sm">
+                  <input type="date" value={editDraft.entry_date}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, entry_date: e.target.value }))} className={editInputCls} />
+                  <div className="min-w-0 text-xs text-zinc-400">{entry.budget_client_name || 'No budget linked'}</div>
+                  <select value={editDraft.designer_id}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, designer_id: e.target.value }))} className={editInputCls}>
+                    <option value="">Unassigned</option>
+                    {staff.map((person) => (
+                      <option key={person.id} value={person.id}>{person.full_name}</option>
+                    ))}
+                  </select>
+                  <input type="number" min="0" step="0.25" value={editDraft.hours}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, hours: e.target.value }))} className={editInputCls} />
+                  <input type="text" value={editDraft.description}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(entry.id) }} className={editInputCls} />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => saveEdit(entry.id)} disabled={rowBusy === entry.id}
+                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-60">
+                      {rowBusy === entry.id ? 'Saving…' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingId(null)}
+                      className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300">
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div className="text-zinc-700">{entry.designer_name || 'Unassigned'}</div>
-                <div className="font-medium text-zinc-900">{Number(entry.hours).toFixed(2)}</div>
-                <div className="text-zinc-600">{entry.description || 'No description'}</div>
-              </div>
+              ) : (
+                <div key={entry.id} className="grid grid-cols-[0.85fr,1.2fr,1fr,0.6fr,1.5fr,auto] items-center gap-4 px-4 py-4 text-sm">
+                  <div className="text-zinc-600">{entry.entry_date ? new Date(`${entry.entry_date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'}</div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-zinc-900">{entry.budget_client_name || 'No budget linked'}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{entry.venue_name || 'No venue'}</p>
+                    {entry.budget_id && (
+                      <Link href={`/hours-budgets/${entry.budget_id}`} className="mt-1 inline-block text-xs font-medium text-blue-600 hover:text-blue-800">
+                        View budget
+                      </Link>
+                    )}
+                  </div>
+                  <div className="text-zinc-700">{entry.designer_name || 'Unassigned'}</div>
+                  <div className="font-medium tabular-nums text-zinc-900">{Number(entry.hours).toFixed(2)}</div>
+                  <div className="text-zinc-600">{entry.description || 'No description'}</div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => startEdit(entry)}
+                      className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:text-zinc-900">
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => deleteEntry(entry.id)} disabled={rowBusy === entry.id}
+                      className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:border-rose-300 disabled:opacity-60">
+                      {rowBusy === entry.id ? '…' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              )
             ))}
           </div>
         </div>

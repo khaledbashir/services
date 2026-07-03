@@ -195,18 +195,18 @@ export default function DesignsPage() {
   const [layoutPrefs, setLayoutPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
   useEffect(() => { loadLayoutPrefs('designs.kanban').then(setLayoutPrefs) }, [])
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'board'>('kanban')
+  const [viewMode, setViewMode] = useState<'kanban' | 'board' | 'cg'>('kanban')
   const [widgets, setWidgets] = useState<DashboardWidget[]>([])
   const [cgWidgetRequests, setCgWidgetRequests] = useState<CgWidgetRequest[]>([])
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
   useEffect(() => {
     loadLayoutPrefs('designs.view').then(p => {
       const stored = (p as unknown as { layout?: string }).layout
-      if (stored === 'board') setViewMode('board')
+      if (stored === 'board' || stored === 'cg') setViewMode(stored as 'board' | 'cg')
     })
     loadDashboardPage().then(page => setWidgets(page.widgets))
   }, [])
-  const persistView = (next: 'kanban' | 'board') => {
+  const persistView = (next: 'kanban' | 'board' | 'cg') => {
     setViewMode(next)
     fetch('/api/preferences', {
       method: 'PUT',
@@ -389,7 +389,7 @@ export default function DesignsPage() {
       setDesignRequests(Array.from(byId.values()))
       setVenues(vd.venues || [])
       setStaff(sd.staff || [])
-      if (viewMode === 'board') {
+      if (viewMode === 'board' || viewMode === 'cg') {
         const cg = await fetch('/api/cg-designs').then((r) => r.json()).catch(() => ({ cg_design_requests: [] }))
         setCgWidgetRequests((cg.cg_design_requests || []).map((item: any) => ({
           id: item.id,
@@ -424,7 +424,7 @@ export default function DesignsPage() {
   }, [sortKey])
 
   useEffect(() => {
-    if (viewMode === 'board') fetchData(sortKey)
+    if (viewMode === 'board' || viewMode === 'cg') fetchData(sortKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode])
 
@@ -720,6 +720,14 @@ export default function DesignsPage() {
                 }`}
               >
                 My Board
+              </button>
+              <button
+                onClick={() => persistView('cg')}
+                className={`px-3 h-8 rounded-md text-xs font-semibold transition-colors ${
+                  viewMode === 'cg' ? 'bg-[#0A52EF] text-white' : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                CG Design
               </button>
             </div>
             <button
@@ -1075,6 +1083,50 @@ export default function DesignsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {viewMode === 'cg' && (
+          <div className="overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+              <p className="text-sm font-semibold text-zinc-900">CG Design Requests <span className="ml-1 font-normal text-zinc-400">{cgWidgetRequests.length}</span></p>
+              <Link href="/cg-designs" className="text-xs font-medium text-blue-600 hover:text-blue-800">Open full CG page →</Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                    <th className="px-4 py-3 text-left">Job</th>
+                    <th className="px-4 py-3 text-left">Team / Client</th>
+                    <th className="px-4 py-3 text-left">Tricode</th>
+                    <th className="px-4 py-3 text-left">Designer</th>
+                    <th className="px-4 py-3 text-left">Due</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {cgWidgetRequests.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-zinc-400">No CG design requests</td></tr>
+                  )}
+                  {[...cgWidgetRequests]
+                    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))
+                    .map((cg) => (
+                      <tr key={cg.id} className="hover:bg-zinc-50">
+                        <td className="px-4 py-3 font-medium text-zinc-900">{cg.job_title}</td>
+                        <td className="px-4 py-3 text-zinc-600">{cg.company_name || cg.venue_name || '—'}</td>
+                        <td className="px-4 py-3 text-zinc-600">{cg.tricode || '—'}</td>
+                        <td className="px-4 py-3 text-zinc-600">{cg.designer_name || 'Unassigned'}</td>
+                        <td className="px-4 py-3 tabular-nums text-zinc-600">{cg.due_date ? new Date(`${cg.due_date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
+                            {(cg.status || 'request_submitted').split('_').join(' ')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
