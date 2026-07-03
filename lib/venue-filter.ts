@@ -3,6 +3,9 @@ import { query } from '@/lib/db'
 /**
  * Returns venue IDs a staff member is linked to.
  * - admin/manager: returns null (no filter — sees everything)
+ * - designer/design_contractor: returns null — design work is venue-agnostic;
+ *   designers have no staff_venues rows, and an empty list would otherwise
+ *   collapse to `AND FALSE` and hide every job from them
  * - technician: returns array of venue_ids from staff_venues
  */
 export async function getStaffVenueIds(
@@ -10,6 +13,7 @@ export async function getStaffVenueIds(
   role: string
 ): Promise<string[] | null> {
   if (role === 'admin' || role === 'tech_support' || role === 'manager') return null
+  if (role === 'designer' || role === 'design_contractor') return null
 
   const result = await query(
     `SELECT venue_id FROM staff_venues WHERE staff_id = $1`,

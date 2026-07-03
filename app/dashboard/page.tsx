@@ -248,7 +248,7 @@ export default function DashboardPage() {
 
         {/* SECTION 2: Stat Cards (5-column grid) */}
         {visibleSections.has('cards') && (
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${cardPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-5'}`} style={{ order: sectionOrder('cards') }}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${cardPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-5 2xl:grid-cols-5'}`} style={{ order: sectionOrder('cards') }}>
           {visibleCards.includes('events') && <div style={{ order: cardOrder('events') }}><StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" /></div>}
           {visibleCards.includes('staff') && <div style={{ order: cardOrder('staff') }}><StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" /></div>}
           {visibleCards.includes('tickets') && <div style={{ order: cardOrder('tickets') }}><StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" /></div>}
@@ -336,7 +336,7 @@ export default function DashboardPage() {
 
         {/* SECTION 3: Two-column layout */}
         {visibleSections.has('operations') && (
-        <div className={`grid grid-cols-1 gap-6 ${sectionPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`} style={{ order: sectionOrder('operations') }}>
+        <div className={`grid grid-cols-1 gap-6 ${sectionPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-3 2xl:grid-cols-4'}`} style={{ order: sectionOrder('operations') }}>
           {/* LEFT COLUMN (col-span-2) */}
           <div className="lg:col-span-2 space-y-6">
             {/* Today's Timeline */}
@@ -558,7 +558,7 @@ export default function DashboardPage() {
         {!loading && chartData && chartData.eventsByMarket.length > 0 && visibleSections.has('markets') && (
           <div className="space-y-4" style={{ order: sectionOrder('markets') }}>
             <h2 className="text-lg font-semibold text-zinc-900">Markets This Week</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-6 gap-4">
               {chartData.eventsByMarket.map((market) => (
                 <button
                   key={market.market}
