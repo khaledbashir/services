@@ -280,6 +280,7 @@ export function Sidebar() {
       role: 'manager',
       links: [
         { href: '/presentation/new', label: 'Studio Home' },
+        { href: '/venue-intelligence', label: 'Venue Intelligence' },
         { href: '/venue-vision', label: 'Venue Vision 3D' },
         { href: '/client-portals', label: 'Client Portals' },
         { href: '/marketing-hub/studio', label: 'Marketing Agent' },
