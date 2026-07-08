@@ -119,6 +119,27 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id, created_at DESC)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_attachments_comment ON ticket_attachments(comment_id) WHERE comment_id IS NOT NULL`)
+    // Multiple assignees per ticket (Chris D, 2026-07-08): keep a full roster of
+    // every tech who worked a ticket across shifts. tickets.assigned_to stays the
+    // "primary owner" (drives list filters, Slack routing, auto-assignment); this
+    // table is the complete record of everyone assigned.
+    await client.query(`CREATE TABLE IF NOT EXISTS ticket_assignees (
+      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      added_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (ticket_id, staff_id)
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_assignees_ticket ON ticket_assignees(ticket_id, added_at)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_assignees_staff ON ticket_assignees(staff_id)`)
+    // Backfill the roster from existing single-owner assignments (idempotent).
+    await client.query(`INSERT INTO ticket_assignees (ticket_id, staff_id)
+      SELECT id, assigned_to FROM tickets WHERE assigned_to IS NOT NULL
+      ON CONFLICT DO NOTHING`)
+    // Soft-delete for internal notes (Chris D, 2026-07-08): a mistake posted to a
+    // ticket can be removed from the timeline without destroying the audit record.
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES staff(id) ON DELETE SET NULL`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS logo_url TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS cover_image_url TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS venue_manager_id UUID REFERENCES staff(id)`)

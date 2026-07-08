@@ -41,6 +41,9 @@ export async function GET(
               e.summary as event_name,
               s1.full_name as created_by_name, t.created_by,
               s2.full_name as assigned_to_name, t.assigned_to,
+              (SELECT COALESCE(json_agg(json_build_object('id', s3.id, 'full_name', s3.full_name) ORDER BY ta.added_at), '[]'::json)
+                 FROM ticket_assignees ta JOIN staff s3 ON ta.staff_id = s3.id
+                 WHERE ta.ticket_id = t.id) as assignees,
               TO_CHAR(t.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date,
               TO_CHAR(t.updated_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as updated_date,
               TO_CHAR(t.resolved_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as resolved_date,
@@ -72,12 +75,12 @@ export async function GET(
     }
 
     const commentsResult = await query(
-      `SELECT tc.id, tc.body, tc.is_internal,
+      `SELECT tc.id, tc.body, tc.is_internal, tc.author_id,
               s.full_name as author_name,
               TO_CHAR(tc.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date
        FROM ticket_comments tc
        LEFT JOIN staff s ON tc.author_id = s.id
-       WHERE tc.ticket_id = $1
+       WHERE tc.ticket_id = $1 AND tc.deleted_at IS NULL
        ORDER BY tc.created_at ASC`,
       [params.id]
     )
@@ -249,7 +252,17 @@ export async function PATCH(
     if (assigned_to !== undefined && oldTicket && assigned_to !== oldTicket.assigned_to) {
       const staffRes = await query('SELECT full_name FROM staff WHERE id = $1', [assigned_to])
       const assignedName = staffRes.rows[0]?.full_name || 'Unassigned'
-      
+
+      // Keep the multi-assignee roster in sync: setting a primary owner also
+      // records them as an assignee (they don't drop off when reassigned later).
+      if (assigned_to) {
+        await query(
+          `INSERT INTO ticket_assignees (ticket_id, staff_id, added_by)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [params.id, assigned_to, user?.userId || null]
+        )
+      }
+
       await query(
         `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details) 
          VALUES ('ticket_assigned', 'ticket', $1, $2, $3)`,
