@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { venueTriCodes, allTriCodes } from '@/lib/tricodes'
-import { AlertBadge } from './alert-badge'
 
 interface Budget {
   id: string
@@ -27,16 +26,30 @@ interface Budget {
 
 interface Venue { id: string; name: string; aliases?: string[] | null }
 
-function progressTone(progress: number) {
-  if (progress >= 0.75) return 'bg-red-500'
-  if (progress >= 0.5) return 'bg-orange-500'
-  return 'bg-emerald-500'
+// The Wrike import created one budget per client × YEAR, with the tri-code
+// buried in the client name — e.g. "Indiana Pacers (IND-PAC)". That's why the
+// list looked like it had missing tri-codes (no badge) and duplicates (the same
+// client repeated once per season). We derive the tri-code and roll the yearly
+// rows up under it so every tri-code shows exactly once. Non-destructive — the
+// per-year budgets stay intact underneath (real, distinct hours per year).
+function budgetTriCodeFromName(name: string): string | null {
+  const matches = [...(name || '').matchAll(/\(([A-Z0-9]{2,4}(?:-[A-Z0-9]{2,4}){0,3})\)/g)]
+  return matches.length ? matches[matches.length - 1][1].toUpperCase() : null
 }
 
-function progressLabel(progress: number) {
-  if (progress >= 0.75) return 'text-red-700 bg-red-50 border-red-100'
-  if (progress >= 0.5) return 'text-orange-700 bg-orange-50 border-orange-100'
-  return 'text-emerald-700 bg-emerald-50 border-emerald-100'
+function cleanBudgetName(name: string): string {
+  return (name || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+interface BudgetGroup {
+  key: string
+  tricode: string | null
+  title: string
+  venue_name: string | null
+  league: string | null
+  spent: number
+  entry_count: number
+  budgets: Budget[]
 }
 
 export default function HoursBudgetsPage() {
@@ -44,6 +57,7 @@ export default function HoursBudgetsPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
@@ -118,16 +132,42 @@ export default function HoursBudgetsPage() {
     }
   }
 
-  const filtered = useMemo(() => {
+  // Roll the per-year budgets up into one group per tri-code (falling back to the
+  // cleaned client name, then venue). Each group shows the tri-code once and sums
+  // hours across its seasons; expanding reveals the individual yearly budgets.
+  const groups = useMemo(() => {
+    const venueSingleTri = (venueId: string | null) => {
+      if (!venueId) return null
+      const codes = venueTriCodes(venues.find((v) => v.id === venueId)?.aliases)
+      return codes.length === 1 ? codes[0] : null
+    }
+    const map = new Map<string, BudgetGroup>()
+    for (const b of budgets) {
+      const tri = b.tricode?.trim().toUpperCase() || budgetTriCodeFromName(b.client_name) || venueSingleTri(b.venue_id)
+      const title = cleanBudgetName(b.client_name) || b.venue_name || b.client_name || 'Untitled'
+      const key = tri || `name:${title.toLowerCase()}`
+      const g = map.get(key) || { key, tricode: tri, title, venue_name: b.venue_name, league: b.league, spent: 0, entry_count: 0, budgets: [] }
+      g.spent += Number(b.hours_spent || 0)
+      g.entry_count += Number(b.entry_count || 0)
+      if (!g.venue_name && b.venue_name) g.venue_name = b.venue_name
+      if (!g.league && b.league) g.league = b.league
+      g.budgets.push(b)
+      map.set(key, g)
+    }
+    const all = Array.from(map.values())
+    for (const g of all) {
+      g.budgets.sort((a, b) => (b.season || '').localeCompare(a.season || ''))
+    }
+    all.sort((a, b) => b.spent - a.spent)
     const q = search.trim().toLowerCase()
-    return budgets.filter((item) =>
-      !q ||
-      item.client_name.toLowerCase().includes(q) ||
-      (item.venue_name || '').toLowerCase().includes(q) ||
-      (item.league || '').toLowerCase().includes(q) ||
-      (item.season || '').toLowerCase().includes(q)
+    if (!q) return all
+    return all.filter((g) =>
+      g.title.toLowerCase().includes(q) ||
+      (g.tricode || '').toLowerCase().includes(q) ||
+      (g.venue_name || '').toLowerCase().includes(q) ||
+      g.budgets.some((b) => (b.season || '').toLowerCase().includes(q))
     )
-  }, [budgets, search])
+  }, [budgets, venues, search])
 
   const totals = useMemo(() => {
     const totalBudgetHours = budgets.reduce((sum, item) => sum + Number(item.total_hours || 0), 0)
@@ -169,7 +209,7 @@ export default function HoursBudgetsPage() {
           <div>
             <h1 className="text-xl font-semibold text-zinc-900">Hours Budgets</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              {budgets.length} budgets · {totals.totalSpentHours.toFixed(1)} / {totals.totalBudgetHours.toFixed(1)} hrs
+              {groups.length} tri-codes · {budgets.length} budgets · {totals.totalSpentHours.toFixed(1)} hrs logged
             </p>
           </div>
           <button
@@ -316,7 +356,7 @@ export default function HoursBudgetsPage() {
 
         <div className="flex items-center justify-between gap-4 border-b border-zinc-200">
           <div className="pb-2 text-sm text-zinc-500">
-            {filtered.length} shown
+            {groups.length} shown
           </div>
           <div className="pb-2">
             <input
@@ -330,59 +370,68 @@ export default function HoursBudgetsPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((budget) => {
-            const total = Number(budget.total_hours || 0)
-            const spent = Number(budget.hours_spent || 0)
-            const isUnlimited = total <= 0
-            const progress = isUnlimited ? 0 : spent / total
-            const tone = progressTone(progress)
+          {groups.map((group) => {
+            const isOpen = expanded.has(group.key)
+            const single = group.budgets.length === 1 ? group.budgets[0] : null
+            const seasons = group.budgets.map((b) => b.season).filter(Boolean)
             return (
-              <Link
-                key={budget.id}
-                href={`/hours-budgets/${budget.id}`}
-                className="border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md"
-              >
+              <div key={group.key} className="border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
-                      {budget.client_name}
-                      {budget.tricode && (
-                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-700 tracking-wider">{budget.tricode}</span>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2 flex-wrap">
+                      <span className="truncate">{group.title}</span>
+                      {group.tricode && (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-700 tracking-wider">{group.tricode}</span>
                       )}
-                      {!isUnlimited && <AlertBadge budgetId={budget.id} progress={progress} />}
                     </h2>
                     <p className="mt-1 text-xs text-zinc-500">
-                      {budget.venue_name || 'No venue linked'}
-                      {budget.league ? ` · ${budget.league}` : ''}
-                      {budget.season ? ` · ${budget.season}` : ''}
+                      {group.venue_name || 'No venue linked'}
+                      {group.league ? ` · ${group.league}` : ''}
                     </p>
                   </div>
-                  {isUnlimited ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                      Unlimited
-                    </span>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 whitespace-nowrap">
+                    Unlimited
+                  </span>
+                </div>
+                <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
+                  <span className="font-medium text-zinc-700">{group.spent.toFixed(1)} hrs logged</span>
+                  <span>{group.entry_count} entries</span>
+                </div>
+                <div className="mt-3 border-t border-zinc-100 pt-3">
+                  {single ? (
+                    <Link href={`/hours-budgets/${single.id}`} className="text-xs font-medium text-[#0A52EF] hover:underline">
+                      Open {single.season || 'budget'} →
+                    </Link>
                   ) : (
-                    <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${progressLabel(progress)}`}>
-                      {Math.round(progress * 100)}%
-                    </span>
+                    <>
+                      <button
+                        onClick={() => setExpanded((prev) => {
+                          const next = new Set(prev)
+                          next.has(group.key) ? next.delete(group.key) : next.add(group.key)
+                          return next
+                        })}
+                        className="text-xs font-medium text-zinc-600 hover:text-zinc-900"
+                      >
+                        {isOpen ? '▾ ' : '▸ '}{group.budgets.length} seasons ({seasons.join(', ')})
+                      </button>
+                      {isOpen && (
+                        <div className="mt-2 space-y-1">
+                          {group.budgets.map((b) => (
+                            <Link
+                              key={b.id}
+                              href={`/hours-budgets/${b.id}`}
+                              className="flex items-center justify-between rounded px-2 py-1.5 text-xs hover:bg-zinc-50"
+                            >
+                              <span className="font-medium text-zinc-700">{b.season || '—'}</span>
+                              <span className="text-zinc-500">{Number(b.hours_spent || 0).toFixed(1)} hrs · {b.entry_count} entries</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-                <div className="mt-4">
-                  {!isUnlimited && (
-                    <div className="h-2 rounded-full bg-zinc-100">
-                      <div className={`h-2 rounded-full ${tone}`} style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-                    <span>{spent.toFixed(1)} spent</span>
-                    <span>{isUnlimited ? '∞ unlimited' : `${total.toFixed(1)} total`}</span>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-1 text-xs text-zinc-500">
-                  <p>{budget.entry_count} time entries</p>
-                  <p>{budget.contract_start || 'No start'} → {budget.contract_end || 'No end'}</p>
-                </div>
-              </Link>
+              </div>
             )
           })}
         </div>
