@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { venueTriCodes, allTriCodes } from '@/lib/tricodes'
 import { AlertBadge } from './alert-badge'
 
 interface Budget {
@@ -24,7 +25,7 @@ interface Budget {
   entry_count: number
 }
 
-interface Venue { id: string; name: string }
+interface Venue { id: string; name: string; aliases?: string[] | null }
 
 function progressTone(progress: number) {
   if (progress >= 0.75) return 'bg-red-500'
@@ -134,6 +135,17 @@ export default function HoursBudgetsPage() {
     return { totalBudgetHours, totalSpentHours }
   }, [budgets])
 
+  // Tri-code picker: a chosen venue narrows to that venue's codes; otherwise the
+  // full deduped catalog across all venues. Enumerated through the shared helper
+  // so nothing is missing (all of a venue's codes, not just one) or duplicated.
+  const budgetTriCodeOptions = useMemo(() => {
+    if (formData.venue_id) {
+      const venue = venues.find((v) => v.id === formData.venue_id)
+      return venueTriCodes(venue?.aliases)
+    }
+    return allTriCodes(venues)
+  }, [formData.venue_id, venues])
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -185,7 +197,18 @@ export default function HoursBudgetsPage() {
                 <label className="mb-1 block text-xs font-medium text-zinc-600">Venue</label>
                 <select
                   value={formData.venue_id}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, venue_id: e.target.value }))}
+                  onChange={(e) => {
+                    const venueId = e.target.value
+                    const venue = venueId ? venues.find((v) => v.id === venueId) : null
+                    const codes = venueTriCodes(venue?.aliases)
+                    setFormData((prev) => ({
+                      ...prev,
+                      venue_id: venueId,
+                      // Auto-pick when the venue has a single code; keep the
+                      // current one only if it's still valid for this venue.
+                      tricode: codes.length === 1 ? codes[0] : (codes.includes(prev.tricode) ? prev.tricode : ''),
+                    }))
+                  }}
                   className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
                 >
                   <option value="">Select venue...</option>
@@ -199,13 +222,26 @@ export default function HoursBudgetsPage() {
               {/* Alexis 5/13: budgets roll up by Tri-Code. Any design request
                   with the same Tri-Code lands hours in this budget. */}
               <label className="mb-1 block text-xs font-medium text-zinc-600">Tri-Code</label>
-              <input
-                type="text"
-                value={formData.tricode}
-                onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value.toUpperCase() }))}
-                placeholder="e.g. ABC"
-                className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm uppercase font-mono outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-              />
+              {budgetTriCodeOptions.length > 0 ? (
+                <select
+                  value={formData.tricode}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value }))}
+                  className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm uppercase font-mono outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+                >
+                  <option value="">{formData.venue_id ? 'Match by venue only' : 'All tri-codes — select one'}</option>
+                  {budgetTriCodeOptions.map((code) => (
+                    <option key={code} value={code}>{code}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={formData.tricode}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value.toUpperCase() }))}
+                  placeholder="e.g. ABC"
+                  className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm uppercase font-mono outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+                />
+              )}
               <p className="mt-1 text-[11px] text-zinc-500">Design requests with this Tri-Code will roll up to this budget. Leave blank to match by venue only.</p>
             </div>
             <div className="grid gap-4 md:grid-cols-4">

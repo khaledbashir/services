@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { useAuth } from '@/lib/useAuth'
 import { PrintRequestCommentThread } from '@/components/print-request-comment-thread'
+import { normalizeTriCode, venueTriCodes } from '@/lib/tricodes'
 
 interface ClientOption {
   id: string
@@ -153,17 +154,6 @@ function formatMoney(value: number | null) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
 }
 
-function normalizeTriCode(value: string): string {
-  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
-  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
-}
-
-function venueTriCodeOptions(venue: VenueOption | null | undefined): string[] {
-  const options = (venue?.aliases || [])
-    .map(normalizeTriCode)
-    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
-  return Array.from(new Set(options))
-}
 
 export default function PrintRequestsPage() {
   const auth = useAuth('manager')
@@ -232,7 +222,7 @@ export default function PrintRequestsPage() {
     return map
   }, [venues])
   const selectedVenueTriCodes = useMemo(() => {
-    return form.venue_id ? venueTriCodeOptions(venueById.get(form.venue_id)) : []
+    return form.venue_id ? venueTriCodes(venueById.get(form.venue_id)?.aliases) : []
   }, [form.venue_id, venueById])
 
   function findShippingAddressForClient(clientName: string | null | undefined) {
@@ -799,7 +789,7 @@ export default function PrintRequestsPage() {
                       value={form.venue_id}
                       onChange={(event) => {
                         const venueId = event.target.value
-                        const codes = venueTriCodeOptions(venueId ? venueById.get(venueId) : null)
+                        const codes = venueTriCodes(venueId ? venueById.get(venueId)?.aliases : null)
                         setForm((current) => ({ ...current, venue_id: venueId, venue_tricode: codes.length === 1 ? codes[0] : current.venue_tricode }))
                       }}
                       className="w-full rounded-xl border border-[#E6ECF5] bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"

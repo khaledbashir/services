@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { formatDate } from '@/lib/format-date'
+import { normalizeTriCode, venueTriCodes } from '@/lib/tricodes'
 
 interface CgDesignRequest {
   id: string
@@ -42,17 +43,6 @@ function hasAssignment(item: CgDesignRequest, staffId: string | null | undefined
   return [...(item.designers || []), ...(item.enterprise_contacts || [])].some((person) => person.id === staffId)
 }
 
-function normalizeTriCode(value: string): string {
-  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
-  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
-}
-
-function venueTriCodeOptions(venue: Venue | null | undefined): string[] {
-  const options = (venue?.aliases || [])
-    .map(normalizeTriCode)
-    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
-  return Array.from(new Set(options))
-}
 
 const statusColumns = [
   { key: 'request_submitted', label: 'Request Submitted' },
@@ -122,7 +112,7 @@ export default function CgDesignsPage() {
     return m
   }, [venues])
   const selectedVenueTriCodes = useMemo(() => {
-    return formData.venue_id ? venueTriCodeOptions(venueById.get(formData.venue_id)) : []
+    return formData.venue_id ? venueTriCodes(venueById.get(formData.venue_id)?.aliases) : []
   }, [formData.venue_id, venueById])
 
   const fetchData = async () => {
@@ -303,7 +293,7 @@ export default function CgDesignsPage() {
                     value={formData.venue_id}
                     onChange={(e) => {
                       const venueId = e.target.value
-                      const codes = venueTriCodeOptions(venueId ? venueById.get(venueId) : null)
+                      const codes = venueTriCodes(venueId ? venueById.get(venueId)?.aliases : null)
                       setFormData((prev) => ({ ...prev, venue_id: venueId, tricode: codes.length === 1 ? codes[0] : prev.tricode }))
                     }}
                     className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white"

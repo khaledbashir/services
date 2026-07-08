@@ -98,7 +98,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [saving, setSaving] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
-  const [hoursEstimatedDraft, setHoursEstimatedDraft] = useState('')
   const [hoursSpentDraft, setHoursSpentDraft] = useState('')
   const [boardsDraft, setBoardsDraft] = useState('')
   const [sizesDraft, setSizesDraft] = useState('')
@@ -120,7 +119,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       setDr(d)
       setStaffList(staffData.staff || [])
       setNotesDraft(d?.notes || '')
-      setHoursEstimatedDraft(d?.hours_estimated?.toString() || '')
       setHoursSpentDraft(d?.hours_spent?.toString() || '')
       setBoardsDraft(d?.boards_requested || '')
       setSizesDraft(d?.sizes_requested || '')
@@ -250,12 +248,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       </DashboardLayout>
     )
   }
-
-  const progressPct =
-    dr.hours_estimated && Number(dr.hours_estimated) > 0
-      ? Math.min(100, Math.round((Number(dr.hours_spent || 0) / Number(dr.hours_estimated)) * 100))
-      : 0
-  const progressTone = progressPct >= 75 ? 'bg-red-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
 
   return (
     <DashboardLayout>
@@ -478,20 +470,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             {/* STAGE 2: IN QUEUE — multi-assign designers + enterprise reps */}
             <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'}>
               <AssigneePicker designRequestId={dr.id} staffList={staffList} />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <Field label="Hours Estimated">
-                  <input
-                    type="number"
-                    step="0.25"
-                    data-ai-target="hours-estimated"
-                    value={hoursEstimatedDraft}
-                    onChange={(e) => setHoursEstimatedDraft(e.target.value)}
-                    onBlur={() => hoursEstimatedDraft !== String(dr.hours_estimated || '') && updateField({ hours_estimated: hoursEstimatedDraft === '' ? null : Number(hoursEstimatedDraft) })}
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                    placeholder="e.g. 4"
-                  />
-                </Field>
-              </div>
             </StageCard>
             {currentIdx === 1 && (
               <button
@@ -504,18 +482,8 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
 
             {/* STAGE 3: IN PROGRESS — hours (logged via entries) + notes */}
             <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'}>
-              <Field label="Hours Progress">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600">{dr.hours_spent ?? 0}h logged / {dr.hours_estimated ?? '—'}h estimated</span>
-                    <span className={`text-xs ${progressPct >= 75 ? 'text-red-600 font-medium' : 'text-zinc-500'}`}>
-                      {progressPct}% used {progressPct >= 75 && '· over 75%'}
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
-                    <div className={`h-full ${progressTone} transition-all`} style={{ width: `${progressPct}%` }} />
-                  </div>
-                </div>
+              <Field label="Hours Logged">
+                <div className="text-sm text-zinc-600">{dr.hours_spent ?? 0}h logged</div>
               </Field>
               <HoursLog designRequestId={dr.id} staffList={staffList} />
             </StageCard>

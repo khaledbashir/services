@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { formatDate } from '@/lib/format-date'
+import { normalizeTriCode, venueTriCodes } from '@/lib/tricodes'
 import { INTERNAL_CATEGORIES } from '@/lib/design-internal-category'
 
 interface DesignRequest {
@@ -123,18 +124,6 @@ function classifyVenue(v: Venue): LeagueKey {
   // No sport association — fall through to the venue's own type.
   if ((v.venue_type || '').toLowerCase() === 'ooh') return 'ooh'
   return 'other'
-}
-
-function normalizeTriCode(value: string): string {
-  const cleaned = value.toUpperCase().replace(/[^A-Z-]/g, '')
-  return cleaned.split('-').slice(0, 2).map((p) => p.slice(0, 3)).join('-')
-}
-
-function venueTriCodeOptions(venue: Venue | null | undefined): string[] {
-  const options = (venue?.aliases || [])
-    .map(normalizeTriCode)
-    .filter((code) => /^[A-Z]{1,3}(-[A-Z]{1,3})?$/.test(code))
-  return Array.from(new Set(options))
 }
 
 const statusColumns: KanbanColumn[] = [
@@ -560,7 +549,7 @@ export default function DesignsPage() {
   }, [staff])
   const selectedFormTriCodes = useMemo(() => {
     const venue = formData.venue_id ? venueById.get(formData.venue_id) : null
-    return venueTriCodeOptions(venue)
+    return venueTriCodes(venue?.aliases)
   }, [formData.venue_id, venueById])
   const venueByLowerName = useMemo(() => {
     const m = new Map<string, Venue>()
@@ -857,7 +846,7 @@ export default function DesignsPage() {
                     onChange={(e) => {
                       const venueId = e.target.value
                       const venue = venueId ? venueById.get(venueId) : null
-                      const codes = venueTriCodeOptions(venue)
+                      const codes = venueTriCodes(venue?.aliases)
                       setFormData((prev) => ({
                         ...prev,
                         venue_id: venueId,
@@ -1413,14 +1402,6 @@ export default function DesignsPage() {
           onStatusChange={updateStatus}
           renderCard={(item) => {
             const hoursSpent = Number(item.hours_spent || 0)
-            const hoursEstimated = Number(item.hours_estimated || 0)
-            const progressPct = hoursEstimated > 0 ? Math.min(100, Math.round((hoursSpent / hoursEstimated) * 100)) : 0
-            const overBudget = hoursEstimated > 0 && hoursSpent > hoursEstimated
-            const progressTone =
-              overBudget ? 'bg-red-500' :
-              progressPct >= 75 ? 'bg-amber-500' :
-              progressPct >= 35 ? 'bg-[#0A52EF]' :
-              'bg-emerald-500'
 
             const dueIso = item.due_date ? String(item.due_date).slice(0, 10) : null
             const isOverdue = dueIso && dueIso < todayIso && item.status !== 'done' && item.status !== 'approved'
@@ -1533,18 +1514,11 @@ export default function DesignsPage() {
                   )}
                 </div>
 
-                {/* Hours progress */}
-                {(hoursEstimated > 0 || hoursSpent > 0) && (
-                  <div>
-                    <div className="flex items-center justify-between text-[10.5px] text-zinc-500 mb-1">
-                      <span className="uppercase tracking-wider font-medium">Hours</span>
-                      <span className={`tabular-nums font-medium ${overBudget ? 'text-red-600' : 'text-zinc-700'}`}>
-                        {hoursSpent}h{hoursEstimated ? ` / ${hoursEstimated}h` : ''}
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full bg-zinc-100 overflow-hidden">
-                      <div className={`h-full ${progressTone} transition-all duration-300`} style={{ width: `${progressPct}%` }} />
-                    </div>
+                {/* Hours logged (estimate removed per Alexis 5/13) */}
+                {hoursSpent > 0 && (
+                  <div className="flex items-center justify-between text-[10.5px] text-zinc-500">
+                    <span className="uppercase tracking-wider font-medium">Hours</span>
+                    <span className="tabular-nums font-medium text-zinc-700">{hoursSpent}h logged</span>
                   </div>
                 )}
               </Link>
