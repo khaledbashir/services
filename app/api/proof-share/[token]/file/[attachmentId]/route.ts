@@ -7,6 +7,7 @@ import { fetchAttachmentById, fetchAttachmentsForRecord } from '@/lib/proof-shar
 import { getSignedDownloadUrl } from '@/lib/proof-storage'
 import { openFileStream } from '@/lib/proof-ftp'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 
 export const runtime = 'nodejs' // ssh2 (FTP streaming) needs the Node runtime
 
@@ -82,7 +83,6 @@ export async function GET(
         return new NextResponse('Could not read proof file', { status: 502 })
       }
       const { stream, size, name, kind } = opened
-      const { Readable } = await import('node:stream')
       const webStream = Readable.toWeb(stream) as unknown as ReadableStream
 
       const contentType =
