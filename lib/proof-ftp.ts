@@ -33,7 +33,13 @@ import path from 'node:path'
 const HOST = process.env.ANC_FTP_HOST || 'ftp.anc.com'
 const PORT = Number(process.env.ANC_FTP_PORT || 22)
 const USER = process.env.ANC_FTP_USER || ''
-const PASS = process.env.ANC_FTP_PASS || ''
+// The FTP password contains `#`, `%`, `,`, `(` etc. Env-file parsers (including
+// EasyPanel's) truncate a raw value at the first `#` as an inline comment, which
+// silently breaks auth. So prefer a base64-encoded password (`ANC_FTP_PASS_B64`)
+// — base64's alphabet has no parser-hostile chars — and fall back to the raw var.
+const PASS = process.env.ANC_FTP_PASS_B64
+  ? Buffer.from(process.env.ANC_FTP_PASS_B64, 'base64').toString('utf8')
+  : (process.env.ANC_FTP_PASS || '')
 // The account is jailed to '/' on the server; keep configurable in case ANC
 // later hands us a subtree-scoped login.
 const ROOT = normalizeRemote(process.env.ANC_FTP_ROOT || '/')
