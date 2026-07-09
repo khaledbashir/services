@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { CONTENT_SCHEDULE_STATUSES } from '@/lib/content-schedule-status'
+import { TicketProofFtp } from '@/components/ticket-proof-ftp'
 
 interface ContentScheduleDetail {
   id: string
@@ -201,6 +202,12 @@ export default function ContentScheduleDetailPage({ params }: { params: { id: st
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Files Ready</span><span className="text-zinc-900">{item.files_ready ? 'Yes' : 'No'}</span></div>
               </div>
             </div>
+            <TicketProofFtp
+              objectType="contentSchedule"
+              recordId={item.id}
+              triCode={(item as { tricode?: string | null }).tricode}
+              clientName={item.company_name || item.venue_name}
+            />
           </div>
         </div>
       </div>

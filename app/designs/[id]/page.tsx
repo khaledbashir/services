@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { DesignProofUpload } from '@/components/design-proof-upload'
+import { TicketProofFtp } from '@/components/ticket-proof-ftp'
 import { CommentThread } from '@/components/comment-thread'
 
 import { INTERNAL_CATEGORIES, labelForCategory } from '@/lib/design-internal-category'
@@ -515,6 +516,16 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 <Field label="Upload Proof">
                   <DesignProofUpload designRequestId={dr.id} />
                 </Field>
+                <div>
+                  <div className="text-[11px] text-zinc-400 text-center my-1">— or pull the proof from the proof server —</div>
+                  <TicketProofFtp
+                    objectType="designRequest"
+                    recordId={dr.id}
+                    triCode={dr.tricode}
+                    clientName={dr.company_name || dr.venue_name}
+                    existingProofUrl={dr.ftp_proof_link}
+                  />
+                </div>
                 <AIFirstDraftButton designRequestId={dr.id} />
                 <p className="text-xs text-zinc-500">
                   The client email fires only when you explicitly advance the status to Client Review — QC first, send second.

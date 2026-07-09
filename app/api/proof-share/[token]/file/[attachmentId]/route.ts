@@ -48,7 +48,7 @@ export async function GET(
     // the file straight off ANC's FTP, honoring HTTP Range so the big review
     // videos scrub without downloading whole. The filename is decoded to a bare
     // basename and joined to the share's folder — no caller-controlled path.
-    if (attachmentId.startsWith('ftp-') && share.twenty_object_type === 'ftpFolder') {
+    if (attachmentId.startsWith('ftp-') && share.ftp_folder_path) {
       if (!share.ftp_folder_path) {
         return new NextResponse('Proof folder missing', { status: 500 })
       }

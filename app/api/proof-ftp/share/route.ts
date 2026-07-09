@@ -5,7 +5,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { query } from '@/lib/db'
-import { generateToken, buildPublicUrl } from '@/lib/proof-share'
+import { generateToken, buildPublicUrl, OBJECT_CONFIGS, patchTwentyRecord } from '@/lib/proof-share'
 import { listProofFiles, resolveSafePath, isConfigured } from '@/lib/proof-ftp'
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
@@ -59,10 +59,24 @@ export async function POST(request: NextRequest) {
     expiresInDays,
     createdByName,
     createdByEmail,
+    // Optional ticket linkage — when Alexis creates the proof FROM a ticket, the
+    // share ties to that ticket so client approval flows back to its status.
+    twentyObjectType,
+    twentyRecordId,
   } = body || {}
 
   if (!folderPath || typeof folderPath !== 'string') {
     return NextResponse.json({ error: 'folderPath is required' }, { status: 400 })
+  }
+
+  // If linking to a ticket, the object type must be a known one. When absent the
+  // share is standalone (twenty_object_type='ftpFolder', no record).
+  const linkedToTicket = Boolean(twentyObjectType && twentyRecordId)
+  if (linkedToTicket && !OBJECT_CONFIGS[twentyObjectType]) {
+    return NextResponse.json(
+      { error: `Unknown ticket type "${twentyObjectType}"`, validTypes: Object.keys(OBJECT_CONFIGS) },
+      { status: 400 }
+    )
   }
 
   // Validate the path is inside the account root and actually holds files.
@@ -94,13 +108,21 @@ export async function POST(request: NextRequest) {
   const expiresAt =
     days > 0 && Number.isFinite(days) ? new Date(Date.now() + days * 86_400_000) : null
 
+  // When tied to a ticket, keep the ticket's real object type + id so approval
+  // writes back to it; otherwise it's a standalone folder share. Either way the
+  // FTP folder path is what makes the files come from the FTP.
+  const objectType = linkedToTicket ? twentyObjectType : 'ftpFolder'
+  const recordId = linkedToTicket ? twentyRecordId : null
+
   await query(
     `INSERT INTO proof_shares (
        token, twenty_object_type, twenty_record_id, ftp_folder_path,
        client_name, client_email, message, created_by_name, created_by_email, expires_at
-     ) VALUES ($1, 'ftpFolder', NULL, $2, $3, $4, $5, $6, $7, $8)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       token,
+      objectType,
+      recordId,
       safePath,
       clientName || null,
       clientEmail || null,
@@ -111,11 +133,27 @@ export async function POST(request: NextRequest) {
     ]
   )
 
+  const publicUrl = buildPublicUrl(token)
+
+  // Stamp the proof link onto the ticket so it shows on the record, same as the
+  // CRM-attachment proof flow does.
+  if (linkedToTicket) {
+    void patchTwentyRecord(twentyObjectType, twentyRecordId, {
+      proofShareUrl: publicUrl,
+      proofSentAt: new Date().toISOString(),
+      proofViewCount: 0,
+      proofLastViewedAt: null,
+      proofRespondedAt: null,
+      proofClientEmail: clientEmail || null,
+    })
+  }
+
   return NextResponse.json({
     token,
-    url: buildPublicUrl(token),
+    url: publicUrl,
     folderPath: safePath,
     fileCount: files.length,
+    linkedToTicket,
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
   })
 }

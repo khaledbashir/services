@@ -57,10 +57,13 @@ export async function GET(
       )
     }
 
-    // FTP-folder shares: the proofs are files sitting in a folder on ANC's own
-    // FTP. List them live and expose each through the token-gated proxy. Nothing
-    // is stored locally — the proxy streams from the FTP on demand.
-    if (share.twenty_object_type === 'ftpFolder') {
+    // FTP-sourced shares: the proofs are files in a folder on ANC's own FTP.
+    // Keyed on ftp_folder_path (not the object type) so this covers BOTH
+    // standalone folder shares (twenty_object_type='ftpFolder') AND ticket-tied
+    // ones (a real designRequest/contentSchedule id whose proofs live on the
+    // FTP) — the ticket linkage drives status write-back in respond/view, while
+    // the file source is the FTP either way. Nothing is stored locally.
+    if (share.ftp_folder_path) {
       const folder: string = share.ftp_folder_path || '/'
       let files: Awaited<ReturnType<typeof listProofFiles>> = []
       try {

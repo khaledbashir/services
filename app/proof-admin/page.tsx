@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
+import { FtpFolderBrowser } from '@/components/ftp-folder-browser'
 
 const OBJECT_TYPES = [
   { value: 'printRequest', label: 'Print Request (Britten)' },
@@ -16,17 +17,6 @@ type ShareResult = {
   fileCount?: number
   recordName?: string
   folderPath?: string
-}
-
-type FtpEntry = { name: string; path: string; type: 'dir' | 'file'; size: number; kind?: string }
-type FtpListing = {
-  path: string
-  parent: string | null
-  entries: FtpEntry[]
-  total: number
-  page: number
-  pageSize: number
-  hasMore: boolean
 }
 
 export default function ProofAdminPage() {
@@ -170,7 +160,7 @@ export default function ProofAdminPage() {
           {mode === 'ftp' && (
             <>
               <Field label="Proof folder" required hint="Browse to the folder that holds this client's proofs, then select it.">
-                <FolderBrowser selected={selectedFolder} onSelect={setSelectedFolder} />
+                <FtpFolderBrowser selected={selectedFolder} onSelect={setSelectedFolder} />
               </Field>
 
               <Field label="Client name (optional)" hint="Shown at the top of the proof page">
@@ -277,94 +267,6 @@ export default function ProofAdminPage() {
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-function FolderBrowser({ selected, onSelect }: { selected: string | null; onSelect: (p: string | null) => void }) {
-  const [path, setPath] = useState('/')
-  const [listing, setListing] = useState<FtpListing | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
-
-  const load = useCallback(async (p: string, pg: number) => {
-    setLoading(true); setErr(null)
-    try {
-      const res = await fetch(`/api/proof-ftp/browse?path=${encodeURIComponent(p)}&page=${pg}&pageSize=100`)
-      const data = await res.json()
-      if (!res.ok) { setErr(data.error || `Error ${res.status}`); setListing(null); return }
-      setListing(data)
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Failed to browse')
-    } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load(path, page) }, [path, page, load])
-
-  const go = (p: string) => { setPage(1); setPath(p) }
-
-  return (
-    <div className="rounded-lg border border-gray-200 overflow-hidden">
-      {/* Breadcrumb / current path */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs">
-        <button
-          type="button"
-          disabled={!listing?.parent && path === '/'}
-          onClick={() => listing?.parent !== null && go(listing?.parent ?? '/')}
-          className="px-2 py-1 rounded bg-white border border-gray-200 text-gray-600 disabled:opacity-40 hover:border-gray-300"
-        >
-          ↑ Up
-        </button>
-        <span className="font-mono text-gray-700 truncate">{path}</span>
-      </div>
-
-      {/* Entries */}
-      <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-        {loading && <div className="px-3 py-6 text-center text-xs text-gray-400">Loading…</div>}
-        {err && <div className="px-3 py-3 text-xs text-red-600">{err}</div>}
-        {!loading && !err && listing && listing.entries.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-gray-400">Empty folder</div>
-        )}
-        {!loading && !err && listing?.entries.map((e) => (
-          <div key={e.path} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
-            {e.type === 'dir' ? (
-              <button type="button" onClick={() => go(e.path)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                <span className="text-gray-400">📁</span>
-                <span className="truncate text-gray-800">{e.name}</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-gray-300">{e.kind === 'video' ? '🎬' : e.kind === 'image' ? '🖼️' : '📄'}</span>
-                <span className="truncate text-gray-500">{e.name}</span>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Pagination + select-this-folder */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border-t border-gray-200 text-xs">
-        <div className="flex items-center gap-1">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-2 py-1 rounded bg-white border border-gray-200 disabled:opacity-40">‹</button>
-          <span className="text-gray-500">{listing ? `${listing.entries.length ? (page - 1) * 100 + 1 : 0}–${(page - 1) * 100 + (listing.entries.length)} of ${listing.total}` : ''}</span>
-          <button type="button" disabled={!listing?.hasMore} onClick={() => setPage((p) => p + 1)} className="px-2 py-1 rounded bg-white border border-gray-200 disabled:opacity-40">›</button>
-        </div>
-        <button
-          type="button"
-          onClick={() => onSelect(path)}
-          disabled={path === '/'}
-          className={`px-3 py-1.5 rounded-md font-medium ${selected === path ? 'bg-green-600 text-white' : 'bg-[color:var(--anc-brand)] text-white hover:opacity-90'} disabled:opacity-40`}
-        >
-          {selected === path ? '✓ Selected this folder' : 'Use this folder'}
-        </button>
-      </div>
-
-      {selected && (
-        <div className="px-3 py-2 bg-green-50 border-t border-green-200 text-xs text-green-800 font-mono truncate">
-          Selected: {selected}
-        </div>
-      )}
     </div>
   )
 }

@@ -237,6 +237,35 @@ export async function listProofFiles(remotePath: string): Promise<FtpEntry[]> {
   return entries
 }
 
+// ── Tri-code → client folder ─────────────────────────────────────────────────
+
+/**
+ * Derive a client's top-level FTP folder from their tri-code and confirm it
+ * exists, so a ticket can open the browser already parked at the right client.
+ *
+ * The FTP files by first-letter → 3-letter code, e.g. tri-code `TIN` lives at
+ * `/T/TIN`. We only resolve the client root (not the specific proof folder —
+ * that's deeper and non-derivable), and we verify it's really there so the UI
+ * can fall back to a plain root browse when a client isn't filed by this rule.
+ * Returns the absolute folder path, or null if it can't be resolved/confirmed.
+ */
+export async function resolveClientFolder(triCode: string): Promise<string | null> {
+  if (!isConfigured()) return null
+  const code = String(triCode || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '')
+  if (!code) return null
+  const firstLetter = code[0]
+  const candidate = normalizeRemote(`/${firstLetter}/${code}`)
+  try {
+    const safe = resolveSafePath(candidate)
+    return await withClient(async (sftp) => {
+      const s = await sftp.stat(safe).catch(() => null)
+      return s && s.isDirectory ? safe : null
+    })
+  } catch {
+    return null
+  }
+}
+
 // ── Stat + stream (for the file proxy) ───────────────────────────────────────
 
 export async function statFile(
