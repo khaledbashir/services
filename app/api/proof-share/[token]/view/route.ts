@@ -39,19 +39,22 @@ export async function POST(
 
     if (result.rows.length > 0) {
       const row = result.rows[0]
-      void patchTwentyRecord(row.twenty_object_type, row.twenty_record_id, {
-        proofViewCount: row.view_count,
-        proofLastViewedAt: row.last_viewed_at,
-      })
+      const isFtp = row.twenty_object_type === 'ftpFolder'
+      // FTP shares have no Twenty record to write back to.
+      if (!isFtp) {
+        void patchTwentyRecord(row.twenty_object_type, row.twenty_record_id, {
+          proofViewCount: row.view_count,
+          proofLastViewedAt: row.last_viewed_at,
+        })
+      }
 
       // Slack ping designer on the FIRST open only
       const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
       if (slackChannel && row.view_count === 1) {
-        const cfg = OBJECT_CONFIGS[row.twenty_object_type]
-        const record = await fetchTwentyRecord(
-          row.twenty_object_type,
-          row.twenty_record_id
-        ).catch(() => null)
+        const cfg = isFtp ? { displayLabel: 'Proof' } : OBJECT_CONFIGS[row.twenty_object_type]
+        const record = isFtp
+          ? null
+          : await fetchTwentyRecord(row.twenty_object_type, row.twenty_record_id).catch(() => null)
         const recordName = (record?.name as string) || 'a proof'
         const designerLabel = row.created_by_name || row.created_by_email || 'a designer'
         const clientLabel = row.client_email || 'the client'

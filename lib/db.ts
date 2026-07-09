@@ -422,6 +422,12 @@ async function runMigrations() {
     `)
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_email TEXT`)
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS last_nudged_at TIMESTAMPTZ`)
+    // FTP-folder proof source: a share can point at a folder on ANC's own FTP
+    // (twenty_object_type = 'ftpFolder') instead of a Twenty record. Those
+    // shares have no record id, so relax the NOT NULL and store the folder path.
+    await client.query(`ALTER TABLE proof_shares ALTER COLUMN twenty_record_id DROP NOT NULL`)
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS ftp_folder_path TEXT`)
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_name TEXT`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)

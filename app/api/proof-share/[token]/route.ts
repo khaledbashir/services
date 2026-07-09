@@ -9,6 +9,7 @@ import {
   fetchAttachmentsForRecord,
   classifyFile,
 } from '@/lib/proof-share'
+import { listProofFiles } from '@/lib/proof-ftp'
 
 /**
  * GET /api/proof-share/[token]
@@ -32,7 +33,8 @@ export async function GET(
     const shareResult = await query(
       `SELECT token, twenty_object_type, twenty_record_id, created_at, expires_at,
               view_count, last_viewed_at, client_response, client_response_at,
-              client_response_note, message, created_by_name, created_by_email
+              client_response_note, message, created_by_name, created_by_email,
+              ftp_folder_path, client_name
        FROM proof_shares WHERE token = $1`,
       [token]
     )
@@ -53,6 +55,51 @@ export async function GET(
         },
         { status: 410 }
       )
+    }
+
+    // FTP-folder shares: the proofs are files sitting in a folder on ANC's own
+    // FTP. List them live and expose each through the token-gated proxy. Nothing
+    // is stored locally — the proxy streams from the FTP on demand.
+    if (share.twenty_object_type === 'ftpFolder') {
+      const folder: string = share.ftp_folder_path || '/'
+      let files: Awaited<ReturnType<typeof listProofFiles>> = []
+      try {
+        files = await listProofFiles(folder)
+      } catch (err) {
+        console.error('[proof-share/get] ftp list failed:', err)
+        return NextResponse.json(
+          { error: 'Could not reach the proof storage for this link right now.' },
+          { status: 502 }
+        )
+      }
+      const attachments = files.map((f) => ({
+        id: `ftp-${Buffer.from(f.name).toString('base64url')}`,
+        name: f.name,
+        extension: (f.name.split('.').pop() || '').toLowerCase(),
+        category: f.kind || 'other',
+        fileUrl: `/api/proof-share/${token}/file/ftp-${Buffer.from(f.name).toString('base64url')}`,
+      }))
+      const folderLabel = folder.replace(/\/+$/, '').split('/').pop() || 'Proof'
+      return NextResponse.json({
+        token,
+        state: share.client_response
+          ? share.client_response === 'approved' ? 'approved' : 'changes_requested'
+          : 'pending',
+        recordType: 'Proof',
+        recordName: folderLabel,
+        clientName: share.client_name || null,
+        message: share.message,
+        createdByName: share.created_by_name,
+        createdByEmail: share.created_by_email,
+        createdAt: share.created_at,
+        expiresAt: share.expires_at,
+        viewCount: share.view_count,
+        lastViewedAt: share.last_viewed_at,
+        clientResponse: share.client_response,
+        clientResponseAt: share.client_response_at,
+        clientResponseNote: share.client_response_note,
+        attachments,
+      })
     }
 
     // Uploaded proof files (MinIO-backed since 2026-04-22) live in the local

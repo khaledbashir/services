@@ -1,0 +1,121 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+import { NextRequest, NextResponse } from 'next/server'
+import { jwtVerify } from 'jose'
+import { query } from '@/lib/db'
+import { generateToken, buildPublicUrl } from '@/lib/proof-share'
+import { listProofFiles, resolveSafePath, isConfigured } from '@/lib/proof-ftp'
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
+
+async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
+  if (request.headers.get('x-webhook-secret') === WEBHOOK_SECRET) return true
+  const token = request.cookies.get('token')?.value
+  if (!token) return false
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'anc-services-secret-key-change-me')
+    await jwtVerify(token, secret)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * POST /api/proof-ftp/share
+ *
+ * Internal, auth-gated. Mints a public proof link for a folder on ANC's FTP.
+ * The client opens the returned URL and swipe-reviews whatever files are in
+ * that folder — same UI as every other proof share, just a different source.
+ *
+ * Body: { folderPath, clientName?, clientEmail?, message?, expiresInDays?,
+ *         createdByName?, createdByEmail? }
+ */
+export async function POST(request: NextRequest) {
+  if (!(await verifyRequestAuth(request))) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  if (!isConfigured()) {
+    return NextResponse.json(
+      { error: 'ANC FTP is not configured on this server (ANC_FTP_* env vars missing).' },
+      { status: 503 }
+    )
+  }
+
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const {
+    folderPath,
+    clientName,
+    clientEmail,
+    message,
+    expiresInDays,
+    createdByName,
+    createdByEmail,
+  } = body || {}
+
+  if (!folderPath || typeof folderPath !== 'string') {
+    return NextResponse.json({ error: 'folderPath is required' }, { status: 400 })
+  }
+
+  // Validate the path is inside the account root and actually holds files.
+  let safePath: string
+  try {
+    safePath = resolveSafePath(folderPath)
+  } catch {
+    return NextResponse.json({ error: 'folderPath is outside the allowed root' }, { status: 400 })
+  }
+
+  let files
+  try {
+    files = await listProofFiles(safePath)
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: `Could not read that folder on the FTP: ${err?.message || err}` },
+      { status: 502 }
+    )
+  }
+  if (files.length === 0) {
+    return NextResponse.json(
+      { error: 'That folder has no viewable files in it. Pick a folder that contains the proofs.' },
+      { status: 400 }
+    )
+  }
+
+  const token = generateToken()
+  const days = Number(expiresInDays)
+  const expiresAt =
+    days > 0 && Number.isFinite(days) ? new Date(Date.now() + days * 86_400_000) : null
+
+  await query(
+    `INSERT INTO proof_shares (
+       token, twenty_object_type, twenty_record_id, ftp_folder_path,
+       client_name, client_email, message, created_by_name, created_by_email, expires_at
+     ) VALUES ($1, 'ftpFolder', NULL, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      token,
+      safePath,
+      clientName || null,
+      clientEmail || null,
+      message || null,
+      createdByName || null,
+      createdByEmail || null,
+      expiresAt,
+    ]
+  )
+
+  return NextResponse.json({
+    token,
+    url: buildPublicUrl(token),
+    folderPath: safePath,
+    fileCount: files.length,
+    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+  })
+}

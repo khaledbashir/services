@@ -60,8 +60,17 @@ export async function POST(
       )
     }
 
-    // Native anc-services design requests — update our DB directly.
-    if (share.twenty_object_type === 'localDesignRequest') {
+    // FTP-folder shares live entirely in our DB — no Twenty record, no local
+    // design request to update. Just record the client's decision.
+    if (share.twenty_object_type === 'ftpFolder') {
+      await query(
+        `UPDATE proof_shares
+         SET client_response = $2, client_response_at = NOW(), client_response_note = $3
+         WHERE token = $1`,
+        [token, response, note || null]
+      )
+    } else if (share.twenty_object_type === 'localDesignRequest') {
+      // Native anc-services design requests — update our DB directly.
       await query(
         `UPDATE proof_shares
          SET client_response = $2, client_response_at = NOW(), client_response_note = $3
@@ -111,6 +120,8 @@ export async function POST(
       const respondentLabel = name ? ` from ${name}` : ''
       const displayLabel = share.twenty_object_type === 'localDesignRequest'
         ? 'Design Request'
+        : share.twenty_object_type === 'ftpFolder'
+        ? 'Proof'
         : (OBJECT_CONFIGS[share.twenty_object_type]?.displayLabel || share.twenty_object_type)
       await sendSlackMessage({
         channel: slackChannel,
