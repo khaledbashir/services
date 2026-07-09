@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "ai:sync-skills": "node scripts/generate-ai-skill-manifest.mjs",
+    "ai:check-skills": "node scripts/generate-ai-skill-manifest.mjs --check",
+    "prebuild": "node scripts/generate-ai-skill-manifest.mjs",
+    "predev": "node scripts/generate-ai-skill-manifest.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",

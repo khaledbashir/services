@@ -2,6 +2,8 @@ import { query } from '@/lib/db'
 import type { AgentRole, AgentChannel } from '@/lib/ai/types'
 import { invokeSkill, toolDefinitions } from '@/lib/ai/registry'
 import { OLLAMA_CLOUD_MODELS } from '@/lib/ai/ollama-cloud-models'
+import { moduleMapForPrompt } from '@/lib/ai/module-map'
+import { tableCatalogForPrompt } from '@/lib/ai/skills/_records'
 
 export interface ProviderConfig {
   name: string
@@ -462,6 +464,7 @@ Tool use:
 - You have full read and write access to the ANC services platform via tools (find, create, update, delete on every table). Use them.
 - Resolve names to IDs by searching first — never invent IDs.
 - For ticket actions, prefer create_ticket / update_ticket. For venue/account context, prefer find_many_venues / find_many_clients.
+- Those named tools cover events, venues, staff, tickets, clients and design requests. Everything else — marketing, gamification, event assignments, ticket comments, hours budgets, project schedules — goes through find_records / create_record / update_record, with list_data_tables and describe_data_table to look up a table you don't know.
 - After you act, confirm what you did out loud in one short sentence ("Ticket two-four-six-three created for Prudential Center, priority high"). Do not list every field.
 - If a tool fails or you need clarification, ask ONE short follow-up question — don't dump options.
 
@@ -501,14 +504,58 @@ next drill-downs. If you just took an action, suggest follow-ups.
 Don't announce them — the tag is hidden from the user.`
   return `${identityBlock}
 
-TOOLING — You have full CRUD access to every dashboard table through
-tools of the form find_many_<plural>, find_one_<singular>,
-create_<singular>, update_<singular>, delete_<singular>. Any field
-including status can be changed via update_<singular> — for example
-to move a design request from "request_submitted" to "in_queue",
-call update_design_request with {id, status: "in_queue"}. Do NOT
-refuse a reasonable request by claiming a tool doesn't exist before
-actually looking — search the tool list first.
+WHAT THIS PLATFORM CONTAINS — these are the modules that exist. When the
+user names one, you already know where it lives; navigate there with
+ui_navigate rather than asking them where it is. Substitute a real id
+you have looked up for any [id] segment.
+
+${moduleMapForPrompt(userRole)}
+
+DATA YOU CAN REACH — every table below is readable. Ones not marked
+read-only are writable, subject to your role.
+
+${tableCatalogForPrompt()}
+
+TOOLING — two layers, use whichever is shorter:
+
+1. Named tools for the six hot tables — events, venues, staff, tickets,
+   clients, design_requests:
+     find_many_<plural>   find_one_<singular>
+     create_<singular>    update_<singular>    delete_<singular>
+   Their arguments are the real columns, and status arguments carry the
+   real allowed values. To move a design request from "request_submitted"
+   to "in_queue", call update_design_request with
+   {id, status: "in_queue"}.
+
+2. Generic record tools for EVERY table in the catalog above:
+     list_data_tables()              — the catalog, if you forget it
+     describe_data_table(table)      — real columns, types, required
+                                       fields, valid status values
+     find_records(table, q?, filters?, order_by?, limit?)
+     get_record(table, where)        — where = the primary key
+     create_record(table, values)
+     update_record(table, where, values)
+     delete_record(table, where)
+   Call describe_data_table before your first write to any table you
+   have not written to before. Do not guess column names.
+
+   filters accept exact matches — {"status": "new"} — or operators:
+   {"event_date": {"op": "gte", "value": "2026-07-01"}}. Operators are
+   eq, neq, gt, gte, lt, lte, like, in, is_null.
+
+   Join tables have composite keys, so \`where\` may need more than one
+   column, e.g. get_record("ticket_assignees",
+   {"ticket_id": "...", "staff_id": "..."}).
+
+You are NOT limited to the six named tables. Marketing campaigns,
+gamification points, event assignments, ticket comments, project
+schedule tasks, hours budgets, portal users and everything else in the
+catalog are reachable through the generic tools. Never tell the user a
+capability is missing without checking the catalog first.
+
+Some columns (passwords, share tokens, API credentials) are hidden from
+you by design. If one is absent, that is deliberate — do not work around
+it, and never ask the user to paste one.
 
 WORKFLOW TIPS:
 - When the user asks "what should I care about today", "morning command
@@ -555,16 +602,33 @@ WORKFLOW TIPS:
 - When asked to "move X to <status>", use update_<singular>. Don't
   ask the user for the id if they gave you a title — look it up.
 - When the user asks for totals, counts, "how many", "do we have", or
-  other high-level dashboard numbers, use dashboard_stats or the
-  relevant find_many_* tool and read the real \`count\`/\`total_count\`
-  field. Never infer the total from the number of rows shown in a
-  limited result set.
+  other high-level dashboard numbers, use dashboard_stats, find_many_*,
+  or find_records and read the real \`count\`/\`total_count\` field. Never
+  infer the total from the number of rows shown in a limited result set.
 - Design request statuses: request_submitted → in_queue → in_progress
   → in_qc → client_review → approved → done. The dedicated skill
   move_design_to_client_review also fires the proof email; use it
   for that specific transition.
 - Venue IDs: use search_venues or find_many_venues to resolve a
   venue by name before creating records that need venue_id.
+- A ticket has ONE primary owner (tickets.assigned_to) and a roster of
+  additional assignees in the ticket_assignees join table. To answer
+  "who is on this ticket", read both. To add someone, create_record on
+  ticket_assignees with {ticket_id, staff_id}.
+- Ticket conversation lives in ticket_comments. \`is_internal\` separates
+  staff-only notes from replies the client can see — check it before
+  quoting a comment back to anyone, and before drafting client-facing
+  copy.
+- An event with no matching row in event_assignments is unstaffed. That
+  join table — not a field on events — is the source of truth for
+  coverage questions.
+- Marketing lives across marketing_contacts, marketing_audiences,
+  newsletter_campaigns and marketing_social_posts. "Who did we email"
+  is newsletter_campaign_recipients; "how did it perform" is the open
+  and click columns on that table.
+- Design hours: designer_hours_budgets holds the contracted total,
+  designer_time_entries draws it down. Remaining hours = budget total
+  minus the sum of its entries — compute it, don't guess.
 
 PREFER USING A TOOL over guessing. Never invent UUIDs.
 
@@ -732,7 +796,9 @@ export async function runChat(params: {
 
   try {
     // Tool loop: keep calling until the assistant returns a message with no tool_calls.
-    const MAX_ITERS = 6
+    // Generic record tools trade breadth for an extra hop (describe_data_table
+    // before a first write), so 6 rounds now runs out mid-task on real work.
+    const MAX_ITERS = 10
     for (let i = 0; i < MAX_ITERS; i++) {
       const reply = await callLlm(messages, tools, preferredProvider, preferredModel)
       messages.push(reply)

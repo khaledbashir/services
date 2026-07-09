@@ -1,137 +1,81 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { SkillError, type Skill, type AgentRole, type AgentChannel } from '@/lib/ai/types'
+import { SkillError, roleAtLeast, type Skill, type AgentRole, type AgentChannel } from '@/lib/ai/types'
+import { fileSkills } from '@/lib/ai/skills/index.generated'
+import { uiSkills } from '@/lib/ai/skills/_ui-actions'
+import { recordSkills } from '@/lib/ai/skills/_records'
 
-// Skill auto-discovery.
-// Any .ts file in /lib/ai/skills/ that default-exports a Skill is picked
-// up at boot. To add a new skill: drop a new file in that directory and
-// redeploy — no registry edits needed.
-
-const SKILLS_DIR = path.join(process.cwd(), 'lib', 'ai', 'skills')
+/**
+ * Skill registry.
+ *
+ * Sources, in precedence order (first definition of a name wins):
+ *   1. fileSkills   — every lib/ai/skills/*.ts, via the generated manifest.
+ *                     Dedicated skills win over generated CRUD, so the
+ *                     hand-written create_ticket (which also posts to Slack)
+ *                     shadows the generic one.
+ *   2. uiSkills     — browser-driving actions, echoed back to the client.
+ *   3. recordSkills — schema-introspected record tools, generic + named CRUD
+ *                     for the hot tables.
+ *
+ * There is no runtime filesystem scan. The manifest is generated at build
+ * time and verified by `npm run ai:check-skills`, so a skill file that isn't
+ * wired up fails the build rather than disappearing from production.
+ */
 
 let cache: Skill[] | null = null
+let inflight: Promise<{ skills: Skill[]; complete: boolean }> | null = null
+
+async function build(): Promise<{ skills: Skill[]; complete: boolean }> {
+  const skills: Skill[] = []
+  const seen = new Set<string>()
+
+  const add = (list: Skill[]) => {
+    for (const s of list) {
+      if (!s?.name || seen.has(s.name)) continue
+      seen.add(s.name)
+      skills.push(s)
+    }
+  }
+
+  add(fileSkills)
+  add(uiSkills())
+
+  // Record tools introspect the database. If Postgres is briefly unreachable
+  // we still serve the rest of the agent — but we must NOT cache that
+  // degraded list, or a single blip at boot would leave the assistant
+  // without data tools until the process restarts.
+  let complete = true
+  try {
+    add(await recordSkills())
+  } catch (err) {
+    complete = false
+    console.error('[ai/registry] record skills unavailable, not caching:', err instanceof Error ? err.message : err)
+  }
+
+  return { skills, complete }
+}
 
 async function loadSkills(): Promise<Skill[]> {
   if (cache) return cache
-  const skills: Skill[] = []
-
-  // In Next.js server runtime, require() against the built output doesn't
-  // give us the TS source list reliably — but we built the skills file set
-  // at compile time. Webpack stuffs them into the build. We use a static
-  // import map here for deterministic inclusion so the bundler keeps them.
-  //
-  // When a new skill is added, append it to the import map below (single
-  // source of truth). The discovery fallback below reads the fs at runtime
-  // too, so dev mode with tsx / node picks up new files without rebuilding.
-  const staticImports: Array<() => Promise<{ default: Skill }>> = [
-    () => import('@/lib/ai/skills/search-events'),
-    () => import('@/lib/ai/skills/search-venues'),
-    () => import('@/lib/ai/skills/search-staff'),
-    () => import('@/lib/ai/skills/create-ticket'),
-    () => import('@/lib/ai/skills/create-design-request'),
-    () => import('@/lib/ai/skills/log-walkthrough'),
-    () => import('@/lib/ai/skills/log-maintenance'),
-    () => import('@/lib/ai/skills/dashboard-stats'),
-    () => import('@/lib/ai/skills/operations-snapshot'),
-    () => import('@/lib/ai/skills/morning-command-center'),
-    () => import('@/lib/ai/skills/venue-health-report'),
-    () => import('@/lib/ai/skills/staffing-recommendations'),
-    () => import('@/lib/ai/skills/client-update-draft'),
-    () => import('@/lib/ai/skills/move-design-to-client-review'),
-    () => import('@/lib/ai/skills/generate-signage-proof'),
-    () => import('@/lib/ai/skills/slack-create-canvas'),
-    () => import('@/lib/ai/skills/jireh-repeat-clients-report'),
-    () => import('@/lib/ai/skills/project-schedule-workspace'),
-    () => import('@/lib/ai/skills/enrich-from-salesforce'),
-    () => import('@/lib/ai/skills/ops-list-tables'),
-    () => import('@/lib/ai/skills/ops-query-table'),
-    () => import('@/lib/ai/skills/ops-create-row'),
-    () => import('@/lib/ai/skills/ops-update-records'),
-    () => import('@/lib/ai/skills/ops-delete-records'),
-    () => import('@/lib/ai/skills/ops-count-records'),
-    () => import('@/lib/ai/skills/ops-table-schema'),
-    () => import('@/lib/ai/skills/ops-list-documents'),
-    () => import('@/lib/ai/skills/ops-write-document'),
-    () => import('@/lib/ai/skills/triage-request'),
-  ]
-  for (const load of staticImports) {
-    try {
-      const mod = await load()
-      if (mod?.default?.name) skills.push(mod.default)
-    } catch (err) {
-      console.warn('[ai/registry] failed to load skill:', err instanceof Error ? err.message : err)
-    }
-  }
-
-  // Browser-driving UI skills — navigate, click, fill, highlight, toast.
-  // Server just echoes the payload; the client dispatcher animates them.
-  try {
-    const { uiSkills } = await import('@/lib/ai/skills/_ui-actions')
-    for (const s of uiSkills()) {
-      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
-    }
-  } catch (err) {
-    console.warn('[ai/registry] failed to load UI skills:', err instanceof Error ? err.message : err)
-  }
-
-  // Auto-generated CRUD skills (find_many / find_one / create / update /
-  // delete) for every dashboard table we care about. Lives in
-  // _auto-crud.ts — underscore prefix keeps the fs-scan fallback from
-  // trying to interpret it as a single-skill file.
-  try {
-    const { autoCrudSkills } = await import('@/lib/ai/skills/_auto-crud')
-    for (const s of autoCrudSkills()) {
-      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
-    }
-  } catch (err) {
-    console.warn('[ai/registry] failed to load auto-CRUD skills:', err instanceof Error ? err.message : err)
-  }
-
-  // Service-contract triage helpers (start/ship/quote/meter/list) ride
-  // alongside the main triage skill in triage-request.ts.
-  try {
-    const { skills: triageSkills } = await import('@/lib/ai/skills/triage-request')
-    for (const s of triageSkills as Skill[]) {
-      if (!skills.some(existing => existing.name === s.name)) skills.push(s)
-    }
-  } catch (err) {
-    console.warn('[ai/registry] failed to load triage skills:', err instanceof Error ? err.message : err)
-  }
-
-  // Fallback fs scan for files that aren't in the static map yet (dev mode).
-  try {
-    const entries = fs.readdirSync(SKILLS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'))
-    for (const entry of entries) {
-      const name = entry.replace(/\.ts$/, '')
-      if (skills.some(s => s.name.replace(/_/g, '-') === name || s.name === name)) continue
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod = require(path.join(SKILLS_DIR, entry))
-        const skill: Skill | undefined = mod?.default
-        if (skill?.name) skills.push(skill)
-      } catch {
-        // ignore — Next.js server build won't have the source .ts anyway
-      }
-    }
-  } catch {
-    // Directory might not exist in prod build; that's fine — static map covers it.
-  }
-
-  cache = skills
-  return skills
+  if (inflight) return (await inflight).skills
+  inflight = build()
+    .then(result => {
+      if (result.complete) cache = result.skills
+      return result
+    })
+    .finally(() => {
+      inflight = null
+    })
+  return (await inflight).skills
 }
 
-const ROLE_RANK: Record<string, number> = { any: 0, technician: 1, manager: 2, tech_support: 3, admin: 4 }
-
-function roleAllows(userRole: AgentRole, minimum?: AgentRole | 'any'): boolean {
-  if (!minimum || minimum === 'any') return true
-  return (ROLE_RANK[userRole] ?? 0) >= (ROLE_RANK[minimum] ?? 0)
+/** Drop the cache so the next call re-introspects the schema. */
+export function invalidateSkillCache(): void {
+  cache = null
 }
 
 /** Skills visible to a given user role. */
 export async function getSkills(userRole: AgentRole): Promise<Skill[]> {
   const all = await loadSkills()
-  return all.filter(s => roleAllows(userRole, s.role))
+  return all.filter(s => roleAtLeast(userRole, s.role))
 }
 
 /** OpenAI-style tool definitions for the LLM. */
@@ -167,7 +111,7 @@ export async function invokeSkill(
       text_summary: `Unknown skill: ${name}`,
     })
   }
-  if (!roleAllows(ctx.userRole, skill.role)) {
+  if (!roleAtLeast(ctx.userRole, skill.role)) {
     return JSON.stringify({
       ok: false,
       error: { code: 'permission_denied', message: `Skill ${name} requires role: ${skill.role}`, suggestion: 'Ask an admin to run this for you.' },

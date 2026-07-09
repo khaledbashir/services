@@ -17,6 +17,26 @@ export interface SkillContext {
 }
 
 /**
+ * Privilege ordering. Shared by the registry's skill-level gate and the
+ * generic record tools, which must gate per-table inside the handler
+ * (one tool serves many tables, so Skill.role can't express it).
+ */
+export const ROLE_RANK: Record<string, number> = {
+  any: 0,
+  designer: 1,
+  design_contractor: 1,
+  technician: 1,
+  manager: 2,
+  tech_support: 3,
+  admin: 4,
+}
+
+export function roleAtLeast(userRole: AgentRole, minimum?: AgentRole | 'any'): boolean {
+  if (!minimum || minimum === 'any') return true
+  return (ROLE_RANK[userRole] ?? 0) >= (ROLE_RANK[minimum] ?? 0)
+}
+
+/**
  * Structured error skills can throw to give the agent (and the UI / Slack)
  * a stable error code + a one-line suggestion for recovery.
  */
@@ -30,6 +50,21 @@ export class SkillError extends Error {
   }
 }
 
+/** UI grouping for the skill picker. Rendered dynamically — safe to extend. */
+export type SkillCategory =
+  | 'Events'
+  | 'Venues'
+  | 'Staff'
+  | 'Support'
+  | 'Service Ops'
+  | 'Creative'
+  | 'Clients'
+  | 'Projects'
+  | 'Marketing'
+  | 'Gamification'
+  | 'Knowledge'
+  | 'System'
+
 export interface Skill {
   /** Unique snake_case identifier used by the LLM. */
   name: string
@@ -42,7 +77,7 @@ export interface Skill {
   /** Optional minimum role to expose the skill. */
   role?: Exclude<AgentRole, 'any'>
   /** UI category label shown in the skill picker. */
-  category?: 'Events' | 'Venues' | 'Staff' | 'Support' | 'Service Ops' | 'Creative' | 'System'
+  category?: SkillCategory
   /** Short lucide-style icon name or emoji for the UI. */
   icon?: string
 }
