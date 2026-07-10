@@ -228,7 +228,7 @@ export default function VenueMapPage() {
               <select
                 value={filterService}
                 onChange={(e) => setFilterService(e.target.value)}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
+                className="min-w-[200px] rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm outline-none transition focus:border-[#0A52EF] focus:ring-4 focus:ring-[#0A52EF]/10"
               >
                 <option value="all">All Services</option>
                 {(data?.serviceTypes || []).map((svc) => (

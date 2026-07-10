@@ -728,6 +728,7 @@ async function runMigrations() {
       ['LiveSync', 'LiveSync product — live content / scoreboard sync'],
       ['VisionStats', 'VisionStats product — statistics integration for displays'],
       ['Parts', 'Parts inventory and fulfillment for this venue'],
+      ['Game Day Support', 'On-site game-day technical support and coverage for this venue'],
     ]
     for (const [name, description] of joeServices) {
       await client.query(

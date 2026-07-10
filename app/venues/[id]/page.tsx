@@ -2400,7 +2400,7 @@ export default function VenueDetailPage() {
                       <div key={svc.service_type_id} className="flex items-center justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-zinc-900">{svc.name}</p>
-                          {svc.description && <p className="text-xs text-zinc-500 truncate">{svc.description}</p>}
+                          {svc.description && <p className="text-xs text-zinc-500">{svc.description}</p>}
                         </div>
                         <button
                           onClick={() => toggleService(svc.service_type_id, !svc.enabled)}
