@@ -9,10 +9,11 @@ interface Attachment {
   extension: string
   category: 'image' | 'video' | 'pdf' | 'link' | 'other'
   fileUrl: string
-  version: number
-  lastViewedAt: string | null
-  viewCount: number
-  uploadedAt: string
+  displayNumber?: number
+  version?: number
+  lastViewedAt?: string | null
+  viewCount?: number
+  uploadedAt?: string
 }
 
 type ShareState = 'pending' | 'approved' | 'changes_requested' | 'expired'
@@ -176,6 +177,10 @@ export default function ProofSharePage() {
   }
 
   const activeAtt = data.attachments.find((a) => a.id === activeAttachment)
+  const activeIndex = activeAtt ? data.attachments.findIndex((a) => a.id === activeAtt.id) : -1
+  const activeDisplayNumber = activeAtt
+    ? activeAtt.displayNumber || activeIndex + 1
+    : null
   const hasResponded =
     data.state === 'approved' ||
     data.state === 'changes_requested' ||
@@ -189,7 +194,8 @@ export default function ProofSharePage() {
     const viewed = attachment.lastViewedAt
       ? `${Math.max(1, Math.floor((Date.now() - new Date(attachment.lastViewedAt).getTime()) / 3600000))}h ago`
       : 'not viewed yet'
-    return `Uploaded ${uploaded} · ${attachment.viewCount} view${attachment.viewCount === 1 ? '' : 's'} · Last viewed ${viewed}`
+    const viewCount = attachment.viewCount || 0
+    return `Uploaded ${uploaded} · ${viewCount} view${viewCount === 1 ? '' : 's'} · Last viewed ${viewed}`
   }
 
   return (
@@ -240,17 +246,19 @@ export default function ProofSharePage() {
         {/* File selector / version history */}
         {data.attachments.length > 1 && (
           <div className="px-6 py-3 flex gap-2 overflow-x-auto border-b border-gray-100 bg-white">
-            {data.attachments.map((a) => (
+            {data.attachments.map((a, index) => (
               <button
                 key={a.id}
                 onClick={() => setActiveAttachment(a.id)}
+                title={a.version ? `Proof ${a.displayNumber || index + 1} · stored version v${a.version}` : `Proof ${a.displayNumber || index + 1}`}
+                aria-label={`Open proof ${a.displayNumber || index + 1}`}
                 className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition ${
                   activeAttachment === a.id
                     ? 'bg-[color:var(--anc-brand,#0A52EF)] text-white border-transparent'
                     : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
                 }`}
               >
-                v{a.version}
+                {a.displayNumber || index + 1}
               </button>
             ))}
           </div>
@@ -260,7 +268,7 @@ export default function ProofSharePage() {
           <div className="px-6 py-3 border-b border-gray-100 bg-white/80">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full bg-[color:var(--anc-brand,#0A52EF)]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--anc-brand,#0A52EF)]">
-                v{activeAtt.version}
+                Proof {activeDisplayNumber}
               </span>
               <span className="text-xs text-gray-500">{activeAtt.name}</span>
             </div>

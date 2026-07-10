@@ -78,11 +78,17 @@ export async function GET(
       let opened
       try {
         opened = await openFileStream(fullPath, range)
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.code === 'RANGE_NOT_SATISFIABLE') {
+          return new NextResponse('Requested range not satisfiable', {
+            status: 416,
+            headers: { 'Accept-Ranges': 'bytes' },
+          })
+        }
         console.error('[proof-share/file] ftp open failed:', err)
         return new NextResponse('Could not read proof file', { status: 502 })
       }
-      const { stream, size, name, kind } = opened
+      const { stream, size, name, kind, modifiedAt, range: resolvedRange } = opened
       const webStream = Readable.toWeb(stream) as unknown as ReadableStream
 
       const contentType =
@@ -96,11 +102,17 @@ export async function GET(
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'private, max-age=300',
         'Content-Disposition': `inline; filename="${name.replace(/[\r\n"\\]/g, '')}"`,
+        'Last-Modified': new Date(modifiedAt).toUTCString(),
       })
-      if (range) {
-        const end = range.end ?? size - 1
-        headers.set('Content-Range', `bytes ${range.start}-${end}/${size}`)
-        headers.set('Content-Length', String(end - range.start + 1))
+      const etag = `"ftp-${size}-${new Date(modifiedAt).getTime()}"`
+      headers.set('ETag', etag)
+      if (!rangeHeader && request.headers.get('if-none-match') === etag) {
+        stream.destroy()
+        return new NextResponse(null, { status: 304, headers })
+      }
+      if (resolvedRange) {
+        headers.set('Content-Range', `bytes ${resolvedRange.start}-${resolvedRange.end}/${size}`)
+        headers.set('Content-Length', String(resolvedRange.end - resolvedRange.start + 1))
         return new NextResponse(webStream, { status: 206, headers })
       }
       headers.set('Content-Length', String(size))

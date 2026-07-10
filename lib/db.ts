@@ -427,6 +427,10 @@ async function runMigrations() {
     // shares have no record id, so relax the NOT NULL and store the folder path.
     await client.query(`ALTER TABLE proof_shares ALTER COLUMN twenty_record_id DROP NOT NULL`)
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS ftp_folder_path TEXT`)
+    // Snapshot the file names/metadata when an FTP share is created. Public
+    // proof pages can then render without re-listing the legacy FTP on every
+    // open; older shares with a null manifest continue to use the live fallback.
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS ftp_manifest JSONB`)
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_name TEXT`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
@@ -437,6 +441,7 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_files_req_version ON design_request_files(design_request_id, version DESC)`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS tricode TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_proof_link TEXT`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS legacy_ftp_proof_link TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_final_link TEXT`)
     await client.query(`CREATE TABLE IF NOT EXISTS design_request_designers (
       design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,

@@ -6,7 +6,7 @@
  * only ever *points at* a folder that already lives on ANC's production FTP
  * (ftp.anc.com) and serves whatever is inside it. Nothing is uploaded or
  * copied to our disk — the proof videos run 100–200GB and the FTP is 56TB, so
- * we stream on demand and keep zero local state.
+ * we stream on demand. Only short-lived directory metadata is cached.
  *
  * Why this file looks the way it does — three hard facts about that server,
  * verified live 2026-07-09:
@@ -44,6 +44,10 @@ const PASS = process.env.ANC_FTP_PASS_B64
 // later hands us a subtree-scoped login.
 const ROOT = normalizeRemote(process.env.ANC_FTP_ROOT || '/')
 const CONNECT_TIMEOUT = Number(process.env.ANC_FTP_TIMEOUT_MS || 20000)
+const LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.ANC_FTP_LIST_CACHE_TTL_MS || 60_000))
+const LIST_CACHE_MAX_FOLDERS = Math.max(10, Number(process.env.ANC_FTP_LIST_CACHE_MAX_FOLDERS || 100))
+const CLIENT_FOLDER_CACHE_TTL_MS = Math.max(30_000, Number(process.env.ANC_FTP_CLIENT_CACHE_TTL_MS || 300_000))
+const METADATA_SESSION_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_METADATA_IDLE_MS || 30_000))
 
 // Legacy algorithm set — additive to ssh2's modern defaults, not a replacement,
 // so we still prefer strong crypto when the far side supports it and only fall
@@ -72,6 +76,33 @@ export function isConfigured(): boolean {
   return Boolean(HOST && USER && PASS)
 }
 
+type CachedListing = { entries: FtpEntry[]; expiresAt: number }
+const listingCache = new Map<string, CachedListing>()
+const listingInFlight = new Map<string, Promise<FtpEntry[]>>()
+const clientFolderCache = new Map<string, { value: string | null; expiresAt: number }>()
+let resolvedHost: { value: string; expiresAt: number } | null = null
+let metadataClient: SftpClient | null = null
+let metadataConnectPromise: Promise<SftpClient> | null = null
+let metadataQueue: Promise<void> = Promise.resolve()
+let metadataIdleTimer: ReturnType<typeof setTimeout> | null = null
+
+function logPerf(event: string, details: Record<string, string | number | boolean | null>) {
+  console.info('[proof-ftp:perf]', JSON.stringify({ event, ...details }))
+}
+
+async function resolveIpv4Host(): Promise<string> {
+  if (resolvedHost && resolvedHost.expiresAt > Date.now()) return resolvedHost.value
+  let host = HOST
+  try {
+    const { address } = await lookup(HOST, { family: 4 })
+    if (address) host = address
+  } catch {
+    // Fall back to the hostname; `family: 4` still steers the socket.
+  }
+  resolvedHost = { value: host, expiresAt: Date.now() + 300_000 }
+  return host
+}
+
 // ── Path safety ──────────────────────────────────────────────────────────────
 
 /** Collapse to a POSIX absolute path with no trailing slash (except root). */
@@ -98,26 +129,45 @@ export function resolveSafePath(input: string): string {
 // ── Connection ───────────────────────────────────────────────────────────────
 
 /**
- * Open a short-lived SFTP connection, run `fn`, and always disconnect. We do NOT
- * pool: browse/stream calls are infrequent and a stale pooled socket against a
- * flaky legacy server is worse than a fresh ~200ms connect each time.
+ * Run metadata operations through one short-idle SFTP session. Calls are
+ * serialized because the legacy server is more reliable with one outstanding
+ * directory command at a time. Any operation failure discards the session and
+ * retries once on a fresh connection; file streams still own their sockets.
  */
 async function withClient<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
   if (!isConfigured()) {
     throw new Error('ANC FTP not configured: ANC_FTP_HOST / ANC_FTP_USER / ANC_FTP_PASS missing')
   }
-  // Force IPv4 by resolving the A record ourselves — passing the literal IPv4
-  // guarantees egress on the whitelisted 95.217.76.248 path.
-  let host = HOST
-  try {
-    const { address } = await lookup(HOST, { family: 4 })
-    if (address) host = address
-  } catch {
-    // Fall back to the hostname; `family: 4` below still steers the socket.
+  const run = async (): Promise<T> => {
+    let lastError: unknown
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const sftp = await getMetadataClient()
+      try {
+        const result = await fn(sftp)
+        scheduleMetadataClose()
+        return result
+      } catch (error) {
+        lastError = error
+        await closeMetadataClient()
+        if (attempt === 1) {
+          logPerf('metadata_retry', { attempt, reason: 'operation_failed' })
+        }
+      }
+    }
+    throw lastError
   }
+  const queued = metadataQueue.then(run, run)
+  metadataQueue = queued.then(() => undefined, () => undefined)
+  return queued
+}
 
-  const sftp = new SftpClient()
-  try {
+async function getMetadataClient(): Promise<SftpClient> {
+  if (metadataClient) return metadataClient
+  if (metadataConnectPromise) return metadataConnectPromise
+  metadataConnectPromise = (async () => {
+    const startedAt = Date.now()
+    const host = await resolveIpv4Host()
+    const sftp = new SftpClient()
     await sftp.connect({
       host,
       port: PORT,
@@ -128,10 +178,35 @@ async function withClient<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
       family: 4,
       algorithms: LEGACY_ALGORITHMS as any,
     })
-    return await fn(sftp)
+    metadataClient = sftp
+    logPerf('metadata_connect', { durationMs: Date.now() - startedAt })
+    return sftp
+  })()
+  try {
+    return await metadataConnectPromise
   } finally {
-    try { await sftp.end() } catch { /* already closed */ }
+    metadataConnectPromise = null
   }
+}
+
+async function closeMetadataClient() {
+  if (metadataIdleTimer) {
+    clearTimeout(metadataIdleTimer)
+    metadataIdleTimer = null
+  }
+  const client = metadataClient
+  metadataClient = null
+  if (client) {
+    try { await client.end() } catch { /* already closed */ }
+  }
+}
+
+function scheduleMetadataClose() {
+  if (metadataIdleTimer) clearTimeout(metadataIdleTimer)
+  metadataIdleTimer = setTimeout(() => {
+    void closeMetadataClient()
+  }, METADATA_SESSION_IDLE_MS)
+  metadataIdleTimer.unref?.()
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -155,6 +230,10 @@ export interface FtpListing {
   page: number
   pageSize: number
   hasMore: boolean
+  timing: {
+    source: 'cache' | 'coalesced' | 'ftp'
+    durationMs: number
+  }
 }
 
 // ── Classification (mirrors proof-share.classifyFile) ────────────────────────
@@ -181,9 +260,44 @@ export async function listDir(
   const page = Math.max(1, Math.floor(opts.page || 1))
   const pageSize = Math.min(500, Math.max(1, Math.floor(opts.pageSize || 100)))
 
-  const all = await withClient(async (sftp) => {
+  const startedAt = Date.now()
+  const { entries: all, source } = await getDirectoryEntries(safe)
+
+  const total = all.length
+  const start = (page - 1) * pageSize
+  const entries = all.slice(start, start + pageSize)
+
+  return {
+    path: safe,
+    parent: safe === ROOT ? null : normalizeRemote(path.posix.dirname(safe)),
+    entries,
+    total,
+    page,
+    pageSize,
+    hasMore: start + pageSize < total,
+    timing: { source, durationMs: Date.now() - startedAt },
+  }
+}
+
+async function getDirectoryEntries(
+  safe: string
+): Promise<{ entries: FtpEntry[]; source: 'cache' | 'coalesced' | 'ftp' }> {
+  const cached = listingCache.get(safe)
+  if (cached && cached.expiresAt > Date.now()) {
+    // Refresh insertion order so the capped map behaves like an LRU cache.
+    listingCache.delete(safe)
+    listingCache.set(safe, cached)
+    return { entries: cached.entries, source: 'cache' }
+  }
+  if (cached) listingCache.delete(safe)
+
+  const pending = listingInFlight.get(safe)
+  if (pending) return { entries: await pending, source: 'coalesced' }
+
+  const startedAt = Date.now()
+  const load = withClient(async (sftp) => {
     const raw = await sftp.list(safe)
-    return raw
+    const entries = raw
       // Hidden/system entries (WS_FTP writes .etc, WS_FTP_LOGS, etc.) stay out.
       .filter((e) => !e.name.startsWith('.'))
       .map<FtpEntry>((e) => {
@@ -198,43 +312,48 @@ export async function listDir(
           ...(isDir ? {} : { kind: classify(e.name) }),
         }
       })
+    // Dirs before files; each group alphabetical, case-insensitive.
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    })
+    return entries
   })
-
-  // Dirs before files; each group alphabetical, case-insensitive.
-  all.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-  })
-
-  const total = all.length
-  const start = (page - 1) * pageSize
-  const entries = all.slice(start, start + pageSize)
-
-  return {
-    path: safe,
-    parent: safe === ROOT ? null : normalizeRemote(path.posix.dirname(safe)),
-    entries,
-    total,
-    page,
-    pageSize,
-    hasMore: start + pageSize < total,
+  listingInFlight.set(safe, load)
+  try {
+    const entries = await load
+    listingCache.set(safe, { entries, expiresAt: Date.now() + LIST_CACHE_TTL_MS })
+    while (listingCache.size > LIST_CACHE_MAX_FOLDERS) {
+      const oldest = listingCache.keys().next().value as string | undefined
+      if (!oldest) break
+      listingCache.delete(oldest)
+    }
+    logPerf('list_directory', {
+      source: 'ftp',
+      durationMs: Date.now() - startedAt,
+      entryCount: entries.length,
+      pathDepth: safe === '/' ? 0 : safe.split('/').filter(Boolean).length,
+    })
+    return { entries, source: 'ftp' }
+  } finally {
+    listingInFlight.delete(safe)
   }
 }
 
 /** All reviewable files directly inside a folder (the proofs a client swipes). */
 export async function listProofFiles(remotePath: string): Promise<FtpEntry[]> {
-  const listing = await listDir(remotePath, { pageSize: 500 })
-  let entries = listing.entries.filter((e) => e.type === 'file')
-  // Drain remaining pages for folders with >500 files (rare, but correct).
-  let page = 2
-  let more = listing.hasMore
-  while (more) {
-    const next = await listDir(remotePath, { page, pageSize: 500 })
-    entries = entries.concat(next.entries.filter((e) => e.type === 'file'))
-    more = next.hasMore
-    page += 1
-  }
-  return entries
+  const safe = resolveSafePath(remotePath || ROOT)
+  const startedAt = Date.now()
+  const { entries, source } = await getDirectoryEntries(safe)
+  const files = entries.filter((entry) => entry.type === 'file')
+  logPerf('list_proof_files', {
+    source,
+    durationMs: Date.now() - startedAt,
+    entryCount: entries.length,
+    fileCount: files.length,
+    pathDepth: safe === '/' ? 0 : safe.split('/').filter(Boolean).length,
+  })
+  return files
 }
 
 // ── Tri-code → client folder ─────────────────────────────────────────────────
@@ -253,15 +372,20 @@ export async function resolveClientFolder(triCode: string): Promise<string | nul
   if (!isConfigured()) return null
   const code = String(triCode || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '')
   if (!code) return null
+  const cached = clientFolderCache.get(code)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
   const firstLetter = code[0]
   const candidate = normalizeRemote(`/${firstLetter}/${code}`)
   try {
     const safe = resolveSafePath(candidate)
-    return await withClient(async (sftp) => {
+    const value = await withClient(async (sftp) => {
       const s = await sftp.stat(safe).catch(() => null)
       return s && s.isDirectory ? safe : null
     })
+    clientFolderCache.set(code, { value, expiresAt: Date.now() + CLIENT_FOLDER_CACHE_TTL_MS })
+    return value
   } catch {
+    clientFolderCache.set(code, { value: null, expiresAt: Date.now() + 60_000 })
     return null
   }
 }
@@ -291,15 +415,19 @@ export async function statFile(
 export async function openFileStream(
   remotePath: string,
   range?: { start: number; end?: number }
-): Promise<{ stream: Readable; size: number; name: string; kind: string }> {
+): Promise<{
+  stream: Readable
+  size: number
+  name: string
+  kind: string
+  modifiedAt: string
+  range?: { start: number; end: number }
+}> {
   if (!isConfigured()) throw new Error('ANC FTP not configured')
   const safe = resolveSafePath(remotePath)
 
-  let host = HOST
-  try {
-    const { address } = await lookup(HOST, { family: 4 })
-    if (address) host = address
-  } catch { /* keep hostname */ }
+  const startedAt = Date.now()
+  const host = await resolveIpv4Host()
 
   const sftp = new SftpClient()
   await sftp.connect({
@@ -320,9 +448,19 @@ export async function openFileStream(
   }
 
   const readOpts: Record<string, number> = {}
+  let resolvedRange: { start: number; end: number } | undefined
   if (range) {
-    readOpts.start = range.start
-    if (typeof range.end === 'number') readOpts.end = range.end
+    const start = Math.floor(range.start)
+    const end = Math.min(Math.floor(range.end ?? s.size - 1), s.size - 1)
+    if (!Number.isFinite(start) || start < 0 || start >= s.size || end < start) {
+      await sftp.end()
+      const error = new Error('Requested byte range is not satisfiable') as Error & { code?: string }
+      error.code = 'RANGE_NOT_SATISFIABLE'
+      throw error
+    }
+    resolvedRange = { start, end }
+    readOpts.start = start
+    readOpts.end = end
   }
 
   // createReadStream on the underlying ssh2 sftp stream.
@@ -332,7 +470,20 @@ export async function openFileStream(
   stream.once('close', cleanup)
   stream.once('error', cleanup)
 
-  return { stream, size: s.size, name: path.posix.basename(safe), kind: classify(safe) }
+  logPerf('open_file', {
+    durationMs: Date.now() - startedAt,
+    size: s.size,
+    ranged: Boolean(resolvedRange),
+    pathDepth: safe.split('/').filter(Boolean).length,
+  })
+  return {
+    stream,
+    size: s.size,
+    name: path.posix.basename(safe),
+    kind: classify(safe),
+    modifiedAt: new Date((s.modifyTime as number) || Date.now()).toISOString(),
+    range: resolvedRange,
+  }
 }
 
 // ── Health check ─────────────────────────────────────────────────────────────

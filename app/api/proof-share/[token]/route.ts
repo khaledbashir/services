@@ -34,7 +34,7 @@ export async function GET(
       `SELECT token, twenty_object_type, twenty_record_id, created_at, expires_at,
               view_count, last_viewed_at, client_response, client_response_at,
               client_response_note, message, created_by_name, created_by_email,
-              ftp_folder_path, client_name
+              ftp_folder_path, ftp_manifest, client_name
        FROM proof_shares WHERE token = $1`,
       [token]
     )
@@ -65,22 +65,53 @@ export async function GET(
     // the file source is the FTP either way. Nothing is stored locally.
     if (share.ftp_folder_path) {
       const folder: string = share.ftp_folder_path || '/'
-      let files: Awaited<ReturnType<typeof listProofFiles>> = []
-      try {
-        files = await listProofFiles(folder)
-      } catch (err) {
-        console.error('[proof-share/get] ftp list failed:', err)
-        return NextResponse.json(
-          { error: 'Could not reach the proof storage for this link right now.' },
-          { status: 502 }
-        )
+      type FtpProofFile = {
+        name: string
+        size: number
+        modifiedAt: string
+        kind: 'image' | 'video' | 'pdf' | 'other'
       }
-      const attachments = files.map((f) => ({
+      const storedManifest = Array.isArray(share.ftp_manifest)
+        ? (share.ftp_manifest as unknown[]).filter((item): item is FtpProofFile => {
+            if (!item || typeof item !== 'object') return false
+            const file = item as Record<string, unknown>
+            return typeof file.name === 'string' && file.name === file.name.split('/').pop()
+          })
+        : []
+      let files: FtpProofFile[] = storedManifest
+      let manifestSource = 'stored'
+      if (files.length === 0) {
+        manifestSource = 'legacy-ftp-fallback'
+        try {
+          files = (await listProofFiles(folder)).map((file) => ({
+            name: file.name,
+            size: file.size,
+            modifiedAt: file.modifiedAt,
+            kind: file.kind || 'other',
+          }))
+        } catch (err) {
+          console.error('[proof-share/get] ftp list failed:', err)
+          return NextResponse.json(
+            { error: 'Could not reach the proof storage for this link right now.' },
+            { status: 502 }
+          )
+        }
+      }
+      console.info('[proof-share:perf]', JSON.stringify({
+        event: 'load_ftp_manifest',
+        source: manifestSource,
+        fileCount: files.length,
+      }))
+      const attachments = files.map((f, index) => ({
         id: `ftp-${Buffer.from(f.name).toString('base64url')}`,
         name: f.name,
         extension: (f.name.split('.').pop() || '').toLowerCase(),
         category: f.kind || 'other',
         fileUrl: `/api/proof-share/${token}/file/ftp-${Buffer.from(f.name).toString('base64url')}`,
+        displayNumber: index + 1,
+        lastViewedAt: null,
+        viewCount: 0,
+        uploadedAt: f.modifiedAt,
       }))
       const folderLabel = folder.replace(/\/+$/, '').split('/').pop() || 'Proof'
       return NextResponse.json({
@@ -151,6 +182,7 @@ export async function GET(
         extension: string
         category: string
         fileUrl: string
+        displayNumber: number
         version: number
         lastViewedAt: string | null
         viewCount: number
@@ -165,6 +197,7 @@ export async function GET(
           category: classifyFile(ext),
           // Route through the token-gated proxy so the download stays scoped to the share token
           fileUrl: `/api/proof-share/${token}/file/file-${f.id}`,
+          displayNumber: attachments.length + 1,
           version: Number(f.version || 1),
           lastViewedAt: f.last_viewed_at,
           viewCount: Number(f.view_count || 0),
@@ -179,6 +212,7 @@ export async function GET(
           extension: 'link',
           category: 'link',
           fileUrl: row.ftp_proof_link,
+          displayNumber: 1,
           version: 1,
           lastViewedAt: null,
           viewCount: 0,
@@ -227,7 +261,7 @@ export async function GET(
       share.twenty_record_id
     )
 
-    const attachmentsForClient = attachments.map((a) => {
+    const attachmentsForClient = attachments.map((a, index) => {
       const extension = a.file?.[0]?.extension || ''
       return {
         id: a.id,
@@ -236,6 +270,7 @@ export async function GET(
         category: classifyFile(extension),
         // Clients use our proxy — never the raw Twenty URL
         fileUrl: `/api/proof-share/${token}/file/${a.id}`,
+        displayNumber: index + 1,
       }
     })
 

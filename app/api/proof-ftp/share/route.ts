@@ -113,17 +113,24 @@ export async function POST(request: NextRequest) {
   // FTP folder path is what makes the files come from the FTP.
   const objectType = linkedToTicket ? twentyObjectType : 'ftpFolder'
   const recordId = linkedToTicket ? twentyRecordId : null
+  const ftpManifest = files.map((file) => ({
+    name: file.name,
+    size: file.size,
+    modifiedAt: file.modifiedAt,
+    kind: file.kind || 'other',
+  }))
 
   await query(
     `INSERT INTO proof_shares (
-       token, twenty_object_type, twenty_record_id, ftp_folder_path,
+       token, twenty_object_type, twenty_record_id, ftp_folder_path, ftp_manifest,
        client_name, client_email, message, created_by_name, created_by_email, expires_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+     ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)`,
     [
       token,
       objectType,
       recordId,
       safePath,
+      JSON.stringify(ftpManifest),
       clientName || null,
       clientEmail || null,
       message || null,
@@ -138,6 +145,28 @@ export async function POST(request: NextRequest) {
   // Stamp the proof link onto the ticket so it shows on the record, same as the
   // CRM-attachment proof flow does.
   if (linkedToTicket) {
+    if (twentyObjectType === 'designRequest') {
+      // Keep any pre-dashboard/workspace link as read-only history before the
+      // new managed proof URL becomes the current client link. No bulk or
+      // destructive migration: this only runs when someone explicitly creates
+      // a new proof for that ticket.
+      await query(
+        `UPDATE design_requests
+         SET legacy_ftp_proof_link = COALESCE(
+               legacy_ftp_proof_link,
+               CASE
+                 WHEN ftp_proof_link IS NOT NULL
+                  AND ftp_proof_link !~ '/proof/[A-Za-z0-9_-]+/?$'
+                 THEN ftp_proof_link
+                 ELSE NULL
+               END
+             ),
+             ftp_proof_link = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [publicUrl, twentyRecordId]
+      )
+    }
     void patchTwentyRecord(twentyObjectType, twentyRecordId, {
       proofShareUrl: publicUrl,
       proofSentAt: new Date().toISOString(),

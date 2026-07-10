@@ -21,6 +21,7 @@ interface DesignRequestDetail {
   internal_category?: string | null
   priority?: string | null
   ftp_proof_link: string | null
+  legacy_ftp_proof_link?: string | null
   ftp_final_link: string | null
   final_file_name: string | null
   final_duration: string | null
@@ -82,6 +83,24 @@ function formatRelative(s: string | null | undefined): string {
     if (hrs < 24) return `${hrs}h ago`
     return `${Math.round(hrs / 24)}d ago`
   } catch { return s }
+}
+
+const PROOF_WORKFLOW_CUTOFF = process.env.NEXT_PUBLIC_PROOF_WORKFLOW_CUTOFF || '2026-07-10T00:00:00Z'
+
+function isManagedProofUrl(value: string | null | undefined): boolean {
+  if (!value) return false
+  try {
+    return /^\/proof\/[A-Za-z0-9_-]+\/?$/.test(new URL(value).pathname)
+  } catch {
+    return false
+  }
+}
+
+function usesNewProofWorkflow(request: DesignRequestDetail): boolean {
+  if (isManagedProofUrl(request.ftp_proof_link)) return true
+  const createdAt = new Date(request.created_at).getTime()
+  const cutoff = new Date(PROOF_WORKFLOW_CUTOFF).getTime()
+  return Number.isFinite(createdAt) && Number.isFinite(cutoff) && createdAt >= cutoff
 }
 
 export default function DesignRequestDetailPage({ params }: { params: { id: string } }) {
@@ -227,6 +246,10 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
     const i = STAGES.findIndex((s) => s.key === dr.status)
     return i === -1 ? 0 : i
   }, [dr])
+  const useNewProofFlow = useMemo(() => dr ? usesNewProofWorkflow(dr) : false, [dr])
+  const managedProofUrl = dr && isManagedProofUrl(dr.ftp_proof_link) ? dr.ftp_proof_link : null
+  const legacyProofUrl = dr?.legacy_ftp_proof_link
+    || (dr?.ftp_proof_link && !isManagedProofUrl(dr.ftp_proof_link) ? dr.ftp_proof_link : null)
 
   if (loading) {
     return (
@@ -417,16 +440,18 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   placeholder="FTP path / folder for final files"
                 />
               </Field>
-              <Field label="Proof Link">
-                <input
-                  type="text"
-                  value={proofLinkDraft}
-                  onChange={(e) => setProofLinkDraft(e.target.value)}
-                  onBlur={() => dr && proofLinkDraft !== (dr.ftp_proof_link || '') && updateField({ ftp_proof_link: proofLinkDraft })}
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  placeholder="https://… proof or review link"
-                />
-              </Field>
+              {!useNewProofFlow && (
+                <Field label="Historical Proof Link">
+                  <input
+                    type="text"
+                    value={proofLinkDraft}
+                    onChange={(e) => setProofLinkDraft(e.target.value)}
+                    onBlur={() => dr && proofLinkDraft !== (dr.ftp_proof_link || '') && updateField({ ftp_proof_link: proofLinkDraft })}
+                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                    placeholder="Legacy proof or review link"
+                  />
+                </Field>
+              )}
             </div>
 
             {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
@@ -499,10 +524,11 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             {/* STAGE 5: CLIENT REVIEW — THE MONEY STAGE */}
             <StageCard n={5} label="Client Review" desc={STAGES[4].desc} state={currentIdx < 4 ? 'upcoming' : currentIdx === 4 ? 'active' : 'done'} highlight={currentIdx === 4}>
               <div className="space-y-4">
-                {dr.ftp_proof_link && (
+                {legacyProofUrl && (
                   <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 p-3 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1">Live client link</div>
-                    <a href={dr.ftp_proof_link} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all font-mono text-xs">{dr.ftp_proof_link}</a>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1">Historical client link</div>
+                    <a href={legacyProofUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all font-mono text-xs">{legacyProofUrl}</a>
+                    <div className="mt-2 text-xs text-blue-600/80">Preserved for this older ticket. New proofs use the proof-server panel below.</div>
                     {(dr.proof_view_count ?? 0) > 0 && (
                       <div className="mt-2 text-xs text-blue-600/80">
                         Viewed {dr.proof_view_count} {dr.proof_view_count === 1 ? 'time' : 'times'} · last opened {formatRelative(dr.proof_last_viewed_at)}
@@ -513,22 +539,32 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                     )}
                   </div>
                 )}
-                <Field label="Upload Proof">
-                  <DesignProofUpload designRequestId={dr.id} />
-                </Field>
-                <div>
-                  <div className="text-[11px] text-zinc-400 text-center my-1">— or pull the proof from the proof server —</div>
+                {useNewProofFlow ? (
                   <TicketProofFtp
                     objectType="designRequest"
                     recordId={dr.id}
                     triCode={dr.tricode}
                     clientName={dr.company_name || dr.venue_name}
-                    existingProofUrl={dr.ftp_proof_link}
+                    existingProofUrl={managedProofUrl}
                   />
-                </div>
-                <AIFirstDraftButton designRequestId={dr.id} />
+                ) : (
+                  <>
+                    <Field label="Uploaded Proofs (Legacy Workflow)">
+                      <DesignProofUpload designRequestId={dr.id} />
+                    </Field>
+                    <TicketProofFtp
+                      objectType="designRequest"
+                      recordId={dr.id}
+                      triCode={dr.tricode}
+                      clientName={dr.company_name || dr.venue_name}
+                    />
+                    <AIFirstDraftButton designRequestId={dr.id} />
+                  </>
+                )}
                 <p className="text-xs text-zinc-500">
-                  The client email fires only when you explicitly advance the status to Client Review — QC first, send second.
+                  {useNewProofFlow
+                    ? 'Choose the proof folder and generate the client link here. The client email fires only when you explicitly advance the status to Client Review.'
+                    : 'This ticket keeps its historical proof workflow and links. New tickets use the single proof-server flow.'}
                 </p>
               </div>
             </StageCard>

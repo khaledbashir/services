@@ -249,12 +249,16 @@ export function classifyFile(extension: string): 'image' | 'video' | 'pdf' | 'ot
  * Build the absolute public URL for a proof-share token (used when returning
  * the URL to the designer at create time).
  */
-export function buildPublicUrl(token: string): string {
-  const base =
+export function getPublicBaseUrl(): string {
+  const configured =
     process.env.NEXT_PUBLIC_URL ||
     process.env.NEXT_PUBLIC_BASE_URL ||
-    'https://abc-anc-services.izcgmb.easypanel.host'
-  return `${base.replace(/\/$/, '')}/proof/${token}`
+    'https://services.ancsports.net'
+  return configured.replace(/\/$/, '')
+}
+
+export function buildPublicUrl(token: string): string {
+  return `${getPublicBaseUrl()}/proof/${token}`
 }
 
 /**
@@ -347,16 +351,13 @@ export async function sendProofEmailToClient(opts: {
 }): Promise<boolean> {
   const { sendEmail } = await import('./email')
   const proofUrl = buildPublicUrl(opts.token)
-  const base =
-    process.env.NEXT_PUBLIC_URL ||
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    'https://abc-anc-services.izcgmb.easypanel.host'
+  const base = getPublicBaseUrl()
   // Pick the first image as a preview thumbnail (video/pdf fall through)
   const firstImage = opts.attachments?.find((a) =>
     classifyFile(a.file?.[0]?.extension || '') === 'image'
   )
   const thumbnailUrl = firstImage
-    ? `${base.replace(/\/$/, '')}/api/proof-share/${opts.token}/file/${firstImage.id}`
+    ? `${base}/api/proof-share/${opts.token}/file/${firstImage.id}`
     : null
   const html = buildProofEmailHtml({
     recordName: opts.recordName,
