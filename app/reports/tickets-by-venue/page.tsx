@@ -111,7 +111,12 @@ export default function TicketsByVenueReport() {
                   <tr key={v.venue_id || i} className="border-t border-zinc-100 hover:bg-zinc-50">
                     <td className="px-5 py-3 font-medium text-zinc-900">
                       {v.venue_id ? (
-                        <Link href={`/tickets?venue_id=${v.venue_id}`} className="hover:text-[#0A52EF] hover:underline">
+                        // Drill into the ticket-level report, carrying this row's date
+                        // window so the line items reconcile with the count shown here.
+                        // (The old target, /tickets, defaults to open-only and hid every
+                        // closed ticket behind the number.)
+                        <Link href={`/reports/tickets-detail?venue_id=${v.venue_id}&from=${from}&to=${to}`}
+                          className="hover:text-[#0A52EF] hover:underline">
                           {v.venue_name}
                         </Link>
                       ) : v.venue_name}
