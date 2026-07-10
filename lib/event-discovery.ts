@@ -469,16 +469,20 @@ function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEv
 
   for (const existing of existingEvents) {
     if (existing.event_date !== candidate.event_date) continue
+    const existingTime = normalizeTimeForKey(existing.start_time)
 
-    if (normalizedTime && existing.start_time && normalizeTimeForKey(existing.start_time) === normalizedTime) {
+    if (normalizedTime && existingTime === normalizedTime) {
       return { duplicate: true, reason: 'Same date and start time already exists' }
     }
 
-    if (normalizeSummary(existing.summary) === normalizedSummary) {
+    // A venue can run the same production more than once in one day. When
+    // both rows have real but different showtimes, title similarity is not a
+    // duplicate signal (e.g. matinee + evening performance).
+    if ((!normalizedTime || !existingTime) && normalizeSummary(existing.summary) === normalizedSummary) {
       return { duplicate: true, reason: 'Same date and summary already exists' }
     }
 
-    if (wordSimilarity(existing.summary, candidate.summary) >= 0.8) {
+    if ((!normalizedTime || !existingTime) && wordSimilarity(existing.summary, candidate.summary) >= 0.8) {
       return { duplicate: true, reason: 'Similar event already exists on this date' }
     }
   }
