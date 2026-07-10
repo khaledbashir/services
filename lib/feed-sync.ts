@@ -10,6 +10,7 @@ export interface FeedVenue {
   address: string | null
   feed_url: string
   feed_type: FeedType
+  timezone?: string | null
   slack_channel_id?: string | null
   client_count?: number
   active_service_count: number
@@ -23,6 +24,10 @@ interface ExistingEventRow {
   summary: string
   event_date: string
   start_time: string | null
+  source: string | null
+  status: string | null
+  workflow_status: string | null
+  assigned_count: number
 }
 
 function normalizeSummary(summary: string): string {
@@ -54,19 +59,111 @@ function normalizeTimeForKey(time: string | null): string | null {
   return match ? match[1] : null
 }
 
-async function loadExistingEvents(venueId: string, startDate: string, endDate: string): Promise<ExistingEventRow[]> {
+async function loadExistingEvents(venueId: string, startDate: string, endDate: string, timezone: string): Promise<ExistingEventRow[]> {
   const result = await query(
     `SELECT id,
             summary,
             TO_CHAR(event_date, 'YYYY-MM-DD') as event_date,
-            TO_CHAR(start_time AT TIME ZONE 'America/New_York', 'HH24:MI') as start_time
+            TO_CHAR(start_time AT TIME ZONE $4, 'HH24:MI') as start_time,
+            source,
+            status,
+            workflow_status,
+            (SELECT COUNT(*)::int FROM event_assignments ea WHERE ea.event_id = events.id) AS assigned_count
      FROM events
      WHERE venue_id = $1
        AND event_date >= $2
        AND event_date <= $3`,
-    [venueId, startDate, endDate]
+    [venueId, startDate, endDate, timezone]
   )
   return result.rows
+}
+
+const DISCOVERY_MANAGED_SOURCES = new Set([
+  'ticketmaster',
+  'venue_calendar',
+  'team_website',
+  'ai_discovery',
+])
+
+function summariesMatch(left: string, right: string): boolean {
+  const normalizedLeft = normalizeSummary(left)
+  const normalizedRight = normalizeSummary(right)
+  if (!normalizedLeft || !normalizedRight) return false
+  if (normalizedLeft === normalizedRight) return true
+  const shorter = normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
+  const longer = normalizedLeft.length > normalizedRight.length ? normalizedLeft : normalizedRight
+  if (shorter.length >= 8 && longer.includes(shorter)) return true
+  return wordSimilarity(left, right) >= 0.6
+}
+
+async function reconcileAuthoritativeSchedule(
+  venue: FeedVenue,
+  feedEvents: FeedEvent[],
+  existingEvents: ExistingEventRow[]
+): Promise<{ updated: number; cancelled: number }> {
+  // Carbonhouse JSON is the venue's own complete calendar for the requested
+  // months. Generic/AI-extracted pages are not complete enough to safely
+  // cancel rows that disappear from a later run.
+  if (venue.feed_type !== 'team-website' || !feedEvents.some((event) => event.source === 'venue_calendar')) {
+    return { updated: 0, cancelled: 0 }
+  }
+
+  const timezone = venue.timezone || 'America/New_York'
+  const matchedExistingIds = new Set<string>()
+  let updated = 0
+
+  for (const feedEvent of feedEvents) {
+    const match = existingEvents.find((existing) =>
+      !matchedExistingIds.has(existing.id)
+      && existing.status !== 'cancelled'
+      && existing.event_date === feedEvent.date
+      && summariesMatch(existing.summary, feedEvent.name)
+    )
+    if (!match) continue
+    matchedExistingIds.add(match.id)
+
+    if (!DISCOVERY_MANAGED_SOURCES.has(match.source || '')) continue
+    const nextTime = normalizeTimeForKey(feedEvent.time)
+    const currentTime = normalizeTimeForKey(match.start_time)
+    if (match.summary === feedEvent.name && nextTime === currentTime && match.status !== 'cancelled') continue
+
+    await query(
+      `UPDATE events
+       SET summary = $2,
+           event_type = $3,
+           league = $4,
+           start_time = CASE
+             WHEN $5::text IS NULL THEN (($6::date + TIME '00:00') AT TIME ZONE $7)
+             ELSE (($6::date + $5::time) AT TIME ZONE $7)
+           END,
+           end_time = CASE
+             WHEN $5::text IS NULL THEN (($6::date + TIME '03:00') AT TIME ZONE $7)
+             ELSE ((($6::date + $5::time) AT TIME ZONE $7) + INTERVAL '3 hours')
+           END,
+           status = 'scheduled',
+           source = $8,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [match.id, feedEvent.name, feedEvent.eventType, feedEvent.league, nextTime, feedEvent.date, timezone, feedEvent.source]
+    )
+    updated++
+  }
+
+  let cancelled = 0
+  for (const existing of existingEvents) {
+    if (matchedExistingIds.has(existing.id)) continue
+    if (!DISCOVERY_MANAGED_SOURCES.has(existing.source || '')) continue
+    if (existing.status === 'cancelled') continue
+    if (existing.workflow_status !== 'pending' || Number(existing.assigned_count || 0) > 0) continue
+
+    await query(
+      `UPDATE events SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+      [existing.id]
+    )
+    cancelled++
+  }
+
+  return { updated, cancelled }
 }
 
 // Only filter genuinely TBD placeholder schedule entries, not real matchups
@@ -157,6 +254,7 @@ export async function getFeedSyncVenues(): Promise<FeedVenue[]> {
        v.address,
        v.feed_url,
        COALESCE(v.feed_type, 'other') as feed_type,
+       v.timezone,
        v.slack_channel_id,
        ${buildAutomationSelect('v', 'vs', 'st')}
      FROM venues v
@@ -183,7 +281,8 @@ export async function syncVenueFeed(
   error?: string
 }> {
   const today = new Date().toISOString().split('T')[0]
-  const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+  const horizonDays = venue.feed_type === 'team-website' ? 365 : 90
+  const horizonEnd = new Date(Date.now() + horizonDays * 86400000).toISOString().split('T')[0]
   const triggeredBy = audit?.triggeredByUserId || null
   const trigger = audit?.trigger || 'cron'
 
@@ -195,7 +294,7 @@ export async function syncVenueFeed(
     })
 
     const windowedEvents = parsedEvents.filter((event) => {
-      if (event.date < today || event.date > ninetyDaysOut) return false
+      if (event.date < today || event.date > horizonEnd) return false
       if (isPlaceholderSummary(event.name)) return false
       const sanity = checkEventSanity({
         summary: event.name,
@@ -205,7 +304,11 @@ export async function syncVenueFeed(
       })
       return sanity.valid
     })
-    const existingEvents = await loadExistingEvents(venue.id, today, ninetyDaysOut)
+    const timezone = venue.timezone || 'America/New_York'
+    const existingBeforeReconcile = await loadExistingEvents(venue.id, today, horizonEnd, timezone)
+    const reconciliation = await reconcileAuthoritativeSchedule(venue, windowedEvents, existingBeforeReconcile)
+    const existingEvents = (await loadExistingEvents(venue.id, today, horizonEnd, timezone))
+      .filter((event) => event.status !== 'cancelled')
     const discovered = windowedEvents.map((event) => {
       const candidate = feedEventToCandidate(event, venue)
       const duplicate = findDuplicate(candidate, existingEvents)
@@ -244,6 +347,7 @@ export async function syncVenueFeed(
           discovered,
           imported_count: imported.imported,
           skipped_count: imported.skipped,
+          reconciliation,
         }),
         triggeredBy,
         trigger,

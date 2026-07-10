@@ -117,6 +117,7 @@ export async function GET(
       WHERE e.venue_id = $1 
         AND e.event_date >= $2
         AND e.event_date <= $3
+        AND COALESCE(LOWER(e.status), 'scheduled') NOT IN ('cancelled', 'canceled')
       GROUP BY e.id, e.summary, e.league, e.event_type, e.event_date, e.start_time, e.workflow_status
       ORDER BY
         CASE WHEN e.event_date >= $4 THEN 0 ELSE 1 END,
@@ -319,6 +320,7 @@ export async function PATCH(
         const venueRow = await query(
           `SELECT v.id, v.name, v.address, v.feed_url,
                   COALESCE(v.feed_type, 'other') as feed_type,
+                  v.timezone,
                   0 AS active_service_count,
                   ARRAY[]::text[] AS active_service_names,
                   ARRAY[]::text[] AS active_service_descriptions,

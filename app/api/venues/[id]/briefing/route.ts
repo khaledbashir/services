@@ -108,7 +108,10 @@ async function fetchAndGenerate(venueId: string) {
               e.workflow_status, COUNT(ea.id) as assigned_count
        FROM events e
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= ($2::date + 14)
+       WHERE e.venue_id = $1
+         AND e.event_date >= $2
+         AND e.event_date <= ($2::date + 14)
+         AND COALESCE(LOWER(e.status), 'scheduled') NOT IN ('cancelled', 'canceled')
        GROUP BY e.id, e.summary, e.event_date, e.workflow_status
        ORDER BY e.start_time`,
       [venueId, today]
@@ -122,7 +125,11 @@ async function fetchAndGenerate(venueId: string) {
     query(
       `SELECT COUNT(*) as total,
               COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed
-       FROM events WHERE venue_id = $1 AND event_date >= ($2::date - 30) AND event_date < $2`,
+       FROM events
+       WHERE venue_id = $1
+         AND event_date >= ($2::date - 30)
+         AND event_date < $2
+         AND COALESCE(LOWER(status), 'scheduled') NOT IN ('cancelled', 'canceled')`,
       [venueId, today]
     ),
     query(
