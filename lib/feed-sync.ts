@@ -93,6 +93,16 @@ function summariesMatch(left: string, right: string): boolean {
   const shorter = normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
   const longer = normalizedLeft.length > normalizedRight.length ? normalizedLeft : normalizedRight
   if (shorter.length >= 8 && longer.includes(shorter)) return true
+  const leftWords = new Set(normalizeWords(left))
+  const rightWords = new Set(normalizeWords(right))
+  const smallerWordCount = Math.min(leftWords.size, rightWords.size)
+  if (smallerWordCount > 0) {
+    let overlap = 0
+    for (const word of leftWords) {
+      if (rightWords.has(word)) overlap++
+    }
+    if (overlap / smallerWordCount >= 0.6) return true
+  }
   return wordSimilarity(left, right) >= 0.6
 }
 

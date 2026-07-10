@@ -90,20 +90,27 @@ async function parseCarbonhouseCalendar(params: ParseFeedParams): Promise<FeedEv
         if (!name) continue
         const href = block.match(/<h3[^>]*>\s*<a[^>]*href="([^"]+)"/i)?.[1] || null
         const rawTime = block.match(/<div class="showings time"[^>]*>\s*([^<]+)</i)?.[1] || null
+        const showtimes = (rawTime || '')
+          .split(',')
+          .map((value) => normalizeClock(value))
+          .filter((value): value is string => Boolean(value))
+        const normalizedShowtimes: Array<string | null> = showtimes.length > 0 ? showtimes : [null]
 
-        events.push({
-          name,
-          date,
-          time: normalizeClock(rawTime),
-          teams: [],
-          eventType: classifyEvent(name),
-          league: inferLeague(name),
-          source: 'venue_calendar',
-          confidence: 0.99,
-          sourceUrl: absoluteUrl(feed.origin, href) || params.feedUrl,
-          sourceLabel: `${params.venueName} Official Calendar`,
-          evidenceSnippet: `${name} on ${date}${rawTime ? ` at ${decodeHtml(rawTime)}` : ''}`,
-        })
+        for (const showtime of normalizedShowtimes) {
+          events.push({
+            name,
+            date,
+            time: showtime,
+            teams: [],
+            eventType: classifyEvent(name),
+            league: inferLeague(name),
+            source: 'venue_calendar',
+            confidence: 0.99,
+            sourceUrl: absoluteUrl(feed.origin, href) || params.feedUrl,
+            sourceLabel: `${params.venueName} Official Calendar`,
+            evidenceSnippet: `${name} on ${date}${showtime ? ` at ${showtime}` : ''}`,
+          })
+        }
       }
     }
   }

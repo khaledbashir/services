@@ -456,7 +456,8 @@ async function loadExistingEvents(venueId: string, startDate: string, endDate: s
      FROM events
      WHERE venue_id = $1
        AND event_date >= $2
-       AND event_date <= $3`,
+       AND event_date <= $3
+       AND COALESCE(LOWER(status), 'scheduled') NOT IN ('cancelled', 'canceled')`,
     [venueId, startDate, endDate]
   )
   return result.rows
