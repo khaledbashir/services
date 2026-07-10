@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/skeleton'
 import { DesignProofUpload } from '@/components/design-proof-upload'
 import { TicketProofFtp } from '@/components/ticket-proof-ftp'
 import { CommentThread } from '@/components/comment-thread'
+import DesignActivityTimeline from '@/components/design-activity-timeline'
 
 import { INTERNAL_CATEGORIES, labelForCategory } from '@/lib/design-internal-category'
 
@@ -598,6 +599,8 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 Request closed. All fields are still visible above for reference.
               </p>
             </StageCard>
+
+            <DesignActivityTimeline designRequestId={dr.id} />
 
           </div>
 

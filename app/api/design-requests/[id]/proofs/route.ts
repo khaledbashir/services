@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { uploadProof, listProofsForRequest, isConfigured, getSignedDownloadUrl } from '@/lib/proof-storage'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
+import { logDesignActivity } from '@/lib/design-activity'
 
 // List every proof file (latest first) attached to this design request.
 // Combines the legacy bytea-backed rows and the new MinIO-backed rows into
@@ -165,6 +166,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
   }
 
+  await logDesignActivity({
+    designRequestId: params.id,
+    eventType: 'proof_created',
+    actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+    detail: {
+      filename: inserted.rows[0]?.filename || filename,
+      version: inserted.rows[0]?.version ?? null,
+    },
+  })
+
   // Per Alexis (2026-04-23 meeting): uploading a proof does NOT auto-send it
   // to the client. The designer uploads, Alexis (Enterprise Solutions) runs
   // QC first, then explicitly moves status to "Client Review" — that
@@ -194,6 +205,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   } catch (err) {
     // Don't fail the upload just because the status nudge hit a snag.
     console.error('[proofs POST] status-nudge failed:', err)
+  }
+
+  if (statusAdvanced) {
+    await logDesignActivity({
+      designRequestId: params.id,
+      eventType: 'status_change',
+      actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+      fromValue: 'request_submitted',
+      toValue: 'in_progress',
+      detail: { auto: true, reason: 'proof_uploaded' },
+    })
   }
 
   return NextResponse.json({

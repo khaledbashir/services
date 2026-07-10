@@ -9,6 +9,7 @@ import { Designs, isTwentyBackedEnabled, type TwentyDesignRequest } from '@/lib/
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { loadDesignAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
 import { loadTriCodeMap, upsertTriCode } from '@/lib/tricode-side-tables'
+import { logDesignActivity } from '@/lib/design-activity'
 
 function normalizeTwentyStatus(raw: string | null | undefined): string {
   if (!raw) return 'request_submitted'
@@ -395,6 +396,17 @@ export async function POST(request: NextRequest) {
         [created.id, staffId],
       )
     }
+
+    await logDesignActivity({
+      designRequestId: created.id,
+      eventType: 'created',
+      actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+      toValue: created.status || null,
+      detail: {
+        jobTitle: created.job_title || null,
+        designerCount: Array.from(new Set(designerIds)).length,
+      },
+    })
 
     return NextResponse.json({ design_request: created })
   } catch (err) {

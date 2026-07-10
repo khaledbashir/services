@@ -452,6 +452,23 @@ async function runMigrations() {
       PRIMARY KEY (design_request_id, staff_id)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_designers_staff ON design_request_designers(staff_id)`)
+    // Append-only activity log for design tickets — one row per meaningful
+    // event (status change, time logged, proof created, client response,
+    // assignment, reschedule, comment). Powers the ticket history timeline.
+    // Never updated or deleted except by the ticket's ON DELETE CASCADE.
+    await client.query(`CREATE TABLE IF NOT EXISTS design_request_activity (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      actor_id UUID,
+      actor_name TEXT,
+      actor_email TEXT,
+      from_value TEXT,
+      to_value TEXT,
+      detail JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_activity_req ON design_request_activity(design_request_id, created_at DESC)`)
     await client.query(`CREATE TABLE IF NOT EXISTS design_request_enterprise_contacts (
       design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

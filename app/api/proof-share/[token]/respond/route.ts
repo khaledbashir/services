@@ -6,6 +6,7 @@ import {
   patchTwentyRecord,
 } from '@/lib/proof-share'
 import { sendSlackMessage } from '@/lib/slack'
+import { logDesignActivity } from '@/lib/design-activity'
 
 /**
  * POST /api/proof-share/[token]/respond
@@ -37,7 +38,7 @@ export async function POST(
     // Fetch the share
     const shareResult = await query(
       `SELECT token, twenty_object_type, twenty_record_id, expires_at,
-              client_response, created_by_name, created_by_email, message
+              client_response, created_by_name, created_by_email, message, client_name
        FROM proof_shares WHERE token = $1`,
       [token]
     )
@@ -82,6 +83,13 @@ export async function POST(
         `UPDATE design_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
         [newStatus, share.twenty_record_id]
       )
+      await logDesignActivity({
+        designRequestId: share.twenty_record_id,
+        eventType: 'client_response',
+        actor: { fullName: share.client_name || 'Client' },
+        toValue: response,
+        detail: { note: note || null, proofToken: token },
+      })
     } else {
       const cfg = OBJECT_CONFIGS[share.twenty_object_type]
       if (!cfg) {

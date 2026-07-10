@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { logDesignActivity } from '@/lib/design-activity'
 
 // Per-job hour logging. Alexis 2026-04-23: "designer can log hours instead
 // of an estimate for the full job." The designer_time_entries table already
@@ -73,6 +74,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
      WHERE id = $1`,
     [params.id]
   )
+
+  await logDesignActivity({
+    designRequestId: params.id,
+    eventType: 'time_logged',
+    actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+    detail: {
+      hours,
+      entryDate: inserted.rows[0]?.entry_date || null,
+      description: description || null,
+      onBehalfOf: designerId !== auth.userId ? designerId : null,
+    },
+  })
 
   return NextResponse.json({ entry: inserted.rows[0] })
 }

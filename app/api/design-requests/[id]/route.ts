@@ -8,6 +8,7 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
+import { logDesignActivity } from '@/lib/design-activity'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
@@ -79,7 +80,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
 
   const result = await query(
     `SELECT dr.id, dr.venue_id, dr.job_title, dr.company_name, dr.tricode,
-            dr.ftp_proof_link, dr.ftp_final_link, dr.final_file_name, dr.final_duration,
+            dr.ftp_proof_link, dr.legacy_ftp_proof_link, dr.ftp_final_link, dr.final_file_name, dr.final_duration,
             dr.notes, dr.boards_requested, dr.sizes_requested, dr.designer_id,
             dr.enterprise_contact_id, dr.status, dr.hours_estimated, dr.hours_spent,
             dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
@@ -128,6 +129,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return null
       }
     }
+    const lookupLegacyProofLink = async (id: string): Promise<string | null> => {
+      try {
+        const r = await query(
+          `SELECT legacy_ftp_proof_link FROM design_requests WHERE id = $1`,
+          [id],
+        )
+        return r.rows[0]?.legacy_ftp_proof_link || null
+      } catch {
+        return null
+      }
+    }
 
     if (isTwentyBackedEnabled('DESIGNS')) {
       const auth = await requireRole(request, 'technician')
@@ -168,6 +180,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           boards_requested: d.boardSection || null,
           sizes_requested: d.sizes || null,
           ftp_proof_link: d.proofShareUrl || d.proofLink || d.ftpProofLink || null,
+          legacy_ftp_proof_link: await lookupLegacyProofLink(d.id),
           ftp_final_link: d.ftpFinalLink || null,
           final_file_name: d.localFilePath || null,
           final_duration: null,
@@ -233,6 +246,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
       const updated = await Designs.update(params.id, patch)
 
+      // History: record a status transition when the normalized status moved.
+      if (normalizedNextStatus && normalizedNextStatus !== priorStatusDashboard) {
+        await logDesignActivity({
+          designRequestId: params.id,
+          eventType: 'status_change',
+          actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+          fromValue: priorStatusDashboard || null,
+          toValue: normalizedNextStatus,
+        })
+      }
+
       // Tri-code side table (Twenty has no native field on designRequests).
       if ('tricode' in body) {
         await upsertTriCode('design_request_tricodes', params.id, body.tricode)
@@ -260,6 +284,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           // record directly (Jireh via CRM) sees the same URL clients received.
           if (proofShare?.url) {
             try { await Designs.update(params.id, { proofLink: proofShare.url, proofSentAt: new Date().toISOString() }) } catch {}
+          }
+          if (proofShare?.token) {
+            await logDesignActivity({
+              designRequestId: params.id,
+              eventType: 'proof_sent',
+              actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+              detail: {
+                emailed: proofShare.emailed,
+                clientEmail: proofShare.client_email,
+              },
+            })
           }
         } catch (err) {
           console.error('[design-requests PATCH twenty-backed] proof share creation failed:', err)
@@ -349,6 +384,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       values,
     )
 
+    // History: record status transitions and reschedules on the local path.
+    if (normalizedNextStatus && normalizedNextStatus !== access.record.status) {
+      await logDesignActivity({
+        designRequestId: params.id,
+        eventType: 'status_change',
+        actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
+        fromValue: access.record.status || null,
+        toValue: normalizedNextStatus,
+      })
+    }
+    if ('due_date' in body) {
+      const nextDue = normalizeValue('due_date', body.due_date)
+      const priorDue = access.record.due_date ? String(access.record.due_date).slice(0, 10) : null
+      const nextDueStr = nextDue ? String(nextDue).slice(0, 10) : null
+      if (nextDueStr !== priorDue) {
+        await logDesignActivity({
+          designRequestId: params.id,
+          eventType: 'rescheduled',
+          actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
+          fromValue: priorDue,
+          toValue: nextDueStr,
+        })
+      }
+    }
+
     // Gamification: award points once when design work reaches approved/done.
     if ((body.status === 'done' || body.status === 'approved') && access.record.status !== body.status) {
       const designerId = access.record.designer_id
@@ -383,9 +443,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         // here; the Client Review transition should always replace it with
         // the public proof-share link.
         await query(
-          `UPDATE design_requests SET ftp_proof_link = $1 WHERE id = $2`,
+          `UPDATE design_requests
+           SET legacy_ftp_proof_link = COALESCE(
+                 legacy_ftp_proof_link,
+                 CASE
+                   WHEN ftp_proof_link IS NOT NULL
+                    AND ftp_proof_link !~ '/proof/[A-Za-z0-9_-]+/?$'
+                   THEN ftp_proof_link
+                   ELSE NULL
+                 END
+               ),
+               ftp_proof_link = $1
+           WHERE id = $2`,
           [proofShare.url, params.id]
         )
+        if (proofShare?.token) {
+          await logDesignActivity({
+            designRequestId: params.id,
+            eventType: 'proof_sent',
+            actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
+            detail: { emailed: proofShare.emailed, clientEmail: proofShare.client_email },
+          })
+        }
       } catch (err) {
         console.error('Proof share creation failed:', err)
       }

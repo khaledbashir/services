@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { logDesignActivity } from '@/lib/design-activity'
 
 // Multi-designer + multi-enterprise-contact assignments on a design request.
 // Alexis 2026-04-23: "can we make it so there can be multiple Enterprise
@@ -73,6 +74,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         `UPDATE design_requests SET designer_id = $1, updated_at = NOW() WHERE id = $2`,
         [newPrimary, params.id]
       )
+      let names: string[] = []
+      if (designerIds.length) {
+        const nameRes = await query(
+          `SELECT full_name FROM staff WHERE id = ANY($1::uuid[])`,
+          [designerIds]
+        )
+        names = nameRes.rows.map((r: any) => r.full_name).filter(Boolean)
+      }
+      await logDesignActivity({
+        designRequestId: params.id,
+        eventType: designerIds.length ? 'assigned' : 'unassigned',
+        actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+        toValue: names.join(', ') || null,
+        detail: { designerCount: designerIds.length },
+      })
     }
     if (entIds !== null) {
       await query(`DELETE FROM design_request_enterprise_contacts WHERE design_request_id = $1`, [params.id])
