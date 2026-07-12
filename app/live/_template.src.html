@@ -115,6 +115,11 @@ html.kinetic .kcv{display:block;position:absolute;inset:0;width:100%;height:100%
 /* ---------- 00 · leader + studio card ---------- */
 #leader-cv{display:none}
 html.kinetic #leader-cv{display:block;position:absolute;inset:0;will-change:opacity}
+.first-frame{position:absolute;inset:0;z-index:6;display:grid;place-items:center;text-align:center;padding:8vw;background:radial-gradient(circle at 50% 45%,rgba(10,82,239,.22),transparent 32%),linear-gradient(180deg,rgba(7,10,24,.18),rgba(7,10,24,.78));opacity:1;visibility:visible;transition:opacity .65s cubic-bezier(.2,.8,.2,1),visibility .65s}
+.first-frame img{width:min(44vw,360px);height:auto;margin:0 auto 3vh;filter:drop-shadow(0 18px 50px rgba(0,0,0,.4))}
+.first-frame strong{display:block;font-size:clamp(2.2rem,6.5vw,6.5rem);line-height:.88;text-transform:uppercase;letter-spacing:-.03em;font-variation-settings:'wght' 900,'wdth' 78}
+.first-frame span{display:block;margin-top:2.4vh;color:var(--acc);font-size:10px;letter-spacing:.46em;text-transform:uppercase}
+html.film-started .first-frame{opacity:0;visibility:hidden;pointer-events:none}
 .studio{padding:0 6vw}
 .studio-t{font-size:clamp(2.4rem,7.4vw,6.8rem);line-height:.98;text-transform:uppercase;letter-spacing:.02em;font-variation-settings:'wght' 870,'wdth' 86}
 .studio-p{margin-top:3vh;font-size:clamp(.7rem,1.1vw,.85rem);letter-spacing:.62em;text-transform:uppercase;font-variation-settings:'wght' 520,'wdth' 100;padding-left:.62em}
@@ -300,13 +305,14 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
 </header>
 <div class="prog" id="prog" aria-hidden="true"></div>
 
-<script>window.__ANC_MAP__ = {{MAP_JSON}};</script>
+<script>window.__ANC_MAP__ = [{"name":"Watsco Center","lat":25.7153095,"lng":-80.2793844,"live":false},{"name":"Moody Coliseum","lat":32.8408274,"lng":-96.7796552,"live":false},{"name":"Kauffman Stadium","lat":39.0515081,"lng":-94.4804598,"live":false},{"name":"QA OOH Venue","lat":55.6473941,"lng":-97.9491468,"live":false},{"name":"Crypto.com Arena","lat":34.0429979,"lng":-118.2671352,"live":false},{"name":"Toyota Center","lat":29.7507473,"lng":-95.3622315,"live":true},{"name":"Indiana University","lat":39.1660594,"lng":-86.5265353,"live":false},{"name":"Iona University","lat":40.9260231,"lng":-73.7889285,"live":false},{"name":"La Salle University (Kirks Pool - Water Polo, Swimming, Diving)","lat":40.0374846,"lng":-75.1523978,"live":false},{"name":"La Salle University (John E Glazer Arena - Basketball and Tumbling","lat":40.0374846,"lng":-75.1523978,"live":true},{"name":"Iona Prep","lat":40.9620273,"lng":-73.7956599,"live":false},{"name":"Crowley Independent School District (ISD)","lat":32.6099369,"lng":-97.3396214,"live":false},{"name":"TD Garden","lat":42.3662986,"lng":-71.0621622,"live":false},{"name":"Binghamton University","lat":42.0877998,"lng":-75.9706607,"live":true},{"name":"PPG Paints Arena","lat":40.4395912,"lng":-79.9895408,"live":true},{"name":"Pegula Ice Arena","lat":40.8009231,"lng":-77.8499591,"live":false},{"name":"WMATA","lat":38.8852276,"lng":-77.0213915,"live":false},{"name":"College of Charleston","lat":32.784031,"lng":-79.9374603,"live":false},{"name":"Fordham University","lat":40.8605307,"lng":-73.8850043,"live":false},{"name":"Georgetown University","lat":38.9089393,"lng":-77.0745796,"live":true},{"name":"The Arena at Innovation Mile","lat":39.992404,"lng":-85.912343,"live":false},{"name":"Truist Stadium","lat":36.0914529,"lng":-80.2552368,"live":false},{"name":"Fairleigh Dickinson University (FDU Bogota Saving Bank Center - Basketball, Volleyball)","lat":40.8978881,"lng":-74.0338918,"live":false},{"name":"TD Ballpark","lat":28.0038021,"lng":-82.786662,"live":true},{"name":"Cleveland Public Auditorium","lat":41.5035164,"lng":-81.6928913,"live":false},{"name":"Baylor University (Foster Pavilion - Basketball)","lat":31.5556188,"lng":-97.123118,"live":false},{"name":"The Liacouras Center","lat":39.9798139,"lng":-75.1585825,"live":false},{"name":"Prudential Center","lat":40.7334302,"lng":-74.1711482,"live":false},{"name":"Arizona State University (ASU)","lat":33.4213174,"lng":-111.9331631,"live":false},{"name":"Nationals Park","lat":38.8727332,"lng":-77.0074815,"live":true},{"name":"Polar Park","lat":42.256283,"lng":-71.800465,"live":true},{"name":"Cheney Stadium","lat":47.238314,"lng":-122.4976015,"live":false},{"name":"Amerant Bank Arena","lat":26.1557691,"lng":-80.3239956,"live":false},{"name":"Uniqlo Field at Dodger Stadium ","lat":34.0736255,"lng":-118.2398452,"live":true},{"name":"Comerica Park","lat":42.337813,"lng":-83.051314,"live":true},{"name":"Boise State University (Albertsons Stadium- Football)","lat":43.6023481,"lng":-116.1986575,"live":false},{"name":"Maimonides Park","lat":40.5749582,"lng":-73.9839665,"live":true},{"name":"Bryce Jordan Center","lat":40.8031049,"lng":-77.8626151,"live":false},{"name":"Moda Center","lat":45.532929,"lng":-122.667657,"live":false},{"name":"Dahlberg Arena","lat":46.8541841,"lng":-113.9655283,"live":false},{"name":"Xfinity Mobile Arena","lat":39.9011004,"lng":-75.1720165,"live":false},{"name":"University of Montana","lat":46.8635292,"lng":-113.9851375,"live":false},{"name":"NTM - 1015 Halsted Chicago","lat":41.9005236,"lng":-87.6474818,"live":false},{"name":"Quinnipiac University","lat":41.4207445,"lng":-72.8990067,"live":false},{"name":"Southern Methodist University (SMU)","lat":32.8377899,"lng":-96.782791,"live":false},{"name":"Umass Lowell","lat":42.6500395,"lng":-71.3239758,"live":false},{"name":"277 Park Ave - NYC","lat":40.7552631,"lng":-73.9742085,"live":false},{"name":"at&t Times Square","lat":40.756604,"lng":-73.987007,"live":false},{"name":"University of North Texas","lat":33.2098926,"lng":-97.1514762,"live":false},{"name":"University of Pennsylvania (UPenn)","lat":39.9536186,"lng":-75.1938579,"live":false},{"name":"University of Saint Thomas","lat":44.9412443,"lng":-93.1896575,"live":false},{"name":"Northwest Stadium","lat":38.9076694,"lng":-76.864533,"live":false},{"name":"Galveston Terminal Pier 16","lat":29.3100366,"lng":-94.7868049,"live":true},{"name":"University of Utah","lat":40.7628137,"lng":-111.8368719,"live":false},{"name":"Villanova University","lat":40.0359804,"lng":-75.343307,"live":false},{"name":"Heritage - Javits Center","lat":40.7583595,"lng":-74.0021206,"live":false},{"name":"Marshall University (Joan C. Edwards Stadium - Football)","lat":38.425489,"lng":-82.423096,"live":false},{"name":"NTM - 1604 Broadway","lat":40.6870972,"lng":-73.7021573,"live":false},{"name":"Western Kentucky University","lat":36.984529,"lng":-86.457647,"live":false},{"name":"Oakland University","lat":42.6666333,"lng":-83.2065575,"live":true},{"name":"Ohio University","lat":39.3267849,"lng":-82.1001991,"live":false},{"name":"Penn State University (PSU)","lat":40.7969435,"lng":-77.8634449,"live":false},{"name":"Aventura Mall","lat":25.956946,"lng":-80.1430334,"live":false},{"name":"University of Louisville","lat":38.2132998,"lng":-85.7596616,"live":false},{"name":"OBM - 51 Brookline","lat":42.3473432,"lng":-71.0986931,"live":false},{"name":"OBM - 1202 3rd Street Santa Monica","lat":34.0179374,"lng":-118.4993012,"live":false},{"name":"NTM - Miami Children's Museum","lat":25.7847781,"lng":-80.1764864,"live":false},{"name":"JP Morgan Chase","lat":40.7559787,"lng":-73.9759701,"live":false},{"name":"OBM - Brooks Tower","lat":39.7463058,"lng":-104.996776,"live":false},{"name":"OBM - Charlotte Hornets Exterior","lat":35.225098,"lng":-80.8391541,"live":false},{"name":"Anfield","lat":53.4319274,"lng":-2.9607302,"live":false},{"name":"Xavier University","lat":39.149898,"lng":-84.4746463,"live":true},{"name":"Sports illustrated Resort Nashville","lat":36.153256,"lng":-86.792424,"live":false},{"name":"Westfield Fulton Center","lat":40.7104439,"lng":-74.0089465,"live":false},{"name":"NTM - Union Station DC","lat":38.9042275,"lng":-77.0058862,"live":false},{"name":"Westgate Entertainment District","lat":33.5335231,"lng":-112.2612886,"live":false},{"name":"Bergen Catholic High School","lat":40.959101,"lng":-74.0498397,"live":false},{"name":"MGM Grand Garden Arena","lat":36.1027891,"lng":-115.1694006,"live":false},{"name":"Barclays Center","lat":40.6825106,"lng":-73.9752519,"live":true},{"name":"NBC Universal 30 Rock","lat":40.7591232,"lng":-73.979556,"live":false},{"name":"OBM - Arlington Choctaw","lat":32.7512975,"lng":-97.0825648,"live":false},{"name":"Rock and Roll Hall of Fame","lat":41.5087678,"lng":-81.6945391,"live":false},{"name":"Spectrum Center","lat":35.225098,"lng":-80.8391541,"live":false},{"name":"Shepherd Stadium","lat":37.248763,"lng":-77.416076,"live":true},{"name":"Super Dome","lat":29.9510489,"lng":-90.0823076,"live":false},{"name":"Marshall University (Dot Hicks Field - Softball)","lat":38.4262391,"lng":-82.4197014,"live":false},{"name":"First Horizon Park","lat":36.1622767,"lng":-86.7742984,"live":false},{"name":"Marshall University (Hoops Family Field - Soccer)","lat":38.4282788,"lng":-82.3925219,"live":false},{"name":"Melissa Independent School District (ISD)","lat":33.2875713,"lng":-96.5425193,"live":false},{"name":"Moody Center","lat":30.2809367,"lng":-97.7306522,"live":false},{"name":"M&T Bank Stadium","lat":39.2786761,"lng":-76.6245361,"live":false},{"name":"Lumen Field","lat":47.5953459,"lng":-122.3316443,"live":true},{"name":"Nissan Stadium","lat":36.1665236,"lng":-86.7713148,"live":false},{"name":"Synovous Park","lat":32.453102,"lng":-84.993135,"live":true},{"name":"Cotton Bowl","lat":32.7796119,"lng":-96.7596025,"live":false},{"name":"Capital One Arena & Monumental Sports & Entertainment","lat":38.8979408,"lng":-77.0217569,"live":false},{"name":"Victory Field","lat":39.7647688,"lng":-86.1693835,"live":false},{"name":"Subaru Park","lat":39.8288989,"lng":-75.3835428,"live":true},{"name":"Reliant Stadium","lat":29.6811729,"lng":-95.4059688,"live":true},{"name":"Gwinnet Stadium","lat":34.040665,"lng":-83.9924762,"live":true},{"name":"Noblesville Event Center","lat":39.992404,"lng":-85.912343,"live":true},{"name":"Daikin Park","lat":29.7572321,"lng":-95.3552344,"live":false},{"name":"Pocono Raceway","lat":41.0605146,"lng":-75.5117578,"live":false},{"name":"Hadlock Field","lat":43.6567752,"lng":-70.2782328,"live":false},{"name":"Joseph P. Riley Jr. Park","lat":32.7906618,"lng":-79.9609281,"live":false},{"name":"Rutgers University (Yurcak - Soccer)","lat":40.5174223,"lng":-74.4656976,"live":false},{"name":"University of Arkansas (Razorback Field - Soccer)","lat":36.0585921,"lng":-94.1765772,"live":false},{"name":"Audi Field","lat":38.8682612,"lng":-77.0126092,"live":false},{"name":"Kia Center","lat":28.5392867,"lng":-81.3838892,"live":false},{"name":"NTM - 1674 Broadway","lat":40.76279,"lng":-73.9829442,"live":false},{"name":"Dr. Detail","lat":42.1408235,"lng":-71.2162008,"live":false},{"name":"Rutgers University (Rutgers Softball Complex - Softball)","lat":40.5267824,"lng":-74.4409768,"live":true},{"name":"390 Madison Ave","lat":40.755502,"lng":-73.977433,"live":false},{"name":"Brandywine Realty Trust","lat":32.8624226,"lng":-96.8506261,"live":false},{"name":"University of Arkansas (Baum-Walker Stadium - Baseball)","lat":36.050156,"lng":-94.1831402,"live":false},{"name":"John E. Glaser Arena","lat":40.0374846,"lng":-75.1523978,"live":false},{"name":"Levi's Stadium","lat":37.4029867,"lng":-121.9696489,"live":false},{"name":"BMO Harris Bank Center","lat":42.2702188,"lng":-89.096132,"live":false},{"name":"Providence Park","lat":45.5224071,"lng":-122.6924111,"live":false},{"name":"UCLA Health Training Center","lat":33.9245533,"lng":-118.3840551,"live":false},{"name":"Columbia University","lat":42.6828774,"lng":-73.7239744,"live":false},{"name":"Met Life Stadium","lat":40.8135071,"lng":-74.0743442,"live":false},{"name":"NTM - Miami Garage","lat":25.7847781,"lng":-80.1764864,"live":false},{"name":"Rose Bowl","lat":34.1613492,"lng":-118.1676674,"live":true},{"name":"Louisiana State University (LSU)","lat":30.4062005,"lng":-91.1854129,"live":false},{"name":"United Center","lat":41.8806831,"lng":-87.6741851,"live":true},{"name":"University of Arkansas (Razorback Stadium - Football)","lat":36.0686266,"lng":-94.1799464,"live":false},{"name":"University of Notre Dame","lat":41.7054506,"lng":-86.2327817,"live":false},{"name":"Temple University","lat":39.9834609,"lng":-75.1551162,"live":false},{"name":"Sports Illustrated Stadium","lat":40.735115,"lng":-74.155222,"live":false},{"name":"Rutgers University (Bainton Field - Baseball)","lat":40.5267824,"lng":-74.4409768,"live":false},{"name":"Boise State University (Donna Larson Park - Softball)","lat":43.6097303,"lng":-116.1914104,"live":false},{"name":"Madison Square Garden (MSG)","lat":40.7504102,"lng":-73.9928259,"live":false},{"name":"Moynihan Station","lat":40.7516764,"lng":-73.9959678,"live":false},{"name":"NTM - Brush St. Detroit Garage","lat":42.3337543,"lng":-83.043873,"live":false},{"name":"OBM - 301 Arizona Ave","lat":34.0174405,"lng":-118.4974316,"live":false},{"name":"Omni PGA Frisco","lat":33.2153528,"lng":-96.8637735,"live":false},{"name":"Pensacola Bay Center","lat":30.416925,"lng":-87.20913,"live":false},{"name":"Providence College","lat":41.8442938,"lng":-71.4354886,"live":false},{"name":"Bank of America Stadium","lat":35.225774,"lng":-80.8528276,"live":true},{"name":"Tsongas Center","lat":42.6462607,"lng":-71.3130313,"live":true},{"name":"University of South Carolina","lat":34.000084,"lng":-81.027376,"live":false},{"name":"Vanderbilt University","lat":36.1438011,"lng":-86.8028189,"live":false},{"name":"Westfield World Trade Center","lat":40.7112931,"lng":-74.0105013,"live":false},{"name":"West Virginia University (WVU)","lat":39.633697,"lng":-79.955008,"live":false},{"name":"ExtraMile Arena","lat":43.6023481,"lng":-116.1986575,"live":false},{"name":"MGM Music Hall at Fenway","lat":42.3466937,"lng":-71.0954944,"live":true},{"name":"Fresno State University","lat":36.8209963,"lng":-119.7372976,"live":false},{"name":"Arizona Athletic Grounds","lat":33.3001654,"lng":-111.6288403,"live":false},{"name":"Boise State University (Hall of Fame)","lat":43.604911,"lng":-116.206226,"live":false},{"name":"Delta Dental Stadium","lat":42.9813691,"lng":-71.4669992,"live":false},{"name":"Fenway Park","lat":42.3464614,"lng":-71.0970999,"live":false},{"name":"H-E-B Center at Cedar Park","lat":30.5413221,"lng":-97.8205235,"live":false},{"name":"University of Maine (Alfond Arena - Hockey)","lat":44.9039861,"lng":-68.6730627,"live":false},{"name":"University of Wyoming","lat":41.314986,"lng":-105.5643222,"live":false},{"name":"American Airlines Center","lat":32.7904894,"lng":-96.810283,"live":true},{"name":"University of Rhode Island (Meade Stadium - Football and Lax)","lat":41.4884581,"lng":-71.5330991,"live":false},{"name":"Cross Insurance Arena","lat":43.6555281,"lng":-70.2593331,"live":false},{"name":"Brigham Young University","lat":40.2507073,"lng":-111.6564683,"live":true},{"name":"United States Naval Academy","lat":38.9819343,"lng":-76.4821362,"live":false},{"name":"Fifth Third Field","lat":41.6475642,"lng":-83.5382828,"live":false},{"name":"Finneran Pavilion","lat":40.0359804,"lng":-75.343307,"live":false},{"name":"American Family Field","lat":43.0287036,"lng":-87.9728106,"live":false},{"name":"Gainbridge Fieldhouse","lat":39.7639331,"lng":-86.1555024,"live":false}];</script>
 <main>
 
   <!-- 00 — academy leader + studio card -->
   <section class="track sec-d" id="sc-leader">
     <div class="sticky stage">
       <canvas id="leader-cv" aria-hidden="true"></canvas>
+      <div class="first-frame" id="first-frame"><div><img src="/brand-2026/anc-logo-main-white-transparent.png" alt="ANC"><strong>Service<br>Operations</strong><span>Scroll to roll film</span></div></div>
       <div class="studio" id="studio">
         <img class="anc-logo-leader" src="/brand-2026/anc-logo-main-white-transparent.png" alt="ANC"/>
         <h2 class="studio-t" data-split>ANC Sports</h2>
@@ -374,12 +380,12 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
         <p class="act-no">Act Two</p>
         <h2 class="act-t">The Scale</h2>
       </div>
-      <div class="stat"><span class="stat-k">01</span><div class="stat-n">{{YTD}}</div><div class="stat-l">events coordinated in 2026</div></div>
-      <div class="stat"><span class="stat-k">02</span><div class="stat-n">{{ALLTIME}}</div><div class="stat-l">events all-time</div></div>
-      <div class="stat"><span class="stat-k">03</span><div class="stat-n">{{VENUES}}</div><div class="stat-l">venues in network</div></div>
-      <div class="stat"><span class="stat-k">04</span><div class="stat-n">{{STATES}}</div><div class="stat-l">states covered</div></div>
-      <div class="stat"><span class="stat-k">05</span><div class="stat-n">{{MARKETS}}</div><div class="stat-l">markets</div></div>
-      <div class="stat"><span class="stat-k">06</span><div class="stat-n">{{TICKETS}}</div><div class="stat-l">service tickets handled</div></div>
+      <div class="stat"><span class="stat-k">01</span><div class="stat-n">11,337</div><div class="stat-l">events coordinated in 2026</div></div>
+      <div class="stat"><span class="stat-k">02</span><div class="stat-n">11,927</div><div class="stat-l">events all-time</div></div>
+      <div class="stat"><span class="stat-k">03</span><div class="stat-n">230</div><div class="stat-l">venues in network</div></div>
+      <div class="stat"><span class="stat-k">04</span><div class="stat-n">38</div><div class="stat-l">states covered</div></div>
+      <div class="stat"><span class="stat-k">05</span><div class="stat-n">15</div><div class="stat-l">markets</div></div>
+      <div class="stat"><span class="stat-k">06</span><div class="stat-n">1,478</div><div class="stat-l">service tickets handled</div></div>
       <div class="stat-idx" id="stat-idx">01 / 06</div>
     </div>
   </section>
@@ -389,8 +395,8 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
     <div style="height:100vh;height:100svh;position:relative;overflow:hidden">
       <div class="anc-map-wrap"><div id="globe" style="position:absolute;inset:0"></div></div>
       <div class="anc-map-overlay">
-        <div class="anc-map-big">{{TONIGHT_EVENTS}}</div>
-        <div class="anc-map-sub">events live tonight · {{TONIGHT_STATES}} states · {{TONIGHT_VENUES}} venues</div>
+        <div class="anc-map-big">42</div>
+        <div class="anc-map-sub">events live tonight · 18 states · 37 venues</div>
       </div>
       <div class="anc-map-cap"><span style="width:9px;height:9px;border-radius:50%;background:#03B8FF;box-shadow:0 0 10px #03B8FF"></span><span>Live tonight — drag &amp; zoom</span></div>
     </div>
@@ -403,7 +409,7 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
       <div class="act-card" id="a3-card">
         <p class="act-no">Act Three</p>
         <h2 class="act-t">Tonight</h2>
-        <p class="act-sub">{{TONIGHT_EVENTS}} events live across {{TONIGHT_STATES}} states.</p>
+        <p class="act-sub">42 events live across 18 states.</p>
       </div>
     </div>
   </section>
@@ -417,7 +423,7 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
           <h3 class="h-name">National Footprint</h3>
           <div class="w-card">
             <p class="w-k">01 · National Footprint</p>
-            <p class="w-metric">{{VENUES}} venues · {{STATES}} states · {{MARKETS}} markets</p>
+            <p class="w-metric">230 venues · 38 states · 15 markets</p>
             <p class="w-copy">From iconic stadiums to transit hubs, ANC keeps displays live across the country — every venue, one operation.</p>
           </div>
         </article>
@@ -425,7 +431,7 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
           <h3 class="h-name">Tonight, Live</h3>
           <div class="w-card">
             <p class="w-k">02 · Tonight, Live</p>
-            <p class="w-metric">{{TONIGHT_EVENTS}} events · {{TONIGHT_VENUES}} venues tonight</p>
+            <p class="w-metric">42 events · 37 venues tonight</p>
             <p class="w-copy">Every game, concert and show tonight — scheduled, staffed, and tracked in real time on one screen.</p>
           </div>
         </article>
@@ -433,7 +439,7 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
           <h3 class="h-name">The Service Desk</h3>
           <div class="w-card">
             <p class="w-k">03 · The Service Desk</p>
-            <p class="w-metric">{{TICKETS}} tickets handled · {{RESOLVED_PCT}}% resolved</p>
+            <p class="w-metric">1,478 tickets handled · 98% resolved</p>
             <p class="w-copy">When something needs attention at a venue, it is logged, routed, and closed out — at scale.</p>
           </div>
         </article>
@@ -446,13 +452,13 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
     <div class="sticky">
       <div class="credits" id="credits">
         <p class="cr-head cr-f">Tonight · Live</p>
-        <div class="cr-f"><p class="cr-super">{{TONIGHT_EVENTS}}</p><p class="cr-super-label">events · one operation</p></div>
-        <p class="cr-line cr-f">{{TONIGHT_VENUES}} venues across {{TONIGHT_STATES}} states</p>
+        <div class="cr-f"><p class="cr-super">42</p><p class="cr-super-label">events · one operation</p></div>
+        <p class="cr-line cr-f">37 venues across 18 states</p>
         <p class="cr-head cr-f">The Network</p>
-        <div class="cr-f"><p class="cr-super">{{VENUES}}</p><p class="cr-super-label">venues under one standard</p></div>
-        <p class="cr-line cr-f">{{MARKETS}} markets · coast to coast</p>
+        <div class="cr-f"><p class="cr-super">230</p><p class="cr-super-label">venues under one standard</p></div>
+        <p class="cr-line cr-f">15 markets · coast to coast</p>
         <p class="cr-head cr-f">The Record · 2026</p>
-        <div class="cr-f"><p class="cr-super">{{YTD}}</p><p class="cr-super-label">events coordinated</p></div>
+        <div class="cr-f"><p class="cr-super">11,337</p><p class="cr-super-label">events coordinated</p></div>
         <div class="cr-lock cr-f"><strong>Ready before showtime.</strong><span>ANC Service Operations</span></div>
         <p class="cr-note cr-f">Live operating data. Updated continuously.</p>
       </div>
@@ -1144,6 +1150,12 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
     size(); window.addEventListener('resize',size);
   }
   if(document.readyState!=='loading')init();else document.addEventListener('DOMContentLoaded',init);
+})();
+</script>
+<script>
+(function(){
+  function syncFirstFrame(){document.documentElement.classList.toggle('film-started',scrollY>24);}
+  syncFirstFrame();addEventListener('scroll',syncFirstFrame,{passive:true});
 })();
 </script>
 </body>
