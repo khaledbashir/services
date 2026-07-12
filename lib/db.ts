@@ -1601,6 +1601,19 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_gam_lb_period ON gamification_leaderboard_snapshots(period, snapshot_at)`)
 
+    // Single-row store for the project schedule workbook. Holding the bytes here
+    // rather than reading them off the container filesystem keeps the page alive
+    // across rebuilds and lets a manager replace the schedule without a deploy.
+    await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_workbook (
+      id TEXT PRIMARY KEY DEFAULT 'current',
+      filename TEXT NOT NULL,
+      content BYTEA NOT NULL,
+      byte_size INTEGER NOT NULL,
+      uploaded_by TEXT,
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT project_schedule_workbook_singleton CHECK (id = 'current')
+    )`)
+
     await client.query(`CREATE TABLE IF NOT EXISTS project_schedule_overrides (
       project_id TEXT PRIMARY KEY,
       project_name TEXT NOT NULL,

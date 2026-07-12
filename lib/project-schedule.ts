@@ -5,6 +5,9 @@ import * as XLSX from 'xlsx'
 import { query } from '@/lib/db'
 
 const WORKBOOK_NAME = 'PM-Project Schedule_JV (2).xlsx'
+// Seed copy shipped with the image. Only read once, to populate the database on
+// first boot; after that the DB row is authoritative and this file is ignored.
+const WORKBOOK_SEED_FILE = 'project-schedule.xlsx'
 
 export type ScheduleRisk = 'critical' | 'watch' | 'ready' | 'done'
 export type DeploymentStatus = 'blocked' | 'needs-docs' | 'needs-update' | 'ready' | 'complete'
@@ -128,6 +131,7 @@ export interface OpportunityScheduleItem {
 
 export interface ProjectScheduleInsights {
   sourceFile: string
+  workbook: WorkbookSourceMeta
   generatedAt: string
   activeProjects: ActiveProject[]
   submittalRegister: SubmittalRegisterItem[]
@@ -242,7 +246,7 @@ const MONTHS = [
 ]
 
 function workbookPath() {
-  return path.join(process.cwd(), WORKBOOK_NAME)
+  return path.join(process.cwd(), 'data', WORKBOOK_SEED_FILE)
 }
 
 function readRows(workbook: XLSX.WorkBook, sheetName: string): SheetRow[] {
@@ -790,6 +794,7 @@ function buildInsights(
 
   return {
     sourceFile: WORKBOOK_NAME,
+    workbook: EMPTY_WORKBOOK.meta,
     generatedAt: new Date().toISOString(),
     activeProjects,
     submittalRegister,
@@ -828,22 +833,144 @@ function buildInsights(
   }
 }
 
-function readWorkbookData() {
-  const filePath = workbookPath()
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Project schedule workbook not found: ${filePath}`)
-  }
-
-  const workbook = XLSX.read(fs.readFileSync(filePath), { cellDates: true })
-  const activeProjects = parseActiveProjects(readRows(workbook, 'Active Projects'))
-  const onsiteAssignments = parseOnsiteAssignments(readRows(workbook, 'On-Site PM Schedule (JOE)'))
-  const opportunities = parseOpportunities(readRows(workbook, 'Sheet1'))
-  return { activeProjects, onsiteAssignments, opportunities }
+export interface WorkbookSourceMeta {
+  status: 'database' | 'seed' | 'missing'
+  filename: string | null
+  uploadedAt: string | null
+  uploadedBy: string | null
+  byteSize: number | null
 }
 
-export function getProjectScheduleInsights(): ProjectScheduleInsights {
-  const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
-  return buildInsights(activeProjects, onsiteAssignments, opportunities)
+interface WorkbookData {
+  activeProjects: ActiveProject[]
+  onsiteAssignments: OnsiteAssignment[]
+  opportunities: OpportunityScheduleItem[]
+  meta: WorkbookSourceMeta
+}
+
+const EMPTY_WORKBOOK: WorkbookData = {
+  activeProjects: [],
+  onsiteAssignments: [],
+  opportunities: [],
+  meta: { status: 'missing', filename: null, uploadedAt: null, uploadedBy: null, byteSize: null },
+}
+
+export function parseWorkbookBuffer(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { cellDates: true })
+  return {
+    activeProjects: parseActiveProjects(readRows(workbook, 'Active Projects')),
+    onsiteAssignments: parseOnsiteAssignments(readRows(workbook, 'On-Site PM Schedule (JOE)')),
+    opportunities: parseOpportunities(readRows(workbook, 'Sheet1')),
+  }
+}
+
+// Parsing a 120KB workbook on every request is wasteful, so memoise on the row's
+// identity (upload time + size). A replaced workbook changes the key and busts it.
+let workbookCache: { key: string; data: WorkbookData } | null = null
+
+export function invalidateWorkbookCache() {
+  workbookCache = null
+}
+
+// Seed the DB from the workbook committed under data/ the first time we run. After
+// that the database is the source of truth and the seed file is never consulted.
+async function seedWorkbookFromDisk(): Promise<WorkbookData> {
+  const filePath = workbookPath()
+  if (!fs.existsSync(filePath)) return EMPTY_WORKBOOK
+
+  const buffer = fs.readFileSync(filePath)
+  const parsed = parseWorkbookBuffer(buffer)
+  await query(
+    `INSERT INTO project_schedule_workbook (id, filename, content, byte_size, uploaded_by)
+     VALUES ('current', $1, $2, $3, 'seed')
+     ON CONFLICT (id) DO NOTHING`,
+    [WORKBOOK_NAME, buffer, buffer.byteLength],
+  )
+  return {
+    ...parsed,
+    meta: {
+      status: 'seed',
+      filename: WORKBOOK_NAME,
+      uploadedAt: null,
+      uploadedBy: 'seed',
+      byteSize: buffer.byteLength,
+    },
+  }
+}
+
+async function loadWorkbookData(): Promise<WorkbookData> {
+  const head = await query(
+    `SELECT filename, byte_size, uploaded_by, uploaded_at FROM project_schedule_workbook WHERE id = 'current'`,
+  )
+
+  if (!head.rows.length) {
+    const seeded = await seedWorkbookFromDisk()
+    workbookCache = null
+    return seeded
+  }
+
+  const row = head.rows[0]
+  const key = `${row.uploaded_at instanceof Date ? row.uploaded_at.toISOString() : row.uploaded_at}:${row.byte_size}`
+  if (workbookCache && workbookCache.key === key) return workbookCache.data
+
+  const body = await query(`SELECT content FROM project_schedule_workbook WHERE id = 'current'`)
+  const parsed = parseWorkbookBuffer(Buffer.from(body.rows[0].content))
+  const data: WorkbookData = {
+    ...parsed,
+    meta: {
+      status: 'database',
+      filename: row.filename,
+      uploadedAt: row.uploaded_at instanceof Date ? row.uploaded_at.toISOString() : row.uploaded_at,
+      uploadedBy: row.uploaded_by,
+      byteSize: row.byte_size,
+    },
+  }
+  workbookCache = { key, data }
+  return data
+}
+
+// Replace the workbook. Parsed up front so a malformed file is rejected before it
+// can take the page down.
+export async function replaceProjectScheduleWorkbook(
+  buffer: Buffer,
+  filename: string,
+  uploadedBy: string,
+): Promise<{ meta: WorkbookSourceMeta; projectCount: number }> {
+  const parsed = parseWorkbookBuffer(buffer)
+  if (!parsed.activeProjects.length) {
+    throw new Error('Workbook has no rows on the "Active Projects" sheet — nothing to import.')
+  }
+
+  const result = await query(
+    `INSERT INTO project_schedule_workbook (id, filename, content, byte_size, uploaded_by, uploaded_at)
+     VALUES ('current', $1, $2, $3, $4, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       filename = EXCLUDED.filename,
+       content = EXCLUDED.content,
+       byte_size = EXCLUDED.byte_size,
+       uploaded_by = EXCLUDED.uploaded_by,
+       uploaded_at = NOW()
+     RETURNING filename, byte_size, uploaded_by, uploaded_at`,
+    [filename, buffer, buffer.byteLength, uploadedBy],
+  )
+  invalidateWorkbookCache()
+
+  const row = result.rows[0]
+  return {
+    projectCount: parsed.activeProjects.length,
+    meta: {
+      status: 'database',
+      filename: row.filename,
+      uploadedAt: row.uploaded_at instanceof Date ? row.uploaded_at.toISOString() : row.uploaded_at,
+      uploadedBy: row.uploaded_by,
+      byteSize: row.byte_size,
+    },
+  }
+}
+
+export async function getProjectScheduleWorkbookMeta(): Promise<WorkbookSourceMeta> {
+  const { meta } = await loadWorkbookData()
+  return meta
 }
 
 function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOverrideRow[]) {
@@ -1006,7 +1133,7 @@ function applyExtraSubmittals(projects: ActiveProject[], rows: ExtraSubmittalRow
 }
 
 export async function listExtraSubmittals(projectId: string): Promise<SubmittalRegisterItem[]> {
-  const { activeProjects } = readWorkbookData()
+  const { activeProjects } = await loadWorkbookData()
   const project = activeProjects.find((item) => item.id === projectId)
   const projectName = project?.project ?? projectId
   const result = await query(
@@ -1023,7 +1150,7 @@ export async function createExtraSubmittals(
   inputs: ExtraSubmittalInput[],
   createdBy = 'dashboard',
 ): Promise<{ created: SubmittalRegisterItem[]; data: ProjectScheduleInsights }> {
-  const { activeProjects } = readWorkbookData()
+  const { activeProjects } = await loadWorkbookData()
   const project = activeProjects.find((item) => item.id === projectId)
   const projectName = project?.project ?? projectId
 
@@ -1067,7 +1194,7 @@ export async function deleteExtraSubmittal(projectId: string, submittalId: strin
 }
 
 export async function getProjectScheduleInsightsLive(): Promise<ProjectScheduleInsights> {
-  const { activeProjects, onsiteAssignments, opportunities } = readWorkbookData()
+  const { activeProjects, onsiteAssignments, opportunities, meta } = await loadWorkbookData()
   const [overrides, itemOverrides, extraSubmittals] = await Promise.all([
     query(`SELECT * FROM project_schedule_overrides`),
     query(`SELECT * FROM project_schedule_item_overrides`),
@@ -1076,7 +1203,8 @@ export async function getProjectScheduleInsightsLive(): Promise<ProjectScheduleI
   const withProjectOverrides = applyOverrides(activeProjects, overrides.rows)
   const withExtras = applyExtraSubmittals(withProjectOverrides, extraSubmittals.rows)
   const withItemOverrides = applyItemOverrides(withExtras, itemOverrides.rows)
-  return buildInsights(withItemOverrides, onsiteAssignments, opportunities)
+  const insights = buildInsights(withItemOverrides, onsiteAssignments, opportunities)
+  return { ...insights, workbook: meta, sourceFile: meta.filename ?? WORKBOOK_NAME }
 }
 
 export async function updateProjectScheduleSubmittalOverride(
@@ -1136,7 +1264,7 @@ export async function updateProjectScheduleDeploymentDocumentOverride(
   patch: DeploymentDocumentPatch,
   updatedBy = 'dashboard',
 ) {
-  const { activeProjects } = readWorkbookData()
+  const { activeProjects } = await loadWorkbookData()
   const project = activeProjects.find((item) => item.id === projectId)
   if (!project) return null
   const doc = project.deploymentDocuments.find((item) => item.key === documentKey)
@@ -1166,7 +1294,7 @@ export async function updateProjectScheduleDeploymentDocumentOverride(
 }
 
 export async function updateProjectScheduleOverride(projectId: string, patch: ProjectSchedulePatch, updatedBy = 'dashboard') {
-  const { activeProjects } = readWorkbookData()
+  const { activeProjects } = await loadWorkbookData()
   const project = activeProjects.find((item) => item.id === projectId)
   if (!project) return null
 
@@ -1205,22 +1333,6 @@ export async function updateProjectScheduleOverride(projectId: string, patch: Pr
   )
 
   return getProjectScheduleInsightsLive()
-}
-
-export function getProjectScheduleProject(projectId: string) {
-  const data = getProjectScheduleInsights()
-  const project = data.activeProjects.find((item) => item.id === projectId)
-  if (!project) return null
-  const normalized = project.project.toLowerCase()
-  const onsiteAssignments = data.onsiteAssignments.filter((assignment) => {
-    const source = assignment.project.toLowerCase()
-    return source.includes(normalized.slice(0, 16)) || normalized.includes(source.slice(0, 16))
-  })
-  const opportunities = data.opportunities.filter((item) => {
-    const text = `${item.account} ${item.opportunity}`.toLowerCase()
-    return normalized.split(/\s+/).filter((part) => part.length > 3).some((part) => text.includes(part))
-  }).slice(0, 6)
-  return { data, project, onsiteAssignments, opportunities }
 }
 
 export async function getProjectScheduleProjectLive(projectId: string) {

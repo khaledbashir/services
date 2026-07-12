@@ -15,3 +15,7 @@ screenshots
 !public/**/*.jpg
 !public/**/*.jpeg
 !public/**/*.webp
+
+# data/ carries runtime seed assets (the project-schedule workbook). Without this
+# the *.xlsx rule above silently strips them and the pages that read them 500.
+!data/**
