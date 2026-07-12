@@ -49,6 +49,11 @@ export async function PATCH(
         }
       }
     }
+    if (resolution_notes !== undefined && !(status === 'closed' && status !== oldTicket.status && resolution_notes)) {
+      updates.push(`resolution_notes = $${idx}`)
+      values.push(resolution_notes)
+      idx++
+    }
     if (priority) { updates.push(`priority = $${idx}`); values.push(priority); idx++ }
     if (category) { updates.push(`category = $${idx}`); values.push(category); idx++ }
     if (assigned_to !== undefined) { updates.push(`assigned_to = $${idx}`); values.push(assigned_to || null); idx++ }

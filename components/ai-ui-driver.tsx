@@ -18,8 +18,23 @@ export type UiAction =
   | { type: 'wait'; ms: number }
   | { type: 'toast'; message: string; variant?: 'info' | 'success' | 'warning' }
   | { type: 'refresh' }
+  | { type: 'sequence'; actions: UiAction[] }
 
 export function dispatchUiAction(action: UiAction) {
+  if (action.type === 'sequence') {
+    let delay = 0
+    for (const step of action.actions) {
+      window.setTimeout(() => dispatchUiAction(step), delay)
+      delay += step.type === 'wait'
+        ? Math.max(100, step.ms)
+        : step.type === 'refresh' || step.type === 'navigate'
+          ? 750
+          : step.type === 'fill'
+            ? 900
+            : 650
+    }
+    return
+  }
   window.dispatchEvent(new CustomEvent<UiAction>('anc:ai-ui', { detail: action }))
 }
 
@@ -333,6 +348,7 @@ export function AiUiDriver() {
             if (!el) { console.warn('ai-ui: highlight target not found', action.selector); break }
             el.scrollIntoView({ behavior: 'smooth', block: 'center' })
             await new Promise((r) => setTimeout(r, 200))
+            await moveCursor(el)
             ringFlash(el, action.label)
             break
           }

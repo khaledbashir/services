@@ -1,4 +1,4 @@
-import type { Skill } from '@/lib/ai/types'
+import { SkillError, type Skill } from '@/lib/ai/types'
 
 // Browser-driving skills. These "run" on the server only as a passthrough —
 // the handler echoes a _ui_action payload which the client-side dispatcher
@@ -175,6 +175,72 @@ const refresh: Skill = {
   },
 }
 
+const showSteps: Skill = {
+  name: 'ui_show_steps',
+  description: 'Run a visible guided workflow on the current page: move the AI cursor, highlight controls, open tabs, fill safe drafts, pause between steps, and show a completion toast. On ticket pages use this around API-backed mutations so the user can watch the work. Never use it to click submit/send/save or mutate status, priority, owner, category, or resolution.',
+  category: 'System',
+  icon: '🎬',
+  parameters: {
+    type: 'object',
+    properties: {
+      steps: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 12,
+        items: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['highlight', 'click', 'fill', 'wait', 'toast'] },
+            selector: { type: 'string', description: 'CSS selector or visible label. Prefer stable [data-ai-target="..."] selectors.' },
+            label: { type: 'string', description: 'Short label shown above a highlighted control.' },
+            value: { type: 'string', description: 'Draft text for a fill step, or toast text for a toast step.' },
+            ms: { type: 'integer', minimum: 100, maximum: 3000, description: 'Pause length for a wait step.' },
+          },
+          required: ['action'],
+        },
+      },
+    },
+    required: ['steps'],
+  },
+  async handler(args) {
+    const rawSteps = Array.isArray(args.steps) ? args.steps.slice(0, 12) : []
+    if (rawSteps.length === 0) throw new SkillError('missing_ui_steps', 'Provide at least one visible workflow step.')
+
+    const actions: Record<string, unknown>[] = []
+    for (const raw of rawSteps) {
+      if (!raw || typeof raw !== 'object') continue
+      const step = raw as Record<string, unknown>
+      const action = String(step.action || '')
+      const selector = String(step.selector || '').trim()
+
+      if (action === 'highlight') {
+        if (!selector) throw new SkillError('missing_selector', 'Highlight steps require a selector.')
+        actions.push({ type: 'highlight', selector, label: step.label ? String(step.label) : undefined })
+      } else if (action === 'click') {
+        if (!selector) throw new SkillError('missing_selector', 'Click steps require a selector.')
+        if (/submit|send|save|mark-complete|ticket-status-|ticket-priority-|ticket-assignee/i.test(selector)) {
+          throw new SkillError(
+            'unsafe_ui_click',
+            'That control must not be clicked by the guided UI workflow.',
+            'Use the authoritative API tool for mutations, or highlight the human-confirmation control instead.',
+          )
+        }
+        actions.push({ type: 'click', selector })
+      } else if (action === 'fill') {
+        if (!selector) throw new SkillError('missing_selector', 'Fill steps require a selector.')
+        actions.push({ type: 'fill', selector, value: String(step.value || ''), fast: String(step.value || '').length > 120 })
+      } else if (action === 'wait') {
+        actions.push({ type: 'wait', ms: Math.min(Math.max(Number(step.ms) || 650, 100), 3000) })
+      } else if (action === 'toast') {
+        actions.push({ type: 'toast', message: String(step.value || 'Step complete'), variant: 'success' })
+      }
+    }
+
+    if (actions.length === 0) throw new SkillError('invalid_ui_steps', 'No supported visible workflow steps were provided.')
+    return ui('sequence', { actions })
+  },
+}
+
 export function uiSkills(): Skill[] {
-  return [navigate, click, fillForm, fill, select, highlight, wait, toast, refresh]
+  return [navigate, click, fillForm, fill, select, highlight, wait, toast, refresh, showSteps]
 }

@@ -204,6 +204,18 @@ export interface PageContext {
   current_path?: string
   page_title?: string
   visible_fields?: PageContextField[]
+  record?: {
+    type?: string
+    id?: string
+    number?: string
+    title?: string
+    status?: string
+    priority?: string
+    assignee_id?: string
+    assignee_name?: string
+    venue_id?: string
+    venue_name?: string
+  }
 }
 
 function sanitizeForProvider(messages: ChatMsg[]): ChatMsg[] {
@@ -323,6 +335,7 @@ async function loadUserContext(): Promise<string> {
 function buildPageContextBlock(pageContext?: PageContext): string {
   const path = pageContext?.current_path?.trim()
   const title = pageContext?.page_title?.trim()
+  const record = pageContext?.record
   const fields = (pageContext?.visible_fields || [])
     .map((field) => {
       const selector = field.selector?.trim()
@@ -345,12 +358,20 @@ function buildPageContextBlock(pageContext?: PageContext): string {
   // capabilities" and refuses to act, instead of routing to ops_*.
   const isOps = !!path && (path === '/operations' || path.startsWith('/operations/'))
   const isProjectSchedule = !!path && (path === '/project-schedule' || path.startsWith('/project-schedule/'))
+  const isTicketDetail = !!path && /^\/tickets\/[^/]+\/?$/.test(path)
 
   if (!path && !title && fields.length === 0) return ''
 
   const lines = ['\nCURRENT PAGE CONTEXT:']
   if (path) lines.push(`- Path: ${path}`)
   if (title) lines.push(`- Title: ${title}`)
+  if (record?.type) {
+    lines.push(`- Current record: ${record.type}${record.number ? ` ${record.number}` : ''}${record.id ? ` (id: ${record.id})` : ''}`)
+    if (record.title) lines.push(`- Record title: ${record.title}`)
+    if (record.status || record.priority) lines.push(`- Status: ${record.status || 'unknown'} · Priority: ${record.priority || 'unknown'}`)
+    if (record.assignee_name || record.assignee_id) lines.push(`- Primary owner: ${record.assignee_name || 'Unassigned'}${record.assignee_id ? ` (${record.assignee_id})` : ''}`)
+    if (record.venue_name || record.venue_id) lines.push(`- Venue: ${record.venue_name || 'Unknown'}${record.venue_id ? ` (${record.venue_id})` : ''}`)
+  }
 
   if (isOps) {
     lines.push(
@@ -391,6 +412,24 @@ function buildPageContextBlock(pageContext?: PageContext): string {
       '  owner and due date, check install window/logistics, then write the next',
       '  PM-sync action. Do not drift into generic project management advice.'
     )
+  } else if (isTicketDetail) {
+    lines.push(
+      '- The user is on a staff ticket detail page. Treat the current ticket id above as authoritative.',
+      '- Make ticket work visibly operator-like. For multi-step requests, prefer ui_show_steps so the cursor moves, controls light up, tabs open, and safe drafts appear while the user watches.',
+      '- Use ticket_context before summarizing the ticket/thread or drafting from its history. It includes internal and client-visible conversation context.',
+      '- Never use a DOM click/select as the authoritative write for ticket status, priority, category, assignment, or resolution. Use update_ticket with this ticket id. That tool refreshes the page and visibly confirms changed fields.',
+      '- Before an API mutation, visibly highlight the field being changed. After it, let update_ticket perform its refresh/highlight/toast confirmation before continuing.',
+      '- Internal draft pattern: ticket_context → ui_show_steps(click Feed, click Internal, fill ticket-comment, highlight ticket-comment-submit).',
+      '- Customer reply pattern: ticket_context or client_update_draft → ui_show_steps(click Emails, fill ticket-email-reply, highlight ticket-email-send).',
+      '- Resolution draft pattern: ui_show_steps(click Feed, highlight/click ticket-resolution-edit, fill ticket-resolution-notes, highlight ticket-resolution-save).',
+      '- For a request like "do one, two, three", execute the steps in order with short visible pauses. Do not collapse the whole workflow into silent API calls or a prose explanation.',
+      '- Do not click ticket-comment, email-reply, or resolution submit buttons. Filling a draft is safe; the staff member submits it through the authenticated page API.',
+      '- Stable ticket targets include ticket-status-*, ticket-priority-*, ticket-owner-summary, ticket-comment, ticket-email-reply, ticket-resolution-*, and ticket-tab-*.',
+    )
+    if (fields.length > 0) {
+      lines.push('- Visible ticket controls:')
+      lines.push(...fields.slice(0, 20))
+    }
   } else if (fields.length > 0) {
     lines.push('- Visible editable fields:')
     lines.push(...fields.slice(0, 20))
@@ -669,6 +708,9 @@ UI DRIVING — You can drive the dashboard UI like a human. You have:
                              works as a selector too)
   ui_select(selector, value) — pick a <select> option
   ui_highlight(selector,label?) — flash a ring around an element
+  ui_show_steps(steps)       — perform a visible multi-step workflow with
+                               cursor motion, highlights, tab clicks, drafts,
+                               pauses, and a completion toast
   ui_toast(message)        — show a notification in the corner
   ui_wait(ms)              — pause for dramatic effect
 
@@ -679,6 +721,12 @@ For data tasks (show me X, find Y), use the data skills. Combine them
 freely — e.g. after creating a record with create_design_request,
 call ui_navigate to /designs and ui_highlight the new row so the
 user can see what you did.
+
+When the user asks for several actions in sequence or says "show me",
+"do one two three", "walk me through it", or otherwise wants to watch
+the work, prefer ui_show_steps over disconnected prose. Keep authoritative
+writes in API/data tools, but visibly frame and confirm those writes with
+cursor movement and highlights.
 
 When the user is already on an existing record page like /designs/[id],
 assume they mean THAT PAGE unless they explicitly say "create a new one"

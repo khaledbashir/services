@@ -32,8 +32,10 @@ import { default as search_staff } from '@/lib/ai/skills/search-staff'
 import { default as search_venues } from '@/lib/ai/skills/search-venues'
 import { default as slack_create_canvas } from '@/lib/ai/skills/slack-create-canvas'
 import { default as staffing_recommendations } from '@/lib/ai/skills/staffing-recommendations'
+import { default as ticket_context } from '@/lib/ai/skills/ticket-context'
 import { default as triage_request, skills as triage_request_skills } from '@/lib/ai/skills/triage-request'
 import { default as update_design } from '@/lib/ai/skills/update-design'
+import { default as update_ticket } from '@/lib/ai/skills/update-ticket'
 import { default as venue_health_report } from '@/lib/ai/skills/venue-health-report'
 
 /** Every skill defined by a file in lib/ai/skills/. */
@@ -67,9 +69,11 @@ export const fileSkills: Skill[] = [
   search_venues,
   slack_create_canvas,
   staffing_recommendations,
+  ticket_context,
   triage_request,
   ...triage_request_skills,
   update_design,
+  update_ticket,
   venue_health_report,
 ]
 
@@ -104,7 +108,9 @@ export const manifestFiles: string[] = [
   'search-venues',
   'slack-create-canvas',
   'staffing-recommendations',
+  'ticket-context',
   'triage-request',
   'update-design',
+  'update-ticket',
   'venue-health-report',
 ]

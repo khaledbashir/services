@@ -505,7 +505,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
   return (
     <DashboardLayout>
-      <div className="max-w-[1440px] mx-auto space-y-5 py-4">
+      <div
+        className="max-w-[1440px] mx-auto space-y-5 py-4"
+        data-ai-page-context
+        data-ai-record-type="ticket"
+        data-ai-record-id={ticket.id}
+        data-ai-record-number={caseNum}
+        data-ai-record-title={ticket.title}
+        data-ai-record-status={ticket.status}
+        data-ai-record-priority={ticket.priority}
+        data-ai-assignee-id={ticket.assigned_to || undefined}
+        data-ai-assignee-name={ticket.assigned_to_name || undefined}
+        data-ai-venue-id={ticket.venue_id || undefined}
+        data-ai-venue-name={ticket.venue_name || undefined}
+      >
 
         {ticket.merged_into_ticket_id && ticket.merged_into_ticket_number && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-center justify-between">
@@ -542,7 +555,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   </>
                 )}
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-semibold">{(ticket.source || 'web').toUpperCase()}</span>
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${pri.color}`}>{pri.label}</span>
+                <span data-ai-target="ticket-priority-summary" className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${pri.color}`}>{pri.label}</span>
+                <span data-ai-target="ticket-owner-summary" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold">
+                  Owner: {ticket.assigned_to_name || 'Unassigned'}
+                </span>
               </div>
               {ticket.image_url && (
                 <div className="mt-2">
@@ -554,6 +570,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
             <div className="flex items-center gap-2 flex-shrink-0 xl:ml-auto">
               {ticket.status !== 'closed' && (
                 <button
+                  data-ai-target="ticket-mark-complete"
                   onClick={() => updateField('status', 'closed')}
                   className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm"
                 >
@@ -648,13 +665,13 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         </div>
 
         {/* ── Status Steps ── */}
-        <div className="bg-white rounded-xl border border-zinc-200 p-3 shadow-sm">
+        <div data-ai-target="ticket-status" className="bg-white rounded-xl border border-zinc-200 p-3 shadow-sm">
         <div className="flex items-center gap-1">
           {statusSteps.map((step, idx) => {
             const isActive = step.key === ticket.status
             const isPast = idx < currentStepIdx
             return (
-              <button key={step.key} onClick={() => updateField('status', step.key)}
+              <button key={step.key} data-ai-target={`ticket-status-${step.key}`} onClick={() => updateField('status', step.key)}
                 className="flex-1 group" title={`Set to ${step.label}`}>
                 <div className={`h-1.5 rounded-full transition-all ${isActive ? 'scale-y-150' : 'group-hover:scale-y-125'}`}
                   style={{ backgroundColor: isActive ? step.color : isPast ? step.color + '60' : 'var(--anc-subtle)' }} />
@@ -670,6 +687,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
+            data-ai-target="ticket-case-panel"
             onClick={() => setCasePanelOpen(open => !open)}
             className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors ${
               casePanelOpen
@@ -727,7 +745,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 ) : (
                   <p className="text-[11px] text-zinc-400 mb-2">Unassigned</p>
                 )}
-                <select data-assignee-select value="" onChange={e => { const v = e.target.value; e.target.value = ''; addAssignee(v) }}
+                <select data-assignee-select data-ai-target="ticket-assignee" aria-label="Add ticket assignee" value="" onChange={e => { const v = e.target.value; e.target.value = ''; addAssignee(v) }}
                   className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none bg-white transition-colors">
                   <option value="">+ Add tech…</option>
                   {staffList.filter(s => !(ticket.assignees || []).some(a => a.id === s.id)).map(s => (
@@ -738,9 +756,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
 
               <div>
                 <label className="text-[11px] text-zinc-400 font-medium block mb-1.5">Priority</label>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div data-ai-target="ticket-priority" className="grid grid-cols-4 gap-1.5">
                   {Object.entries(priorityConfig).map(([key, cfg]) => (
-                    <button key={key} onClick={() => updateField('priority', key)}
+                    <button key={key} data-ai-target={`ticket-priority-${key}`} onClick={() => updateField('priority', key)}
                       className={`text-[11px] font-medium py-1.5 rounded-md transition-all text-center border ${ticket.priority === key ? cfg.color : 'text-zinc-400 bg-white border-zinc-200 hover:border-zinc-300'}`}>
                       {cfg.label}
                     </button>
@@ -954,7 +972,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                   { key: 'attachments', label: 'Files', icon: 'M3 16.5V7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5zM8 11l2.25 2.25L13 10l4 5H7l1-4z' },
                   { key: 'notes', label: 'Notes', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
                 ] as const).map(tab => (
-                  <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                  <button key={tab.key} data-ai-target={`ticket-tab-${tab.key}`} onClick={() => setActiveTab(tab.key)}
                     className={`flex items-center gap-1.5 px-4 py-3 text-[12px] font-medium border-b-2 transition-colors ${
                       activeTab === tab.key
                         ? 'border-zinc-900 text-zinc-900'
@@ -977,30 +995,35 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                 {/* ── Timeline Tab ── */}
                 {activeTab === 'timeline' && (
                   <div>
-                    {/* Resolution banner */}
-                    {ticket.status === 'closed' && (
-                      <div className="px-6 py-4 bg-emerald-50/50 border-b border-emerald-100">
+                    {/* Resolution workspace remains available before closure so AI can safely draft notes for human review. */}
+                      <div
+                        data-ai-target="ticket-resolution-area"
+                        className={`px-6 py-4 border-b ${ticket.status === 'closed' ? 'bg-emerald-50/50 border-emerald-100' : 'bg-blue-50/40 border-blue-100'}`}
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                            <span className="text-sm font-medium text-emerald-900">Resolved</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${ticket.status === 'closed' ? 'text-emerald-500' : 'text-blue-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            <span className={`text-sm font-medium ${ticket.status === 'closed' ? 'text-emerald-900' : 'text-blue-900'}`}>
+                              {ticket.status === 'closed' ? 'Resolved' : 'Resolution'}
+                            </span>
                           </div>
-                          {!editResolution && <button onClick={() => setEditResolution(true)} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Edit</button>}
+                          {!editResolution && <button data-ai-target="ticket-resolution-edit" onClick={() => setEditResolution(true)} className={`text-xs font-medium ${ticket.status === 'closed' ? 'text-emerald-600 hover:text-emerald-800' : 'text-blue-600 hover:text-blue-800'}`}>{resolutionNotes ? 'Edit' : 'Add notes'}</button>}
                         </div>
                         {editResolution ? (
                           <div className="mt-3 space-y-2">
-                            <textarea value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)}
-                              className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white" rows={2} />
+                            <textarea data-ai-target="ticket-resolution-notes" aria-label="Ticket resolution notes" value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)}
+                              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white ${ticket.status === 'closed' ? 'border-emerald-200 focus:ring-emerald-500/20' : 'border-blue-200 focus:ring-blue-500/20'}`} rows={2} />
                             <div className="flex gap-2">
-                              <button onClick={saveResolution} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-700">Save</button>
+                              <button data-ai-target="ticket-resolution-save" onClick={saveResolution} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-700">Save</button>
                               <button onClick={() => setEditResolution(false)} className="text-xs text-zinc-500 px-3 py-1.5">Cancel</button>
                             </div>
                           </div>
                         ) : resolutionNotes ? (
-                          <p className="text-sm text-emerald-800/70 mt-1">{resolutionNotes}</p>
-                        ) : null}
+                          <p className={`text-sm mt-1 ${ticket.status === 'closed' ? 'text-emerald-800/70' : 'text-blue-800/70'}`}>{resolutionNotes}</p>
+                        ) : (
+                          <p className="text-xs text-zinc-400 mt-1">Add resolution notes before closing the ticket.</p>
+                        )}
                       </div>
-                    )}
 
                     {allTimelineItems.length === 0 ? (
                       <div className="py-20 text-center">
@@ -1108,6 +1131,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         )}
                         <div className="relative">
                           <textarea
+                            data-ai-target="ticket-comment"
+                            aria-label="Ticket comment or internal note"
                             ref={commentTextareaRef}
                             value={newComment}
                             onChange={onCommentChange}
@@ -1139,7 +1164,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${showCanned ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Quick Replies
                             </button>
-                            <button type="button" onClick={() => setIsInternal(false)}
+                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => setIsInternal(false)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Client
                               {ticket && typeof (ticket as any).venue_distribution_count === 'number' && (
@@ -1148,12 +1173,12 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                 </span>
                               )}
                             </button>
-                            <button type="button" onClick={() => setIsInternal(true)}
+                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => setIsInternal(true)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Internal
                             </button>
                           </div>
-                          <button type="submit" disabled={submitting || !newComment.trim()}
+                          <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
                             className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
                             {submitting ? 'Posting...' : 'Post'}
                           </button>
@@ -1352,6 +1377,8 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                 <span className="min-w-0 truncate font-medium text-zinc-800">Re: Case {String(ticket.ticket_number).padStart(8, '0')} - {ticket.title}</span>
                               </div>
                               <textarea
+                                data-ai-target="ticket-email-reply"
+                                aria-label="Ticket client email reply"
                                 value={emailReply}
                                 onChange={(e) => setEmailReply(e.target.value)}
                                 placeholder="Write a clear client-facing reply..."
@@ -1362,6 +1389,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                                 <div className="text-[11px] text-zinc-500">{replyTarget ? `Route: ${replyTarget.source}` : 'Add a contact email before sending.'}</div>
                                 <button
                                   type="submit"
+                                  data-ai-target="ticket-email-send"
                                   disabled={sendingEmail || !emailReply.trim() || !replyTarget}
                                   className="inline-flex items-center gap-2 rounded-md bg-[#0A52EF] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-35"
                                 >
@@ -1593,22 +1621,22 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     {/* Note composer */}
                     <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100">
                       <form onSubmit={addComment}>
-                        <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
+                        <textarea data-ai-target="ticket-comment" aria-label="Ticket comment or internal note" value={newComment} onChange={e => setNewComment(e.target.value)}
                           placeholder={isInternal ? 'Write an internal note...' : 'Write a client-visible note...'}
                           className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
                           rows={2} />
                         <div className="flex items-center justify-between gap-3 mt-2">
                           <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
-                            <button type="button" onClick={() => setIsInternal(false)}
+                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => setIsInternal(false)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Client
                             </button>
-                            <button type="button" onClick={() => setIsInternal(true)}
+                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => setIsInternal(true)}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Internal
                             </button>
                           </div>
-                          <button type="submit" disabled={submitting || !newComment.trim()}
+                          <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
                             className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
                             {submitting ? 'Posting...' : 'Add Note'}
                           </button>

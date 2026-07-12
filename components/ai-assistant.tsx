@@ -91,6 +91,9 @@ const SUGGESTION_GROUPS = [
       'Draft a client-safe ticket update',
       'Find tickets waiting on parts',
       'Show overdue ticket follow-ups',
+      'Summarize this ticket and thread',
+      'Draft a reply on this ticket',
+      'Run a visible ticket workflow',
     ],
   },
   {
@@ -192,6 +195,9 @@ const PROMPT_EXAMPLES: Record<string, string> = {
   'Draft a client-safe ticket update': 'Draft a client-safe update for the highest priority open ticket. Use only external comments and ticket details. Do not send it.',
   'Find tickets waiting on parts': 'Find open tickets that appear to be waiting on parts or inventory and summarize the next action.',
   'Show overdue ticket follow-ups': 'Show tickets that need follow-up based on age, priority, or SLA risk.',
+  'Summarize this ticket and thread': 'On the current ticket page, use ticket_context and summarize the issue, conversation, current owner/status/priority, unresolved questions, and recommended next action. Visibly highlight the status and relevant conversation tab while you work.',
+  'Draft a reply on this ticket': 'On the current ticket page, load ticket_context, draft a concise client-safe reply, visibly open the Emails tab, fill the reply field, and highlight Send Reply for my confirmation. Do not send it.',
+  'Run a visible ticket workflow': 'On the current ticket page, visibly perform this workflow in order: highlight the current status, open the Feed, highlight the internal note composer, open Emails, and show the resolution area. Move the cursor and pause between steps; do not submit or mutate anything.',
   'Log a walkthrough note': 'Log a walkthrough note. Ask me for the venue and result, then structure it cleanly.',
   'Show recent walkthroughs': 'Show recent walkthroughs from the last 7 days with venue, result, and any issue patterns.',
   'Find walkthroughs with new issues': 'Find recent walkthroughs where the result indicates a new issue or follow-up is needed.',
@@ -322,6 +328,18 @@ interface PageContext {
   current_path?: string
   page_title?: string
   visible_fields?: PageContextField[]
+  record?: {
+    type?: string
+    id?: string
+    number?: string
+    title?: string
+    status?: string
+    priority?: string
+    assignee_id?: string
+    assignee_name?: string
+    venue_id?: string
+    venue_name?: string
+  }
 }
 
   const STORAGE_KEY = 'ai-panel-open'
@@ -358,8 +376,9 @@ function collectPageContext(pathname: string): PageContext {
   const nodes = Array.from(document.querySelectorAll<HTMLElement>('input, textarea, select, [data-ai-target]'))
 
   for (const node of nodes) {
-    if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement)) continue
-    if (!isVisibleElement(node) || node.disabled || node.type === 'hidden') continue
+    if (!isVisibleElement(node)) continue
+    const isField = node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement
+    if (isField && (node.disabled || (node instanceof HTMLInputElement && node.type === 'hidden'))) continue
 
     const aiTarget = node.getAttribute('data-ai-target')?.trim()
     const selector = aiTarget ? `[data-ai-target="${aiTarget}"]` : node.id ? `#${node.id}` : ''
@@ -377,27 +396,48 @@ function collectPageContext(pathname: string): PageContext {
       aiTarget
     )
 
-    const currentValue = cleanFieldValue(
-      node instanceof HTMLSelectElement
-        ? (node.selectedOptions?.[0]?.textContent || node.value || '')
-        : node.value
-    )
+    const currentValue = node instanceof HTMLSelectElement
+      ? cleanFieldValue(node.selectedOptions?.[0]?.textContent || node.value || '')
+      : node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
+        ? cleanFieldValue(node.value)
+      : cleanFieldValue(node.getAttribute('aria-label') || node.textContent)
 
     fields.push({
       selector,
       label,
-      type: node instanceof HTMLSelectElement ? 'select' : node.type || node.tagName.toLowerCase(),
+      type: node instanceof HTMLSelectElement
+        ? 'select'
+        : node instanceof HTMLInputElement
+          ? node.type
+          : node instanceof HTMLTextAreaElement
+            ? 'textarea'
+          : node.tagName.toLowerCase(),
       value: currentValue,
-      empty: !currentValue,
+      empty: isField ? !currentValue : undefined,
     })
     seen.add(selector)
     if (fields.length >= 20) break
   }
 
+  const recordNode = document.querySelector<HTMLElement>('[data-ai-page-context]')
+  const record = recordNode ? {
+    type: cleanFieldValue(recordNode.dataset.aiRecordType),
+    id: cleanFieldValue(recordNode.dataset.aiRecordId),
+    number: cleanFieldValue(recordNode.dataset.aiRecordNumber),
+    title: cleanFieldValue(recordNode.dataset.aiRecordTitle),
+    status: cleanFieldValue(recordNode.dataset.aiRecordStatus),
+    priority: cleanFieldValue(recordNode.dataset.aiRecordPriority),
+    assignee_id: cleanFieldValue(recordNode.dataset.aiAssigneeId),
+    assignee_name: cleanFieldValue(recordNode.dataset.aiAssigneeName),
+    venue_id: cleanFieldValue(recordNode.dataset.aiVenueId),
+    venue_name: cleanFieldValue(recordNode.dataset.aiVenueName),
+  } : undefined
+
   return {
     current_path: pathname,
     page_title: document.title || undefined,
     visible_fields: fields,
+    record,
   }
 }
 

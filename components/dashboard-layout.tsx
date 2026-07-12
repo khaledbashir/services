@@ -8,7 +8,9 @@ import { GlobalSearch } from './global-search'
 import { Sidebar } from './sidebar'
 
 function shouldShowAiAssistant(pathname: string) {
-  return pathname === '/project-schedule' || pathname.startsWith('/project-schedule/')
+  return pathname === '/project-schedule'
+    || pathname.startsWith('/project-schedule/')
+    || /^\/tickets\/[^/]+\/?$/.test(pathname)
 }
 
 interface DashboardLayoutProps {
