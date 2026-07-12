@@ -103,7 +103,7 @@ function fieldCurrentValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSele
 // browser security blocks the parent from touching cross-origin iframe
 // DOM directly, so click/fill/highlight against NocoDB cells from the
 // parent's findElement will always come up empty.
-const OPS_IFRAME_ORIGIN = 'https://nocodb.ancsports.net'
+const OPS_IFRAME_ORIGIN = 'https://ops.ancsports.net'
 const OPS_BRIDGE_TIMEOUT_MS = 5000
 
 function findOpsIframe(): HTMLIFrameElement | null {

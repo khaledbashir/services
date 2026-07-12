@@ -9,8 +9,8 @@ import { AiUiDriver } from '@/components/ai-ui-driver'
 // The embed only works because our pinned NocoDB image neutralises the upstream
 // anti-iframe guard (see anc-nocodb Dockerfile, 2026-06-23). If this ever shows
 // "Not allowed", the NocoDB image regressed — re-check that patch, not this file.
-const OPS_WORKSPACE_URL = 'https://nocodb.ancsports.net/w2116qsq'
-const OPS_WORKSPACE_ORIGIN = 'https://nocodb.ancsports.net'
+const OPS_WORKSPACE_URL = 'https://ops.ancsports.net/#/w2116qsq'
+const OPS_WORKSPACE_ORIGIN = 'https://ops.ancsports.net'
 
 const OPERATOR_ACTIONS = [
   {

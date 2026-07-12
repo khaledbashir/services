@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+npm-debug.log
+.DS_Store
+*.mov
+*.mp4
+*.pdf
+.deepseek
+postiz-patches
+calendar-ai-service
