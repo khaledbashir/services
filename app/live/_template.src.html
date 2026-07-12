@@ -161,6 +161,9 @@ html.kinetic .split{display:block;position:absolute;inset:0;z-index:2;opacity:0;
 .sp-ghost p{color:transparent;-webkit-text-stroke:1.5px currentColor;opacity:.13}
 .sp-gap{height:14vh}
 .sp-seam{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--acc);transform-origin:center;will-change:transform,opacity}
+.sp-label{position:absolute;z-index:4;top:7vh;font-size:10px;letter-spacing:.42em;text-transform:uppercase;font-variation-settings:'wght' 720,'wdth' 100}
+.sp-label.before{left:5vw;color:rgba(7,10,24,.48)}.sp-label.after{right:5vw;color:rgba(255,255,255,.62)}
+.sp-stack .sp-hit{color:var(--acc)!important;-webkit-text-stroke:0!important;opacity:1!important}
 
 /* ---------- ACT II · numbers ---------- */
 html:not(.kinetic) .stat{margin:9vh 0}
@@ -338,22 +341,23 @@ body[data-theme=light] .cinema-bg{opacity:.38;filter:invert(1)}body[data-theme=v
       </div>
       <p class="t-state">Every event. Every venue. Every night.</p>
       <div class="split" id="split" aria-hidden="true">
+        <p class="sp-label before">Before ANC</p><p class="sp-label after">With ANC</p>
         <div class="sp-half sp-l">
           <div class="sp-stack">
-            <div class="sp-ghost"><p>event.</p><p>Every</p><p>venue.</p><p>Every</p></div>
+            <div class="sp-ghost"><p>Disconnected</p><p>Reactive</p><p>Unseen</p><p>Waiting</p></div>
             <div class="sp-gap"></div>
-            <div class="sp-main"><p>Every</p><p>event.</p><p>Every</p><p>venue.</p><p>Every night.</p></div>
+            <div class="sp-main"><p>Scattered.</p><p>Reactive.</p><p>Unclear.</p><p>Too late.</p><p class="sp-hit">Before.</p></div>
             <div class="sp-gap"></div>
-            <div class="sp-ghost"><p>Every</p><p>event.</p><p>Every</p><p>venue.</p></div>
+            <div class="sp-ghost"><p>Waiting</p><p>Unseen</p><p>Reactive</p><p>Disconnected</p></div>
           </div>
         </div>
         <div class="sp-half sp-r">
           <div class="sp-stack">
-            <div class="sp-ghost"><p>event.</p><p>Every</p><p>venue.</p><p>Every</p></div>
+            <div class="sp-ghost"><p>Connected</p><p>Visible</p><p>Ready</p><p>Live</p></div>
             <div class="sp-gap"></div>
-            <div class="sp-main"><p>Every</p><p>event.</p><p>Every</p><p>venue.</p><p>Every night.</p></div>
+            <div class="sp-main"><p>Connected.</p><p>Proactive.</p><p>Visible.</p><p>Showtime.</p><p class="sp-hit">ANC.</p></div>
             <div class="sp-gap"></div>
-            <div class="sp-ghost"><p>Every</p><p>event.</p><p>Every</p><p>venue.</p></div>
+            <div class="sp-ghost"><p>Live</p><p>Ready</p><p>Visible</p><p>Connected</p></div>
           </div>
         </div>
         <div class="sp-seam" id="sp-seam"></div>
