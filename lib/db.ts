@@ -97,6 +97,14 @@ async function runMigrations() {
     // Per-tech email signature, appended to ticket replies they send (which all
     // go out from the shared support@anc.com mailbox).
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email_signature TEXT`)
+    // Keep the database role contract aligned with both Add Staff and Edit Staff.
+    // The original constraint predated the creative-team roles, so the UI could
+    // offer Designer/Design Consultant while Postgres rejected the submission.
+    await client.query(`ALTER TABLE staff
+      DROP CONSTRAINT IF EXISTS staff_role_check,
+      ADD CONSTRAINT staff_role_check CHECK (
+        role IN ('admin', 'tech_support', 'manager', 'technician', 'designer', 'design_contractor')
+      )`)
     await client.query(`CREATE TABLE IF NOT EXISTS ticket_comments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
