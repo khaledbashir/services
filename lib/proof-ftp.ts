@@ -48,6 +48,9 @@ const LIST_CACHE_TTL_MS = Math.max(5_000, Number(process.env.ANC_FTP_LIST_CACHE_
 const LIST_CACHE_MAX_FOLDERS = Math.max(10, Number(process.env.ANC_FTP_LIST_CACHE_MAX_FOLDERS || 100))
 const CLIENT_FOLDER_CACHE_TTL_MS = Math.max(30_000, Number(process.env.ANC_FTP_CLIENT_CACHE_TTL_MS || 300_000))
 const METADATA_SESSION_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_METADATA_IDLE_MS || 30_000))
+const FILE_STREAM_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_IDLE_MS || 60_000))
+const FILE_STREAM_POOL_MAX = Math.min(6, Math.max(1, Number(process.env.ANC_FTP_STREAM_POOL_MAX || 3)))
+const FILE_STREAM_HIGH_WATER_MARK = Math.max(64 * 1024, Number(process.env.ANC_FTP_STREAM_HIGH_WATER_MARK || 1024 * 1024))
 
 // Legacy algorithm set — additive to ssh2's modern defaults, not a replacement,
 // so we still prefer strong crypto when the far side supports it and only fall
@@ -85,6 +88,18 @@ let metadataClient: SftpClient | null = null
 let metadataConnectPromise: Promise<SftpClient> | null = null
 let metadataQueue: Promise<void> = Promise.resolve()
 let metadataIdleTimer: ReturnType<typeof setTimeout> | null = null
+
+type StreamPoolEntry = {
+  client: SftpClient
+  busy: boolean
+  idleTimer: ReturnType<typeof setTimeout> | null
+}
+type StreamPoolWaiter = {
+  resolve: (entry: StreamPoolEntry) => void
+  reject: (error: unknown) => void
+}
+const streamPool: StreamPoolEntry[] = []
+const streamPoolWaiters: StreamPoolWaiter[] = []
 
 function logPerf(event: string, details: Record<string, string | number | boolean | null>) {
   console.info('[proof-ftp:perf]', JSON.stringify({ event, ...details }))
@@ -207,6 +222,72 @@ function scheduleMetadataClose() {
     void closeMetadataClient()
   }, METADATA_SESSION_IDLE_MS)
   metadataIdleTimer.unref?.()
+}
+
+async function connectStreamClient(): Promise<StreamPoolEntry> {
+  const entry: StreamPoolEntry = { client: new SftpClient(), busy: true, idleTimer: null }
+  // Reserve the slot before awaiting network setup so concurrent requests
+  // cannot all observe an empty pool and exceed the configured limit.
+  streamPool.push(entry)
+  try {
+    const host = await resolveIpv4Host()
+    await entry.client.connect({
+      host, port: PORT, username: USER, password: PASS,
+      readyTimeout: CONNECT_TIMEOUT,
+      // @ts-expect-error family pins IPv4
+      family: 4,
+      algorithms: LEGACY_ALGORITHMS as any,
+    })
+    return entry
+  } catch (error) {
+    const index = streamPool.indexOf(entry)
+    if (index >= 0) streamPool.splice(index, 1)
+    try { await entry.client.end() } catch { /* connection never opened */ }
+    throw error
+  }
+}
+
+async function acquireStreamClient(): Promise<StreamPoolEntry> {
+  const idle = streamPool.find((entry) => !entry.busy)
+  if (idle) {
+    idle.busy = true
+    if (idle.idleTimer) clearTimeout(idle.idleTimer)
+    idle.idleTimer = null
+    return idle
+  }
+  if (streamPool.length < FILE_STREAM_POOL_MAX) return connectStreamClient()
+  return new Promise<StreamPoolEntry>((resolve, reject) => {
+    streamPoolWaiters.push({ resolve, reject })
+  })
+}
+
+function releaseStreamClient(entry: StreamPoolEntry, reusable: boolean) {
+  if (!entry.busy) return
+  if (!reusable) {
+    entry.busy = false
+    if (entry.idleTimer) clearTimeout(entry.idleTimer)
+    const index = streamPool.indexOf(entry)
+    if (index >= 0) streamPool.splice(index, 1)
+    void entry.client.end().catch(() => {})
+    const waiter = streamPoolWaiters.shift()
+    if (waiter) void acquireStreamClient().then(waiter.resolve, waiter.reject)
+    return
+  }
+
+  const waiter = streamPoolWaiters.shift()
+  if (waiter) {
+    waiter.resolve(entry)
+    return
+  }
+
+  entry.busy = false
+  entry.idleTimer = setTimeout(() => {
+    if (entry.busy) return
+    const index = streamPool.indexOf(entry)
+    if (index >= 0) streamPool.splice(index, 1)
+    void entry.client.end().catch(() => {})
+  }, FILE_STREAM_IDLE_MS)
+  entry.idleTimer.unref?.()
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -409,8 +490,8 @@ export async function statFile(
 
 /**
  * Open a readable stream for a file, optionally a byte range (for HTTP Range /
- * video scrubbing on the big review MP4s). The returned stream owns its own
- * connection and closes it on end/error — do NOT wrap in withClient.
+ * video scrubbing on the big review MP4s). The returned stream leases a pooled
+ * connection and returns it on end. Failed streams discard their connection.
  */
 export async function openFileStream(
   remotePath: string,
@@ -427,23 +508,24 @@ export async function openFileStream(
   const safe = resolveSafePath(remotePath)
 
   const startedAt = Date.now()
-  const host = await resolveIpv4Host()
-
-  const sftp = new SftpClient()
-  await sftp.connect({
-    host, port: PORT, username: USER, password: PASS,
-    readyTimeout: CONNECT_TIMEOUT,
-    // @ts-expect-error family pins IPv4
-    family: 4,
-    algorithms: LEGACY_ALGORITHMS as any,
-  })
-
-  const s = await sftp.stat(safe).catch((err) => {
-    void sftp.end()
-    throw err
-  })
+  let lease: StreamPoolEntry | null = null
+  let s: Awaited<ReturnType<SftpClient['stat']>> | null = null
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    lease = await acquireStreamClient()
+    try {
+      s = await lease.client.stat(safe)
+      break
+    } catch (error) {
+      lastError = error
+      releaseStreamClient(lease, false)
+      lease = null
+    }
+  }
+  if (!lease || !s) throw lastError
+  const sftp = lease.client
   if (s.isDirectory) {
-    await sftp.end()
+    releaseStreamClient(lease, true)
     throw new Error('Path is a directory, not a file')
   }
 
@@ -453,7 +535,7 @@ export async function openFileStream(
     const start = Math.floor(range.start)
     const end = Math.min(Math.floor(range.end ?? s.size - 1), s.size - 1)
     if (!Number.isFinite(start) || start < 0 || start >= s.size || end < start) {
-      await sftp.end()
+      releaseStreamClient(lease, true)
       const error = new Error('Requested byte range is not satisfiable') as Error & { code?: string }
       error.code = 'RANGE_NOT_SATISFIABLE'
       throw error
@@ -462,13 +544,19 @@ export async function openFileStream(
     readOpts.start = start
     readOpts.end = end
   }
+  readOpts.highWaterMark = FILE_STREAM_HIGH_WATER_MARK
 
   // createReadStream on the underlying ssh2 sftp stream.
   const stream = sftp.createReadStream(safe, readOpts as any) as unknown as Readable
-  const cleanup = () => { sftp.end().catch(() => {}) }
-  stream.once('end', cleanup)
-  stream.once('close', cleanup)
-  stream.once('error', cleanup)
+  let released = false
+  const release = (reusable: boolean) => {
+    if (released) return
+    released = true
+    releaseStreamClient(lease!, reusable)
+  }
+  stream.once('end', () => release(true))
+  stream.once('close', () => release(false))
+  stream.once('error', () => release(false))
 
   logPerf('open_file', {
     durationMs: Date.now() - startedAt,

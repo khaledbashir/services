@@ -100,7 +100,7 @@ export async function GET(
       const headers = new Headers({
         'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'private, max-age=300',
+        'Cache-Control': 'private, max-age=3600',
         'Content-Disposition': `inline; filename="${name.replace(/[\r\n"\\]/g, '')}"`,
         'Last-Modified': new Date(modifiedAt).toUTCString(),
       })

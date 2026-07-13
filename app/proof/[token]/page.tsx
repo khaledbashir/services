@@ -433,6 +433,7 @@ function FilePreview({ attachment }: { attachment: Attachment }) {
         <video
           src={fileUrl}
           controls
+          preload="metadata"
           className="max-w-full max-h-[70vh] rounded-lg bg-black"
         />
       </div>
