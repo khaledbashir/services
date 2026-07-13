@@ -50,7 +50,7 @@ const CLIENT_FOLDER_CACHE_TTL_MS = Math.max(30_000, Number(process.env.ANC_FTP_C
 const METADATA_SESSION_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_METADATA_IDLE_MS || 30_000))
 const FILE_STREAM_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_IDLE_MS || 60_000))
 const FILE_STREAM_POOL_MAX = Math.min(6, Math.max(1, Number(process.env.ANC_FTP_STREAM_POOL_MAX || 3)))
-const FILE_STREAM_HIGH_WATER_MARK = Math.max(64 * 1024, Number(process.env.ANC_FTP_STREAM_HIGH_WATER_MARK || 1024 * 1024))
+const FILE_STREAM_HIGH_WATER_MARK = Math.max(64 * 1024, Number(process.env.ANC_FTP_STREAM_HIGH_WATER_MARK || 256 * 1024))
 
 // Legacy algorithm set — additive to ssh2's modern defaults, not a replacement,
 // so we still prefer strong crypto when the far side supports it and only fall
