@@ -28,7 +28,7 @@ export function buildAssignableStaffWhere(assignable: string | null) {
     clause: `
       WHERE COALESCE(is_active, true) = true
         AND (
-          role IN ('admin', 'manager', 'tech_support')
+          role IN ('admin', 'manager', 'tech_support', 'designer', 'design_contractor')
           OR ${patternChecks}
         )
         AND COALESCE(full_name, '') !~* '(bot|agent|test)'
