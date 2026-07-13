@@ -34,6 +34,39 @@ function reshapeHoursBudget(b: TwentyDesignerHoursBudget, tricode: string | null
   }
 }
 
+const DEFAULT_THRESHOLDS = [25, 50, 75, 85, 90, 95, 100]
+
+function normalizeThresholds(value: unknown): number[] {
+  if (!Array.isArray(value)) return DEFAULT_THRESHOLDS
+  const thresholds = [...new Set(value.map(Number).filter((n) => Number.isInteger(n) && n > 0 && n <= 100))].sort((a, b) => a - b)
+  return thresholds.length ? thresholds : DEFAULT_THRESHOLDS
+}
+
+async function loadAlertSettings(ids: string[]) {
+  if (!ids.length) return new Map<string, { thresholds: number[]; recipient_email: string | null }>()
+  const result = await query(
+    `SELECT budget_id, thresholds, recipient_email FROM hours_budget_alert_settings WHERE budget_id = ANY($1::text[])`,
+    [ids]
+  )
+  return new Map(result.rows.map((row) => [row.budget_id, {
+    thresholds: normalizeThresholds(row.thresholds),
+    recipient_email: row.recipient_email || null,
+  }]))
+}
+
+async function saveAlertSettings(budgetId: string, thresholds: unknown, recipientEmail: unknown) {
+  const normalized = normalizeThresholds(thresholds)
+  const email = typeof recipientEmail === 'string' && recipientEmail.trim() ? recipientEmail.trim() : null
+  await query(
+    `INSERT INTO hours_budget_alert_settings (budget_id, thresholds, recipient_email, updated_at)
+     VALUES ($1, $2::int[], $3, NOW())
+     ON CONFLICT (budget_id) DO UPDATE
+       SET thresholds = EXCLUDED.thresholds, recipient_email = EXCLUDED.recipient_email, updated_at = NOW()`,
+    [budgetId, normalized, email]
+  )
+  return { thresholds: normalized, recipient_email: email }
+}
+
 async function getBudgetRows() {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
@@ -70,7 +103,12 @@ export async function GET(request: NextRequest) {
         cursor = page.nextCursor
       }
       const triCodeMap = await loadTriCodeMap('hours_budget_tricodes', records.map((r) => r.id))
-      const items = records.map((b) => reshapeHoursBudget(b, triCodeMap.get(b.id) || null))
+      const alertSettings = await loadAlertSettings(records.map((record) => record.id))
+      const items = records.map((b) => ({
+        ...reshapeHoursBudget(b, triCodeMap.get(b.id) || null),
+        alert_thresholds: alertSettings.get(b.id)?.thresholds || DEFAULT_THRESHOLDS,
+        alert_recipient_email: alertSettings.get(b.id)?.recipient_email || null,
+      }))
       return NextResponse.json({ hours_budgets: items })
     } catch (err) {
       console.error('[hours-budgets GET twenty-backed] error:', err)
@@ -80,6 +118,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await getBudgetRows()
+    const alertSettings = await loadAlertSettings(rows.map((row) => row.id))
+    for (const row of rows) {
+      row.alert_thresholds = alertSettings.get(row.id)?.thresholds || DEFAULT_THRESHOLDS
+      row.alert_recipient_email = alertSettings.get(row.id)?.recipient_email || null
+    }
     return NextResponse.json({ hours_budgets: rows })
   } catch (err) {
     console.error('Error fetching hours budgets:', err)
@@ -110,7 +153,8 @@ export async function POST(request: NextRequest) {
           alert50Pct: false,
         })
         const savedTriCode = await upsertTriCode('hours_budget_tricodes', created.id, body.tricode)
-        return NextResponse.json({ hours_budget: reshapeHoursBudget(created, savedTriCode) })
+        const alertSettings = await saveAlertSettings(created.id, body.alert_thresholds, body.alert_recipient_email)
+        return NextResponse.json({ hours_budget: { ...reshapeHoursBudget(created, savedTriCode), alert_thresholds: alertSettings.thresholds, alert_recipient_email: alertSettings.recipient_email } })
       } catch (err) {
         console.error('[hours-budgets POST twenty-backed] error:', err)
         return NextResponse.json({ error: 'Failed to create hours budget in Twenty' }, { status: 500 })
@@ -148,6 +192,10 @@ export async function POST(request: NextRequest) {
        GROUP BY b.id, v.name`,
       [result.rows[0].id]
     )
+
+    const alertSettings = await saveAlertSettings(result.rows[0].id, body.alert_thresholds, body.alert_recipient_email)
+    created.rows[0].alert_thresholds = alertSettings.thresholds
+    created.rows[0].alert_recipient_email = alertSettings.recipient_email
 
     return NextResponse.json({ hours_budget: created.rows[0] })
   } catch (err) {

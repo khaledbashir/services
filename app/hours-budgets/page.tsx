@@ -22,6 +22,8 @@ interface Budget {
   updated_at: string
   hours_spent: number
   entry_count: number
+  alert_thresholds: number[]
+  alert_recipient_email: string | null
 }
 
 interface Venue { id: string; name: string; aliases?: string[] | null }
@@ -70,6 +72,8 @@ export default function HoursBudgetsPage() {
     contract_start: '',
     contract_end: '',
     notes: '',
+    alert_thresholds: '25, 50, 75, 85, 90, 95, 100',
+    alert_recipient_email: '',
   })
 
   const fetchData = async () => {
@@ -108,6 +112,8 @@ export default function HoursBudgetsPage() {
           total_hours: formData.total_hours.trim() ? Number(formData.total_hours) : 0,
           contract_start: formData.contract_start || null,
           contract_end: formData.contract_end || null,
+          alert_thresholds: formData.alert_thresholds.split(',').map((value) => Number(value.trim())),
+          alert_recipient_email: formData.alert_recipient_email.trim() || null,
         }),
       })
       if (res.ok) {
@@ -121,6 +127,8 @@ export default function HoursBudgetsPage() {
           contract_start: '',
           contract_end: '',
           notes: '',
+          alert_thresholds: '25, 50, 75, 85, 90, 95, 100',
+          alert_recipient_email: '',
         })
         setShowForm(false)
         await fetchData()
@@ -344,6 +352,28 @@ export default function HoursBudgetsPage() {
                 />
               </div>
             </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Alert Thresholds (%)</label>
+                <input
+                  type="text"
+                  value={formData.alert_thresholds}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, alert_thresholds: e.target.value }))}
+                  placeholder="25, 50, 75, 85, 90, 95, 100"
+                  className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Client Alert Email</label>
+                <input
+                  type="email"
+                  value={formData.alert_recipient_email}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, alert_recipient_email: e.target.value }))}
+                  placeholder="client@example.com"
+                  className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+                />
+              </div>
+            </div>
             <button
               type="submit"
               disabled={submitting}
@@ -374,6 +404,15 @@ export default function HoursBudgetsPage() {
             const isOpen = expanded.has(group.key)
             const single = group.budgets.length === 1 ? group.budgets[0] : null
             const seasons = group.budgets.map((b) => b.season).filter(Boolean)
+            const today = new Date().toISOString().slice(0, 10)
+            const currentBudget = group.budgets.find((b) =>
+              (!b.contract_start || b.contract_start <= today) && (!b.contract_end || b.contract_end >= today)
+            ) || group.budgets[0]
+            const currentTotal = Number(currentBudget?.total_hours || 0)
+            const currentSpent = Number(currentBudget?.hours_spent || 0)
+            const currentPct = currentTotal > 0 ? Math.min(100, Math.max(0, currentSpent / currentTotal * 100)) : 0
+            const thresholds = currentBudget?.alert_thresholds?.length ? currentBudget.alert_thresholds : [25, 50, 75, 85, 90, 95, 100]
+            const nextThreshold = thresholds.find((threshold) => threshold > currentPct)
             return (
               <div key={group.key} className="border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
@@ -390,13 +429,27 @@ export default function HoursBudgetsPage() {
                     </p>
                   </div>
                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 whitespace-nowrap">
-                    Unlimited
+                    {currentTotal > 0 ? `${Math.round(currentPct)}% used` : 'Unlimited'}
                   </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
-                  <span className="font-medium text-zinc-700">{group.spent.toFixed(1)} hrs logged</span>
+                  <span className="font-medium text-zinc-700">{currentSpent.toFixed(1)}{currentTotal > 0 ? ` / ${currentTotal.toFixed(1)}` : ''} hrs</span>
                   <span>{group.entry_count} entries</span>
                 </div>
+                {currentTotal > 0 && (
+                  <div className="mt-3">
+                    <div className="relative h-2 overflow-hidden rounded-full bg-zinc-100">
+                      <div className="h-full rounded-full bg-[#0A52EF]" style={{ width: `${currentPct}%` }} />
+                      {thresholds.filter((threshold) => threshold < 100).map((threshold) => (
+                        <span key={threshold} className="absolute top-0 h-full w-px bg-zinc-400/70" style={{ left: `${threshold}%` }} />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-zinc-400">
+                      Contract year {currentBudget.contract_start || 'open'} to {currentBudget.contract_end || 'open'}
+                      {nextThreshold ? ` · next alert ${nextThreshold}%` : ' · all thresholds reached'}
+                    </p>
+                  </div>
+                )}
                 <div className="mt-3 border-t border-zinc-100 pt-3">
                   {single ? (
                     <Link href={`/hours-budgets/${single.id}`} className="text-xs font-medium text-[#0A52EF] hover:underline">

@@ -38,7 +38,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { searchParams } = new URL(request.url)
   const threshold = parseInt(searchParams.get('threshold') || '0', 10)
 
-  if (threshold !== 50 && threshold !== 75) {
+  const settings = await query(`SELECT thresholds, recipient_email FROM hours_budget_alert_settings WHERE budget_id = $1`, [params.id])
+  const allowedThresholds = (settings.rows[0]?.thresholds || [25, 50, 75, 85, 90, 95, 100]).map(Number)
+  if (!allowedThresholds.includes(threshold)) {
     return NextResponse.json({ error: 'Invalid threshold' }, { status: 400 })
   }
 
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const b = await HoursBudgets.get(params.id)
     if (!b) return NextResponse.json({ error: 'Budget not found' }, { status: 404 })
     const raw = b as any
-    const totalBudget = Number(raw.totalHoursBudgeted || 0)
+    const totalBudget = Number(raw.contractedHours ?? raw.totalHoursBudgeted ?? 0)
     // For simulation, we pretend we are precisely at the threshold if actual is lower
     let used = Number(b.currentHoursUsed || 0)
     let actualPct = totalBudget > 0 ? used / totalBudget : 0
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     let emailSent = false
-    const clientEmail = raw.budgetClient?.email || raw.budgetClientEmails?.[0] || null
+    const clientEmail = settings.rows[0]?.recipient_email || raw.budgetClient?.email || raw.budgetClientEmails?.[0] || null
     if (clientEmail || CC_EMAIL) {
       try {
         const recipients = [clientEmail, CC_EMAIL].filter(Boolean) as string[]

@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
     // Tri-Code, not venue, so hours from any request with the same tri-code
     // land in the same budget.
     let resolvedBudgetId: string | null = body.budget_id || null
+    const entryDate = body.entry_date || new Date().toISOString().slice(0, 10)
     if (!resolvedBudgetId && body.design_request_id) {
       try {
         const lookup = await query(
@@ -172,9 +173,11 @@ export async function POST(request: NextRequest) {
           const budgetMatch = await query(
             `SELECT id FROM designer_hours_budgets
               WHERE UPPER(tricode) = UPPER($1)
-              ORDER BY COALESCE(contract_end, created_at) DESC
+                AND $2::date >= COALESCE(contract_start, '-infinity'::date)
+                AND $2::date <= COALESCE(contract_end, 'infinity'::date)
+              ORDER BY contract_start DESC NULLS LAST, created_at DESC
               LIMIT 1`,
-            [dr.tricode]
+            [dr.tricode, entryDate]
           )
           if (budgetMatch.rows[0]?.id) resolvedBudgetId = budgetMatch.rows[0].id
         }
@@ -183,9 +186,11 @@ export async function POST(request: NextRequest) {
           const venueMatch = await query(
             `SELECT id FROM designer_hours_budgets
               WHERE venue_id = $1
-              ORDER BY COALESCE(contract_end, created_at) DESC
+                AND $2::date >= COALESCE(contract_start, '-infinity'::date)
+                AND $2::date <= COALESCE(contract_end, 'infinity'::date)
+              ORDER BY contract_start DESC NULLS LAST, created_at DESC
               LIMIT 1`,
-            [dr.venue_id]
+            [dr.venue_id, entryDate]
           )
           if (venueMatch.rows[0]?.id) resolvedBudgetId = venueMatch.rows[0].id
         }
@@ -203,7 +208,7 @@ export async function POST(request: NextRequest) {
         resolvedBudgetId,
         body.designer_id || null,
         body.design_request_id || null,
-        body.entry_date || new Date().toISOString().slice(0, 10),
+        entryDate,
         hours,
         body.description || null,
       ]

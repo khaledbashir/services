@@ -44,7 +44,9 @@ interface DesignRequestDetail {
   proof_last_viewed_at?: string | null
 }
 
-interface Staff { id: string; full_name: string }
+interface Staff { id: string; full_name: string; role: string }
+
+const DESIGN_ASSIGNMENT_ROLES = new Set(['designer', 'design_contractor', 'manager'])
 
 // Pipeline order drives the stage timeline: earlier index = earlier stage.
 // Each stage can advance with a single "move forward" button OR via the status
@@ -453,6 +455,27 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   />
                 </Field>
               )}
+              {useNewProofFlow && managedProofUrl && (
+                <Field label="Client Proof Link">
+                  <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 ring-1 ring-blue-200">
+                    <a
+                      href={managedProofUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 flex-1 break-all font-mono text-xs text-blue-700 hover:underline"
+                    >
+                      {managedProofUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(managedProofUrl)}
+                      className="shrink-0 rounded bg-white px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </Field>
+              )}
             </div>
 
             {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
@@ -771,7 +794,7 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
           className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
         >
           <option value="">＋ Add designer…</option>
-          {staffList.filter(s => !designerIds.includes(s.id)).map(s => (
+          {staffList.filter(s => DESIGN_ASSIGNMENT_ROLES.has(s.role) && !designerIds.includes(s.id)).map(s => (
             <option key={s.id} value={s.id}>{s.full_name}</option>
           ))}
         </select>
@@ -807,7 +830,7 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
           className="mt-2 w-full rounded-lg ring-1 ring-zinc-200 px-3 py-1.5 text-xs text-zinc-600 bg-white outline-none"
         >
           <option value="">＋ Add enterprise rep…</option>
-          {staffList.filter(s => !repIds.includes(s.id)).map(s => (
+          {staffList.filter(s => DESIGN_ASSIGNMENT_ROLES.has(s.role) && !repIds.includes(s.id)).map(s => (
             <option key={s.id} value={s.id}>{s.full_name}</option>
           ))}
         </select>

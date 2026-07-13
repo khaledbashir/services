@@ -6,6 +6,33 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { HoursBudgets, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
+const DEFAULT_THRESHOLDS = [25, 50, 75, 85, 90, 95, 100]
+
+function normalizeThresholds(value: unknown): number[] {
+  if (!Array.isArray(value)) return DEFAULT_THRESHOLDS
+  const thresholds = [...new Set(value.map(Number).filter((n) => Number.isInteger(n) && n > 0 && n <= 100))].sort((a, b) => a - b)
+  return thresholds.length ? thresholds : DEFAULT_THRESHOLDS
+}
+
+async function loadAlertSettings(id: string) {
+  const result = await query(`SELECT thresholds, recipient_email FROM hours_budget_alert_settings WHERE budget_id = $1`, [id])
+  return {
+    alert_thresholds: normalizeThresholds(result.rows[0]?.thresholds),
+    alert_recipient_email: result.rows[0]?.recipient_email || null,
+  }
+}
+
+async function saveAlertSettings(id: string, thresholds: unknown, recipientEmail: unknown) {
+  const normalized = normalizeThresholds(thresholds)
+  const email = typeof recipientEmail === 'string' && recipientEmail.trim() ? recipientEmail.trim() : null
+  await query(
+    `INSERT INTO hours_budget_alert_settings (budget_id, thresholds, recipient_email, updated_at)
+     VALUES ($1, $2::int[], $3, NOW())
+     ON CONFLICT (budget_id) DO UPDATE SET thresholds = EXCLUDED.thresholds, recipient_email = EXCLUDED.recipient_email, updated_at = NOW()`,
+    [id, normalized, email]
+  )
+}
+
 async function loadBudget(id: string) {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
@@ -32,13 +59,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     try {
       const b = await HoursBudgets.get(params.id)
       if (!b) return NextResponse.json({ error: 'Hours budget not found' }, { status: 404 })
+      const alertSettings = await loadAlertSettings(params.id)
       return NextResponse.json({
         hours_budget: {
           id: b.id,
           client_name: b.budgetClient?.name || '(unknown client)',
           total_hours: 0,
           hours_spent: Number(b.currentHoursUsed || 0),
-          created_at: b.createdAt, updated_at: b.updatedAt,
+          created_at: b.createdAt, updated_at: b.updatedAt, ...alertSettings,
         },
         time_entries: [],
       })
@@ -58,6 +86,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // intentional now: per Alexis 5/6, no total = unlimited budget.
     budget.total_hours = budget.total_hours == null ? 0 : Number(budget.total_hours)
     budget.hours_spent = Number(budget.hours_spent || 0)
+    Object.assign(budget, await loadAlertSettings(params.id))
 
     // Pull the linked design request title so each time-entry card shows
      // what the time was logged AGAINST (Alexis 5/6 — "can you add what
@@ -93,7 +122,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       const patch: Record<string, unknown> = {}
       if ('hours_spent' in body) patch.currentHoursUsed = Number(body.hours_spent) || 0
       const updated = await HoursBudgets.update(params.id, patch)
-      return NextResponse.json({ hours_budget: { id: updated.id, hours_spent: Number(updated.currentHoursUsed || 0) } })
+      if ('alert_thresholds' in body || 'alert_recipient_email' in body) {
+        const existing = await loadAlertSettings(params.id)
+        await saveAlertSettings(
+          params.id,
+          body.alert_thresholds ?? existing.alert_thresholds,
+          body.alert_recipient_email ?? existing.alert_recipient_email
+        )
+      }
+      return NextResponse.json({ hours_budget: { id: updated.id, hours_spent: Number(updated.currentHoursUsed || 0), ...(await loadAlertSettings(params.id)) } })
     } catch (err) {
       console.error('[hours-budgets PATCH twenty-backed] error:', err)
       return NextResponse.json({ error: 'Failed to update hours budget' }, { status: 500 })
@@ -134,19 +171,30 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
-    if (updates.length === 0) {
+    const hasAlertUpdate = body.alert_thresholds !== undefined || body.alert_recipient_email !== undefined
+    if (updates.length === 0 && !hasAlertUpdate) {
       return NextResponse.json({ hours_budget: current })
     }
 
-    updates.push(`updated_at = NOW()`)
-    values.push(params.id)
-
-    await query(
-      `UPDATE designer_hours_budgets SET ${updates.join(', ')} WHERE id = $${idx}`,
-      values
-    )
+    if (updates.length) {
+      updates.push(`updated_at = NOW()`)
+      values.push(params.id)
+      await query(
+        `UPDATE designer_hours_budgets SET ${updates.join(', ')} WHERE id = $${idx}`,
+        values
+      )
+    }
+    if (hasAlertUpdate) {
+      const existing = await loadAlertSettings(params.id)
+      await saveAlertSettings(
+        params.id,
+        body.alert_thresholds ?? existing.alert_thresholds,
+        body.alert_recipient_email ?? existing.alert_recipient_email
+      )
+    }
 
     const budget = await loadBudget(params.id)
+    Object.assign(budget, await loadAlertSettings(params.id))
     return NextResponse.json({ hours_budget: budget })
   } catch (err) {
     console.error('Error updating hours budget:', err)

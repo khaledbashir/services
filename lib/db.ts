@@ -561,6 +561,12 @@ async function runMigrations() {
       tricode TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    await client.query(`CREATE TABLE IF NOT EXISTS hours_budget_alert_settings (
+      budget_id TEXT PRIMARY KEY,
+      thresholds INTEGER[] NOT NULL DEFAULT ARRAY[25,50,75,85,90,95,100],
+      recipient_email TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
     await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_operators (
       content_schedule_id UUID NOT NULL REFERENCES content_schedules(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

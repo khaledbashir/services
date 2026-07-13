@@ -111,7 +111,12 @@ export async function POST(request: NextRequest) {
   // When tied to a ticket, keep the ticket's real object type + id so approval
   // writes back to it; otherwise it's a standalone folder share. Either way the
   // FTP folder path is what makes the files come from the FTP.
-  const objectType = linkedToTicket ? twentyObjectType : 'ftpFolder'
+  // The native Design Ticket screen passes `designRequest`, but its record is
+  // owned by anc-services rather than Twenty. Persist the local object type so
+  // the public response handler advances Step 5 to Step 6 in the native ticket.
+  const objectType = linkedToTicket
+    ? (twentyObjectType === 'designRequest' ? 'localDesignRequest' : twentyObjectType)
+    : 'ftpFolder'
   const recordId = linkedToTicket ? twentyRecordId : null
   const ftpManifest = files.map((file) => ({
     name: file.name,

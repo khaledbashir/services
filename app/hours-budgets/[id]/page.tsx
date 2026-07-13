@@ -20,6 +20,8 @@ interface BudgetDetail {
   updated_at: string
   hours_spent: number
   entry_count: number
+  alert_thresholds: number[]
+  alert_recipient_email: string | null
 }
 
 interface TimeEntry {
@@ -228,8 +230,9 @@ export default function HoursBudgetDetailPage({ params }: { params: { id: string
         <div className="flex gap-3 justify-end items-center">
              {isAdmin && (
                 <>
-                  <button onClick={() => simulateAlert(50)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 50% Alert</button>
-                  <button onClick={() => simulateAlert(75)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate 75% Alert</button>
+                  {(budget.alert_thresholds || [25, 50, 75, 85, 90, 95, 100]).map((threshold) => (
+                    <button key={threshold} onClick={() => simulateAlert(threshold)} disabled={simulating} className="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3 py-1.5 rounded transition-colors disabled:opacity-50">Simulate {threshold}%</button>
+                  ))}
                 </>
              )}
           </div>
@@ -433,6 +436,8 @@ function BudgetEditor({ budget, onSaved }: { budget: BudgetDetail; onSaved: () =
     total_hours: budget.total_hours == null ? '' : String(budget.total_hours),
     league: budget.league || '',
     season: budget.season || '',
+    alert_thresholds: (budget.alert_thresholds || [25, 50, 75, 85, 90, 95, 100]).join(', '),
+    alert_recipient_email: budget.alert_recipient_email || '',
   })
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -450,6 +455,8 @@ function BudgetEditor({ budget, onSaved }: { budget: BudgetDetail; onSaved: () =
           total_hours: draft.total_hours.trim() === '' ? 0 : Number(draft.total_hours),
           league: draft.league.trim() || null,
           season: draft.season.trim() || null,
+          alert_thresholds: draft.alert_thresholds.split(',').map((value) => Number(value.trim())),
+          alert_recipient_email: draft.alert_recipient_email.trim() || null,
         }),
       })
       if (res.ok) {
@@ -485,6 +492,16 @@ function BudgetEditor({ budget, onSaved }: { budget: BudgetDetail; onSaved: () =
       </Field>
       <Field label="Season">
         <input value={draft.season} onChange={e => setDraft(p => ({ ...p, season: e.target.value }))}
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Alert Thresholds (%)">
+        <input value={draft.alert_thresholds} onChange={e => setDraft(p => ({ ...p, alert_thresholds: e.target.value }))}
+          placeholder="25, 50, 75, 85, 90, 95, 100"
+          className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
+      </Field>
+      <Field label="Client Alert Email">
+        <input type="email" value={draft.alert_recipient_email} onChange={e => setDraft(p => ({ ...p, alert_recipient_email: e.target.value }))}
+          placeholder="client@example.com"
           className="w-full border border-zinc-300 px-2 py-1.5 outline-none focus:ring-1 focus:ring-zinc-400" />
       </Field>
       <div className="md:col-span-2 lg:col-span-3 flex items-center justify-end gap-2 pt-1">

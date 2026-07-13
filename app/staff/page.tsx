@@ -606,6 +606,8 @@ export default function StaffPage() {
                     className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-zinc-900"
                   >
                     <option value="technician">Technician</option>
+                    <option value="designer">Designer</option>
+                    <option value="design_contractor">Design Consultant (third-party)</option>
                     <option value="manager">Manager</option>
                     <option value="tech_support">Tech Support</option>
                     <option value="admin">Admin</option>
@@ -656,6 +658,8 @@ export default function StaffPage() {
             <option value="admin">Admin</option>
             <option value="tech_support">Tech Support</option>
             <option value="manager">Manager</option>
+            <option value="designer">Designer</option>
+            <option value="design_contractor">Design Consultant</option>
             <option value="technician">Technician</option>
           </select>
         </div>
