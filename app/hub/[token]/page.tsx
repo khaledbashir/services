@@ -31,58 +31,16 @@ type HubData = {
 
 const CATEGORY_ORDER = ['Revenue', 'Operations', 'Marketing', 'Knowledge', 'In Development']
 
-const STATUS_BADGES: Record<string, { label: string; fg: string; bg: string; line: string }> = {
-  in_progress: { label: 'Work in progress', fg: '#F2B33B', bg: 'rgba(242,179,59,.12)', line: 'rgba(242,179,59,.35)' },
-  experimental: { label: 'Experimental', fg: '#B388FF', bg: 'rgba(179,136,255,.12)', line: 'rgba(179,136,255,.35)' },
+const STATUS_LABEL: Record<string, string> = {
+  in_progress: 'Building',
+  experimental: 'Experimental',
 }
-
-// ANC brand palettes (see brand kit). Dark = "stadium at night" house look.
-const THEMES = {
-  dark: {
-    bg: '#0A0F1C',
-    surface: '#101A2E',
-    surface2: '#15213A',
-    ink: '#EBF1FC',
-    muted: '#93A2C2',
-    faint: '#5F6E8E',
-    line: 'rgba(255,255,255,.075)',
-    lineSoft: 'rgba(255,255,255,.06)',
-    accent: '#00AEEF',
-    linkText: '#4F86FF',
-    chipBg: 'rgba(10,82,239,.14)',
-    chipLine: 'rgba(79,134,255,.22)',
-    logo: '/anc-wordmark-white.png',
-    green: '#46D588',
-    amber: '#F2B33B',
-  },
-  light: {
-    bg: '#F4F7FC',
-    surface: '#FFFFFF',
-    surface2: '#E9EEF8',
-    ink: '#0A1020',
-    muted: '#5A6B86',
-    faint: '#8A97B0',
-    line: 'rgba(10,16,32,.10)',
-    lineSoft: 'rgba(10,16,32,.07)',
-    accent: '#0A52EF',
-    linkText: '#0A52EF',
-    chipBg: 'rgba(10,82,239,.07)',
-    chipLine: 'rgba(10,82,239,.22)',
-    logo: '/anc-wordmark-blue.png',
-    green: '#1FA35C',
-    amber: '#B97A0B',
-  },
-} as const
-
-type ThemeKey = keyof typeof THEMES
 
 export default function HubPage({ params }: { params: { token: string } }) {
   const [data, setData] = useState<HubData | null>(null)
   const [error, setError] = useState(false)
   const [revealed, setRevealed] = useState<Record<number, boolean>>({})
-  // Device-level display choice on a tokenless-public page (shared links have
-  // many viewers, so this intentionally does NOT persist to the token row).
-  const [theme, setTheme] = useState<ThemeKey>('dark')
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
     try {
@@ -90,6 +48,13 @@ export default function HubPage({ params }: { params: { token: string } }) {
       if (saved === 'light' || saved === 'dark') setTheme(saved)
     } catch { /* private browsing */ }
   }, [])
+
+  useEffect(() => {
+    fetch(`/api/hub/${params.token}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setData)
+      .catch(() => setError(true))
+  }, [params.token])
 
   const toggleTheme = () => {
     setTheme((current) => {
@@ -99,228 +64,355 @@ export default function HubPage({ params }: { params: { token: string } }) {
     })
   }
 
-  useEffect(() => {
-    fetch(`/api/hub/${params.token}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setData)
-      .catch(() => setError(true))
-  }, [params.token])
-
   const firstName = useMemo(() => data?.person.name.split(' ')[0] || '', [data])
   const greeting = useMemo(() => {
     const h = new Date().getHours()
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   }, [])
 
-  const t = THEMES[theme]
-
-  if (error) {
-    return (
-      <div style={{ minHeight: '100vh', background: t.bg, color: t.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
-        This link isn&apos;t active. Ask Ahmad for a fresh one.
-      </div>
-    )
-  }
-
-  const kpiItems = data
+  // The board only ever shows numbers this person is scoped to see.
+  const readouts = data
     ? [
-        { label: 'Opportunities in CRM', value: data.kpis.opportunities },
-        { label: 'Open service tickets', value: data.kpis.openTickets },
-        { label: 'Events · next 7 days', value: data.kpis.eventsNext7Days },
-        { label: 'Marketing contacts', value: data.kpis.marketingContacts },
-        { label: 'Emails delivered', value: data.kpis.emailsDelivered },
+        { label: 'Opportunities', value: data.kpis.opportunities },
+        { label: 'Open tickets', value: data.kpis.openTickets },
+        { label: 'Events / 7 days', value: data.kpis.eventsNext7Days },
+        { label: 'Contacts', value: data.kpis.marketingContacts },
+        { label: 'Emails out', value: data.kpis.emailsDelivered },
       ].filter((k) => k.value != null)
     : []
 
-  const eyebrowStyle = {
-    fontFamily: 'IBM Plex Mono, monospace',
-    fontSize: 11.5,
-    letterSpacing: '.3em',
-    textTransform: 'uppercase' as const,
-    color: t.accent,
-  }
+  const liveCount = data ? data.platforms.filter((p) => p.health?.ok).length : 0
 
   return (
-    <div style={{ minHeight: '100vh', background: t.bg, color: t.ink, fontFamily: 'Inter, system-ui, sans-serif', transition: 'background .25s ease, color .25s ease' }}>
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '48px 24px 80px' }}>
-        {/* header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={t.logo} alt="ANC" style={{ height: 26 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={eyebrowStyle}>{data?.classificationLabel || 'Leadership'}</div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              style={{
-                background: t.surface,
-                color: t.muted,
-                border: `1px solid ${t.line}`,
-                borderRadius: 999,
-                width: 34,
-                height: 34,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: 15,
-                lineHeight: 1,
-              }}
-            >
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
-          </div>
-        </div>
+    <div className={`root ${theme}`}>
+      <style jsx global>{THEME_CSS}</style>
 
-        <div style={{ marginTop: 44 }}>
-          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            {data ? (firstName && firstName !== 'Leadership' ? `${greeting}, ${firstName}.` : `${greeting}.`) : 'Loading…'}
-          </div>
-          <div style={{ color: t.muted, marginTop: 8, fontSize: 15, lineHeight: 1.6, maxWidth: 640 }}>
-            Everything ANC runs on, in one place — what each platform does, whether it&apos;s healthy right now, what changed recently, and your own access to all of it.
-          </div>
-        </div>
+      {error ? (
+        <main className="shell">
+          <p className="dead">This link isn&apos;t active. Ask Ahmad for a fresh one.</p>
+        </main>
+      ) : (
+        <main className="shell">
+          <header className="top">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="mark" src={theme === 'dark' ? '/anc-wordmark-white.png' : '/anc-wordmark-blue.png'} alt="ANC" />
+            <div className="top-right">
+              <span className="eyebrow">{data?.classificationLabel || 'Leadership'}</span>
+              <button
+                className="toggle"
+                type="button"
+                onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? '☀' : '☾'}
+              </button>
+            </div>
+          </header>
 
-        {/* KPIs */}
-        {kpiItems.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(160px, 1fr))`, gap: 12, marginTop: 36 }}>
-            {kpiItems.map((k) => (
-              <div key={k.label} style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 14, padding: '18px 20px' }}>
-                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 26, fontWeight: 700 }}>
-                  {Number(k.value).toLocaleString()}
-                </div>
-                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10.5, letterSpacing: '.12em', textTransform: 'uppercase', color: t.faint, marginTop: 6 }}>
-                  {k.label}
-                </div>
+          <section className="lede">
+            <h1>{data ? (firstName && firstName !== 'Leadership' ? `${greeting}, ${firstName}.` : greeting) : 'Loading'}</h1>
+            <p>
+              Every platform ANC runs on, live. What each one does, whether it&apos;s up right now,
+              what changed this week, and a way straight in.
+            </p>
+          </section>
+
+          {/* SIGNATURE — the ribbon board. ANC builds these; leadership's numbers run on one. */}
+          {readouts.length > 0 && (
+            <section className="ribbon" aria-label="Live numbers">
+              <span className="sweep" aria-hidden="true" />
+              <div className="cells">
+                {readouts.map((r) => (
+                  <div className="cell" key={r.label}>
+                    <div className="value">{Number(r.value).toLocaleString()}</div>
+                    <div className="cell-label">{r.label}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            </section>
+          )}
 
-        {/* platform categories */}
-        {data &&
-          CATEGORY_ORDER.map((cat) => {
-            const items = data.platforms.filter((p) => p.category === cat)
-            if (!items.length) return null
-            return (
-              <div key={cat} style={{ marginTop: 44 }}>
-                <div style={eyebrowStyle}>{cat}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 14 }}>
-                  {items.map((p) => (
-                    <a
-                      key={p.key}
-                      href={p.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 16, padding: 22, textDecoration: 'none', color: 'inherit', display: 'block' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 18, fontWeight: 600 }}>{p.name}</div>
-                          {p.status && STATUS_BADGES[p.status] && (
-                            <span style={{
-                              fontFamily: 'IBM Plex Mono, monospace',
-                              fontSize: 9,
-                              letterSpacing: '.08em',
-                              textTransform: 'uppercase',
-                              whiteSpace: 'nowrap',
-                              color: STATUS_BADGES[p.status].fg,
-                              background: STATUS_BADGES[p.status].bg,
-                              border: `1px solid ${STATUS_BADGES[p.status].line}`,
-                              borderRadius: 999,
-                              padding: '2px 7px',
-                            }}>
-                              {STATUS_BADGES[p.status].label}
-                            </span>
+          {data &&
+            CATEGORY_ORDER.map((category) => {
+              const items = data.platforms.filter((p) => p.category === category)
+              if (!items.length) return null
+              return (
+                <section className="band" key={category}>
+                  <div className="band-head">
+                    <h2 className="eyebrow">{category}</h2>
+                    <span className="rule" />
+                    <span className="count">{items.length}</span>
+                  </div>
+
+                  <div className="panels">
+                    {items.map((p) => (
+                      <a className="panel" key={p.key} href={p.url} target="_blank" rel="noreferrer">
+                        <div className="panel-head">
+                          <span className={`led ${p.health ? (p.health.ok ? 'on' : 'warn') : 'off'}`} aria-hidden="true" />
+                          <h3>{p.name}</h3>
+                          {p.status && STATUS_LABEL[p.status] && (
+                            <span className={`tag ${p.status}`}>{STATUS_LABEL[p.status]}</span>
                           )}
                         </div>
-                        <span
-                          title={p.health ? (p.health.ok ? 'Healthy' : 'Attention') : 'Unknown'}
-                          style={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: 99,
-                            background: p.health ? (p.health.ok ? t.green : t.amber) : t.faint,
-                            boxShadow: p.health?.ok && theme === 'dark' ? '0 0 8px rgba(70,213,136,.6)' : 'none',
-                            display: 'inline-block',
-                          }}
-                        />
-                      </div>
-                      <div style={{ color: t.muted, fontSize: 13.5, lineHeight: 1.55, marginTop: 8 }}>{p.description}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-                        {p.capabilities.map((c) => (
-                          <span key={c} style={{ fontSize: 11.5, color: t.muted, background: t.chipBg, border: `1px solid ${t.chipLine}`, borderRadius: 999, padding: '3px 10px' }}>
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                      <div style={{ marginTop: 16, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: t.linkText }}>Open →</div>
-                    </a>
-                  ))}
-                </div>
+                        <p className="panel-copy">{p.description}</p>
+                        <p className="panel-caps">{p.capabilities.slice(0, 4).join('  ·  ')}</p>
+                        <span className="enter">Open</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+
+          {data && data.feed.length > 0 && (
+            <section className="band">
+              <div className="band-head">
+                <h2 className="eyebrow">What changed</h2>
+                <span className="rule" />
               </div>
-            )
-          })}
-
-        {/* what's new */}
-        {data && data.feed.length > 0 && (
-          <div style={{ marginTop: 52 }}>
-            <div style={eyebrowStyle}>What&apos;s new</div>
-            <div style={{ marginTop: 14, background: t.surface, border: `1px solid ${t.line}`, borderRadius: 16, overflow: 'hidden' }}>
-              {data.feed.map((f, i) => (
-                <div key={i} style={{ padding: '16px 22px', borderTop: i ? `1px solid ${t.lineSoft}` : 'none', display: 'flex', gap: 16, alignItems: 'baseline' }}>
-                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: t.faint, whiteSpace: 'nowrap' }}>
-                    {new Date(f.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{f.title}</div>
-                    {f.detail && <div style={{ fontSize: 13, color: t.muted, marginTop: 3, lineHeight: 1.5 }}>{f.detail}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* your access */}
-        {data && data.logins.length > 0 && (
-          <div style={{ marginTop: 52 }}>
-            <div style={eyebrowStyle}>Your access</div>
-            <div style={{ marginTop: 14, background: t.surface, border: `1px solid ${t.line}`, borderRadius: 16, overflow: 'hidden' }}>
-              {data.logins.map((l, i) => (
-                <div key={i} style={{ padding: '16px 22px', borderTop: i ? `1px solid ${t.lineSoft}` : 'none', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{l.platform}</div>
-                    <div style={{ fontSize: 12.5, color: t.muted, marginTop: 2 }}>
-                      {l.email ? `Sign in as ${l.email}` : ''}
-                      {l.note ? (l.email ? ' — ' : '') + l.note : ''}
+              <ol className="log">
+                {data.feed.map((f, i) => (
+                  <li key={i}>
+                    <time>
+                      {new Date(f.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </time>
+                    <div>
+                      <h4>{f.title}</h4>
+                      {f.detail && <p>{f.detail}</p>}
                     </div>
-                  </div>
-                  {l.password && (
-                    <button
-                      onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}
-                      style={{ background: revealed[i] ? t.surface2 : '#0A52EF', color: revealed[i] ? t.ink : '#fff', border: 'none', borderRadius: 999, padding: '7px 16px', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, cursor: 'pointer' }}
-                    >
-                      {revealed[i] ? l.password : 'Show password'}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 11.5, color: t.faint, marginTop: 10 }}>
-              This page is personal to you — the link works only for {data.person.name}. Keep it private.
-            </div>
-          </div>
-        )}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
-        <div style={{ marginTop: 64, textAlign: 'center', fontSize: 12, color: t.faint }}>
-          Built for the big picture · updates live · questions go to Ahmad
-        </div>
-      </div>
+          {data && data.logins.length > 0 && (
+            <section className="band">
+              <div className="band-head">
+                <h2 className="eyebrow">Your access</h2>
+                <span className="rule" />
+              </div>
+              <div className="keys">
+                {data.logins.map((l, i) => (
+                  <div className="key" key={i}>
+                    <div>
+                      <h4>{l.platform}</h4>
+                      <p>
+                        {l.email ? `Sign in as ${l.email}` : ''}
+                        {l.note ? (l.email ? ' — ' : '') + l.note : ''}
+                      </p>
+                    </div>
+                    {l.password && (
+                      <button
+                        className="reveal"
+                        type="button"
+                        onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}
+                      >
+                        {revealed[i] ? l.password : 'Show password'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <footer className="foot">
+            <span>{data ? `${liveCount} of ${data.platforms.length} platforms up` : ''}</span>
+            <span>ANC Sports</span>
+          </footer>
+        </main>
+      )}
     </div>
   )
 }
+
+const THEME_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+
+.root {
+  --blue: #0A52EF;
+  --sky: #4F86FF;
+  --cyan: #00AEEF;
+  --green: #46D588;
+  --amber: #F2B33B;
+  --violet: #B388FF;
+  min-height: 100vh;
+  background: var(--field);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  transition: background .3s ease, color .3s ease;
+}
+.root.dark {
+  --field: #060B14;
+  --panel: #0C1524;
+  --panel-hi: #111C2F;
+  --bezel: #1A2942;
+  --hair: rgba(255,255,255,.07);
+  --ink: #E8EFFA;
+  --muted: #8496B4;
+  --faint: #4E5F7D;
+  --dot: rgba(6,11,20,.72);
+  --glow: rgba(79,134,255,.30);
+}
+.root.light {
+  --field: #EFF3F9;
+  --panel: #FFFFFF;
+  --panel-hi: #FFFFFF;
+  --bezel: #DBE3EF;
+  --hair: rgba(10,16,32,.10);
+  --ink: #0A1020;
+  --muted: #5A6B86;
+  --faint: #93A0B5;
+  --dot: rgba(239,243,249,.82);
+  --glow: rgba(10,82,239,.14);
+}
+
+.shell { max-width: 1120px; margin: 0 auto; padding: 40px 24px 96px; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.mark { height: 24px; }
+.top-right { display: flex; align-items: center; gap: 16px; }
+.eyebrow {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--cyan); margin: 0;
+}
+.toggle {
+  width: 32px; height: 32px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  background: var(--panel); color: var(--muted); border: 1px solid var(--hair);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.toggle:hover { color: var(--ink); }
+.toggle:focus-visible, .panel:focus-visible, .reveal:focus-visible {
+  outline: 2px solid var(--sky); outline-offset: 3px;
+}
+
+/* lede */
+.lede { margin-top: 56px; }
+.lede h1 {
+  font-family: 'Space Grotesk', sans-serif; font-size: clamp(30px, 4.4vw, 44px);
+  font-weight: 700; letter-spacing: -.03em; margin: 0;
+}
+.lede p { color: var(--muted); margin: 12px 0 0; font-size: 15px; line-height: 1.65; max-width: 58ch; }
+
+/* ── THE RIBBON BOARD ─────────────────────────────────────────────
+   The thing ANC actually builds: a bezel, LED digits with real pixel
+   gaps, a slow refresh sweep. Their numbers, on their own hardware. */
+.ribbon {
+  position: relative; overflow: hidden; margin-top: 44px;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+  border: 1px solid var(--bezel); border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 20px 50px -30px rgba(0,0,0,.9);
+}
+.cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.cell { padding: 22px 24px; border-right: 1px solid var(--hair); }
+.cell:last-child { border-right: 0; }
+.value {
+  position: relative; width: fit-content;
+  font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700;
+  letter-spacing: .01em; line-height: 1;
+  text-shadow: 0 0 22px var(--glow);
+}
+/* the pixel grid — what makes the digits read as LED, not type */
+.value::after {
+  content: ''; position: absolute; inset: -2px;
+  background-image: radial-gradient(circle, var(--dot) 42%, transparent 43%);
+  background-size: 3px 3px;
+  pointer-events: none;
+}
+.cell-label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--faint); margin-top: 10px;
+}
+.sweep {
+  position: absolute; top: 0; bottom: 0; width: 22%;
+  background: linear-gradient(90deg, transparent, rgba(120,170,255,.06), transparent);
+  animation: sweep 9s linear infinite;
+}
+@keyframes sweep { from { left: -25%; } to { left: 105%; } }
+
+/* bands */
+.band { margin-top: 64px; }
+.band-head { display: flex; align-items: center; gap: 16px; }
+.band-head h2 { font-size: 10.5px; }
+.rule { flex: 1; height: 1px; background: var(--hair); }
+.count { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--faint); }
+
+/* platform panels */
+.panels { margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
+.panel {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel); padding: 24px; text-decoration: none; color: inherit;
+  transition: background .18s ease, transform .18s ease;
+}
+.panel:hover { background: var(--panel-hi); }
+.panel:hover .enter { color: var(--sky); }
+.panel:hover .enter::after { transform: translateX(4px); }
+.panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel-head h3 { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600; margin: 0; }
+.led { width: 7px; height: 7px; border-radius: 999px; background: var(--faint); flex: none; }
+.led.on { background: var(--green); box-shadow: 0 0 10px rgba(70,213,136,.8); }
+.led.warn { background: var(--amber); box-shadow: 0 0 10px rgba(242,179,59,.7); }
+.tag {
+  font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: .14em;
+  text-transform: uppercase; padding: 3px 7px; border-radius: 3px; white-space: nowrap;
+}
+.tag.in_progress { color: var(--amber); background: rgba(242,179,59,.10); border: 1px solid rgba(242,179,59,.30); }
+.tag.experimental { color: var(--violet); background: rgba(179,136,255,.10); border: 1px solid rgba(179,136,255,.30); }
+.panel-copy { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0; }
+.panel-caps {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--faint);
+  margin: 2px 0 0; line-height: 1.7;
+}
+.enter {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted);
+  margin-top: auto; padding-top: 8px; transition: color .18s ease;
+}
+.enter::after { content: ' →'; display: inline-block; transition: transform .18s ease; }
+
+/* what changed */
+.log { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--hair); }
+.log li { display: flex; gap: 24px; padding: 18px 2px; border-bottom: 1px solid var(--hair); }
+.log time {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--faint);
+  white-space: nowrap; padding-top: 2px; min-width: 52px;
+}
+.log h4 { font-size: 14px; font-weight: 600; margin: 0; }
+.log p { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 3px 0 0; }
+
+/* access */
+.keys { margin-top: 20px; border: 1px solid var(--hair); }
+.key {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  padding: 18px 22px; background: var(--panel); border-bottom: 1px solid var(--hair);
+}
+.key:last-child { border-bottom: 0; }
+.key h4 { font-size: 14px; font-weight: 600; margin: 0; }
+.key p { color: var(--muted); font-size: 12.5px; margin: 3px 0 0; }
+.reveal {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; cursor: pointer;
+  background: var(--blue); color: #fff; border: 0; border-radius: 999px; padding: 8px 16px;
+}
+.reveal:hover { background: var(--sky); }
+
+.foot {
+  margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--hair);
+  display: flex; justify-content: space-between;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--faint);
+}
+
+.dead { color: var(--muted); text-align: center; padding: 140px 0; }
+
+@media (max-width: 620px) {
+  .shell { padding: 28px 18px 72px; }
+  .lede { margin-top: 40px; }
+  .cell { padding: 18px; }
+  .value { font-size: 28px; }
+  .log li { gap: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sweep { display: none; }
+  .panel, .enter, .enter::after { transition: none; }
+}
+`
