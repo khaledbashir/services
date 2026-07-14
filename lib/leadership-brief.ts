@@ -18,7 +18,8 @@ import { query } from '@/lib/db'
 
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://ollama.com/v1'
 const AI_API_KEY = process.env.AI_API_KEY || ''
-const BRIEF_MODEL = process.env.LEADERSHIP_BRIEF_MODEL || 'kimi-k2.6'
+const BRIEF_MODEL =
+  process.env.LEADERSHIP_BRIEF_MODEL || process.env.RECEIPT_REASONER_MODEL || 'glm-5.1'
 
 /**
  * Names that must never appear in front of leadership. If a generated line
@@ -60,6 +61,8 @@ export type ShippedItem = {
   shippedAt: string
 }
 
+export type BriefResult = { entries: BriefEntry[]; ok: boolean }
+
 export type BriefEntry = {
   sourceIds: string[]
   platformKey: string
@@ -97,11 +100,26 @@ export async function ensureBriefColumns() {
  * Turn a batch of shipped items into leadership-facing entries. Items that
  * describe the same capability are merged, and pure plumbing is dropped.
  */
-export async function summariseForLeadership(items: ShippedItem[]): Promise<BriefEntry[]> {
-  if (items.length === 0) return []
+const BATCH_SIZE = 20
+
+export async function summariseForLeadership(items: ShippedItem[]): Promise<BriefResult> {
+  if (items.length === 0) return { entries: [], ok: true }
   if (!AI_API_KEY) {
     console.warn('[leadership-brief] AI_API_KEY missing — skipping summarisation')
-    return []
+    return { entries: [], ok: false }
+  }
+
+  // One prompt per batch — a fortnight of shipped work overruns the context
+  // window and the model comes back empty.
+  if (items.length > BATCH_SIZE) {
+    const entries: BriefEntry[] = []
+    let ok = true
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = await summariseForLeadership(items.slice(i, i + BATCH_SIZE))
+      entries.push(...batch.entries)
+      if (!batch.ok) ok = false
+    }
+    return { entries, ok }
   }
 
   const numbered = items
@@ -146,7 +164,9 @@ where "items" lists the numbers from above that the entry covers.`
       }),
       signal: AbortSignal.timeout(90_000),
     })
-    if (!res.ok) throw new Error(`brief HTTP ${res.status}`)
+    if (!res.ok) {
+      throw new Error(`brief HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    }
 
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
     const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/^```(?:json)?|```$/g, '')
@@ -177,10 +197,10 @@ where "items" lists the numbers from above that the entry covers.`
         detail,
       })
     }
-    return entries
+    return { entries, ok: true }
   } catch (err) {
     console.error('[leadership-brief] summarisation failed:', err)
-    return []
+    return { entries: [], ok: false }
   }
 }
 

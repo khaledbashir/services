@@ -23,18 +23,22 @@ export async function GET() {
       return NextResponse.json({ ok: true, ships: 0, published: 0 })
     }
 
-    const entries = await summariseForLeadership(ships)
+    const { entries, ok } = await summariseForLeadership(ships)
     const published = await publishEntries(entries)
 
-    // Mark everything in this batch, including work the model merged or judged
-    // too internal to surface, so it isn't reconsidered every night.
-    await markConsumed(ships)
+    // Only retire the batch when the summariser actually ran. A failed model
+    // call must leave the work queued — silently marking it published is how
+    // shipped work goes missing from the exec feed forever.
+    if (ok) {
+      await markConsumed(ships)
+    }
 
     console.info('[leadership-brief]', JSON.stringify({
       ships: ships.length,
       published,
+      summariserOk: ok,
     }))
-    return NextResponse.json({ ok: true, ships: ships.length, published })
+    return NextResponse.json({ ok, ships: ships.length, published })
   } catch (err) {
     console.error('Leadership brief cron error:', err)
     return NextResponse.json({ error: 'Failed to build leadership brief' }, { status: 500 })
