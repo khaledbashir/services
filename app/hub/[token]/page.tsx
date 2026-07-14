@@ -305,9 +305,10 @@ const THEME_CSS = `
   border: 1px solid var(--bezel); border-radius: 4px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 20px 50px -30px rgba(0,0,0,.9);
 }
-.cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.cell { padding: 22px 24px; border-right: 1px solid var(--hair); }
-.cell:last-child { border-right: 0; }
+/* gap + hairline background draws the gridlines on BOTH axes, so a wrapped
+   row never leaves an orphan cell hanging off the board */
+.cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1px; background: var(--hair); }
+.cell { padding: 22px 24px; background: var(--panel); }
 .value {
   position: relative; width: fit-content;
   font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700;
