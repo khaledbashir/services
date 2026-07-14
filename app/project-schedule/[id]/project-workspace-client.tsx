@@ -508,6 +508,14 @@ function ScheduleTab({
           >
             Today <ChevronRight className="h-3.5 w-3.5" />
           </button>
+          <a
+            href={`/api/project-schedule/${encodeURIComponent(projectId)}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E8E8E8] bg-white px-3 text-xs font-semibold text-zinc-600 transition hover:border-[#0A52EF]/40 hover:text-[#0A52EF]"
+          >
+            <FileText className="h-3.5 w-3.5" /> Export PDF
+          </a>
         </div>
         <div className="flex items-center gap-2">
           {addingSection ? (
@@ -762,6 +770,7 @@ function ScheduleTab({
           task={selectedTask}
           phases={phaseGroups.map((g) => g.phase)}
           presetPhase={presetPhase}
+          childCount={selectedTask ? tasks.filter((t) => t.parentId === selectedTask.id).length : 0}
           onClose={() => {
             setSelectedTask(null)
             setAdding(false)
@@ -956,6 +965,7 @@ function TaskDrawer({
   task,
   phases,
   presetPhase,
+  childCount,
   onClose,
   onSaved,
   onError,
@@ -965,6 +975,7 @@ function TaskDrawer({
   task: ProjectScheduleTask | null
   phases: string[]
   presetPhase?: string | null
+  childCount?: number
   onClose: () => void
   onSaved: () => void | Promise<void>
   onError: (message: string | null) => void
@@ -979,6 +990,7 @@ function TaskDrawer({
   const [isMilestone, setIsMilestone] = useState(task?.isMilestone ?? false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   async function save() {
     if (!name.trim()) {
@@ -1107,14 +1119,40 @@ function TaskDrawer({
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-[#E8E8E8] px-5 py-4">
           {!isNew ? (
-            <button
-              type="button"
-              onClick={remove}
-              disabled={deleting || saving}
-              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
-            </button>
+            confirmingDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-rose-600">
+                  {childCount && childCount > 0
+                    ? `Delete “${task?.name}” and ${childCount} sub-task${childCount === 1 ? '' : 's'}?`
+                    : `Delete “${task?.name}”?`}
+                </span>
+                <button
+                  type="button"
+                  onClick={remove}
+                  disabled={deleting || saving}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-rose-600 px-2.5 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="inline-flex h-9 items-center rounded-md border border-[#E8E8E8] px-2.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={deleting || saving}
+                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
+              </button>
+            )
           ) : (
             <span />
           )}
