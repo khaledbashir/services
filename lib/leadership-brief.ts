@@ -156,7 +156,7 @@ where "items" lists the numbers from above that the entry covers.`
       body: JSON.stringify({
         model: BRIEF_MODEL,
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: 4000,
         messages: [
           { role: 'system', content: 'You output strict JSON. No prose. No markdown fences.' },
           { role: 'user', content: prompt },
@@ -168,9 +168,18 @@ where "items" lists the numbers from above that the entry covers.`
       throw new Error(`brief HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
     }
 
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
-    const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/^```(?:json)?|```$/g, '')
-    const parsed = JSON.parse(raw) as Array<{ items?: number[]; title?: string; detail?: string }>
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    const content = (data.choices?.[0]?.message?.content || '').trim()
+    if (!content) {
+      // Reasoning models spend max_tokens thinking and can return nothing.
+      throw new Error('model returned empty content')
+    }
+    // Grab the JSON array even if the model wrapped it in fences or a sentence.
+    const match = content.replace(/```(?:json)?/g, '').match(/\[[\s\S]*\]/)
+    if (!match) throw new Error(`no JSON array in response: ${content.slice(0, 120)}`)
+    const parsed = JSON.parse(match[0]) as Array<{ items?: number[]; title?: string; detail?: string }>
 
     const entries: BriefEntry[] = []
     for (const candidate of parsed) {
