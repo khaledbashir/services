@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { isAuthError, requireRole } from '@/lib/rbac'
-import { ensureHubTables, normalizeClassification } from '@/lib/hub'
+import { ensureHubTables, normalizeClassifications } from '@/lib/hub'
 import { query } from '@/lib/db'
 
 export type Login = { platform: string; url?: string; email?: string; password?: string; note?: string }
@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     const logins: Login[] = Array.isArray(body.logins) ? body.logins : []
-    const classification = normalizeClassification(body.classification)
+    // Accepts one classification or several (array, or comma-separated string).
+    const classification = normalizeClassifications(
+      Array.isArray(body.classifications)
+        ? body.classifications.join(',')
+        : (body.classifications ?? body.classification)
+    ).join(',')
     const token = randomBytes(18).toString('hex')
 
     await ensureHubTables()

@@ -41,6 +41,15 @@ export const HUB_PLATFORMS: HubPlatform[] = [
     url: 'https://services.ancsports.net',
   },
   {
+    key: 'projects',
+    name: 'Project Delivery',
+    category: 'Operations',
+    description: 'Install schedules, submittals, and the delivery timeline for every venue project.',
+    capabilities: ['Project schedules', 'Submittal tracking', 'Delivery milestones', 'Schedule exports'],
+    url: 'https://services.ancsports.net/project-schedule',
+    healthUrl: 'https://services.ancsports.net',
+  },
+  {
     key: 'ops',
     name: 'Operations Tables',
     category: 'Operations',
@@ -74,12 +83,25 @@ export const HUB_PLATFORMS: HubPlatform[] = [
  * their world. Each classification picks which platforms and which KPI tiles
  * its links show. `leadership` sees everything.
  */
-export type HubClassification = 'leadership' | 'sales' | 'design' | 'operations' | 'marketing'
+export type HubClassification =
+  | 'leadership'
+  | 'sales'
+  | 'design'
+  | 'operations'
+  | 'marketing'
+  | 'project_management'
+
+export type HubKpiKey =
+  | 'opportunities'
+  | 'openTickets'
+  | 'eventsNext7Days'
+  | 'marketingContacts'
+  | 'emailsDelivered'
 
 export const HUB_CLASSIFICATIONS: Record<HubClassification, {
   label: string
   platformKeys: string[] | 'all'
-  kpiKeys: Array<'opportunities' | 'openTickets' | 'eventsNext7Days' | 'marketingContacts' | 'emailsDelivered'> | 'all'
+  kpiKeys: HubKpiKey[] | 'all'
 }> = {
   leadership: { label: 'Leadership', platformKeys: 'all', kpiKeys: 'all' },
   sales: {
@@ -102,17 +124,53 @@ export const HUB_CLASSIFICATIONS: Record<HubClassification, {
     platformKeys: ['marketing', 'docs'],
     kpiKeys: ['marketingContacts', 'emailsDelivered'],
   },
+  // Jireh 7/14: Jesse leads Project Management — the schedule builder, submittals,
+  // and the venue delivery calendar are his world.
+  project_management: {
+    label: 'Project Management',
+    platformKeys: ['projects', 'services', 'ops', 'docs'],
+    kpiKeys: ['openTickets', 'eventsNext7Days'],
+  },
 }
 
+/**
+ * A link can carry SEVERAL classifications (Jireh 7/14: "Alexis is going to be
+ * combined with design and operations and also sales"). Stored comma-separated;
+ * the hub shows the union of every classification's platforms and KPIs.
+ */
+export function normalizeClassifications(value: unknown): HubClassification[] {
+  const parts = String(value ?? '')
+    .toLowerCase()
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p in HUB_CLASSIFICATIONS) as HubClassification[]
+  const unique = Array.from(new Set(parts))
+  return unique.length ? unique : ['leadership']
+}
+
+/** Single-value form kept for callers that only need one (first wins). */
 export function normalizeClassification(value: unknown): HubClassification {
-  const v = String(value ?? '').toLowerCase().trim()
-  return (v in HUB_CLASSIFICATIONS ? v : 'leadership') as HubClassification
+  return normalizeClassifications(value)[0]
 }
 
-export function platformsForClassification(classification: HubClassification): HubPlatform[] {
-  const spec = HUB_CLASSIFICATIONS[classification]
-  if (spec.platformKeys === 'all') return HUB_PLATFORMS
-  return HUB_PLATFORMS.filter((p) => (spec.platformKeys as string[]).includes(p.key))
+export function labelForClassifications(classifications: HubClassification[]): string {
+  if (classifications.includes('leadership')) return 'Leadership'
+  return classifications.map((c) => HUB_CLASSIFICATIONS[c].label).join(' · ')
+}
+
+export function platformsForClassifications(classifications: HubClassification[]): HubPlatform[] {
+  if (classifications.some((c) => HUB_CLASSIFICATIONS[c].platformKeys === 'all')) return HUB_PLATFORMS
+  const keys = new Set(
+    classifications.flatMap((c) => HUB_CLASSIFICATIONS[c].platformKeys as string[])
+  )
+  return HUB_PLATFORMS.filter((p) => keys.has(p.key))
+}
+
+export function kpiKeysForClassifications(classifications: HubClassification[]): HubKpiKey[] | 'all' {
+  if (classifications.some((c) => HUB_CLASSIFICATIONS[c].kpiKeys === 'all')) return 'all'
+  return Array.from(
+    new Set(classifications.flatMap((c) => HUB_CLASSIFICATIONS[c].kpiKeys as HubKpiKey[]))
+  )
 }
 
 // ---------- health ----------

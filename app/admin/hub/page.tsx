@@ -10,8 +10,16 @@ const CLASSIFICATIONS = [
   { value: 'sales', label: 'Sales & Enterprise' },
   { value: 'design', label: 'Design & Creative' },
   { value: 'operations', label: 'Operations & Field' },
+  { value: 'project_management', label: 'Project Management' },
   { value: 'marketing', label: 'Marketing' },
 ]
+
+function labelFor(value: string): string {
+  return value
+    .split(',')
+    .map((v) => CLASSIFICATIONS.find((c) => c.value === v.trim())?.label || v.trim())
+    .join(' · ')
+}
 
 type TokenRow = {
   url: string
@@ -29,7 +37,14 @@ export default function HubAdminPage() {
   const [tokens, setTokens] = useState<TokenRow[]>([])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [classification, setClassification] = useState('leadership')
+  const [picked, setPicked] = useState<string[]>(['leadership'])
+
+  const togglePick = (value: string) =>
+    setPicked((current) =>
+      current.includes(value)
+        ? (current.length > 1 ? current.filter((v) => v !== value) : current)
+        : [...current.filter((v) => v !== 'leadership' || value === 'leadership'), value],
+    )
   const [minting, setMinting] = useState(false)
   const [justMinted, setJustMinted] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -56,7 +71,7 @@ export default function HubAdminPage() {
     try {
       const res = await fetch('/api/hub/tokens', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personName: n, personEmail: e, logins: [], classification }),
+        body: JSON.stringify({ personName: n, personEmail: e, logins: [], classifications: picked }),
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || 'Could not mint link.')
@@ -105,14 +120,26 @@ export default function HubAdminPage() {
           <div className="flex flex-wrap items-center gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-9 w-40 rounded-md border border-[#E8E8E8] px-3 text-sm outline-none focus:border-[#0A52EF]" />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="h-9 w-56 rounded-md border border-[#E8E8E8] px-3 text-sm outline-none focus:border-[#0A52EF]" />
-            <select value={classification} onChange={(e) => setClassification(e.target.value)} className="h-9 rounded-md border border-[#E8E8E8] bg-white px-2 text-sm text-zinc-700 outline-none focus:border-[#0A52EF]">
-              {CLASSIFICATIONS.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
             <button type="button" onClick={mint} disabled={minting} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E8E8E8] px-3 text-xs font-semibold text-zinc-600 transition hover:border-[#0A52EF]/40 hover:text-[#0A52EF] disabled:opacity-60">
               <Plus className="h-3.5 w-3.5" /> Mint
             </button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Classifications</span>
+            {CLASSIFICATIONS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => togglePick(c.value)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  picked.includes(c.value)
+                    ? 'border-[#0A52EF] bg-[#0A52EF]/8 font-semibold text-[#0A52EF]'
+                    : 'border-[#E8E8E8] text-zinc-500 hover:border-zinc-300'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
           </div>
           {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
           {justMinted ? (
@@ -136,7 +163,7 @@ export default function HubAdminPage() {
                     {t.personName} <span className="text-zinc-400">· {t.personEmail}</span>
                     {t.classification && t.classification !== 'leadership' ? (
                       <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                        {CLASSIFICATIONS.find((c) => c.value === t.classification)?.label || t.classification}
+                        {labelFor(t.classification)}
                       </span>
                     ) : null}
                   </div>
