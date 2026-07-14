@@ -312,6 +312,9 @@ body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:7.5px;-webkit-p
 .title .t2{font-size:9px;font-weight:600;margin-top:1px}
 .title .t3{font-size:8.5px;font-style:italic;margin-top:1px}
 table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead{display:table-header-group}
+tfoot{display:table-footer-group}
+tr{page-break-inside:avoid}
 col.c-id{width:22px}col.c-name{width:172px}col.c-dur{width:52px}col.c-start{width:60px}col.c-finish{width:60px}
 thead th{border:1px solid #000;background:#fff;font-size:7.5px;font-weight:700;text-align:left;padding:2px 4px;vertical-align:bottom}
 thead th.head-gantt{padding:0;position:relative;height:24px}
@@ -337,7 +340,8 @@ td.gantt{padding:0;position:relative;border-left:1px solid #000}
 .bar-label{position:absolute;top:3px;font-size:6.5px;font-weight:700;white-space:nowrap;color:#000}
 .bar-label.flip{text-align:right}
 .bar-label.on-bar{color:#fff}
-.legend{border-top:1px solid #000;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:7px}
+.foot-cell{padding:0;border:1px solid #000;border-top:1px solid #000}
+.legend{border-bottom:1px solid #000;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:7px}
 .legend-item{display:inline-flex;align-items:center;gap:4px}
 .swatch{display:inline-block;width:18px;height:6px}
 .swatch.bar-task{background:#9DC3E6;border:1px solid #6f9fcc}
@@ -366,14 +370,18 @@ td.gantt{padding:0;position:relative;border-left:1px solid #000}
         </th>
       </tr>
     </thead>
+    <tfoot>
+      <tr><td colspan="6" class="foot-cell">
+        <div class="legend">${legend}</div>
+        <div class="foot">
+          <div><div>Project: ${escapeHtml(projectName)}</div><div>Date: ${today}</div></div>
+          <div class="mid">ANC</div>
+          <div style="width:120px"></div>
+        </div>
+      </td></tr>
+    </tfoot>
     <tbody>${bodyRows}</tbody>
   </table>
-  <div class="legend">${legend}</div>
-  <div class="foot">
-    <div><div>Project: ${escapeHtml(projectName)}</div><div>Date: ${today}</div></div>
-    <div class="mid">ANC<div style="font-weight:400">Page 1</div></div>
-    <div style="width:120px"></div>
-  </div>
 </div>
 <script>
   // Draw the week grid behind the bars once layout is known.
