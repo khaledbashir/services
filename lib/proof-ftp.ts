@@ -25,6 +25,7 @@
 
 import SftpClient from 'ssh2-sftp-client'
 import { Readable } from 'node:stream'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import path from 'node:path'
 
@@ -52,6 +53,16 @@ const FILE_STREAM_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_ID
 const FILE_STREAM_POOL_MAX = Math.min(6, Math.max(1, Number(process.env.ANC_FTP_STREAM_POOL_MAX || 3)))
 const FILE_STREAM_HIGH_WATER_MARK = Math.max(64 * 1024, Number(process.env.ANC_FTP_STREAM_HIGH_WATER_MARK || 256 * 1024))
 const STREAM_POOL_WAIT_TIMEOUT_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_WAIT_TIMEOUT_MS || 30_000))
+// Security controls. Both are opt-in by config: unset means "behave as before"
+// so setting them is a deliberate tightening, not a surprise outage. Set
+// ANC_FTP_ALLOWED_ROOTS (e.g. "/T,/A") and ANC_FTP_HOST_KEY_FINGERPRINT
+// (`ssh-keyscan -t rsa ftp.anc.com | ssh-keygen -lf -`) in prod to enforce.
+const ALLOWED_ROOTS = parseAllowedRoots(process.env.ANC_FTP_ALLOWED_ROOTS)
+const PINNED_HOST_KEY = normalizeFingerprint(process.env.ANC_FTP_HOST_KEY_FINGERPRINT)
+const MAX_PROOF_FILE_BYTES = Math.max(
+  1024 * 1024,
+  Number(process.env.ANC_FTP_MAX_PROOF_FILE_BYTES || 5 * 1024 * 1024 * 1024)
+)
 
 // Legacy algorithm set — additive to ssh2's modern defaults, not a replacement,
 // so we still prefer strong crypto when the far side supports it and only fall
@@ -128,6 +139,111 @@ function normalizeRemote(p: string): string {
 }
 
 /**
+ * Explicit allowlist of folders this account may browse, from
+ * `ANC_FTP_ALLOWED_ROOTS` (comma/semicolon/newline separated). The share
+ * account is read-only and jailed server-side, but the FTP also holds ~20k
+ * client folders — an allowlist keeps a crafted path from wandering into
+ * clients we have no business serving. The server root ('/') is never a valid
+ * entry: allowing it would defeat the point.
+ */
+export function parseAllowedRoots(raw: string | undefined | null): string[] {
+  return Array.from(
+    new Set(
+      String(raw ?? '')
+        .split(/[,;\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => normalizeRemote(part))
+        .filter((part) => part !== '/')
+    )
+  ).sort()
+}
+
+/**
+ * True when `candidate` is one of the roots or lives beneath one. Compares on
+ * normalized paths and on segment boundaries, so `/T/TIN-NYC` does not match
+ * the root `/T/TIN`, and `..` cannot climb out.
+ */
+export function isPathWithinRoots(candidate: string, roots: string[]): boolean {
+  if (roots.length === 0) return false
+  const target = normalizeRemote(candidate)
+  return roots.some((root) => {
+    const normalizedRoot = normalizeRemote(root)
+    if (normalizedRoot === '/') return false
+    return target === normalizedRoot || target.startsWith(`${normalizedRoot}/`)
+  })
+}
+
+/** Directory listings only ever expose real dirs and regular files — never symlinks. */
+export function isRegularListingType(type: string | undefined | null): boolean {
+  return type === 'd' || type === '-'
+}
+
+const REVIEWABLE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'tif', 'tiff',
+  'mp4', 'mov', 'webm', 'm4v', 'mpg', 'mpeg', 'avi', 'mkv', 'wmv',
+  'pdf',
+])
+
+/**
+ * What a client proof is allowed to be: a plain filename (no path parts), a
+ * reviewable image/video/PDF, non-empty, and under the size ceiling.
+ */
+export function validateProofFile(
+  name: string,
+  size: number,
+  maxBytes: number
+): { ok: true; kind: 'image' | 'video' | 'pdf' | 'other' } | { ok: false; reason: string } {
+  if (!name || name !== path.posix.basename(name) || name.startsWith('.')) {
+    return { ok: false, reason: 'unsafe_name' }
+  }
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  if (!REVIEWABLE_EXTENSIONS.has(ext)) {
+    return { ok: false, reason: 'unsupported_format' }
+  }
+  if (!Number.isFinite(size) || size <= 0) {
+    return { ok: false, reason: 'empty_file' }
+  }
+  if (size > maxBytes) {
+    return { ok: false, reason: 'too_large' }
+  }
+  return { ok: true, kind: classify(name) }
+}
+
+/**
+ * Identity of a file revision. Same name + same bytes-and-mtime = same version;
+ * a replaced file gets a new one, which is what drives manifest reconciliation.
+ */
+export function buildSourceVersion(name: string, size: number, modifiedAt: string): string {
+  return createHash('sha1').update(`${name}|${size}|${modifiedAt}`).digest('hex')
+}
+
+// ── Host key pinning ─────────────────────────────────────────────────────────
+
+/** Base64 SHA-256 of a host key — the same shape `ssh-keyscan` prints. */
+export function fingerprintHostKey(key: Buffer): string {
+  return createHash('sha256').update(key).digest('base64').replace(/=+$/, '')
+}
+
+/** Accepts `SHA256:<fp>`, a bare fingerprint, and trailing base64 padding. */
+export function normalizeFingerprint(value: string | undefined | null): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/^SHA256:/i, '')
+    .replace(/=+$/, '')
+}
+
+/** Constant-time compare of a presented host key against the pinned fingerprint. */
+export function verifyPinnedHostKey(key: Buffer, pinned: string | undefined | null): boolean {
+  const expected = normalizeFingerprint(pinned)
+  if (!expected) return false
+  const actual = fingerprintHostKey(key)
+  const a = Buffer.from(actual)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/**
  * Resolve a caller-supplied path against ROOT and refuse anything that escapes
  * it. Returns the safe absolute remote path, or throws.
  */
@@ -138,6 +254,11 @@ export function resolveSafePath(input: string): string {
   const rootWithSep = ROOT === '/' ? '/' : ROOT + '/'
   if (candidate !== ROOT && !candidate.startsWith(rootWithSep)) {
     throw new Error(`Path escapes root: ${input}`)
+  }
+  // When an allowlist is configured, the path must also sit inside it. The
+  // allowlist root itself is browsable so the picker can still start there.
+  if (ALLOWED_ROOTS.length > 0 && candidate !== ROOT && !isPathWithinRoots(candidate, ALLOWED_ROOTS)) {
+    throw new Error(`Path is outside the approved content library: ${input}`)
   }
   return candidate
 }
@@ -177,6 +298,26 @@ async function withClient<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
   return queued
 }
 
+/**
+ * When a fingerprint is pinned, every connection must present that exact host
+ * key — otherwise the session is refused. Unpinned (no env var) keeps today's
+ * behavior so enforcement is a deliberate config step.
+ */
+function hostVerifier(): { hostVerifier?: (key: Buffer) => boolean } {
+  if (!PINNED_HOST_KEY) return {}
+  return {
+    hostVerifier: (key: Buffer) => {
+      const ok = verifyPinnedHostKey(key, PINNED_HOST_KEY)
+      if (!ok) {
+        console.error('[proof-ftp] host key mismatch — refusing connection', JSON.stringify({
+          presented: fingerprintHostKey(key),
+        }))
+      }
+      return ok
+    },
+  }
+}
+
 async function getMetadataClient(): Promise<SftpClient> {
   if (metadataClient) return metadataClient
   if (metadataConnectPromise) return metadataConnectPromise
@@ -193,6 +334,7 @@ async function getMetadataClient(): Promise<SftpClient> {
       // @ts-expect-error ssh2 accepts `family` to pin the socket to IPv4.
       family: 4,
       algorithms: LEGACY_ALGORITHMS as any,
+      ...hostVerifier(),
     })
     metadataClient = sftp
     logPerf('metadata_connect', { durationMs: Date.now() - startedAt })
@@ -238,6 +380,7 @@ async function connectStreamClient(): Promise<StreamPoolEntry> {
       // @ts-expect-error family pins IPv4
       family: 4,
       algorithms: LEGACY_ALGORITHMS as any,
+      ...hostVerifier(),
     })
     return entry
   } catch (error) {
@@ -433,7 +576,13 @@ export async function listDir(
   const pageSize = Math.min(500, Math.max(1, Math.floor(opts.pageSize || 100)))
 
   const startedAt = Date.now()
-  const { entries: all, source } = await getDirectoryEntries(safe)
+  const { entries: allEntries, source } = await getDirectoryEntries(safe)
+
+  // With an allowlist configured, the root listing shows only approved folders
+  // — the picker never even offers the server's admin/system directories.
+  const all = ALLOWED_ROOTS.length > 0 && safe === ROOT
+    ? allEntries.filter((entry) => isPathWithinRoots(entry.path, ALLOWED_ROOTS))
+    : allEntries
 
   const total = all.length
   const start = (page - 1) * pageSize
@@ -470,8 +619,9 @@ async function getDirectoryEntries(
   const load = withClient(async (sftp) => {
     const raw = await sftp.list(safe)
     const entries = raw
-      // Hidden/system entries (WS_FTP writes .etc, WS_FTP_LOGS, etc.) stay out.
-      .filter((e) => !e.name.startsWith('.'))
+      // Hidden/system entries (WS_FTP writes .etc, WS_FTP_LOGS, etc.) stay out,
+      // and so do symlinks/sockets — only real dirs and regular files.
+      .filter((e) => !e.name.startsWith('.') && isRegularListingType(e.type as string))
       .map<FtpEntry>((e) => {
         const isDir = e.type === 'd'
         const full = normalizeRemote(path.posix.join(safe, e.name))
@@ -522,12 +672,24 @@ export async function listProofFiles(remotePath: string): Promise<FtpEntry[]> {
   const safe = resolveSafePath(remotePath || ROOT)
   const startedAt = Date.now()
   const { entries, source } = await getDirectoryEntries(safe)
-  const files = entries.filter((entry) => entry.type === 'file')
+  // A proof is a reviewable image/video/PDF. Working files (.psd, .zip,
+  // thumbs.db) that happen to sit in the folder never reach a client.
+  let rejected = 0
+  const files = entries.filter((entry) => {
+    if (entry.type !== 'file') return false
+    const verdict = validateProofFile(entry.name, entry.size, MAX_PROOF_FILE_BYTES)
+    if (!verdict.ok) {
+      rejected += 1
+      return false
+    }
+    return true
+  })
   logPerf('list_proof_files', {
     source,
     durationMs: Date.now() - startedAt,
     entryCount: entries.length,
     fileCount: files.length,
+    rejected,
     pathDepth: safe === '/' ? 0 : safe.split('/').filter(Boolean).length,
   })
   return files
