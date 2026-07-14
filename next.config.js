@@ -7,6 +7,8 @@ const nextConfig = {
     // that webpack can't bundle — keep them external so they're required from
     // node_modules at runtime (used by the proof-ftp browse/stream routes).
     serverComponentsExternalPackages: ['ssh2', 'ssh2-sftp-client'],
+    // Boot hook (instrumentation.ts) re-warms the proof file cache after deploys.
+    instrumentationHook: true,
   },
 }
 

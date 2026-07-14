@@ -670,6 +670,40 @@ export async function openFileStream(
   }
 }
 
+/**
+ * Download a whole remote file to a local path using SFTP fastGet — many
+ * concurrent 32KB reads on one connection. The legacy line yields ~110KB/s to
+ * a sequential stream; parallel in-flight reads pull the same file an order
+ * of magnitude faster, which is what makes cache warming practical.
+ */
+export async function downloadFileFast(remotePath: string, localPath: string): Promise<void> {
+  if (!isConfigured()) throw new Error('ANC FTP not configured')
+  const safe = resolveSafePath(remotePath)
+  const startedAt = Date.now()
+  let lease: StreamPoolEntry | null = null
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    lease = await acquireStreamClient()
+    try {
+      await lease.client.fastGet(safe, localPath, {
+        concurrency: 64,
+        chunkSize: 32_768,
+      })
+      releaseStreamClient(lease, true)
+      logPerf('fast_download', {
+        durationMs: Date.now() - startedAt,
+        pathDepth: safe.split('/').filter(Boolean).length,
+      })
+      return
+    } catch (error) {
+      lastError = error
+      releaseStreamClient(lease, false)
+      lease = null
+    }
+  }
+  throw lastError
+}
+
 // ── Health check ─────────────────────────────────────────────────────────────
 
 export async function isReachable(): Promise<{ ok: boolean; error?: string; rootEntries?: number }> {

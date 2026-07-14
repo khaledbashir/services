@@ -15,11 +15,10 @@
  */
 
 import { createHash } from 'node:crypto'
-import { createReadStream, createWriteStream } from 'node:fs'
+import { createReadStream } from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { openFileStream, type FtpManifestEntry } from '@/lib/proof-ftp'
+import { downloadFileFast, type FtpManifestEntry } from '@/lib/proof-ftp'
 
 const CACHE_DIR = process.env.PROOF_FILE_CACHE_DIR || '/tmp/anc-proof-cache'
 const MAX_TOTAL_BYTES = Math.max(
@@ -95,8 +94,7 @@ export function prefetchFile(remotePath: string, sourceVersion: string, size: nu
     await ensureDir()
     const temp = `${dest}.part-${process.pid}-${startedAt}`
     try {
-      const opened = await openFileStream(remotePath)
-      await pipeline(opened.stream, createWriteStream(temp))
+      await downloadFileFast(remotePath, temp)
       await fsp.rename(temp, dest)
       console.info('[proof-cache]', JSON.stringify({
         event: 'cached',

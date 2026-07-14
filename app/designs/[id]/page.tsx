@@ -126,7 +126,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [notesDraft, setNotesDraft] = useState('')
   const [hoursSpentDraft, setHoursSpentDraft] = useState('')
   const [boardsDraft, setBoardsDraft] = useState('')
-  const [sizesDraft, setSizesDraft] = useState('')
   const [finalFileDraft, setFinalFileDraft] = useState('')
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
   const [proofLinkDraft, setProofLinkDraft] = useState('')
@@ -147,7 +146,6 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       setNotesDraft(d?.notes || '')
       setHoursSpentDraft(d?.hours_spent?.toString() || '')
       setBoardsDraft(d?.boards_requested || '')
-      setSizesDraft(d?.sizes_requested || '')
       setFinalFileDraft(d?.final_file_name || '')
       setFinalLinkDraft(d?.ftp_final_link || '')
       setProofLinkDraft(d?.ftp_proof_link || '')
@@ -483,27 +481,19 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </div>
 
             {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
-            <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'}>
-              <Field label="Boards requested">
+            <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'} onSetStatus={() => updateField({ status: STAGES[0].key })}>
+              {/* Boards + Sizes merged into one field (Charlie 7/14 round 2).
+                  Legacy sizes_requested values were folded into boards_requested
+                  by a one-time data migration; the column stays for history. */}
+              <Field label="Boards requested and sizes">
                 <textarea
                   data-ai-target="boards-requested"
                   value={boardsDraft}
                   onChange={(e) => setBoardsDraft(e.target.value)}
                   onBlur={() => boardsDraft !== (dr.boards_requested || '') && updateField({ boards_requested: boardsDraft })}
-                  rows={4}
+                  rows={5}
                   className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
-                  placeholder="e.g. 2× main scoreboards, 1× ribbon"
-                />
-              </Field>
-              <Field label="Sizes">
-                <textarea
-                  data-ai-target="sizes-requested"
-                  value={sizesDraft}
-                  onChange={(e) => setSizesDraft(e.target.value)}
-                  onBlur={() => sizesDraft !== (dr.sizes_requested || '') && updateField({ sizes_requested: sizesDraft })}
-                  rows={4}
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
-                  placeholder="e.g. 1920x1080, 960x540"
+                  placeholder="e.g. 2× main scoreboards (1920x1080), 1× ribbon (960x540)"
                 />
               </Field>
               <Field label="Notes / Brief">
@@ -520,7 +510,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </StageCard>
 
             {/* STAGE 3: IN PROGRESS — hours (logged via entries) + notes */}
-            <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'}>
+            <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[2].key })}>
               <Field label="Hours Logged">
                 <div className="text-sm text-zinc-600">{dr.hours_spent ?? 0}h logged</div>
               </Field>
@@ -528,7 +518,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </StageCard>
 
             {/* STAGE 4: IN QC */}
-            <StageCard n={4} label="In QC" desc={STAGES[3].desc} state={currentIdx < 3 ? 'upcoming' : currentIdx === 3 ? 'active' : 'done'}>
+            <StageCard n={4} label="In QC" desc={STAGES[3].desc} state={currentIdx < 3 ? 'upcoming' : currentIdx === 3 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[3].key })}>
               <p className="text-sm text-zinc-500">
                 Internal quality check. When passed, upload the proof below, then explicitly advance this request to Client Review to fire the approval email.
               </p>
@@ -537,7 +527,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>
                   QC approved by {dr.qc_approved_by_name} on {formatDate(dr.qc_approved_at)}
                 </div>
-              ) : dr.status === 'in_qc' && (
+              ) : (
                 <label className={`flex items-center gap-2.5 rounded-lg ring-1 ring-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 ${saving ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-zinc-50'}`}>
                   <input
                     type="checkbox"
@@ -554,7 +544,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </StageCard>
 
             {/* STAGE 5: CLIENT REVIEW — THE MONEY STAGE */}
-            <StageCard n={5} label="Client Review" desc={STAGES[4].desc} state={currentIdx < 4 ? 'upcoming' : currentIdx === 4 ? 'active' : 'done'} highlight={currentIdx === 4}>
+            <StageCard n={5} label="Client Review" desc={STAGES[4].desc} state={currentIdx < 4 ? 'upcoming' : currentIdx === 4 ? 'active' : 'done'} highlight={currentIdx === 4} onSetStatus={() => updateField({ status: STAGES[4].key })}>
               <div className="space-y-4">
                 {legacyProofUrl && (
                   <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 p-3 text-sm">
@@ -602,7 +592,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </StageCard>
 
             {/* STAGE 6: APPROVED — final file */}
-            <StageCard n={6} label="Approved" desc={STAGES[5].desc} state={currentIdx < 5 ? 'upcoming' : currentIdx === 5 ? 'active' : 'done'}>
+            <StageCard n={6} label="Approved" desc={STAGES[5].desc} state={currentIdx < 5 ? 'upcoming' : currentIdx === 5 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[5].key })}>
               {managedProofUrl && (
                 <div className="mb-4">
                   <ProofFileRoster proofUrl={managedProofUrl} />
@@ -630,7 +620,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             </StageCard>
 
             {/* STAGE 7: DONE */}
-            <StageCard n={7} label="Done" desc={STAGES[6].desc} state={currentIdx < 6 ? 'upcoming' : 'done'}>
+            <StageCard n={7} label="Done" desc={STAGES[6].desc} state={currentIdx < 6 ? 'upcoming' : 'done'} onSetStatus={() => updateField({ status: STAGES[6].key })}>
               <p className="text-sm text-zinc-500">
                 Request closed. All fields are still visible above for reference.
               </p>
@@ -668,7 +658,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             {/* STAGE 2: IN QUEUE — multi-assign designers + enterprise reps.
                 Moved to the sidebar (Charlie 2026-07-14) so assignment sits
                 next to the quick facts; stacked layout for the 280px rail. */}
-            <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'}>
+            <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[1].key })}>
               <AssigneePicker designRequestId={dr.id} staffList={staffList} stacked />
               {currentIdx === 1 && (
                 <button
@@ -701,13 +691,15 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
 // when done. Upcoming stages appear greyed out but still readable.
 // ─────────────────────────────────────────────────────────────────────────────
 function StageCard({
-  n, label, desc, state, highlight = false, children,
+  n, label, desc, state, highlight = false, onSetStatus, children,
 }: {
   n: number
   label: string
   desc: string
   state: 'upcoming' | 'active' | 'done'
   highlight?: boolean
+  /** When set, the card's number badge is a button that jumps the request to this stage. */
+  onSetStatus?: () => void
   children: React.ReactNode
 }) {
   const border =
@@ -715,12 +707,26 @@ function StageCard({
     : state === 'done' ? 'ring-1 ring-zinc-200 bg-white'
     : 'ring-1 ring-zinc-100 bg-zinc-50/60'
 
-  const number =
+  const badgeClass =
     state === 'done'
-      ? <span className="w-7 h-7 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-semibold">✓</span>
+      ? 'w-7 h-7 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-semibold'
       : state === 'active'
-        ? <span className="w-7 h-7 rounded-full bg-[#0A52EF] text-white text-sm flex items-center justify-center font-semibold">{n}</span>
-        : <span className="w-7 h-7 rounded-full bg-zinc-200 text-zinc-500 text-sm flex items-center justify-center font-semibold">{n}</span>
+        ? 'w-7 h-7 rounded-full bg-[#0A52EF] text-white text-sm flex items-center justify-center font-semibold'
+        : 'w-7 h-7 rounded-full bg-zinc-200 text-zinc-500 text-sm flex items-center justify-center font-semibold'
+  const badgeContent = state === 'done' ? '✓' : n
+
+  const number = onSetStatus ? (
+    <button
+      type="button"
+      title={`Set status to "${label}"`}
+      onClick={onSetStatus}
+      className={`${badgeClass} cursor-pointer transition hover:ring-2 hover:ring-[#0A52EF]/40 hover:scale-105`}
+    >
+      {badgeContent}
+    </button>
+  ) : (
+    <span className={badgeClass}>{badgeContent}</span>
+  )
 
   return (
     <section className={`rounded-xl p-5 ${border} ${state === 'upcoming' ? 'opacity-60' : ''}`}>
