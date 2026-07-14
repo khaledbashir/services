@@ -245,19 +245,29 @@ function buildHTML(
       const widthPct = (spanDays / totalDays) * 100
       const labelLeft = leftPct + widthPct
 
+      // A label that would run off the right edge flips to the left of its bar
+      // (MS Project does the same) so nothing is clipped at the frame.
+      const flipLabel = labelLeft > 78
+      const labelHtml = (anchorLeft: number, anchorRight: number) =>
+        flipLabel
+          ? `<div class="bar-label flip" style="right:calc(${100 - anchorLeft}% + 6px)">${escapeHtml(row.name)}</div>`
+          : `<div class="bar-label" style="left:calc(${anchorRight}% + 6px)">${escapeHtml(row.name)}</div>`
+
       let bar: string
       if (row.isMilestone) {
         bar = `<div class="milestone" style="left:calc(${leftPct}% - 4px)"></div>
-               <div class="bar-label" style="left:calc(${leftPct}% + 8px)">${escapeHtml(row.name)}</div>`
+               ${flipLabel
+                 ? `<div class="bar-label flip" style="right:calc(${100 - leftPct}% + 8px)">${escapeHtml(row.name)}</div>`
+                 : `<div class="bar-label" style="left:calc(${leftPct}% + 8px)">${escapeHtml(row.name)}</div>`}`
       } else if (row.isProject) {
         bar = `<div class="project-bar" style="left:${leftPct}%;width:${widthPct}%"></div>
                <div class="bar-label on-bar" style="left:${leftPct + widthPct / 2}%;transform:translateX(-50%)">${escapeHtml(row.name)}</div>`
       } else if (row.isSummary) {
         bar = `<div class="summary-bar" style="left:${leftPct}%;width:${widthPct}%"></div>
-               <div class="bar-label" style="left:calc(${labelLeft}% + 6px)">${escapeHtml(row.name)}</div>`
+               ${labelHtml(leftPct, labelLeft)}`
       } else {
         bar = `<div class="task-bar ${row.atRisk ? 'risk' : ''}" style="left:${leftPct}%;width:${widthPct}%"></div>
-               <div class="bar-label" style="left:calc(${labelLeft}% + 6px)">${escapeHtml(row.name)}</div>`
+               ${labelHtml(leftPct, labelLeft)}`
       }
 
       const nameClass = row.isProject
@@ -325,6 +335,7 @@ td.gantt{padding:0;position:relative;border-left:1px solid #000}
 .project-bar{position:absolute;top:4px;height:8px;background:#1F4E79}
 .milestone{position:absolute;top:4px;width:8px;height:8px;background:#000;transform:rotate(45deg)}
 .bar-label{position:absolute;top:3px;font-size:6.5px;font-weight:700;white-space:nowrap;color:#000}
+.bar-label.flip{text-align:right}
 .bar-label.on-bar{color:#fff}
 .legend{border-top:1px solid #000;padding:5px 8px;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:7px}
 .legend-item{display:inline-flex;align-items:center;gap:4px}
