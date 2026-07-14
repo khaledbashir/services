@@ -162,7 +162,7 @@ where "items" lists the numbers from above that the entry covers.`
           { role: 'user', content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(180_000),
     })
     if (!res.ok) {
       throw new Error(`brief HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
@@ -214,9 +214,29 @@ where "items" lists the numbers from above that the entry covers.`
 }
 
 /** Publish entries to the hub feed and mark their source rows as published. */
+function normaliseTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
 export async function publishEntries(entries: BriefEntry[]): Promise<number> {
   let published = 0
+  const seen = new Set<string>()
+  const recent = await query(
+    `SELECT title FROM hub_status_entries WHERE created_at > NOW() - interval '45 days'`
+  )
+  for (const row of recent.rows) seen.add(normaliseTitle(String(row.title)))
+
   for (const entry of entries) {
+    const key = normaliseTitle(entry.title)
+    if (seen.has(key)) {
+      // Already announced — mark the source work done, but don't repeat it.
+      await query(
+        `UPDATE service_requests SET brief_published_at = NOW() WHERE id = ANY($1::uuid[])`,
+        [entry.sourceIds]
+      )
+      continue
+    }
+    seen.add(key)
     await query(
       `INSERT INTO hub_status_entries (platform_key, title, detail)
        VALUES ($1, $2, $3)`,
