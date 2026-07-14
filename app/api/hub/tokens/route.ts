@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { isAuthError, requireRole } from '@/lib/rbac'
-import { ensureHubTables } from '@/lib/hub'
+import { ensureHubTables, normalizeClassification } from '@/lib/hub'
 import { query } from '@/lib/db'
 
 export type Login = { platform: string; url?: string; email?: string; password?: string; note?: string }
@@ -40,18 +40,19 @@ export async function POST(request: NextRequest) {
     }
 
     const logins: Login[] = Array.isArray(body.logins) ? body.logins : []
+    const classification = normalizeClassification(body.classification)
     const token = randomBytes(18).toString('hex')
 
     await ensureHubTables()
     await query(
-      `INSERT INTO hub_access_tokens (token, person_name, person_email, logins)
-       VALUES ($1, $2, $3, $4::jsonb)`,
-      [token, personName, personEmail, JSON.stringify(logins)],
+      `INSERT INTO hub_access_tokens (token, person_name, person_email, logins, classification)
+       VALUES ($1, $2, $3, $4::jsonb, $5)`,
+      [token, personName, personEmail, JSON.stringify(logins), classification],
     )
 
     const origin = publicOrigin(request)
     return NextResponse.json({
-      data: { token, url: `${origin}/hub/${token}`, personName, personEmail },
+      data: { token, url: `${origin}/hub/${token}`, personName, personEmail, classification },
     })
   } catch (err) {
     console.error('Error minting hub token:', err)
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     await ensureHubTables()
     const res = await query(
-      `SELECT token, person_name, person_email, view_count, last_viewed_at, created_at, revoked_at
+      `SELECT token, person_name, person_email, classification, view_count, last_viewed_at, created_at, revoked_at
        FROM hub_access_tokens ORDER BY created_at DESC`,
     )
     const origin = publicOrigin(request)
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
         url: `${origin}/hub/${r.token}`,
         personName: r.person_name,
         personEmail: r.person_email,
+        classification: r.classification || 'leadership',
         viewCount: r.view_count,
         lastViewedAt: r.last_viewed_at,
         createdAt: r.created_at,

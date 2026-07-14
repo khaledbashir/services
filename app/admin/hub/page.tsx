@@ -5,10 +5,19 @@ import { Check, Copy, ExternalLink, Link2, Plus } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuth } from '@/lib/useAuth'
 
+const CLASSIFICATIONS = [
+  { value: 'leadership', label: 'Leadership' },
+  { value: 'sales', label: 'Sales & Enterprise' },
+  { value: 'design', label: 'Design & Creative' },
+  { value: 'operations', label: 'Operations & Field' },
+  { value: 'marketing', label: 'Marketing' },
+]
+
 type TokenRow = {
   url: string
   personName: string
   personEmail: string
+  classification?: string
   viewCount: number
   lastViewedAt: string | null
   createdAt: string
@@ -20,6 +29,7 @@ export default function HubAdminPage() {
   const [tokens, setTokens] = useState<TokenRow[]>([])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [classification, setClassification] = useState('leadership')
   const [minting, setMinting] = useState(false)
   const [justMinted, setJustMinted] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -46,7 +56,7 @@ export default function HubAdminPage() {
     try {
       const res = await fetch('/api/hub/tokens', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personName: n, personEmail: e, logins: [] }),
+        body: JSON.stringify({ personName: n, personEmail: e, logins: [], classification }),
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || 'Could not mint link.')
@@ -95,6 +105,11 @@ export default function HubAdminPage() {
           <div className="flex flex-wrap items-center gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-9 w-40 rounded-md border border-[#E8E8E8] px-3 text-sm outline-none focus:border-[#0A52EF]" />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="h-9 w-56 rounded-md border border-[#E8E8E8] px-3 text-sm outline-none focus:border-[#0A52EF]" />
+            <select value={classification} onChange={(e) => setClassification(e.target.value)} className="h-9 rounded-md border border-[#E8E8E8] bg-white px-2 text-sm text-zinc-700 outline-none focus:border-[#0A52EF]">
+              {CLASSIFICATIONS.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
             <button type="button" onClick={mint} disabled={minting} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E8E8E8] px-3 text-xs font-semibold text-zinc-600 transition hover:border-[#0A52EF]/40 hover:text-[#0A52EF] disabled:opacity-60">
               <Plus className="h-3.5 w-3.5" /> Mint
             </button>
@@ -117,7 +132,14 @@ export default function HubAdminPage() {
             {tokens.map((t) => (
               <div key={t.url} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-zinc-900">{t.personName} <span className="text-zinc-400">· {t.personEmail}</span></div>
+                  <div className="text-sm font-medium text-zinc-900">
+                    {t.personName} <span className="text-zinc-400">· {t.personEmail}</span>
+                    {t.classification && t.classification !== 'leadership' ? (
+                      <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        {CLASSIFICATIONS.find((c) => c.value === t.classification)?.label || t.classification}
+                      </span>
+                    ) : null}
+                  </div>
                   <a href={t.url} target="_blank" rel="noreferrer" className="truncate text-xs text-[#0A52EF]">{t.url}</a>
                 </div>
                 <div className="text-right text-[11px] text-zinc-400">

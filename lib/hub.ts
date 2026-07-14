@@ -67,6 +67,54 @@ export const HUB_PLATFORMS: HubPlatform[] = [
   },
 ]
 
+// ---------- classifications ----------
+
+/**
+ * Employee classifications (Jireh 7/14): everyone gets the same hub, scoped to
+ * their world. Each classification picks which platforms and which KPI tiles
+ * its links show. `leadership` sees everything.
+ */
+export type HubClassification = 'leadership' | 'sales' | 'design' | 'operations' | 'marketing'
+
+export const HUB_CLASSIFICATIONS: Record<HubClassification, {
+  label: string
+  platformKeys: string[] | 'all'
+  kpiKeys: Array<'opportunities' | 'openTickets' | 'eventsNext7Days' | 'marketingContacts' | 'emailsDelivered'> | 'all'
+}> = {
+  leadership: { label: 'Leadership', platformKeys: 'all', kpiKeys: 'all' },
+  sales: {
+    label: 'Sales & Enterprise',
+    platformKeys: ['crm', 'proposals', 'docs'],
+    kpiKeys: ['opportunities'],
+  },
+  design: {
+    label: 'Design & Creative',
+    platformKeys: ['services', 'docs'],
+    kpiKeys: ['openTickets'],
+  },
+  operations: {
+    label: 'Operations & Field',
+    platformKeys: ['services', 'ops', 'docs'],
+    kpiKeys: ['openTickets', 'eventsNext7Days'],
+  },
+  marketing: {
+    label: 'Marketing',
+    platformKeys: ['marketing', 'docs'],
+    kpiKeys: ['marketingContacts', 'emailsDelivered'],
+  },
+}
+
+export function normalizeClassification(value: unknown): HubClassification {
+  const v = String(value ?? '').toLowerCase().trim()
+  return (v in HUB_CLASSIFICATIONS ? v : 'leadership') as HubClassification
+}
+
+export function platformsForClassification(classification: HubClassification): HubPlatform[] {
+  const spec = HUB_CLASSIFICATIONS[classification]
+  if (spec.platformKeys === 'all') return HUB_PLATFORMS
+  return HUB_PLATFORMS.filter((p) => (spec.platformKeys as string[]).includes(p.key))
+}
+
 // ---------- health ----------
 
 type Health = { key: string; ok: boolean; ms: number }
@@ -147,6 +195,7 @@ export async function ensureHubTables() {
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`)
+  await query(`ALTER TABLE hub_access_tokens ADD COLUMN IF NOT EXISTS classification TEXT NOT NULL DEFAULT 'leadership'`)
   await query(`CREATE TABLE IF NOT EXISTS hub_status_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     platform_key TEXT NOT NULL,
@@ -163,7 +212,7 @@ export async function getHubAccess(token: string) {
     `UPDATE hub_access_tokens
      SET view_count = view_count + 1, last_viewed_at = NOW()
      WHERE token = $1 AND revoked_at IS NULL
-     RETURNING person_name, person_email, logins`,
+     RETURNING person_name, person_email, logins, classification`,
     [token],
   )
   return res.rows[0] || null
