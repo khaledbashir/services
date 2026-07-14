@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import { applyTicketClose } from '@/lib/ticket-close'
 import { jwtVerify } from 'jose'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { notifyCustomerReply } from '@/lib/customer-notify'
@@ -23,10 +24,14 @@ export async function POST(
     const user = await getUserFromToken(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { body, is_internal } = await request.json()
+    // `close_ticket` (Chris D, 7/14): post the note AND close in one action, so
+    // the team gets one Slack notification instead of one for the note and a
+    // second for the close.
+    const { body, is_internal, close_ticket } = await request.json()
     if (!body || !body.trim()) {
       return NextResponse.json({ error: 'Comment body is required' }, { status: 400 })
     }
+    const closeRequested = close_ticket === true
 
     const result = await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
@@ -37,11 +42,31 @@ export async function POST(
 
     // Slack notification for all comments
     const ticketInfo = await query(
-      `SELECT t.ticket_number, t.title, t.venue_id, v.name as venue_name, v.slack_channel_id
+      `SELECT t.ticket_number, t.title, t.venue_id, t.status, t.assigned_to,
+              v.name as venue_name, v.slack_channel_id
        FROM tickets t JOIN venues v ON t.venue_id = v.id WHERE t.id = $1`,
       [params.id]
     )
     const ti = ticketInfo.rows[0]
+
+    // Post-and-close: run the same close side-effects as the Close button, then
+    // announce note + close together in ONE message below.
+    let closed = false
+    if (closeRequested && ti && ti.status !== 'closed') {
+      await applyTicketClose({
+        ticketId: params.id,
+        ticket: {
+          ticket_number: ti.ticket_number,
+          status: ti.status,
+          title: ti.title,
+          venue_id: ti.venue_id,
+          assigned_to: ti.assigned_to,
+        },
+        venueName: ti.venue_name || '',
+        actor: { userId: user.userId, fullName: user.fullName },
+      })
+      closed = true
+    }
 
     // @-mention DMs: parse @[Full Name] markers and DM each tagged staff
     // member who has a Slack user ID on file. Best-effort — failure doesn't
@@ -80,13 +105,20 @@ export async function POST(
       const caseNum = String(ti.ticket_number).padStart(8, '0')
       const channelId = ti.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (channelId) {
-        const emoji = is_internal ? ':memo:' : ':speech_balloon:'
-        const label = is_internal ? 'Internal Note' : 'Comment'
+        // One message covers both the note and the close when they happen
+        // together — that's the whole point of post-and-close.
+        const emoji = closed ? ':white_check_mark:' : is_internal ? ':memo:' : ':speech_balloon:'
+        const label = closed
+          ? 'Resolved & Closed'
+          : is_internal ? 'Internal Note' : 'Comment'
+        const heading = closed
+          ? `${emoji} *Case #${caseNum} — Resolved & Closed*\n*${ti.title}*`
+          : `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*`
         sendSlackMessage({
           channel: channelId,
           text: `${emoji} Case #${caseNum} — ${label} by ${user.fullName || 'User'}`,
           blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*` } },
+            { type: 'section', text: { type: 'mrkdwn', text: heading } },
             { type: 'section', text: { type: 'mrkdwn', text: `*${user.fullName || 'User'}* ${is_internal ? '_(internal)_' : ''}:\n> ${body.substring(0, 300)}${body.length > 300 ? '...' : ''}` } },
             { type: 'section', text: { type: 'mrkdwn', text: `<https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}|:link: View Ticket>` } },
           ],
@@ -136,7 +168,7 @@ export async function POST(
       }).catch(err => console.error('[customer-notify] reply email failed:', err))
     }
 
-    return NextResponse.json({ comment: result.rows[0], email: emailStatus })
+    return NextResponse.json({ comment: result.rows[0], email: emailStatus, closed })
   } catch (err) {
     console.error('Error creating comment:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

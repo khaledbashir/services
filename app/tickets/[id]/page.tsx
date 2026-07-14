@@ -109,6 +109,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     | { kind: 'no_list' }
     | { kind: 'send_failed' }
     | { kind: 'internal' }
+    | { kind: 'closed' }
     | null
   >(null)
   const [emailReply, setEmailReply] = useState('')
@@ -297,7 +298,9 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     else if (e.key === 'Escape') { setMentionQuery(null) }
   }
 
-  const addComment = async (e: FormEvent) => {
+  // `closeAfter` (Chris D, 7/14): post the note and close the ticket in one
+  // action so the team gets a single Slack notification instead of two.
+  const addComment = async (e: FormEvent, closeAfter = false) => {
     e.preventDefault()
     if (!newComment.trim()) return
     setSubmitting(true)
@@ -305,12 +308,14 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     try {
       const res = await fetch(`/api/tickets/${params.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: newComment, is_internal: isInternal })
+        body: JSON.stringify({ body: newComment, is_internal: isInternal, close_ticket: closeAfter })
       })
       if (res.ok) {
         const data = await res.json().catch(() => null)
         const email = data?.email
-        if (isInternal) {
+        if (data?.closed) {
+          setCommentToast({ kind: 'closed' })
+        } else if (isInternal) {
           setCommentToast({ kind: 'internal' })
         } else if (email?.sent) {
           setCommentToast({ kind: 'emailed', count: email.recipient_count || 0 })
@@ -1109,6 +1114,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                         }`}>
                           <span className="font-medium">
                             {commentToast.kind === 'emailed' && `Posted — emailed to ${commentToast.count} client recipient${commentToast.count === 1 ? '' : 's'} on the venue's distribution list.`}
+                            {commentToast.kind === 'closed' && `Posted and closed — one notification sent.`}
                             {commentToast.kind === 'internal' && `Posted as internal note — not emailed to the client.`}
                             {commentToast.kind === 'no_list' && `Posted, but no email went out — this venue has no client distribution list configured. Add recipients in venue settings to email future Client comments.`}
                             {commentToast.kind === 'send_failed' && `Posted, but the client email failed to send. Check Slack #ops or the logs.`}
@@ -1178,10 +1184,21 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               Internal
                             </button>
                           </div>
-                          <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
-                            className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
-                            {submitting ? 'Posting...' : 'Post'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {ticket.status !== 'closed' && (
+                              <button type="button" data-ai-target="ticket-comment-post-close"
+                                onClick={(e) => addComment(e as unknown as FormEvent, true)}
+                                disabled={submitting || !newComment.trim()}
+                                title="Post this note and close the ticket — sends one notification"
+                                className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-emerald-100 disabled:opacity-30 transition-all">
+                                {submitting ? 'Posting...' : 'Post & Close'}
+                              </button>
+                            )}
+                            <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
+                              className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
+                              {submitting ? 'Posting...' : 'Post'}
+                            </button>
+                          </div>
                         </div>
                       </form>
                     </div>
@@ -1636,10 +1653,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                               Internal
                             </button>
                           </div>
-                          <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
-                            className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
-                            {submitting ? 'Posting...' : 'Add Note'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {ticket.status !== 'closed' && (
+                              <button type="button" onClick={(e) => addComment(e as unknown as FormEvent, true)}
+                                disabled={submitting || !newComment.trim()}
+                                title="Post this note and close the ticket — sends one notification"
+                                className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-emerald-100 disabled:opacity-30 transition-all">
+                                {submitting ? 'Posting...' : 'Post & Close'}
+                              </button>
+                            )}
+                            <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
+                              className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
+                              {submitting ? 'Posting...' : 'Add Note'}
+                            </button>
+                          </div>
                         </div>
                       </form>
                     </div>
