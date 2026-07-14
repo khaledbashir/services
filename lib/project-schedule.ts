@@ -1383,6 +1383,26 @@ export async function updateProjectScheduleTask(
   return result.rows[0] ? mapTaskRow(result.rows[0]) : null
 }
 
+/**
+ * Rename a phase (the schedule's section headers) across every task in a
+ * project. Groups are derived from task phases, so renaming the group means
+ * re-stamping its members. Returns the number of tasks moved.
+ */
+export async function renameProjectSchedulePhase(
+  projectId: string,
+  from: string,
+  to: string,
+  updatedBy = 'dashboard',
+): Promise<number> {
+  const result = await query(
+    `UPDATE project_schedule_tasks
+     SET phase = $3, updated_by = $4, updated_at = NOW()
+     WHERE project_id = $1 AND phase = $2`,
+    [projectId, from, to, updatedBy],
+  )
+  return result.rowCount ?? 0
+}
+
 export async function deleteProjectScheduleTask(taskId: string): Promise<boolean> {
   // Cascade to direct children so a deleted parent never orphans rows.
   const result = await query(

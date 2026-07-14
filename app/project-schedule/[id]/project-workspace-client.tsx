@@ -12,6 +12,7 @@ import {
   FileText,
   FolderOpen,
   Loader2,
+  Pencil,
   Plus,
   Save,
   Send,
@@ -352,6 +353,11 @@ function ScheduleTab({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [selectedTask, setSelectedTask] = useState<ProjectScheduleTask | null>(null)
   const [adding, setAdding] = useState(false)
+  const [addingSection, setAddingSection] = useState(false)
+  const [renamingPhase, setRenamingPhase] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [newSection, setNewSection] = useState('')
+  const [presetPhase, setPresetPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const todayRef = useRef<HTMLDivElement>(null)
@@ -424,6 +430,54 @@ function ScheduleTab({
     }
   }
 
+  // Rename a section header — sections are derived from task phases, so the
+  // server re-stamps every task in the group.
+  async function renamePhase(from: string) {
+    const to = renameDraft.replace(/\s+/g, ' ').trim()
+    setRenamingPhase(null)
+    if (!to || to === from) return
+    setError(null)
+    try {
+      const res = await fetch(`/api/project-schedule/${encodeURIComponent(projectId)}/phases`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload.error || 'Could not rename the section.')
+      }
+      setCollapsed((prev) => {
+        const next = { ...prev }
+        if (from in next) {
+          next[to] = next[from]
+          delete next[from]
+        }
+        return next
+      })
+      await refreshTasks()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rename the section.')
+    }
+  }
+
+  // Add a new section — sections are derived from task phases, so we hand the
+  // new section name to the task drawer as a preset phase. The section appears
+  // once its first task is saved.
+  function addSection() {
+    const name = newSection.replace(/\s+/g, ' ').trim()
+    setNewSection('')
+    if (!name) return
+    if (phaseGroups.some((g) => g.phase.toLowerCase() === name.toLowerCase())) {
+      setError(`A section named "${name}" already exists.`)
+      return
+    }
+    setError(null)
+    setPresetPhase(name)
+    setSelectedTask(null)
+    setAdding(true)
+  }
+
   if (!dated.length) {
     return <ScheduleEmpty projectId={projectId} project={project} onCreated={refreshTasks} />
   }
@@ -455,17 +509,71 @@ function ScheduleTab({
             Today <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setAdding(true)
-            setSelectedTask(null)
-          }}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#0A52EF] px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-[#0A52EF]/90"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add task
-        </button>
+        <div className="flex items-center gap-2">
+          {addingSection ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={newSection}
+                onChange={(e) => setNewSection(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') addSection()
+                  if (e.key === 'Escape') {
+                    setAddingSection(false)
+                    setNewSection('')
+                  }
+                }}
+                placeholder="New section name"
+                className="h-9 w-44 rounded-md border border-[#0A52EF]/40 bg-white px-3 text-xs text-zinc-900 outline-none focus:ring-2 focus:ring-[#0A52EF]/20"
+              />
+              <button
+                type="button"
+                onClick={addSection}
+                className="inline-flex h-9 items-center rounded-md bg-[#0A52EF] px-2.5 text-xs font-semibold text-white transition hover:bg-[#0A52EF]/90"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingSection(false)
+                  setNewSection('')
+                }}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-[#E8E8E8] bg-white px-2 text-xs text-zinc-500 transition hover:text-zinc-800"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingSection(true)
+                  setNewSection('')
+                  setError(null)
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E8E8E8] bg-white px-3 text-xs font-semibold text-zinc-600 transition hover:border-[#7350FF]/40 hover:text-[#7350FF]"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add section
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(true)
+                  setSelectedTask(null)
+                  setPresetPhase(null)
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#0A52EF] px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-[#0A52EF]/90"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add task
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* New-section prompt row */}
 
       {/* Gantt */}
       <div className="overflow-hidden rounded-md border border-[#E8E8E8] bg-white shadow-sm">
@@ -478,21 +586,72 @@ function ScheduleTab({
               const blockingBall = worstBall(group.items, project.submittals)
               return (
                 <div key={group.phase}>
-                  <button
-                    type="button"
-                    onClick={() => setCollapsed((prev) => ({ ...prev, [group.phase]: !prev[group.phase] }))}
-                    className="flex h-9 w-full items-center gap-1.5 border-b border-[#E8E8E8] px-3 text-left"
-                  >
-                    {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-zinc-400" /> : <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />}
-                    <span className="flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
-                      {group.phase}
-                    </span>
-                    {blockingBall ? (
-                      <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
-                        {ballLabels[blockingBall]}
-                      </span>
-                    ) : null}
-                  </button>
+                  {renamingPhase === group.phase ? (
+                    <div className="flex h-9 items-center gap-1.5 border-b border-[#E8E8E8] px-3">
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') renamePhase(group.phase)
+                          if (e.key === 'Escape') {
+                            setRenamingPhase(null)
+                            setRenameDraft('')
+                          }
+                        }}
+                        placeholder="Section name"
+                        className="h-7 flex-1 rounded border border-[#7350FF]/40 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] outline-none focus:ring-2 focus:ring-[#7350FF]/20"
+                        style={{ color: ACCENT }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => renamePhase(group.phase)}
+                        className="inline-flex h-7 items-center rounded bg-[#7350FF] px-2 text-[10px] font-semibold text-white transition hover:bg-[#7350FF]/90"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenamingPhase(null)
+                          setRenameDraft('')
+                        }}
+                        className="inline-flex h-7 items-center justify-center rounded text-zinc-400 hover:text-zinc-700"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="group/header flex h-9 items-center gap-1.5 border-b border-[#E8E8E8] px-3">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsed((prev) => ({ ...prev, [group.phase]: !prev[group.phase] }))}
+                        className="flex h-9 flex-1 items-center gap-1.5 text-left"
+                      >
+                        {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-zinc-400" /> : <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />}
+                        <span className="flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: ACCENT }}>
+                          {group.phase}
+                        </span>
+                      </button>
+                      {blockingBall ? (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500">
+                          {ballLabels[blockingBall]}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        title="Rename section"
+                        onClick={() => {
+                          setRenamingPhase(group.phase)
+                          setRenameDraft(group.phase)
+                        }}
+                        className="opacity-0 transition group-hover/header:opacity-100"
+                      >
+                        <Pencil className="h-3 w-3 text-zinc-400 hover:text-[#7350FF]" />
+                      </button>
+                    </div>
+                  )}
                   {!isCollapsed
                     ? group.items.map((t) => (
                         <button
@@ -602,13 +761,16 @@ function ScheduleTab({
           projectId={projectId}
           task={selectedTask}
           phases={phaseGroups.map((g) => g.phase)}
+          presetPhase={presetPhase}
           onClose={() => {
             setSelectedTask(null)
             setAdding(false)
+            setPresetPhase(null)
           }}
           onSaved={async () => {
             setSelectedTask(null)
             setAdding(false)
+            setPresetPhase(null)
             await refreshTasks()
           }}
           onError={setError}
@@ -793,6 +955,7 @@ function TaskDrawer({
   projectId,
   task,
   phases,
+  presetPhase,
   onClose,
   onSaved,
   onError,
@@ -801,6 +964,7 @@ function TaskDrawer({
   projectId: string
   task: ProjectScheduleTask | null
   phases: string[]
+  presetPhase?: string | null
   onClose: () => void
   onSaved: () => void | Promise<void>
   onError: (message: string | null) => void
@@ -811,7 +975,7 @@ function TaskDrawer({
   const [start, setStart] = useState(task?.start ?? '')
   const [end, setEnd] = useState(task?.end ?? '')
   const [duration, setDuration] = useState(task?.duration != null ? String(task.duration) : '')
-  const [phase, setPhase] = useState(task?.phase ?? phases[0] ?? '')
+  const [phase, setPhase] = useState(task?.phase ?? presetPhase ?? phases[0] ?? '')
   const [isMilestone, setIsMilestone] = useState(task?.isMilestone ?? false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -914,6 +1078,7 @@ function TaskDrawer({
                   <option key={p} value={p} />
                 ))}
               </datalist>
+              <span className="text-[10px] text-zinc-400">Type a new name to create a section.</span>
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-zinc-700">
