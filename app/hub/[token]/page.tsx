@@ -79,7 +79,7 @@ export default function HubPage({ params }: { params: { token: string } }) {
 
         <div style={{ marginTop: 44 }}>
           <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            {data ? `${greeting}, ${firstName}.` : 'Loading…'}
+            {data ? (firstName && firstName !== 'Leadership' ? `${greeting}, ${firstName}.` : `${greeting}.`) : 'Loading…'}
           </div>
           <div style={{ color: '#93A2C2', marginTop: 8, fontSize: 15, lineHeight: 1.6, maxWidth: 640 }}>
             Everything ANC runs on, in one place — what each platform does, whether it&apos;s healthy right now, what changed recently, and your own access to all of it.
