@@ -473,6 +473,7 @@ function ScheduleTab({
       return
     }
     setError(null)
+    setAddingSection(false)
     setPresetPhase(name)
     setSelectedTask(null)
     setAdding(true)
