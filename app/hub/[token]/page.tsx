@@ -10,6 +10,7 @@ type Platform = {
   description: string
   capabilities: string[]
   url: string
+  status?: 'live' | 'in_progress' | 'experimental'
   health: { ok: boolean; ms: number } | null
 }
 type HubData = {
@@ -28,7 +29,12 @@ type HubData = {
   feed: { platform_key: string; title: string; detail: string | null; entry_date: string }[]
 }
 
-const CATEGORY_ORDER = ['Revenue', 'Operations', 'Marketing', 'Knowledge']
+const CATEGORY_ORDER = ['Revenue', 'Operations', 'Marketing', 'Knowledge', 'In Development']
+
+const STATUS_BADGES: Record<string, { label: string; fg: string; bg: string; line: string }> = {
+  in_progress: { label: 'Work in progress', fg: '#F2B33B', bg: 'rgba(242,179,59,.12)', line: 'rgba(242,179,59,.35)' },
+  experimental: { label: 'Experimental', fg: '#B388FF', bg: 'rgba(179,136,255,.12)', line: 'rgba(179,136,255,.35)' },
+}
 
 // ANC brand palettes (see brand kit). Dark = "stadium at night" house look.
 const THEMES = {
@@ -212,8 +218,26 @@ export default function HubPage({ params }: { params: { token: string } }) {
                       rel="noreferrer"
                       style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 16, padding: 22, textDecoration: 'none', color: 'inherit', display: 'block' }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 18, fontWeight: 600 }}>{p.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 18, fontWeight: 600 }}>{p.name}</div>
+                          {p.status && STATUS_BADGES[p.status] && (
+                            <span style={{
+                              fontFamily: 'IBM Plex Mono, monospace',
+                              fontSize: 9,
+                              letterSpacing: '.08em',
+                              textTransform: 'uppercase',
+                              whiteSpace: 'nowrap',
+                              color: STATUS_BADGES[p.status].fg,
+                              background: STATUS_BADGES[p.status].bg,
+                              border: `1px solid ${STATUS_BADGES[p.status].line}`,
+                              borderRadius: 999,
+                              padding: '2px 7px',
+                            }}>
+                              {STATUS_BADGES[p.status].label}
+                            </span>
+                          )}
+                        </div>
                         <span
                           title={p.health ? (p.health.ok ? 'Healthy' : 'Attention') : 'Unknown'}
                           style={{

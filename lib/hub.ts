@@ -5,6 +5,9 @@ import { query } from '@/lib/db'
  * Served through unguessable personal tokens (same trust model as proof-share links).
  */
 
+/** Not-yet-production platforms carry a badge so nobody mistakes them for shipped work. */
+export type HubPlatformStatus = 'live' | 'in_progress' | 'experimental'
+
 export type HubPlatform = {
   key: string
   name: string
@@ -13,6 +16,7 @@ export type HubPlatform = {
   capabilities: string[]
   url: string
   healthUrl?: string
+  status?: HubPlatformStatus
 }
 
 export const HUB_PLATFORMS: HubPlatform[] = [
@@ -74,6 +78,24 @@ export const HUB_PLATFORMS: HubPlatform[] = [
     capabilities: ['Training guides', 'Platform docs', 'AI assistant'],
     url: 'https://docs.ancsports.net',
   },
+  {
+    key: 'studio',
+    name: 'ANC Studio',
+    category: 'In Development',
+    description: 'Client decks built from live project and pricing data — presented, shared, and tracked.',
+    capabilities: ['Client presentations', 'Live deck sharing', 'Before/after showcases', 'Deck library'],
+    url: 'https://presentation.basheer.app',
+    status: 'in_progress',
+  },
+  {
+    key: 'aihub',
+    name: 'AI Hub',
+    category: 'In Development',
+    description: 'Where new AI capabilities are trialled before they earn a place in the platforms.',
+    capabilities: ['Document generation', 'Report drafting', 'Content tools', 'Prototypes'],
+    url: 'https://ai.basheer.app',
+    status: 'experimental',
+  },
 ]
 
 // ---------- classifications ----------
@@ -106,12 +128,12 @@ export const HUB_CLASSIFICATIONS: Record<HubClassification, {
   leadership: { label: 'Leadership', platformKeys: 'all', kpiKeys: 'all' },
   sales: {
     label: 'Sales & Enterprise',
-    platformKeys: ['crm', 'proposals', 'docs'],
+    platformKeys: ['crm', 'proposals', 'studio', 'docs'],
     kpiKeys: ['opportunities'],
   },
   design: {
     label: 'Design & Creative',
-    platformKeys: ['services', 'docs'],
+    platformKeys: ['services', 'studio', 'docs'],
     kpiKeys: ['openTickets'],
   },
   operations: {
