@@ -9,6 +9,15 @@ import { query } from '@/lib/db'
 
 export type Login = { platform: string; url?: string; email?: string; password?: string; note?: string }
 
+// Behind the proxy, request.nextUrl.origin resolves to the internal container
+// (localhost:80). Use the forwarded host so returned/listed URLs are public.
+function publicOrigin(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-host')
+  const host = forwarded || request.headers.get('host')
+  if (host) return `https://${host.split(',')[0].trim()}`
+  return `https://services.ancsports.net`
+}
+
 /**
  * POST /api/hub/tokens — mint a Leadership Hub access link.
  *
@@ -40,7 +49,7 @@ export async function POST(request: NextRequest) {
       [token, personName, personEmail, JSON.stringify(logins)],
     )
 
-    const origin = request.nextUrl.origin
+    const origin = publicOrigin(request)
     return NextResponse.json({
       data: { token, url: `${origin}/hub/${token}`, personName, personEmail },
     })
@@ -63,7 +72,7 @@ export async function GET(request: NextRequest) {
       `SELECT token, person_name, person_email, view_count, last_viewed_at, created_at, revoked_at
        FROM hub_access_tokens ORDER BY created_at DESC`,
     )
-    const origin = request.nextUrl.origin
+    const origin = publicOrigin(request)
     return NextResponse.json({
       data: res.rows.map((r: any) => ({
         url: `${origin}/hub/${r.token}`,
