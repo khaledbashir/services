@@ -31,6 +31,8 @@ export function TicketProofFtp({
   const [creating, setCreating] = useState(false)
   const [result, setResult] = useState<{ url: string; fileCount: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
   const create = async () => {
     if (!folder) return
@@ -63,6 +65,29 @@ export function TicketProofFtp({
   }
 
   const proofUrl = result?.url || existingProofUrl || null
+  const managedToken = proofUrl?.match(/\/proof\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/)?.[1] || null
+
+  const sync = async () => {
+    if (!managedToken) return
+    setSyncing(true)
+    setError(null)
+    setSyncStatus(null)
+    try {
+      const res = await fetch(`/api/proof-ftp/share/${managedToken}/sync`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || `Error ${res.status}`)
+        return
+      }
+      setSyncStatus(
+        `${data.activeFileCount} current · ${data.added} added · ${data.updated} updated · ${data.unpublished} unpublished`
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to refresh files')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <div className="rounded-xl border border-zinc-200 p-4" style={{ ['--anc-brand' as any]: '#0A52EF' }}>
@@ -92,8 +117,20 @@ export function TicketProofFtp({
           />
           <button onClick={() => navigator.clipboard.writeText(proofUrl)} className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-[color:var(--anc-brand)] text-white font-medium hover:opacity-90">Copy</button>
           <a href={proofUrl} target="_blank" rel="noreferrer" className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-white border border-zinc-200 text-zinc-700 font-medium hover:border-zinc-300">Open</a>
+          {managedToken && (
+            <button
+              type="button"
+              onClick={sync}
+              disabled={syncing}
+              className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-white border border-zinc-200 text-zinc-700 font-medium hover:border-zinc-300 disabled:opacity-40"
+            >
+              {syncing ? 'Refreshing…' : 'Refresh files'}
+            </button>
+          )}
         </div>
       )}
+      {syncStatus && !open && <div className="mt-2 text-xs text-zinc-500">{syncStatus}</div>}
+      {error && !open && <div className="mt-2 rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs text-red-700">{error}</div>}
 
       {open && (
         <div className="mt-3 space-y-3">

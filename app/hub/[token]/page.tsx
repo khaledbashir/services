@@ -73,7 +73,7 @@ export default function HubPage({ params }: { params: { token: string } }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <img src="/ANC_Logo_2023_white.png" alt="ANC" style={{ height: 34 }} />
           <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11.5, letterSpacing: '.3em', textTransform: 'uppercase', color: '#00AEEF' }}>
-            Platform Hub
+            Leadership
           </div>
         </div>
 

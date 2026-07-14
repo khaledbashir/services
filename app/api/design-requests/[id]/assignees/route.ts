@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { logDesignActivity } from '@/lib/design-activity'
+import { sendAssignmentEmail } from '@/lib/assignment-emails'
 
 // Multi-designer + multi-enterprise-contact assignments on a design request.
 // Alexis 2026-04-23: "can we make it so there can be multiple Enterprise
@@ -56,6 +57,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const primaryDesignerId = typeof body.primary_designer_id === 'string' ? body.primary_designer_id : null
 
   try {
+    // Snapshot current assignees BEFORE the wipe+reinsert so we can email only
+    // the people who are genuinely NEW — re-saving the same list stays silent.
+    const priorDesigners = designerIds !== null
+      ? new Set(
+          (await query(`SELECT staff_id::text AS staff_id FROM design_request_designers WHERE design_request_id = $1`, [params.id]))
+            .rows.map((r: any) => r.staff_id),
+        )
+      : null
+    const priorEnts = entIds !== null
+      ? new Set(
+          (await query(`SELECT staff_id::text AS staff_id FROM design_request_enterprise_contacts WHERE design_request_id = $1`, [params.id]))
+            .rows.map((r: any) => r.staff_id),
+        )
+      : null
+
     if (designerIds !== null) {
       // Wipe + reinsert — atomic if wrapped in a transaction; here we're OK
       // with a tiny race because the UI serializes on the frontend.
@@ -104,6 +120,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         `UPDATE design_requests SET enterprise_contact_id = $1, updated_at = NOW() WHERE id = $2`,
         [newPrimary, params.id]
       )
+    }
+
+    // Email only the newly-added people (fire-and-forget — never blocks the response).
+    const newlyAssignedIds = [
+      ...(designerIds || []).filter((sid: string) => priorDesigners && !priorDesigners.has(sid)),
+      ...(entIds || []).filter((sid: string) => priorEnts && !priorEnts.has(sid)),
+    ]
+    if (newlyAssignedIds.length) {
+      sendAssignmentEmail({
+        kind: 'design',
+        recordId: params.id,
+        assigneeUserIds: newlyAssignedIds,
+        assignedByName: auth.fullName,
+        assignedByUserId: auth.userId,
+        assignedByEmail: auth.email,
+      }).catch((err) => console.error('[assignees POST] assignment email failed:', err))
     }
 
     return NextResponse.json({ ok: true })

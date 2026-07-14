@@ -20,6 +20,7 @@ type SearchResponse = {
   maintenance: SearchItem[]
   designs: SearchItem[]
   parts: SearchItem[]
+  recent: SearchItem[]
 }
 
 const EMPTY_RESULTS: SearchResponse = {
@@ -31,6 +32,18 @@ const EMPTY_RESULTS: SearchResponse = {
   maintenance: [],
   designs: [],
   parts: [],
+  recent: [],
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  event: 'Event',
+  client: 'Client',
+  venue: 'Venue',
+  staff: 'Staff',
+  ticket: 'Ticket',
+  maintenance: 'Maintenance',
+  design: 'Design',
+  part: 'Part',
 }
 
 const GROUPS: Array<{ key: keyof SearchResponse; label: string }> = [
@@ -98,13 +111,9 @@ export function GlobalSearch() {
 
   useEffect(() => {
     if (!open) return
-    if (!debouncedQuery) {
-      setResults(EMPTY_RESULTS)
-      setError(null)
-      setLoading(false)
-      return
-    }
 
+    // Empty query still hits the API — it returns the most recently updated
+    // records so the palette is useful the moment it opens.
     const controller = new AbortController()
     setLoading(true)
     setError(null)
@@ -127,6 +136,7 @@ export function GlobalSearch() {
           maintenance: data.maintenance || [],
           designs: data.designs || [],
           parts: data.parts || [],
+          recent: data.recent || [],
         })
       } catch (err: any) {
         if (err?.name !== 'AbortError') {
@@ -201,9 +211,42 @@ export function GlobalSearch() {
 
               <div className="max-h-[70vh] overflow-y-auto p-4">
                 {!debouncedQuery ? (
-                  <div className="rounded-xl border border-dashed border-[#E8E8E8] bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
-                    Start typing to search the dashboard.
-                  </div>
+                  loading ? (
+                    <div className="px-4 py-8 text-center text-sm text-zinc-500">Loading recent…</div>
+                  ) : results.recent.length > 0 ? (
+                    <section>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                          Recent
+                        </h3>
+                        <span className="text-xs text-zinc-400">{results.recent.length}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {results.recent.map((item) => (
+                          <Link
+                            key={`${item.type}-${item.id}`}
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className="block rounded-xl border border-[#E8E8E8] px-4 py-3 transition hover:border-zinc-300 hover:bg-zinc-50"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-zinc-900">{item.title}</div>
+                                <div className="mt-0.5 truncate text-xs text-zinc-500">{item.subtitle}</div>
+                              </div>
+                              <span className="shrink-0 rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                                {TYPE_LABELS[item.type] || item.type}
+                              </span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[#E8E8E8] bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+                      Start typing to search the dashboard.
+                    </div>
+                  )
                 ) : loading ? (
                   <div className="px-4 py-8 text-center text-sm text-zinc-500">Searching…</div>
                 ) : error ? (

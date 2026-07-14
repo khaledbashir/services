@@ -18,6 +18,7 @@ import {
   getContentScheduleAssigneeIds,
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
+import { sendAssignmentEmail } from '@/lib/assignment-emails'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -246,6 +247,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
        RETURNING id, content_name, status, tricode, updated_at`,
       values,
     )
+
+    // Email a newly-assigned operator (fire-and-forget — never blocks the response).
+    const nextOperatorId = body.operator_id !== undefined ? (body.operator_id || null) : undefined
+    if (nextOperatorId && nextOperatorId !== access.record.operator_id) {
+      sendAssignmentEmail({
+        kind: 'content',
+        recordId: params.id,
+        recordTitle: access.record.content_name,
+        client: access.record.company_name || access.record.venue_name || null,
+        dueDate: body.launch_date !== undefined ? body.launch_date || null : access.record.launch_date,
+        assigneeUserIds: [nextOperatorId],
+        assignedByName: access.auth.fullName,
+        assignedByUserId: access.auth.userId,
+        assignedByEmail: access.auth.email,
+      }).catch((err) => console.error('[content-schedules PATCH] assignment email failed:', err))
+    }
 
     const notificationSummary = normalizedNextStatus && normalizedNextStatus !== access.record.status
       ? await notifyAssigneesOfStatusChange({

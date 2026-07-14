@@ -8,7 +8,8 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { createDesignProofShare } from '@/lib/design-proof'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
-import { logDesignActivity } from '@/lib/design-activity'
+import { logDesignActivity, type DesignActivityType } from '@/lib/design-activity'
+import { sendAssignmentEmail } from '@/lib/assignment-emails'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
@@ -84,6 +85,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
             dr.notes, dr.boards_requested, dr.sizes_requested, dr.designer_id,
             dr.enterprise_contact_id, dr.status, dr.hours_estimated, dr.hours_spent,
             dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
+            dr.qc_approved_by_name, dr.qc_approved_by_email, dr.qc_approved_at,
             v.name as venue_name,
             d.full_name as designer_name,
             ec.full_name as enterprise_contact_name,
@@ -129,6 +131,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return null
       }
     }
+    // QC sign-off lives on the local design_requests row even in Twenty mode.
+    const lookupQcApproval = async (id: string) => {
+      try {
+        const r = await query(
+          `SELECT qc_approved_by_name, qc_approved_by_email, qc_approved_at FROM design_requests WHERE id::text = $1`,
+          [id],
+        )
+        return r.rows[0] || null
+      } catch {
+        return null
+      }
+    }
     const lookupLegacyProofLink = async (id: string): Promise<string | null> => {
       try {
         const r = await query(
@@ -164,6 +178,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ? (d.notes?.markdown || d.notes?.blocknote || '')
         : (d.notes || d.aiPrompt || '')
       const companyName = d.designClient?.name || null
+      const qc = await lookupQcApproval(d.id)
       return NextResponse.json({
         design_request: {
           id: d.id,
@@ -199,6 +214,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           updated_at: d.updatedAt,
           internal_category: await lookupInternalCategory(d.id),
           priority: await lookupPriority(d.id),
+          qc_approved_by_name: qc?.qc_approved_by_name || null,
+          qc_approved_by_email: qc?.qc_approved_by_email || null,
+          qc_approved_at: qc?.qc_approved_at || null,
         },
       })
     }
@@ -254,6 +272,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
           fromValue: priorStatusDashboard || null,
           toValue: normalizedNextStatus,
+        })
+      }
+
+      // QC sign-off: the In QC checkbox sends { status: 'client_review', qc_approved: true }.
+      // The sign-off columns live on the local design_requests row in both modes.
+      if (body.qc_approved === true) {
+        try {
+          await query(
+            `UPDATE design_requests
+             SET qc_approved_by_name = $1, qc_approved_by_email = $2, qc_approved_at = NOW(), updated_at = NOW()
+             WHERE id::text = $3`,
+            [auth.fullName || null, auth.email || null, params.id],
+          )
+        } catch (err) {
+          console.error('[design-requests PATCH twenty-backed] QC approval stamp failed:', err)
+        }
+        await logDesignActivity({
+          designRequestId: params.id,
+          eventType: 'qc_approved' as DesignActivityType,
+          actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+          detail: {},
         })
       }
 
@@ -358,6 +397,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
+    // QC sign-off: the In QC checkbox sends { status: 'client_review', qc_approved: true }.
+    // Stamp who approved and when from the authenticated actor.
+    const qcApproving = body.qc_approved === true
+    if (qcApproving) {
+      updates.push(`qc_approved_by_name = $${index++}`)
+      values.push(access.auth.fullName || null)
+      updates.push(`qc_approved_by_email = $${index++}`)
+      values.push(access.auth.email || null)
+      updates.push(`qc_approved_at = NOW()`)
+    }
+
     if (!updates.length) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
@@ -393,6 +443,35 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         fromValue: access.record.status || null,
         toValue: normalizedNextStatus,
       })
+    }
+    if (qcApproving) {
+      await logDesignActivity({
+        designRequestId: params.id,
+        eventType: 'qc_approved' as DesignActivityType,
+        actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
+        detail: {},
+      })
+    }
+
+    // Email newly-assigned staff (fire-and-forget — never blocks the response).
+    const nextDesignerId = body.designer_id !== undefined ? (body.designer_id || null) : undefined
+    const nextEnterpriseContactId = body.enterprise_contact_id !== undefined ? (body.enterprise_contact_id || null) : undefined
+    const newlyAssignedIds = [
+      nextDesignerId && nextDesignerId !== access.record.designer_id ? nextDesignerId : null,
+      nextEnterpriseContactId && nextEnterpriseContactId !== access.record.enterprise_contact_id ? nextEnterpriseContactId : null,
+    ].filter((id): id is string => typeof id === 'string')
+    if (newlyAssignedIds.length) {
+      sendAssignmentEmail({
+        kind: 'design',
+        recordId: params.id,
+        recordTitle: access.record.job_title,
+        client: access.record.company_name || access.record.venue_name || null,
+        dueDate: body.due_date !== undefined ? body.due_date || null : access.record.due_date,
+        assigneeUserIds: newlyAssignedIds,
+        assignedByName: access.auth.fullName,
+        assignedByUserId: access.auth.userId,
+        assignedByEmail: access.auth.email,
+      }).catch((err) => console.error('[design-requests PATCH] assignment email failed:', err))
     }
     if ('due_date' in body) {
       const nextDue = normalizeValue('due_date', body.due_date)

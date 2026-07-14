@@ -3,22 +3,18 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
 import { listDir, resolveClientFolder, isConfigured } from '@/lib/proof-ftp'
+import { requireAuth, isAuthError } from '@/lib/rbac'
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
+const CONTENT_LIBRARY_ROLES = new Set(['admin', 'tech_support', 'manager', 'designer', 'design_contractor'])
 
-async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
-  if (request.headers.get('x-webhook-secret') === WEBHOOK_SECRET) return true
-  const token = request.cookies.get('token')?.value
-  if (!token) return false
-  try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'anc-services-secret-key-change-me')
-    await jwtVerify(token, secret)
-    return true
-  } catch {
-    return false
+async function authorize(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (isAuthError(auth)) return auth
+  if (!CONTENT_LIBRARY_ROLES.has(auth.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  return auth
 }
 
 /**
@@ -29,12 +25,11 @@ async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
  * lists the whole tree — the root alone is ~20,000 folders.
  */
 export async function GET(request: NextRequest) {
-  if (!(await verifyRequestAuth(request))) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  const auth = await authorize(request)
+  if (isAuthError(auth)) return auth
   if (!isConfigured()) {
     return NextResponse.json(
-      { error: 'ANC FTP is not configured on this server (ANC_FTP_* env vars missing).' },
+      { error: 'The content library is not fully configured.' },
       { status: 503 }
     )
   }
@@ -59,7 +54,10 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     const msg = err?.message || String(err)
     // Path-jail rejections are a client error, everything else is upstream.
-    const status = /escapes root/i.test(msg) ? 400 : 502
-    return NextResponse.json({ error: msg }, { status })
+    const isBoundaryError = /escapes root|outside the approved|select an approved/i.test(msg)
+    return NextResponse.json(
+      { error: isBoundaryError ? 'That folder is outside the approved content library.' : 'Could not read the content library.' },
+      { status: isBoundaryError ? 400 : 502 }
+    )
   }
 }

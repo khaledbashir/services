@@ -14,6 +14,10 @@ interface Attachment {
   lastViewedAt?: string | null
   viewCount?: number
   uploadedAt?: string
+  // Per-file review (FTP-backed proofs): null = not reviewed yet;
+  // undefined = this share doesn't support per-file review.
+  response?: 'approved' | 'changes_requested' | null
+  responseAt?: string | null
 }
 
 type ShareState = 'pending' | 'approved' | 'changes_requested' | 'expired'
@@ -87,6 +91,7 @@ export default function ProofSharePage() {
     loadProof()
   }, [loadProof])
 
+  // Whole-proof response (single-file proofs, and "Approve all" shortcut)
   const submitResponse = async () => {
     if (!responseChoice) return
     setSubmitting(true)
@@ -108,6 +113,53 @@ export default function ProofSharePage() {
       const json = await res.json()
       setSubmittedState(json.state)
       await loadProof()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Per-file response — records the decision for ONE proof, then moves the
+  // reviewer along to the next file they haven't decided on yet.
+  const submitFileResponse = async (
+    fileId: string,
+    response: 'approved' | 'changes_requested'
+  ) => {
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/proof-share/${token}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response,
+          fileId,
+          note: responseNote || undefined,
+          name: responseName || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        alert(`Failed to submit: ${b.error || res.status}`)
+        return
+      }
+      const json = await res.json()
+      setResponseNote('')
+      setResponseChoice(null)
+      if (json.complete) {
+        setSubmittedState(json.state)
+        await loadProof()
+        return
+      }
+      setData((current) => {
+        if (!current) return current
+        const attachments = current.attachments.map((a) =>
+          a.id === fileId ? { ...a, response, responseAt: new Date().toISOString() } : a
+        )
+        // Advance to the next unreviewed file so a 12-proof folder is a
+        // straight run-through instead of hunting through the dropdown.
+        const next = attachments.find((a) => a.response === null && a.id !== fileId)
+        if (next) setActiveAttachment(next.id)
+        return { ...current, attachments }
+      })
     } finally {
       setSubmitting(false)
     }
@@ -187,6 +239,13 @@ export default function ProofSharePage() {
     submittedState === 'approved' ||
     submittedState === 'changes_requested'
 
+  // Per-file review is available when the share reports per-file response
+  // slots (FTP-backed proofs) and there's more than one file to decide on.
+  const perFileMode =
+    data.attachments.length > 1 &&
+    data.attachments.some((a) => a.response !== undefined)
+  const reviewedCount = data.attachments.filter((a) => a.response).length
+
   const formatAttachmentMeta = (attachment: Attachment) => {
     const uploaded = attachment.uploadedAt
       ? new Date(attachment.uploadedAt).toLocaleDateString()
@@ -243,24 +302,58 @@ export default function ProofSharePage() {
           )}
         </div>
 
-        {/* File selector / version history */}
+        {/* File selector — named dropdown so reviewers can jump straight to
+            the file they care about instead of decoding numbered buttons. */}
         {data.attachments.length > 1 && (
-          <div className="px-6 py-3 flex gap-2 overflow-x-auto border-b border-gray-100 bg-white">
-            {data.attachments.map((a, index) => (
-              <button
-                key={a.id}
-                onClick={() => setActiveAttachment(a.id)}
-                title={a.version ? `Proof ${a.displayNumber || index + 1} · stored version v${a.version}` : `Proof ${a.displayNumber || index + 1}`}
-                aria-label={`Open proof ${a.displayNumber || index + 1}`}
-                className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition ${
-                  activeAttachment === a.id
-                    ? 'bg-[color:var(--anc-brand,#0A52EF)] text-white border-transparent'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                }`}
+          <div className="px-6 py-3 border-b border-gray-100 bg-white">
+            <label htmlFor="proof-file-select" className="sr-only">
+              Select file to preview
+            </label>
+            <div className="flex items-center gap-2">
+              <select
+                id="proof-file-select"
+                value={activeAttachment || ''}
+                onChange={(e) => setActiveAttachment(e.target.value)}
+                className="w-full min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[color:var(--anc-brand,#0A52EF)] focus:border-transparent"
               >
-                {a.displayNumber || index + 1}
-              </button>
-            ))}
+                {data.attachments.map((a, index) => (
+                  <option key={a.id} value={a.id}>
+                    {a.response === 'approved'
+                      ? '✓ '
+                      : a.response === 'changes_requested'
+                        ? '✎ '
+                        : ''}
+                    {a.displayNumber || index + 1}. {a.name}
+                  </option>
+                ))}
+              </select>
+              <div className="shrink-0 flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous file"
+                  disabled={activeIndex <= 0}
+                  onClick={() => {
+                    const prev = data.attachments[activeIndex - 1]
+                    if (prev) setActiveAttachment(prev.id)
+                  }}
+                  className="px-2.5 py-2 rounded-lg border border-gray-200 text-xs text-gray-600 disabled:opacity-40 hover:border-gray-300"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next file"
+                  disabled={activeIndex < 0 || activeIndex >= data.attachments.length - 1}
+                  onClick={() => {
+                    const next = data.attachments[activeIndex + 1]
+                    if (next) setActiveAttachment(next.id)
+                  }}
+                  className="px-2.5 py-2 rounded-lg border border-gray-200 text-xs text-gray-600 disabled:opacity-40 hover:border-gray-300"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -282,7 +375,33 @@ export default function ProofSharePage() {
             <ResponseConfirmation data={data} submittedState={submittedState} />
           ) : (
             <>
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">Your response</h2>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {perFileMode && activeAtt
+                    ? <>Your response — <span className="font-normal text-gray-600">{activeAtt.name}</span></>
+                    : 'Your response'}
+                </h2>
+                {perFileMode && (
+                  <span className="shrink-0 text-xs text-gray-500">
+                    {reviewedCount} of {data.attachments.length} reviewed
+                  </span>
+                )}
+              </div>
+
+              {perFileMode && activeAtt?.response && (
+                <div
+                  className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+                    activeAtt.response === 'approved'
+                      ? 'border-green-200 bg-green-50 text-green-800'
+                      : 'border-amber-200 bg-amber-50 text-amber-800'
+                  }`}
+                >
+                  {activeAtt.response === 'approved'
+                    ? 'You approved this file.'
+                    : 'You requested changes on this file.'}{' '}
+                  Pick again below to change your decision.
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mb-5">
                 <ChoiceCard
@@ -322,17 +441,62 @@ export default function ProofSharePage() {
                     className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--anc-brand,#0A52EF)] focus:border-transparent resize-none"
                   />
                   <button
-                    onClick={submitResponse}
+                    onClick={() => {
+                      if (perFileMode && activeAtt) {
+                        if (responseChoice) submitFileResponse(activeAtt.id, responseChoice)
+                      } else {
+                        submitResponse()
+                      }
+                    }}
                     disabled={submitting}
                     className="w-full py-3 rounded-lg bg-[color:var(--anc-brand,#0A52EF)] text-white font-medium text-sm hover:opacity-90 disabled:opacity-50"
                   >
                     {submitting
                       ? 'Submitting…'
-                      : responseChoice === 'approved'
-                        ? 'Submit approval'
-                        : 'Send change request'}
+                      : perFileMode
+                        ? responseChoice === 'approved'
+                          ? 'Approve this file'
+                          : 'Request changes on this file'
+                        : responseChoice === 'approved'
+                          ? 'Submit approval'
+                          : 'Send change request'}
                   </button>
                 </div>
+              )}
+
+              {perFileMode && reviewedCount === 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setResponseChoice('approved')
+                    setSubmitting(true)
+                    try {
+                      const res = await fetch(`/api/proof-share/${token}/respond`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          response: 'approved',
+                          note: responseNote || undefined,
+                          name: responseName || undefined,
+                        }),
+                      })
+                      if (!res.ok) {
+                        const b = await res.json().catch(() => ({}))
+                        alert(`Failed to submit: ${b.error || res.status}`)
+                        return
+                      }
+                      const json = await res.json()
+                      setSubmittedState(json.state)
+                      await loadProof()
+                    } finally {
+                      setSubmitting(false)
+                    }
+                  }}
+                  disabled={submitting}
+                  className="mt-4 w-full py-2.5 rounded-lg border border-green-300 bg-green-50 text-green-800 text-sm font-medium hover:bg-green-100 disabled:opacity-50"
+                >
+                  ✓ Approve all {data.attachments.length} files
+                </button>
               )}
             </>
           )}
@@ -542,6 +706,27 @@ function ResponseConfirmation({
       {note && (
         <div className="mt-3 pl-12 text-sm text-gray-800 whitespace-pre-wrap">
           {note}
+        </div>
+      )}
+      {data.attachments.some((a) => a.response) && (
+        <div className="mt-4 pl-12 space-y-1">
+          {data.attachments.map((a, index) => (
+            <div key={a.id} className="flex items-center gap-2 text-xs">
+              <span
+                className={
+                  a.response === 'changes_requested' ? 'text-amber-700' : 'text-green-700'
+                }
+              >
+                {a.response === 'changes_requested' ? '✎' : '✓'}
+              </span>
+              <span className="text-gray-700 truncate">
+                {a.displayNumber || index + 1}. {a.name}
+              </span>
+              <span className="text-gray-400">
+                {a.response === 'changes_requested' ? 'changes requested' : 'approved'}
+              </span>
+            </div>
+          ))}
         </div>
       )}
       <div className="mt-4 pl-12 text-xs text-gray-500">

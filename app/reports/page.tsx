@@ -100,6 +100,7 @@ export default function ReportsPage() {
               <a href="/reports/tickets-detail" className="text-[#0A52EF] hover:underline">→ All Tickets</a>
               <a href="/reports/hours-by-client" className="text-[#0A52EF] hover:underline">→ Hours by Client</a>
               <a href="/reports/designs-by-client" className="text-[#0A52EF] hover:underline">→ Design Requests by Client</a>
+              <a href="/reports/design-creative" className="text-[#0A52EF] hover:underline">→ Design &amp; Creative</a>
               <a href="/reports/tickets-by-tech" className="text-[#0A52EF] hover:underline">→ Tickets Closed by Tech</a>
               <a href="/reports/tickets-by-venue" className="text-[#0A52EF] hover:underline">→ Tickets by Venue</a>
             </div>

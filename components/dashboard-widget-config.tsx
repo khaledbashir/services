@@ -7,6 +7,7 @@ import {
   WidgetGrouping,
   WidgetSort,
   WidgetSize,
+  WidgetDensity,
   STATUS_LABEL,
   DUE_BUCKET_LABEL,
   DueBucket,
@@ -48,6 +49,12 @@ const SIZE_OPTIONS: Array<{ value: WidgetSize; label: string }> = [
   { value: 'lg', label: 'Large (1/2 width)' },
   { value: 'xl', label: 'X-Large (2/3 width)' },
   { value: 'full', label: 'Full width' },
+]
+
+const DENSITY_OPTIONS: Array<{ value: WidgetDensity; label: string }> = [
+  { value: 'compact', label: 'Compact — tight rows, essentials only' },
+  { value: 'comfortable', label: 'Comfortable — default' },
+  { value: 'expanded', label: 'Expanded — more rows, full detail' },
 ]
 
 export function DashboardWidgetConfig({ widget, staff, venues, onClose, onSave }: Props) {
@@ -242,6 +249,17 @@ export function DashboardWidgetConfig({ widget, staff, venues, onClose, onSave }
               className="w-full h-10 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
             >
               {SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 mb-1.5">Card size</label>
+            <select
+              value={draft.density || 'comfortable'}
+              onChange={(e) => setDraft({ ...draft, density: e.target.value as WidgetDensity })}
+              className="w-full h-10 px-3 rounded-lg ring-1 ring-zinc-200 bg-white text-sm outline-none focus:ring-2 focus:ring-[#0A52EF]/30"
+            >
+              {DENSITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
 

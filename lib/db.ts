@@ -439,7 +439,12 @@ async function runMigrations() {
     // proof pages can then render without re-listing the legacy FTP on every
     // open; older shares with a null manifest continue to use the live fallback.
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS ftp_manifest JSONB`)
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS ftp_last_synced_at TIMESTAMPTZ`)
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_name TEXT`)
+    // Per-file approve/request-changes decisions, keyed by attachment id
+    // (ftp-<base64url name> for FTP files). Whole-share client_response stays
+    // the rollup the ticket workflow reads.
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS file_responses JSONB NOT NULL DEFAULT '{}'::jsonb`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
@@ -451,6 +456,10 @@ async function runMigrations() {
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_proof_link TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS legacy_ftp_proof_link TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS ftp_final_link TEXT`)
+    // QC approval sign-off — who checked the box in the In QC stage, and when.
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_by_name TEXT`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_by_email TEXT`)
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_at TIMESTAMPTZ`)
     await client.query(`CREATE TABLE IF NOT EXISTS design_request_designers (
       design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

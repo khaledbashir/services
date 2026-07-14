@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -13,6 +13,7 @@ import {
   loadDashboardPage,
   saveDashboardPage,
   newBlankWidget,
+  normalizeSearch,
 } from '@/lib/dashboard-widgets'
 import { Skeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
@@ -188,14 +189,27 @@ export default function DesignsPage() {
   const [widgets, setWidgets] = useState<DashboardWidget[]>([])
   const [cgWidgetRequests, setCgWidgetRequests] = useState<CgWidgetRequest[]>([])
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
+  // Once the user picks a view this session, a late-resolving preference
+  // fetch must not overwrite their choice.
+  const userPickedViewRef = useRef(false)
   useEffect(() => {
-    loadLayoutPrefs('designs.view').then(p => {
-      const stored = (p as unknown as { layout?: string }).layout
-      if (stored === 'board' || stored === 'cg') setViewMode(stored as 'board' | 'cg')
-    })
-    loadDashboardPage().then(page => setWidgets(page.widgets))
+    let cancelled = false
+    // Read the raw preference: loadLayoutPrefs coerces `layout` to
+    // 'stacked' | 'horizontal', which silently destroyed 'board' / 'cg'
+    // and made the saved default view never restore.
+    fetch(`/api/preferences?key=${encodeURIComponent('designs.view')}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (cancelled || userPickedViewRef.current || !data?.value) return
+        const stored = (JSON.parse(data.value) as { layout?: string }).layout
+        if (stored === 'board' || stored === 'cg') setViewMode(stored)
+      })
+      .catch(() => {})
+    loadDashboardPage().then(page => { if (!cancelled) setWidgets(page.widgets) })
+    return () => { cancelled = true }
   }, [])
   const persistView = (next: 'kanban' | 'board' | 'cg') => {
+    userPickedViewRef.current = true
     setViewMode(next)
     fetch('/api/preferences', {
       method: 'PUT',
@@ -565,15 +579,21 @@ export default function DesignsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+    // Normalized fallback so "big 3" matches "big3" and vice versa (Charlie 7/14).
+    const nq = normalizeSearch(q)
+    const matchesField = (field: string | null | undefined) => {
+      const f = (field || '').toLowerCase()
+      return f.includes(q) || (!!nq && normalizeSearch(f).includes(nq))
+    }
     const targetDesignerId = designerFilter === 'mine' ? currentUserId : designerFilter
     return designRequests.filter((item) => {
       const matchesSearch =
         !q ||
-        item.job_title.toLowerCase().includes(q) ||
-        (item.company_name || '').toLowerCase().includes(q) ||
-        (item.venue_name || '').toLowerCase().includes(q) ||
-        (item.designer_name || '').toLowerCase().includes(q) ||
-        (item.tricode || '').toLowerCase().includes(q)
+        matchesField(item.job_title) ||
+        matchesField(item.company_name) ||
+        matchesField(item.venue_name) ||
+        matchesField(item.designer_name) ||
+        matchesField(item.tricode)
 
       const matchesStatus =
         statusFilter === 'all' ||

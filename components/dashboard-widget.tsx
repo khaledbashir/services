@@ -4,6 +4,7 @@ import { ReactNode, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   DashboardWidget,
+  WidgetDensity,
   applyWidget,
   groupBy,
   STATUS_LABEL,
@@ -52,6 +53,21 @@ const SIZE_CLASS: Record<DashboardWidget['size'], string> = {
   full: 'lg:col-span-12',
 }
 
+// Density controls how much each widget shows before scrolling: compact packs
+// more rows into a shorter card (no meta line), expanded gives a taller card
+// with the full meta. Old configs without the field render as comfortable.
+const DENSITY_LIST_CLASS: Record<WidgetDensity, string> = {
+  compact: 'max-h-[38vh]',
+  comfortable: 'max-h-[60vh]',
+  expanded: 'max-h-[82vh]',
+}
+
+const DENSITY_ROW_CLASS: Record<WidgetDensity, string> = {
+  compact: 'px-4 py-1.5',
+  comfortable: 'px-4 py-2.5',
+  expanded: 'px-4 py-3',
+}
+
 function dueTone(due: string | null, todayIso: string): string {
   if (!due) return 'text-zinc-400'
   const d = String(due).slice(0, 10)
@@ -94,6 +110,7 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
   isLast,
 }: Props<T>) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const density: WidgetDensity = widget.density || 'comfortable'
 
   const filtered = useMemo(() => applyWidget(items, widget, ctx), [items, widget, ctx])
   const grouped = useMemo(() => groupBy(filtered, widget.grouping, ctx), [filtered, widget.grouping, ctx])
@@ -157,7 +174,7 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto max-h-[60vh]">
+      <div className={`flex-1 overflow-y-auto ${DENSITY_LIST_CLASS[density]}`}>
         {filtered.length === 0 && (
           <div className="px-4 py-10 text-center text-xs text-zinc-400">
             Nothing here yet.<br /><span className="text-zinc-300">Adjust the filter from the gear above.</span>
@@ -195,10 +212,10 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
                       <li key={item.id}>
                         <Link
                           href={widget.source === 'cg-designs' ? `/cg-designs/${item.id}` : `/designs/${item.id}`}
-                          className="px-4 py-2.5 flex items-center gap-2.5 hover:bg-zinc-50 transition-colors"
+                          className={`${DENSITY_ROW_CLASS[density]} flex items-center gap-2.5 hover:bg-zinc-50 transition-colors`}
                         >
                           <span
-                            className={`flex-shrink-0 h-7 w-7 rounded-full text-[10px] font-semibold flex items-center justify-center ${
+                            className={`flex-shrink-0 ${density === 'compact' ? 'h-6 w-6' : 'h-7 w-7'} rounded-full text-[10px] font-semibold flex items-center justify-center ${
                               personId
                                 ? 'bg-gradient-to-br from-[#0A52EF] to-[#6A5CF8] text-white'
                                 : 'bg-zinc-100 ring-1 ring-dashed ring-zinc-300 text-zinc-400'
@@ -214,14 +231,18 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
                               )}
                               <span className="text-[12.5px] font-medium text-zinc-900 truncate">{item.job_title}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <StatusPill status={item.status} />
-                              {(item.venue_name || item.company_name) && (
-                                <span className="text-[10.5px] text-zinc-500 truncate">
-                                  {item.venue_name || item.company_name}
-                                </span>
-                              )}
-                            </div>
+                            {density !== 'compact' && (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <StatusPill status={item.status} />
+                                {(item.venue_name || item.company_name) && (
+                                  <span className="text-[10.5px] text-zinc-500 truncate">
+                                    {density === 'expanded'
+                                      ? [item.venue_name, item.company_name].filter(Boolean).join(' · ')
+                                      : (item.venue_name || item.company_name)}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <span className={`flex-shrink-0 text-[10.5px] tabular-nums ${dueTone(item.due_date, ctx.todayIso)}`}>
                             {item.due_date ? new Date(`${item.due_date.slice(0,10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}

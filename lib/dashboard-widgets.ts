@@ -23,6 +23,10 @@ export type WidgetSort = 'due_asc' | 'due_desc' | 'newest' | 'oldest' | 'priorit
 
 export type WidgetSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
+// How much each row shows before scrolling. Optional so widget configs saved
+// before this field existed still parse — readers default to 'comfortable'.
+export type WidgetDensity = 'compact' | 'comfortable' | 'expanded'
+
 export interface DashboardWidget {
   id: string
   title: string
@@ -31,6 +35,7 @@ export interface DashboardWidget {
   grouping: WidgetGrouping
   sort: WidgetSort
   size: WidgetSize
+  density?: WidgetDensity          // row density (default 'comfortable')
   limit?: number                   // truncate the rendered list (default 50)
 }
 
@@ -140,6 +145,10 @@ interface FilterableRequest {
   enterprise_contacts?: Array<{ id: string }>
 }
 
+// Strip everything but letters/digits so "big 3" matches "big3" and vice
+// versa (Charlie 7/14). Shared by the designs page search and widget search.
+export const normalizeSearch = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
 function hasAssignment(item: FilterableRequest, staffId: string | null | undefined) {
   if (!staffId) return false
   if (item.designer_id === staffId || item.enterprise_contact_id === staffId) return true
@@ -155,6 +164,7 @@ export function applyWidget<T extends FilterableRequest>(
   const wantedStatuses = f.status?.length ? new Set(f.status) : null
   const wantedBuckets = f.due_bucket?.length ? new Set(f.due_bucket) : null
   const search = (f.search || '').trim().toLowerCase()
+  const normalizedSearch = normalizeSearch(search)
 
   const filtered = items.filter((item) => {
     if (wantedStatuses && !wantedStatuses.has(item.status)) return false
@@ -187,7 +197,7 @@ export function applyWidget<T extends FilterableRequest>(
 
     if (search) {
       const hay = `${item.job_title || ''} ${item.company_name || ''} ${item.venue_name || ''} ${item.tricode || ''}`.toLowerCase()
-      if (!hay.includes(search)) return false
+      if (!hay.includes(search) && !(normalizedSearch && normalizeSearch(hay).includes(normalizedSearch))) return false
     }
 
     return true

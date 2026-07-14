@@ -3,24 +3,21 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
 import { query } from '@/lib/db'
 import { generateToken, buildPublicUrl, OBJECT_CONFIGS, patchTwentyRecord } from '@/lib/proof-share'
-import { listProofFiles, resolveSafePath, isConfigured } from '@/lib/proof-ftp'
+import { listProofFiles, resolveSafePath, isConfigured, type FtpManifestEntry } from '@/lib/proof-ftp'
+import { prefetchManifest } from '@/lib/proof-file-cache'
+import { requireAuth, isAuthError } from '@/lib/rbac'
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
+const CONTENT_LIBRARY_ROLES = new Set(['admin', 'tech_support', 'manager', 'designer', 'design_contractor'])
 
-async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
-  if (request.headers.get('x-webhook-secret') === WEBHOOK_SECRET) return true
-  const token = request.cookies.get('token')?.value
-  if (!token) return false
-  try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'anc-services-secret-key-change-me')
-    await jwtVerify(token, secret)
-    return true
-  } catch {
-    return false
+async function authorize(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (isAuthError(auth)) return auth
+  if (!CONTENT_LIBRARY_ROLES.has(auth.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  return auth
 }
 
 /**
@@ -34,12 +31,11 @@ async function verifyRequestAuth(request: NextRequest): Promise<boolean> {
  *         createdByName?, createdByEmail? }
  */
 export async function POST(request: NextRequest) {
-  if (!(await verifyRequestAuth(request))) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+  const auth = await authorize(request)
+  if (isAuthError(auth)) return auth
   if (!isConfigured()) {
     return NextResponse.json(
-      { error: 'ANC FTP is not configured on this server (ANC_FTP_* env vars missing).' },
+      { error: 'The content library is not fully configured.' },
       { status: 503 }
     )
   }
@@ -57,8 +53,6 @@ export async function POST(request: NextRequest) {
     clientEmail,
     message,
     expiresInDays,
-    createdByName,
-    createdByEmail,
     // Optional ticket linkage — when Alexis creates the proof FROM a ticket, the
     // share ties to that ticket so client approval flows back to its status.
     twentyObjectType,
@@ -90,9 +84,9 @@ export async function POST(request: NextRequest) {
   let files
   try {
     files = await listProofFiles(safePath)
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
-      { error: `Could not read that folder on the FTP: ${err?.message || err}` },
+      { error: 'Could not read that folder from the content library.' },
       { status: 502 }
     )
   }
@@ -104,9 +98,11 @@ export async function POST(request: NextRequest) {
   }
 
   const token = generateToken()
-  const days = Number(expiresInDays)
-  const expiresAt =
-    days > 0 && Number.isFinite(days) ? new Date(Date.now() + days * 86_400_000) : null
+  const requestedDays = Number(expiresInDays)
+  const days = requestedDays > 0 && Number.isFinite(requestedDays)
+    ? Math.min(Math.floor(requestedDays), 90)
+    : 14
+  const expiresAt = new Date(Date.now() + days * 86_400_000)
 
   // When tied to a ticket, keep the ticket's real object type + id so approval
   // writes back to it; otherwise it's a standalone folder share. Either way the
@@ -123,13 +119,15 @@ export async function POST(request: NextRequest) {
     size: file.size,
     modifiedAt: file.modifiedAt,
     kind: file.kind || 'other',
+    sourceVersion: file.sourceVersion,
+    active: true,
   }))
 
   await query(
     `INSERT INTO proof_shares (
-       token, twenty_object_type, twenty_record_id, ftp_folder_path, ftp_manifest,
+       token, twenty_object_type, twenty_record_id, ftp_folder_path, ftp_manifest, ftp_last_synced_at,
        client_name, client_email, message, created_by_name, created_by_email, expires_at
-     ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)`,
+     ) VALUES ($1, $2, $3, $4, $5::jsonb, NOW(), $6, $7, $8, $9, $10, $11)`,
     [
       token,
       objectType,
@@ -139,11 +137,15 @@ export async function POST(request: NextRequest) {
       clientName || null,
       clientEmail || null,
       message || null,
-      createdByName || null,
-      createdByEmail || null,
+      auth.fullName || null,
+      auth.email || null,
       expiresAt,
     ]
   )
+
+  // Warm the local file cache in the background — by the time the client opens
+  // the link, the proofs are usually already on our disk and play instantly.
+  prefetchManifest(safePath, ftpManifest as FtpManifestEntry[])
 
   const publicUrl = buildPublicUrl(token)
 
@@ -188,6 +190,6 @@ export async function POST(request: NextRequest) {
     folderPath: safePath,
     fileCount: files.length,
     linkedToTicket,
-    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    expiresAt: expiresAt.toISOString(),
   })
 }

@@ -51,6 +51,7 @@ const METADATA_SESSION_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_META
 const FILE_STREAM_IDLE_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_IDLE_MS || 60_000))
 const FILE_STREAM_POOL_MAX = Math.min(6, Math.max(1, Number(process.env.ANC_FTP_STREAM_POOL_MAX || 3)))
 const FILE_STREAM_HIGH_WATER_MARK = Math.max(64 * 1024, Number(process.env.ANC_FTP_STREAM_HIGH_WATER_MARK || 256 * 1024))
+const STREAM_POOL_WAIT_TIMEOUT_MS = Math.max(5_000, Number(process.env.ANC_FTP_STREAM_WAIT_TIMEOUT_MS || 30_000))
 
 // Legacy algorithm set — additive to ssh2's modern defaults, not a replacement,
 // so we still prefer strong crypto when the far side supports it and only fall
@@ -257,7 +258,28 @@ async function acquireStreamClient(): Promise<StreamPoolEntry> {
   }
   if (streamPool.length < FILE_STREAM_POOL_MAX) return connectStreamClient()
   return new Promise<StreamPoolEntry>((resolve, reject) => {
-    streamPoolWaiters.push({ resolve, reject })
+    const waiter: StreamPoolWaiter = {
+      resolve: (entry) => {
+        clearTimeout(timer)
+        resolve(entry)
+      },
+      reject: (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    }
+    // A saturated pool must not strand requests forever — the browser retries
+    // ranged video requests aggressively, and each stranded waiter is a proof
+    // that "doesn't load".
+    const timer = setTimeout(() => {
+      const index = streamPoolWaiters.indexOf(waiter)
+      if (index >= 0) streamPoolWaiters.splice(index, 1)
+      const error = new Error('Timed out waiting for a file connection') as Error & { code?: string }
+      error.code = 'STREAM_POOL_TIMEOUT'
+      waiter.reject(error)
+    }, STREAM_POOL_WAIT_TIMEOUT_MS)
+    timer.unref?.()
+    streamPoolWaiters.push(waiter)
   })
 }
 
@@ -301,6 +323,75 @@ export interface FtpEntry {
   size: number            // bytes (0 for dirs)
   modifiedAt: string      // ISO timestamp
   kind?: 'image' | 'video' | 'pdf' | 'other'  // files only
+  sourceVersion?: string  // files only — changes when the remote file is replaced
+}
+
+/**
+ * One file inside a proof share's stored manifest. `active: false` means the
+ * file disappeared from the remote folder on a later sync — we keep the row
+ * (approval history may reference it) but stop serving it publicly.
+ */
+export interface FtpManifestEntry {
+  name: string
+  size: number
+  modifiedAt: string
+  kind: 'image' | 'video' | 'pdf' | 'other'
+  sourceVersion: string
+  active: boolean
+  previousSourceVersion?: string  // set when a sync sees a replaced revision
+  removedAt?: string              // set when a sync soft-unpublishes the file
+}
+
+/**
+ * Merge a fresh folder listing into a share's stored manifest. Files keep
+ * their manifest identity (name) across revisions — a replaced file is
+ * `updated` (new sourceVersion), a vanished file is deactivated rather than
+ * dropped, and a reappearing file is reactivated.
+ */
+export function reconcileProofManifest(
+  previous: FtpManifestEntry[],
+  current: FtpManifestEntry[],
+  syncedAt: string
+): { manifest: FtpManifestEntry[]; added: number; updated: number; removed: number; unchanged: number } {
+  const currentByName = new Map(current.map((entry) => [entry.name, entry]))
+  const previousByName = new Map(previous.map((entry) => [entry.name, entry]))
+
+  let added = 0
+  let updated = 0
+  let removed = 0
+  let unchanged = 0
+
+  const manifest: FtpManifestEntry[] = []
+  // Keep previous ordering first (stable proof numbering), then append new files.
+  for (const prev of previous) {
+    const now = currentByName.get(prev.name)
+    if (!now) {
+      if (prev.active !== false) {
+        removed += 1
+        manifest.push({ ...prev, active: false, removedAt: syncedAt })
+      } else {
+        manifest.push(prev)
+      }
+      continue
+    }
+    if (prev.active === false) {
+      // File came back after being unpublished.
+      added += 1
+      manifest.push({ ...now, active: true })
+    } else if (prev.sourceVersion !== now.sourceVersion) {
+      updated += 1
+      manifest.push({ ...now, active: true, previousSourceVersion: prev.sourceVersion })
+    } else {
+      unchanged += 1
+      manifest.push({ ...prev, active: true })
+    }
+  }
+  for (const now of current) {
+    if (previousByName.has(now.name)) continue
+    added += 1
+    manifest.push({ ...now, active: true })
+  }
+  return { manifest, added, updated, removed, unchanged }
 }
 
 export interface FtpListing {
@@ -390,7 +481,12 @@ async function getDirectoryEntries(
           type: isDir ? 'dir' : 'file',
           size: isDir ? 0 : (e.size || 0),
           modifiedAt: new Date((e.modifyTime as number) || Date.now()).toISOString(),
-          ...(isDir ? {} : { kind: classify(e.name) }),
+          ...(isDir
+            ? {}
+            : {
+                kind: classify(e.name),
+                sourceVersion: `${e.size || 0}-${(e.modifyTime as number) || 0}`,
+              }),
         }
       })
     // Dirs before files; each group alphabetical, case-insensitive.

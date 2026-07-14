@@ -34,6 +34,8 @@ export function FtpFolderBrowser({
   const [err, setErr] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [didResolve, setDidResolve] = useState(false)
+  const [pathDraft, setPathDraft] = useState('')
+  const [editingPath, setEditingPath] = useState(false)
 
   const load = useCallback(
     async (p: string | null, pg: number, useTriCode: boolean) => {
@@ -72,11 +74,20 @@ export function FtpFolderBrowser({
   const go = (p: string) => {
     setPage(1)
     setPath(p)
+    setEditingPath(false)
     load(p, 1, false)
   }
   const changePage = (pg: number) => {
     setPage(pg)
     load(path, pg, false)
+  }
+
+  // Accept a typed/pasted folder location and jump straight to it. Tolerates
+  // Windows-style backslashes and stray whitespace from copy/paste.
+  const goToDraft = () => {
+    const cleaned = pathDraft.trim().replace(/\\/g, '/').replace(/\/{2,}/g, '/')
+    if (!cleaned) return
+    go(cleaned.startsWith('/') ? cleaned : `/${cleaned}`)
   }
 
   return (
@@ -90,8 +101,53 @@ export function FtpFolderBrowser({
         >
           ↑ Up
         </button>
-        <span className="font-mono text-gray-700 truncate">{path || '…'}</span>
-        {listing?.resolvedFrom && (
+        {editingPath ? (
+          <form
+            className="flex items-center gap-1 flex-1 min-w-0"
+            onSubmit={(e) => {
+              e.preventDefault()
+              goToDraft()
+            }}
+          >
+            <input
+              autoFocus
+              value={pathDraft}
+              onChange={(e) => setPathDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setEditingPath(false)
+              }}
+              placeholder="/T/TTI/Proofs/2025/…  (paste a folder location)"
+              className="flex-1 min-w-0 font-mono text-xs px-2 py-1 rounded border border-gray-300 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[color:var(--anc-brand,#0A52EF)]"
+            />
+            <button
+              type="submit"
+              disabled={loading || !pathDraft.trim()}
+              className="px-2 py-1 rounded bg-[color:var(--anc-brand,#0A52EF)] text-white disabled:opacity-40"
+            >
+              Go
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingPath(false)}
+              className="px-2 py-1 rounded bg-white border border-gray-200 text-gray-500 hover:border-gray-300"
+            >
+              ✕
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            title="Click to type or paste a folder location"
+            onClick={() => {
+              setPathDraft(path || '')
+              setEditingPath(true)
+            }}
+            className="font-mono text-gray-700 truncate text-left flex-1 min-w-0 px-1 py-0.5 rounded hover:bg-white hover:ring-1 hover:ring-gray-300 cursor-text"
+          >
+            {path || '…'}
+          </button>
+        )}
+        {!editingPath && listing?.resolvedFrom && (
           <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">opened via {listing.resolvedFrom}</span>
         )}
       </div>

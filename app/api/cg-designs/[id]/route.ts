@@ -10,6 +10,7 @@ import {
   getCgDesignAssigneeIds,
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
+import { sendAssignmentEmail } from '@/lib/assignment-emails'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -167,6 +168,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
        RETURNING id, job_title, status, updated_at`,
       values,
     )
+
+    // Email a newly-assigned designer (fire-and-forget — never blocks the response).
+    const nextDesignerId = body.designer_id !== undefined ? (body.designer_id || null) : undefined
+    if (nextDesignerId && nextDesignerId !== access.record.designer_id) {
+      sendAssignmentEmail({
+        kind: 'cg',
+        recordId: params.id,
+        recordTitle: access.record.job_title,
+        client: access.record.team_name || access.record.venue_name || null,
+        dueDate: body.due_date !== undefined ? body.due_date || null : access.record.due_date,
+        assigneeUserIds: [nextDesignerId],
+        assignedByName: access.auth.fullName,
+        assignedByUserId: access.auth.userId,
+        assignedByEmail: access.auth.email,
+      }).catch((err) => console.error('[cg-designs PATCH] assignment email failed:', err))
+    }
 
     const notificationSummary = normalizedNextStatus && normalizedNextStatus !== access.record.status
       ? await notifyAssigneesOfStatusChange({

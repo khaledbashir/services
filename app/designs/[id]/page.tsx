@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { DesignProofUpload } from '@/components/design-proof-upload'
 import { TicketProofFtp } from '@/components/ticket-proof-ftp'
+import { ProofFileRoster } from '@/components/proof-file-roster'
 import { CommentThread } from '@/components/comment-thread'
 import DesignActivityTimeline from '@/components/design-activity-timeline'
 
@@ -42,6 +43,8 @@ interface DesignRequestDetail {
   proof_sent_at?: string | null
   proof_view_count?: number | null
   proof_last_viewed_at?: string | null
+  qc_approved_by_name?: string | null
+  qc_approved_at?: string | null
 }
 
 interface Staff { id: string; full_name: string; role: string }
@@ -404,12 +407,13 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 <div key={s.key} className="flex items-center gap-1">
                   <button
                     onClick={() => updateField({ status: s.key })}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    title={`Set status to "${s.label}"`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       state === 'active'
                         ? 'bg-[#0A52EF] text-white'
                         : state === 'done'
-                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
+                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:ring-1 hover:ring-emerald-300'
+                          : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 hover:ring-1 hover:ring-zinc-300'
                     }`}
                   >
                     <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
@@ -480,30 +484,28 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
 
             {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
             <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Boards requested">
-                  <textarea
-                    data-ai-target="boards-requested"
-                    value={boardsDraft}
-                    onChange={(e) => setBoardsDraft(e.target.value)}
-                    onBlur={() => boardsDraft !== (dr.boards_requested || '') && updateField({ boards_requested: boardsDraft })}
-                    rows={2}
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-none"
-                    placeholder="e.g. 2× main scoreboards, 1× ribbon"
-                  />
-                </Field>
-                <Field label="Sizes">
-                  <textarea
-                    data-ai-target="sizes-requested"
-                    value={sizesDraft}
-                    onChange={(e) => setSizesDraft(e.target.value)}
-                    onBlur={() => sizesDraft !== (dr.sizes_requested || '') && updateField({ sizes_requested: sizesDraft })}
-                    rows={2}
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-none"
-                    placeholder="e.g. 1920x1080, 960x540"
-                  />
-                </Field>
-              </div>
+              <Field label="Boards requested">
+                <textarea
+                  data-ai-target="boards-requested"
+                  value={boardsDraft}
+                  onChange={(e) => setBoardsDraft(e.target.value)}
+                  onBlur={() => boardsDraft !== (dr.boards_requested || '') && updateField({ boards_requested: boardsDraft })}
+                  rows={4}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
+                  placeholder="e.g. 2× main scoreboards, 1× ribbon"
+                />
+              </Field>
+              <Field label="Sizes">
+                <textarea
+                  data-ai-target="sizes-requested"
+                  value={sizesDraft}
+                  onChange={(e) => setSizesDraft(e.target.value)}
+                  onBlur={() => sizesDraft !== (dr.sizes_requested || '') && updateField({ sizes_requested: sizesDraft })}
+                  rows={4}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
+                  placeholder="e.g. 1920x1080, 960x540"
+                />
+              </Field>
               <Field label="Notes / Brief">
                 <textarea
                   data-ai-target="notes-brief"
@@ -511,24 +513,11 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                   onChange={(e) => setNotesDraft(e.target.value)}
                   onBlur={() => notesDraft !== (dr.notes || '') && updateField({ notes: notesDraft })}
                   rows={4}
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-none"
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
                   placeholder="What the client wants + any specific callouts"
                 />
               </Field>
             </StageCard>
-
-            {/* STAGE 2: IN QUEUE — multi-assign designers + enterprise reps */}
-            <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'}>
-              <AssigneePicker designRequestId={dr.id} staffList={staffList} />
-            </StageCard>
-            {currentIdx === 1 && (
-              <button
-                onClick={() => updateField({ status: 'in_progress' })}
-                className="mt-3 text-xs font-medium text-[#0A52EF] hover:underline block"
-              >
-                → Team assigned? Advance to In Progress
-              </button>
-            )}
 
             {/* STAGE 3: IN PROGRESS — hours (logged via entries) + notes */}
             <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'}>
@@ -543,6 +532,25 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               <p className="text-sm text-zinc-500">
                 Internal quality check. When passed, upload the proof below, then explicitly advance this request to Client Review to fire the approval email.
               </p>
+              {dr.qc_approved_by_name ? (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-700">
+                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>
+                  QC approved by {dr.qc_approved_by_name} on {formatDate(dr.qc_approved_at)}
+                </div>
+              ) : dr.status === 'in_qc' && (
+                <label className={`flex items-center gap-2.5 rounded-lg ring-1 ring-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 ${saving ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-zinc-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    disabled={saving}
+                    onChange={(e) => {
+                      if (e.target.checked && !saving) updateField({ status: 'client_review', qc_approved: true })
+                    }}
+                    className="h-4 w-4 rounded ring-1 ring-zinc-300 accent-[#0A52EF]"
+                  />
+                  QC passed — send to Client Review
+                </label>
+              )}
             </StageCard>
 
             {/* STAGE 5: CLIENT REVIEW — THE MONEY STAGE */}
@@ -595,6 +603,11 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
 
             {/* STAGE 6: APPROVED — final file */}
             <StageCard n={6} label="Approved" desc={STAGES[5].desc} state={currentIdx < 5 ? 'upcoming' : currentIdx === 5 ? 'active' : 'done'}>
+              {managedProofUrl && (
+                <div className="mb-4">
+                  <ProofFileRoster proofUrl={managedProofUrl} />
+                </div>
+              )}
               <Field label="Final File Name">
                 <input
                   type="text"
@@ -651,6 +664,21 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
                 <div className="text-zinc-900">{formatRelative(dr.updated_at)}</div>
               </div>
             </div>
+
+            {/* STAGE 2: IN QUEUE — multi-assign designers + enterprise reps.
+                Moved to the sidebar (Charlie 2026-07-14) so assignment sits
+                next to the quick facts; stacked layout for the 280px rail. */}
+            <StageCard n={2} label="In Queue" desc={STAGES[1].desc} state={currentIdx < 1 ? 'upcoming' : currentIdx === 1 ? 'active' : 'done'}>
+              <AssigneePicker designRequestId={dr.id} staffList={staffList} stacked />
+              {currentIdx === 1 && (
+                <button
+                  onClick={() => updateField({ status: 'in_progress' })}
+                  className="text-xs font-medium text-[#0A52EF] hover:underline block"
+                >
+                  → Team assigned? Advance to In Progress
+                </button>
+              )}
+            </StageCard>
 
             {/* Comment thread (Alexis 5/6 — distinct from notes, newest at
                 top, @-mentions). Lives in the aside so designers can talk
@@ -725,7 +753,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // ─────────────────────────────────────────────────────────────────────────────
 interface Assignee { id: string; full_name: string; email?: string; is_primary?: boolean }
 
-function AssigneePicker({ designRequestId, staffList }: { designRequestId: string; staffList: Staff[] }) {
+function AssigneePicker({ designRequestId, staffList, stacked = false }: { designRequestId: string; staffList: Staff[]; stacked?: boolean }) {
   const [designers, setDesigners] = useState<Assignee[]>([])
   const [reps, setReps] = useState<Assignee[]>([])
   const [loading, setLoading] = useState(true)
@@ -762,7 +790,7 @@ function AssigneePicker({ designRequestId, staffList }: { designRequestId: strin
   const repIds = reps.map(r => r.id)
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className={`grid gap-4 ${stacked ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
       <div>
         <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
           Designers {designers.length > 0 && <span className="text-zinc-400 font-normal">· {designers.length}</span>}

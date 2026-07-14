@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { fetchAttachmentById, fetchAttachmentsForRecord } from '@/lib/proof-share'
 import { getSignedDownloadUrl } from '@/lib/proof-storage'
 import { openFileStream } from '@/lib/proof-ftp'
+import { getCachedFile, openCachedStream, prefetchFile } from '@/lib/proof-file-cache'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 
@@ -32,7 +33,7 @@ export async function GET(
 
     // 1. Validate share
     const shareResult = await query(
-      `SELECT twenty_object_type, twenty_record_id, expires_at, ftp_folder_path
+      `SELECT twenty_object_type, twenty_record_id, expires_at, ftp_folder_path, ftp_manifest
        FROM proof_shares WHERE token = $1`,
       [token]
     )
@@ -62,6 +63,18 @@ export async function GET(
       if (!filename || filename !== path.posix.basename(filename)) {
         return new NextResponse('Invalid file', { status: 400 })
       }
+      const manifest = Array.isArray(share.ftp_manifest) ? share.ftp_manifest : []
+      const manifestFile = manifest.find((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return false
+        return (entry as Record<string, unknown>).name === filename
+          && (entry as Record<string, unknown>).active !== false
+      })
+      // A public token is scoped to the immutable manifest captured when the
+      // share was created. New files added to the remote folder are not exposed
+      // until staff explicitly creates or syncs a share.
+      if (!manifestFile) {
+        return new NextResponse('Attachment does not belong to this proof', { status: 403 })
+      }
       const fullPath = path.posix.join(share.ftp_folder_path, filename)
 
       // Parse an optional Range header.
@@ -69,11 +82,72 @@ export async function GET(
       let range: { start: number; end?: number } | undefined
       if (rangeHeader) {
         const m = /^bytes=(\d+)-(\d*)$/.exec(rangeHeader.trim())
-        if (m) {
-          range = { start: Number(m[1]) }
-          if (m[2]) range.end = Number(m[2])
+        if (!m) {
+          return new NextResponse('Requested range not satisfiable', {
+            status: 416,
+            headers: { 'Accept-Ranges': 'bytes' },
+          })
         }
+        range = { start: Number(m[1]) }
+        if (m[2]) range.end = Number(m[2])
       }
+
+      const entry = manifestFile as Record<string, unknown>
+      const sourceVersion =
+        (typeof entry.sourceVersion === 'string' && entry.sourceVersion) ||
+        `${entry.size}-${entry.modifiedAt}`
+
+      // Local cache first — a hit serves the file from our own disk (fast,
+      // full range support) instead of streaming over the legacy line again.
+      const cached = await getCachedFile(fullPath, sourceVersion)
+      if (cached) {
+        const size = cached.size
+        const name = filename
+        const kind = typeof entry.kind === 'string' ? entry.kind : 'other'
+        const modifiedAt = typeof entry.modifiedAt === 'string' ? entry.modifiedAt : new Date().toISOString()
+        let resolvedRange: { start: number; end: number } | undefined
+        if (range) {
+          const start = Math.floor(range.start)
+          const end = Math.min(Math.floor(range.end ?? size - 1), size - 1)
+          if (!Number.isFinite(start) || start < 0 || start >= size || end < start) {
+            return new NextResponse('Requested range not satisfiable', {
+              status: 416,
+              headers: { 'Accept-Ranges': 'bytes' },
+            })
+          }
+          resolvedRange = { start, end }
+        }
+        const contentType =
+          kind === 'video' ? `video/${(name.split('.').pop() || 'mp4').toLowerCase()}`
+          : kind === 'image' ? `image/${(name.split('.').pop() || 'jpeg').toLowerCase().replace('jpg', 'jpeg')}`
+          : kind === 'pdf' ? 'application/pdf'
+          : 'application/octet-stream'
+        const headers = new Headers({
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'private, max-age=3600',
+          'Content-Disposition': `inline; filename="${name.replace(/[\r\n"\\]/g, '')}"`,
+          'Last-Modified': new Date(modifiedAt).toUTCString(),
+        })
+        const etag = `"ftp-${size}-${new Date(modifiedAt).getTime()}"`
+        headers.set('ETag', etag)
+        if (!rangeHeader && request.headers.get('if-none-match') === etag) {
+          return new NextResponse(null, { status: 304, headers })
+        }
+        const local = openCachedStream(cached.localPath, resolvedRange)
+        const webStream = Readable.toWeb(local) as unknown as ReadableStream
+        if (resolvedRange) {
+          headers.set('Content-Range', `bytes ${resolvedRange.start}-${resolvedRange.end}/${size}`)
+          headers.set('Content-Length', String(resolvedRange.end - resolvedRange.start + 1))
+          return new NextResponse(webStream, { status: 206, headers })
+        }
+        headers.set('Content-Length', String(size))
+        return new NextResponse(webStream, { status: 200, headers })
+      }
+
+      // Cache miss — serve live and warm the cache in the background so the
+      // next request for this file is local.
+      void prefetchFile(fullPath, sourceVersion, Number(entry.size) || 0)
 
       let opened
       try {

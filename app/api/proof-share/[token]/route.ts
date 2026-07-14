@@ -9,7 +9,8 @@ import {
   fetchAttachmentsForRecord,
   classifyFile,
 } from '@/lib/proof-share'
-import { listProofFiles } from '@/lib/proof-ftp'
+import { listProofFiles, isConfigured as ftpConfigured } from '@/lib/proof-ftp'
+import { isManifestStale, parseManifest, syncFtpShareManifest } from '@/lib/proof-share-sync'
 
 /**
  * GET /api/proof-share/[token]
@@ -34,7 +35,7 @@ export async function GET(
       `SELECT token, twenty_object_type, twenty_record_id, created_at, expires_at,
               view_count, last_viewed_at, client_response, client_response_at,
               client_response_note, message, created_by_name, created_by_email,
-              ftp_folder_path, ftp_manifest, client_name
+              ftp_folder_path, ftp_manifest, ftp_last_synced_at, client_name, file_responses
        FROM proof_shares WHERE token = $1`,
       [token]
     )
@@ -71,15 +72,27 @@ export async function GET(
         modifiedAt: string
         kind: 'image' | 'video' | 'pdf' | 'other'
       }
-      const storedManifest = Array.isArray(share.ftp_manifest)
-        ? (share.ftp_manifest as unknown[]).filter((item): item is FtpProofFile => {
-            if (!item || typeof item !== 'object') return false
-            const file = item as Record<string, unknown>
-            return typeof file.name === 'string' && file.name === file.name.split('/').pop()
-          })
-        : []
-      let files: FtpProofFile[] = storedManifest
+
+      // Freshness pass: designers revise proofs by replacing files INSIDE the
+      // folder, so the stored manifest follows the folder (TTL-gated so bursts
+      // of views don't hammer the legacy box). The link itself never changes.
+      // On any sync failure we fall back to the stored snapshot silently.
+      let manifestRaw: unknown = share.ftp_manifest
       let manifestSource = 'stored'
+      if (ftpConfigured() && isManifestStale(share.ftp_last_synced_at)) {
+        try {
+          const synced = await syncFtpShareManifest(token, folder, share.ftp_manifest)
+          manifestRaw = synced.manifest
+          manifestSource = 'live-sync'
+        } catch (err) {
+          console.error('[proof-share/get] freshness sync failed, serving stored manifest:', err)
+        }
+      }
+
+      const storedManifest = parseManifest(manifestRaw).filter(
+        (file) => file.active !== false
+      ) as FtpProofFile[]
+      let files: FtpProofFile[] = storedManifest
       if (files.length === 0) {
         manifestSource = 'legacy-ftp-fallback'
         try {
@@ -102,17 +115,24 @@ export async function GET(
         source: manifestSource,
         fileCount: files.length,
       }))
-      const attachments = files.map((f, index) => ({
-        id: `ftp-${Buffer.from(f.name).toString('base64url')}`,
-        name: f.name,
-        extension: (f.name.split('.').pop() || '').toLowerCase(),
-        category: f.kind || 'other',
-        fileUrl: `/api/proof-share/${token}/file/ftp-${Buffer.from(f.name).toString('base64url')}`,
-        displayNumber: index + 1,
-        lastViewedAt: null,
-        viewCount: 0,
-        uploadedAt: f.modifiedAt,
-      }))
+      const fileResponses: Record<string, { response: string; note?: string; name?: string; at?: string }> =
+        share.file_responses && typeof share.file_responses === 'object' ? share.file_responses : {}
+      const attachments = files.map((f, index) => {
+        const id = `ftp-${Buffer.from(f.name).toString('base64url')}`
+        return {
+          id,
+          name: f.name,
+          extension: (f.name.split('.').pop() || '').toLowerCase(),
+          category: f.kind || 'other',
+          fileUrl: `/api/proof-share/${token}/file/${id}`,
+          displayNumber: index + 1,
+          lastViewedAt: null,
+          viewCount: 0,
+          uploadedAt: f.modifiedAt,
+          response: fileResponses[id]?.response || null,
+          responseAt: fileResponses[id]?.at || null,
+        }
+      })
       const folderLabel = folder.replace(/\/+$/, '').split('/').pop() || 'Proof'
       return NextResponse.json({
         token,

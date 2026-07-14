@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { sendAssignmentEmail } from '@/lib/assignment-emails'
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
@@ -42,6 +43,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const primaryOperatorId = typeof body.primary_operator_id === 'string' ? body.primary_operator_id : null
 
   try {
+    // Snapshot current assignees BEFORE the wipe+reinsert so we can email only
+    // the people who are genuinely NEW — re-saving the same list stays silent.
+    const priorOperators = operatorIds !== null
+      ? new Set(
+          (await query(`SELECT staff_id::text AS staff_id FROM content_schedule_operators WHERE content_schedule_id = $1`, [params.id]))
+            .rows.map((r: any) => r.staff_id),
+        )
+      : null
+    const priorEnts = entIds !== null
+      ? new Set(
+          (await query(`SELECT staff_id::text AS staff_id FROM content_schedule_enterprise_contacts WHERE content_schedule_id = $1`, [params.id]))
+            .rows.map((r: any) => r.staff_id),
+        )
+      : null
+
     if (operatorIds !== null) {
       await query(`DELETE FROM content_schedule_operators WHERE content_schedule_id = $1`, [params.id])
       for (const sid of operatorIds) {
@@ -68,6 +84,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           [params.id, sid],
         )
       }
+    }
+
+    // Email only the newly-added people (fire-and-forget — never blocks the response).
+    const newlyAssignedIds = [
+      ...(operatorIds || []).filter((sid: string) => priorOperators && !priorOperators.has(sid)),
+      ...(entIds || []).filter((sid: string) => priorEnts && !priorEnts.has(sid)),
+    ]
+    if (newlyAssignedIds.length) {
+      sendAssignmentEmail({
+        kind: 'content',
+        recordId: params.id,
+        assigneeUserIds: newlyAssignedIds,
+        assignedByName: auth.fullName,
+        assignedByUserId: auth.userId,
+        assignedByEmail: auth.email,
+      }).catch((err) => console.error('[content assignees POST] assignment email failed:', err))
     }
 
     return NextResponse.json({ ok: true })
