@@ -38,6 +38,31 @@ export async function POST(request: NextRequest) {
     access_token: string
     external_urn: string
     expires_at: string
+    metadata: { sandbox?: boolean } | null
+  }
+
+  // Sandbox account: exercises the full publish flow without touching LinkedIn.
+  // The post is recorded as published and mirrored into Slack so it's visible.
+  if (account.metadata?.sandbox || account.access_token === 'SANDBOX') {
+    const sandboxId = `sandbox-${Date.now()}`
+    await query(
+      `INSERT INTO marketing_social_posts (platform, integration_id, content, state, postiz_post_id, channel_name)
+       VALUES ('linkedin', $1, $2, 'published', $3, 'LinkedIn — Sandbox')`,
+      [account.id, text, sandboxId],
+    )
+    const botToken = process.env.SLACK_BOT_TOKEN || ''
+    const mirrorChannel = process.env.SLACK_MARKETING_SANDBOX_CHANNEL || 'U0A92M2DA13'
+    if (botToken) {
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${botToken}` },
+        body: JSON.stringify({
+          channel: mirrorChannel,
+          text: `🧪 LinkedIn sandbox post (would publish to the connected page):\n\n${text}`,
+        }),
+      }).catch(() => {})
+    }
+    return NextResponse.json({ ok: true, sandbox: true, postId: sandboxId })
   }
 
   if (new Date(account.expires_at).getTime() < Date.now()) {
