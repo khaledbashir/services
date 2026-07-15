@@ -1,8 +1,13 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import sharp from 'sharp'
-import gifenc from 'gifenc'
+import * as gifencNs from 'gifenc'
 
-const { GIFEncoder, quantize, applyPalette } = gifenc
+// gifenc ships a CJS main and an ESM "module" build with different default-export
+// shapes; resolve named exports from whichever namespace the bundler picked.
+const gifencAny = gifencNs as Record<string, unknown> & { default?: Record<string, unknown> }
+const GIFEncoder = (gifencAny.GIFEncoder ?? gifencAny.default?.GIFEncoder) as typeof import('gifenc').GIFEncoder
+const quantize = (gifencAny.quantize ?? gifencAny.default?.quantize) as typeof import('gifenc').quantize
+const applyPalette = (gifencAny.applyPalette ?? gifencAny.default?.applyPalette) as typeof import('gifenc').applyPalette
 
 export type RenderedFile = {
   name: string

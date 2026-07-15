@@ -12,11 +12,10 @@ declare module 'gifenc' {
     bytes(): Uint8Array
   }
 
-  const gifenc: {
-    GIFEncoder(): GifEncoderInstance
-    quantize(rgba: Uint8Array | Uint8ClampedArray, maxColors: number): GifPalette
-    applyPalette(rgba: Uint8Array | Uint8ClampedArray, palette: GifPalette): Uint8Array
-  }
+  export function GIFEncoder(): GifEncoderInstance
+  export function quantize(rgba: Uint8Array | Uint8ClampedArray, maxColors: number): GifPalette
+  export function applyPalette(rgba: Uint8Array | Uint8ClampedArray, palette: GifPalette): Uint8Array
 
-  export default gifenc
+  const gifencDefault: unknown
+  export default gifencDefault
 }
