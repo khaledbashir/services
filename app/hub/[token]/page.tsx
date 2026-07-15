@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 
 type Login = { platform: string; url?: string; email?: string; password?: string; note?: string }
 type Platform = {
@@ -34,6 +34,17 @@ const CATEGORY_ORDER = ['Revenue', 'Operations', 'Marketing', 'Knowledge', 'In D
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'Building',
   experimental: 'Experimental',
+}
+
+// Feed details may carry URLs — render them as real links so leadership can
+// click straight through to the thing that shipped.
+function linkifyDetail(text: string): React.ReactNode[] {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer">{part.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
+      : part
+  )
 }
 
 export default function HubPage({ params }: { params: { token: string } }) {
@@ -178,7 +189,7 @@ export default function HubPage({ params }: { params: { token: string } }) {
                     </time>
                     <div>
                       <h4>{f.title}</h4>
-                      {f.detail && <p>{f.detail}</p>}
+                      {f.detail && <p>{linkifyDetail(f.detail)}</p>}
                     </div>
                   </li>
                 ))}
@@ -381,6 +392,8 @@ const THEME_CSS = `
 }
 .log h4 { font-size: 14px; font-weight: 600; margin: 0; }
 .log p { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 3px 0 0; }
+.log p a { color: var(--accent, #4F86FF); text-decoration: none; border-bottom: 1px solid currentColor; }
+.log p a:hover { opacity: 0.8; }
 
 /* access */
 .keys { margin-top: 20px; border: 1px solid var(--hair); }
