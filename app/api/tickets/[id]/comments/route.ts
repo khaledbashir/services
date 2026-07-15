@@ -1,3 +1,4 @@
+import fs from 'fs'
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
@@ -27,11 +28,16 @@ export async function POST(
     // `close_ticket` (Chris D, 7/14): post the note AND close in one action, so
     // the team gets one Slack notification instead of one for the note and a
     // second for the close.
-    const { body, is_internal, close_ticket } = await request.json()
+    // `set_status: 'in_progress'` (Chris D, 7/15): same idea for picking a
+    // ticket up — post the note and move New/On Hold to In Progress in one
+    // action. Never demotes Escalated or reopens Closed; those stay put and
+    // the note posts normally.
+    const { body, is_internal, close_ticket, set_status } = await request.json()
     if (!body || !body.trim()) {
       return NextResponse.json({ error: 'Comment body is required' }, { status: 400 })
     }
-    const closeRequested = close_ticket === true
+    const closeRequested = close_ticket === true || set_status === 'closed'
+    const inProgressRequested = set_status === 'in_progress'
 
     const result = await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
@@ -66,6 +72,31 @@ export async function POST(
         actor: { userId: user.userId, fullName: user.fullName },
       })
       closed = true
+    }
+
+    // Post-and-in-progress: only a forward move — New or On Hold may advance.
+    // Escalated must never quietly drop back to In Progress (Chris's explicit
+    // guard), and Closed doesn't reopen from the composer.
+    let movedInProgress = false
+    if (inProgressRequested && !closed && ti && (ti.status === 'new' || ti.status === 'on_hold')) {
+      await query(`UPDATE tickets SET status = 'in_progress', updated_at = NOW() WHERE id = $1`, [params.id])
+      await query(
+        `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+         VALUES ('ticket_status_change', 'ticket', $1, $2, $3)`,
+        [params.id, user.userId || null, JSON.stringify({
+          entity_name: ti.title,
+          venue_name: ti.venue_name || '',
+          old_status: ti.status,
+          new_status: 'in_progress',
+        })]
+      )
+      try {
+        fs.appendFileSync(
+          '/tmp/anc-ticket-notifications.log',
+          `TICKET|status_changed|${user.fullName || 'User'}|${ti.title}|${ti.venue_name || ''}|from ${ti.status} to In Progress|${new Date().toISOString()}\n`
+        )
+      } catch { /* log file is best-effort */ }
+      movedInProgress = true
     }
 
     // @-mention DMs: parse @[Full Name] markers and DM each tagged staff
@@ -107,12 +138,15 @@ export async function POST(
       if (channelId) {
         // One message covers both the note and the close when they happen
         // together — that's the whole point of post-and-close.
-        const emoji = closed ? ':white_check_mark:' : is_internal ? ':memo:' : ':speech_balloon:'
+        const emoji = closed ? ':white_check_mark:' : movedInProgress ? ':arrows_counterclockwise:' : is_internal ? ':memo:' : ':speech_balloon:'
         const label = closed
           ? 'Resolved & Closed'
+          : movedInProgress ? 'In Progress'
           : is_internal ? 'Internal Note' : 'Comment'
         const heading = closed
           ? `${emoji} *Case #${caseNum} — Resolved & Closed*\n*${ti.title}*`
+          : movedInProgress
+          ? `${emoji} *Case #${caseNum} — Moved to In Progress*\n*${ti.title}*`
           : `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*`
         sendSlackMessage({
           channel: channelId,
@@ -168,7 +202,7 @@ export async function POST(
       }).catch(err => console.error('[customer-notify] reply email failed:', err))
     }
 
-    return NextResponse.json({ comment: result.rows[0], email: emailStatus, closed })
+    return NextResponse.json({ comment: result.rows[0], email: emailStatus, closed, moved_in_progress: movedInProgress })
   } catch (err) {
     console.error('Error creating comment:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -110,6 +110,7 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     | { kind: 'send_failed' }
     | { kind: 'internal' }
     | { kind: 'closed' }
+    | { kind: 'in_progress' }
     | null
   >(null)
   const [emailReply, setEmailReply] = useState('')
@@ -298,9 +299,10 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     else if (e.key === 'Escape') { setMentionQuery(null) }
   }
 
-  // `closeAfter` (Chris D, 7/14): post the note and close the ticket in one
-  // action so the team gets a single Slack notification instead of two.
-  const addComment = async (e: FormEvent, closeAfter = false) => {
+  // One-click post-plus-status (Chris D): 'close' (7/14) posts the note and
+  // closes; 'in_progress' (7/15) posts the note and moves New/On Hold forward.
+  // Either way the team gets a single Slack notification instead of two.
+  const addComment = async (e: FormEvent, statusAction?: 'close' | 'in_progress') => {
     e.preventDefault()
     if (!newComment.trim()) return
     setSubmitting(true)
@@ -308,13 +310,20 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
     try {
       const res = await fetch(`/api/tickets/${params.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: newComment, is_internal: isInternal, close_ticket: closeAfter })
+        body: JSON.stringify({
+          body: newComment,
+          is_internal: isInternal,
+          close_ticket: statusAction === 'close',
+          set_status: statusAction === 'in_progress' ? 'in_progress' : undefined,
+        })
       })
       if (res.ok) {
         const data = await res.json().catch(() => null)
         const email = data?.email
         if (data?.closed) {
           setCommentToast({ kind: 'closed' })
+        } else if (data?.moved_in_progress) {
+          setCommentToast({ kind: 'in_progress' })
         } else if (isInternal) {
           setCommentToast({ kind: 'internal' })
         } else if (email?.sent) {
@@ -1107,14 +1116,15 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                     <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100">
                       {commentToast && (
                         <div className={`mb-3 rounded-md px-3 py-2 text-xs flex items-start justify-between gap-3 border ${
-                          commentToast.kind === 'emailed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                          commentToast.kind === 'emailed' || commentToast.kind === 'closed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
                           commentToast.kind === 'internal' ? 'bg-indigo-50 border-indigo-200 text-indigo-800' :
-                          commentToast.kind === 'no_list' ? 'bg-amber-50 border-amber-200 text-amber-900' :
+                          commentToast.kind === 'no_list' || commentToast.kind === 'in_progress' ? 'bg-amber-50 border-amber-200 text-amber-900' :
                           'bg-rose-50 border-rose-200 text-rose-800'
                         }`}>
                           <span className="font-medium">
                             {commentToast.kind === 'emailed' && `Posted — emailed to ${commentToast.count} client recipient${commentToast.count === 1 ? '' : 's'} on the venue's distribution list.`}
                             {commentToast.kind === 'closed' && `Posted and closed — one notification sent.`}
+                            {commentToast.kind === 'in_progress' && `Posted and moved to In Progress — one notification sent.`}
                             {commentToast.kind === 'internal' && `Posted as internal note — not emailed to the client.`}
                             {commentToast.kind === 'no_list' && `Posted, but no email went out — this venue has no client distribution list configured. Add recipients in venue settings to email future Client comments.`}
                             {commentToast.kind === 'send_failed' && `Posted, but the client email failed to send. Check Slack #ops or the logs.`}
@@ -1185,9 +1195,18 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             </button>
                           </div>
                           <div className="flex items-center gap-2">
+                            {(ticket.status === 'new' || ticket.status === 'on_hold') && (
+                              <button type="button" data-ai-target="ticket-comment-post-inprogress"
+                                onClick={(e) => addComment(e as unknown as FormEvent, 'in_progress')}
+                                disabled={submitting || !newComment.trim()}
+                                title="Post this note and move the ticket to In Progress — sends one notification"
+                                className="border border-amber-200 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-100 disabled:opacity-30 transition-all">
+                                {submitting ? 'Posting...' : 'Post & In Progress'}
+                              </button>
+                            )}
                             {ticket.status !== 'closed' && (
                               <button type="button" data-ai-target="ticket-comment-post-close"
-                                onClick={(e) => addComment(e as unknown as FormEvent, true)}
+                                onClick={(e) => addComment(e as unknown as FormEvent, 'close')}
                                 disabled={submitting || !newComment.trim()}
                                 title="Post this note and close the ticket — sends one notification"
                                 className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-emerald-100 disabled:opacity-30 transition-all">
@@ -1654,8 +1673,16 @@ export default function TicketDetailPage({ params }: { params: { id: string } })
                             </button>
                           </div>
                           <div className="flex items-center gap-2">
+                            {(ticket.status === 'new' || ticket.status === 'on_hold') && (
+                              <button type="button" onClick={(e) => addComment(e as unknown as FormEvent, 'in_progress')}
+                                disabled={submitting || !newComment.trim()}
+                                title="Post this note and move the ticket to In Progress — sends one notification"
+                                className="border border-amber-200 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-100 disabled:opacity-30 transition-all">
+                                {submitting ? 'Posting...' : 'Post & In Progress'}
+                              </button>
+                            )}
                             {ticket.status !== 'closed' && (
-                              <button type="button" onClick={(e) => addComment(e as unknown as FormEvent, true)}
+                              <button type="button" onClick={(e) => addComment(e as unknown as FormEvent, 'close')}
                                 disabled={submitting || !newComment.trim()}
                                 title="Post this note and close the ticket — sends one notification"
                                 className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-emerald-100 disabled:opacity-30 transition-all">
