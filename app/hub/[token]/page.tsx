@@ -185,7 +185,9 @@ export default function HubPage({ params }: { params: { token: string } }) {
                 {data.feed.map((f, i) => (
                   <li key={i}>
                     <time>
-                      {new Date(f.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {/* entry_date is a calendar date serialized at UTC midnight — render in UTC
+                          or viewers west of Greenwich see every entry dated a day early */}
+                      {new Date(f.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
                     </time>
                     <div>
                       <h4>{f.title}</h4>
