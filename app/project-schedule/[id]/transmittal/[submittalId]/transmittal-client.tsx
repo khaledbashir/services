@@ -301,7 +301,7 @@ export function TransmittalClient({
             {/* Header */}
             <header className="flex items-start justify-between gap-6 border-b-2 border-[#0A52EF] pb-5">
               <div className="flex items-center gap-4">
-                <Image src="/ANC_Logo_2023_blue.png" alt="ANC" width={56} height={56} className="h-14 w-14 object-contain" priority />
+                <Image src="/ANC_Logo_2023_blue.png" alt="ANC" width={175} height={45} className="h-10 w-auto object-contain" priority />
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">ANC Sports</p>
                   <h1 className="mt-0.5 text-2xl font-bold uppercase tracking-[0.06em] text-zinc-950">Letter of Transmittal</h1>

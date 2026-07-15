@@ -71,7 +71,10 @@ function ChatWidget({ venueName }: { venueName: string }) {
     script.src = 'https://ancservices-anything-llm.izcgmb.easypanel.host/embed/anythingllm-chat-widget.min.js';
     script.setAttribute('data-embed-id', embedId);
     script.setAttribute('data-base-api-url', 'https://ancservices-anything-llm.izcgmb.easypanel.host/api/embed');
-    script.setAttribute('data-brand-image-url', '/ANC_Logo_2023_white.png');
+    // Square-slot assets: the chat widget renders these in fixed square/round
+    // frames, so they use the square Services tile — the wide official
+    // wordmark (/ANC_Logo_2023_*.png) would be squeezed illegibly here.
+    script.setAttribute('data-brand-image-url', '/anc-tile-services.png');
     script.setAttribute('data-greeting', `Hi! I'm the ANC assistant for ${venueName}. How can I help?`);
     script.setAttribute('data-button-color', '#1B2A4A');
     script.setAttribute('data-user-bg-color', '#0A52EF');
@@ -79,7 +82,7 @@ function ChatWidget({ venueName }: { venueName: string }) {
     script.setAttribute('data-assistant-text-color', '#1B2A4A');
     script.setAttribute('data-user-text-color', '#FFFFFF');
     script.setAttribute('data-assistant-name', 'ANC Assistant');
-    script.setAttribute('data-assistant-icon', '/ANC_Logo_2023_blue.png');
+    script.setAttribute('data-assistant-icon', '/anc-tile-services.png');
     script.setAttribute('data-window-title', `${venueName} — ANC Support`);
     script.setAttribute('data-no-sponsor', 'true');
     document.body.appendChild(script);
