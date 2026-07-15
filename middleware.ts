@@ -70,19 +70,27 @@ export async function middleware(request: NextRequest) {
   // Protected routes - require authentication
   const token = request.cookies.get('token')?.value
   
+  // Preserve the destination through the login bounce — a deep link into a
+  // ticket/event/report must land THERE after sign-in, not on the dashboard.
+  const loginWithReturn = () => {
+    const url = new URL('/login', request.url)
+    url.searchParams.set('redirect', pathname + (request.nextUrl.search || ''))
+    return NextResponse.redirect(url)
+  }
+
   if (!token) {
     if (pathname.startsWith('/api/')) {
       return withCors(request, NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    return loginWithReturn()
   }
-  
+
   const payload = await verifyJWT(token)
   if (!payload) {
     if (pathname.startsWith('/api/')) {
       return withCors(request, NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    return loginWithReturn()
   }
   
   return withCors(request, NextResponse.next())
