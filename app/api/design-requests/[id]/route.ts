@@ -26,6 +26,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'tricode',
   'ftp_proof_link',
   'ftp_final_link',
+  'project_file_location',
   'final_file_name',
   'final_duration',
   'notes',
@@ -54,7 +55,7 @@ const ALLOWED_STATUSES = new Set([
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'designer_id', 'enterprise_contact_id'].includes(key)) return value || null
-  if (['company_name', 'client_name', 'client_email', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'final_file_name', 'final_duration', 'notes', 'boards_requested', 'sizes_requested'].includes(key)) {
+  if (['company_name', 'client_name', 'client_email', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'project_file_location', 'final_file_name', 'final_duration', 'notes', 'boards_requested', 'sizes_requested'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
@@ -81,7 +82,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
 
   const result = await query(
     `SELECT dr.id, dr.venue_id, dr.job_title, dr.company_name, dr.tricode,
-            dr.ftp_proof_link, dr.legacy_ftp_proof_link, dr.ftp_final_link, dr.final_file_name, dr.final_duration,
+            dr.ftp_proof_link, dr.legacy_ftp_proof_link, dr.ftp_final_link, dr.project_file_location, dr.final_file_name, dr.final_duration,
             dr.notes, dr.boards_requested, dr.sizes_requested, dr.designer_id,
             dr.enterprise_contact_id, dr.status, dr.hours_estimated, dr.hours_spent,
             dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
@@ -197,6 +198,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           ftp_proof_link: d.proofShareUrl || d.proofLink || d.ftpProofLink || null,
           legacy_ftp_proof_link: await lookupLegacyProofLink(d.id),
           ftp_final_link: d.ftpFinalLink || null,
+          project_file_location: d.projectLocation || null,
           final_file_name: d.localFilePath || null,
           final_duration: null,
           hours_estimated: d.effortHours ?? null,
@@ -258,6 +260,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if ('notes' in body) patch.aiPrompt = body.notes?.trim() || null
       if ('boards_requested' in body) patch.boardSection = body.boards_requested?.trim() || null
       if ('ftp_proof_link' in body) patch.proofLink = body.ftp_proof_link?.trim() || null
+      if ('project_file_location' in body) patch.projectLocation = body.project_file_location?.trim() || null
       if ('final_file_name' in body) patch.localFilePath = body.final_file_name?.trim() || null
       if ('status' in body && ALLOWED_STATUSES.has(body.status)) {
         patch.status = `STATUS_${String(body.status).toUpperCase()}`

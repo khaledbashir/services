@@ -359,6 +359,7 @@ export default function DesignsPage() {
     enterprise_contact_ids: [] as string[],
     due_date: '',
     hours_estimated: '',
+    project_file_location: '',
     ftp_final_link: '',
     ftp_proof_link: '',
     notes: '',
@@ -531,6 +532,7 @@ export default function DesignsPage() {
         enterprise_contact_ids: [],
         due_date: '',
         hours_estimated: '',
+        project_file_location: '',
         ftp_final_link: '',
         ftp_proof_link: '',
         notes: '',
@@ -1005,32 +1007,34 @@ export default function DesignsPage() {
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Boards</label>
-                  <input
-                    type="text"
-                    value={formData.boards_requested}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, boards_requested: e.target.value }))}
-                    placeholder="e.g. Scoring, Anthem, Intro"
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Sizes</label>
-                  <input
-                    type="text"
-                    value={formData.sizes_requested}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, sizes_requested: e.target.value }))}
-                    placeholder="e.g. 16:9, 6×12"
-                    className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  />
-                </div>
+              {/* Board & Sizes — single merged field (Charlie 2026-07-15), matching
+                  how it already shows on the ticket. Boards and their sizes are
+                  typed together in one place instead of two split columns. */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Board &amp; Sizes</label>
+                <textarea
+                  rows={3}
+                  value={formData.boards_requested}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, boards_requested: e.target.value }))}
+                  placeholder="e.g. Scoring 1920×1080, Anthem 16:9, Ribbon 6×12"
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Project File Location</label>
+                <input
+                  type="text"
+                  value={formData.project_file_location}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, project_file_location: e.target.value }))}
+                  placeholder="Internal server path to the project / working files"
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                />
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">FTP Location</label>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Final File Location</label>
                   <input
                     type="text"
                     value={formData.ftp_final_link}

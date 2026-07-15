@@ -27,11 +27,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const jobTitle = (tpl.job_title || tpl.name || 'Untitled').toString().trim()
 
+    // Board & Sizes is one field now — fold any legacy separate sizes into the
+    // board field so applying an older template doesn't drop its sizing.
+    const mergedBoards = [tpl.boards_requested, tpl.sizes_requested]
+      .filter(Boolean)
+      .join(' · ') || null
+
     if (isTwentyBackedEnabled('DESIGNS')) {
       const created = await Designs.create({
         name: jobTitle,
         aiPrompt: tpl.notes || null,
-        boardSection: tpl.boards_requested || null,
+        boardSection: mergedBoards,
         proofLink: null,
         localFilePath: null,
         status: 'STATUS_REQUEST_SUBMITTED' as any,
@@ -59,8 +65,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         jobTitle,
         tpl.tricode,
         tpl.notes,
-        tpl.boards_requested,
-        tpl.sizes_requested,
+        mergedBoards,
+        null,
         tpl.designer_id,
         tpl.enterprise_contact_id,
         tpl.hours_estimated,

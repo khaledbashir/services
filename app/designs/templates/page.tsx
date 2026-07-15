@@ -97,8 +97,10 @@ export default function DesignTemplatesPage() {
       company_name: t.company_name || '',
       tricode: t.tricode || '',
       notes: t.notes || '',
-      boards_requested: t.boards_requested || '',
-      sizes_requested: t.sizes_requested || '',
+      // Board & Sizes is one field now — fold any legacy separate sizes into it
+      // so older templates carry their sizing forward instead of dropping it.
+      boards_requested: [t.boards_requested, t.sizes_requested].filter(Boolean).join(' · ') || '',
+      sizes_requested: '',
       venue_id: t.venue_id || '',
       designer_id: t.designer_id || '',
       enterprise_contact_id: t.enterprise_contact_id || '',
@@ -282,26 +284,17 @@ export default function DesignTemplatesPage() {
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label="Boards requested">
-                <textarea
-                  value={form.boards_requested}
-                  onChange={(e) => setForm({ ...form, boards_requested: e.target.value })}
-                  rows={2}
-                  placeholder="e.g. 2× main scoreboards, 1× ribbon"
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-none"
-                />
-              </Field>
-              <Field label="Sizes">
-                <textarea
-                  value={form.sizes_requested}
-                  onChange={(e) => setForm({ ...form, sizes_requested: e.target.value })}
-                  rows={2}
-                  placeholder="e.g. 1920×1080, 960×540"
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-none"
-                />
-              </Field>
-            </div>
+            {/* Board & Sizes — single merged field (Charlie 2026-07-15), matching
+                the ticket + create form. */}
+            <Field label="Board & Sizes">
+              <textarea
+                value={form.boards_requested}
+                onChange={(e) => setForm({ ...form, boards_requested: e.target.value })}
+                rows={3}
+                placeholder="e.g. Scoring 1920×1080, Anthem 16:9, Ribbon 960×540"
+                className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
+              />
+            </Field>
             <Field label="Notes / Brief">
               <textarea
                 value={form.notes}

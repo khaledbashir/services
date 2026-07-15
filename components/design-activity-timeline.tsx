@@ -78,11 +78,19 @@ function describe(e: ActivityEvent): { title: string; sub?: string } {
         title: 'Proof sent to client',
         sub: d.emailed ? `emailed ${(d.clientEmail as string) || 'client'}` : 'link generated',
       }
-    case 'client_response':
+    case 'client_response': {
+      const approvedCount = typeof d.approvedCount === 'number' ? d.approvedCount : null
+      const changesCount = typeof d.changesCount === 'number' ? d.changesCount : null
+      const counts =
+        approvedCount != null && changesCount != null && (approvedCount || changesCount)
+          ? `${approvedCount} approved · ${changesCount} changes`
+          : undefined
       return {
         title: e.toValue === 'approved' ? 'Client approved' : 'Client requested changes',
-        sub: (d.note as string) || undefined,
+        // Prefer the per-file rollup; fall back to the free-text note.
+        sub: counts || (d.note as string) || undefined,
       }
+    }
     case 'assigned':
       return { title: 'Assigned', sub: e.toValue || undefined }
     case 'unassigned':
@@ -165,6 +173,10 @@ export default function DesignActivityTimeline({ designRequestId }: { designRequ
         <ol className="relative border-l border-zinc-200 pl-5 space-y-4">
           {events.map((e) => {
             const { title, sub } = describe(e)
+            const fileResponses =
+              e.eventType === 'client_response' && Array.isArray((e.detail || {}).fileResponses)
+                ? ((e.detail as any).fileResponses as Array<{ name: string; response: string; note: string | null }>)
+                : null
             return (
               <li key={e.id} className="relative">
                 <span
@@ -177,6 +189,29 @@ export default function DesignActivityTimeline({ designRequestId }: { designRequ
                   <span className="shrink-0 text-[11px] text-zinc-400">{formatWhen(e.createdAt)}</span>
                 </div>
                 {sub && <div className="text-xs text-zinc-500 mt-0.5">{sub}</div>}
+                {/* Per-file approved/denied breakdown so it's clear at a glance what
+                    the client signed off vs sent back (Charlie 2026-07-15). */}
+                {fileResponses && fileResponses.length > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    {fileResponses.map((f, i) => {
+                      const denied = f.response === 'changes_requested'
+                      return (
+                        <li key={i} className="flex items-start gap-1.5 text-xs">
+                          <span className={`mt-0.5 shrink-0 ${denied ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {denied ? '✎' : '✓'}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="text-zinc-700">{f.name}</span>
+                            <span className={`ml-1.5 ${denied ? 'text-amber-600' : 'text-emerald-600'}`}>
+                              {denied ? 'changes requested' : 'approved'}
+                            </span>
+                            {f.note && <span className="block text-zinc-500">{f.note}</span>}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
                 <div className="text-[11px] text-zinc-400 mt-0.5">{e.actorName || 'System'}</div>
               </li>
             )

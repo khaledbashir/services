@@ -289,6 +289,7 @@ export async function POST(request: NextRequest) {
       tricode,
       ftp_proof_link,
       ftp_final_link,
+      project_file_location,
       final_file_name,
       final_duration,
       notes,
@@ -316,6 +317,7 @@ export async function POST(request: NextRequest) {
           aiPrompt: notes?.trim() || null,
           boardSection: boards_requested?.trim() || null,
           proofLink: ftp_proof_link?.trim() || null,
+          projectLocation: project_file_location?.trim() || null,
           localFilePath: final_file_name?.trim() || null,
           status: toTwentyStatus(status) as any,
         })
@@ -341,13 +343,13 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO design_requests (
-        venue_id, company_name, job_title, tricode, ftp_proof_link, ftp_final_link,
+        venue_id, company_name, job_title, tricode, ftp_proof_link, ftp_final_link, project_file_location,
         final_file_name, final_duration, notes, boards_requested, sizes_requested,
         designer_id, enterprise_contact_id, status, hours_estimated, hours_spent, due_date, is_rando, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16, $17, $18, NOW()
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17, $18, $19, NOW()
       )
       RETURNING id, job_title, status, is_rando`,
       [
@@ -357,6 +359,7 @@ export async function POST(request: NextRequest) {
         normalizedTriCode,
         ftp_proof_link?.trim() || null,
         ftp_final_link?.trim() || null,
+        project_file_location?.trim() || null,
         final_file_name?.trim() || null,
         final_duration?.trim() || null,
         notes?.trim() || null,

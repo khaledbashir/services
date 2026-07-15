@@ -30,6 +30,21 @@ import { parseManifest } from '@/lib/proof-share-sync'
 
 type FileResponseEntry = { response: string; note: string | null; name: string | null; at: string }
 
+/** One line per proof file, for the ticket History timeline. */
+type FileBreakdown = { name: string; response: 'approved' | 'changes_requested'; note: string | null }
+
+/** Stable per-file id — must match the roster GET (`ftp-<base64url(name)>`). */
+function fileIdFor(name: string): string {
+  return `ftp-${Buffer.from(name).toString('base64url')}`
+}
+
+/** Active files in an FTP-backed share, in manifest order. */
+function activeManifestFiles(ftpManifest: unknown): { id: string; name: string }[] {
+  return parseManifest(ftpManifest)
+    .filter((file) => file.active !== false)
+    .map((file) => ({ id: fileIdFor(file.name), name: file.name }))
+}
+
 async function finalizeShare(
   token: string,
   share: {
@@ -38,7 +53,8 @@ async function finalizeShare(
     client_name: string | null
   },
   response: 'approved' | 'changes_requested',
-  note: string | null
+  note: string | null,
+  fileBreakdown?: FileBreakdown[]
 ) {
   if (share.twenty_object_type === 'ftpFolder') {
     // FTP-folder shares live entirely in our DB — no Twenty record, no local
@@ -67,7 +83,15 @@ async function finalizeShare(
       eventType: 'client_response',
       actor: { fullName: share.client_name || 'Client' },
       toValue: response,
-      detail: { note: note || null, proofToken: token },
+      detail: {
+        note: note || null,
+        proofToken: token,
+        // Per-file breakdown so the History timeline shows exactly which files
+        // were approved vs sent back (Charlie 2026-07-15), not one text blob.
+        fileResponses: fileBreakdown && fileBreakdown.length ? fileBreakdown : null,
+        approvedCount: fileBreakdown ? fileBreakdown.filter((f) => f.response === 'approved').length : null,
+        changesCount: fileBreakdown ? fileBreakdown.filter((f) => f.response === 'changes_requested').length : null,
+      },
     })
   } else {
     const cfg = OBJECT_CONFIGS[share.twenty_object_type]
@@ -212,23 +236,25 @@ export async function POST(
 
       // Auto-finalize FTP-backed shares once every active file has a decision.
       if (share.ftp_folder_path) {
-        const activeIds = parseManifest(share.ftp_manifest)
-          .filter((file) => file.active !== false)
-          .map((file) => `ftp-${Buffer.from(file.name).toString('base64url')}`)
-        const respondedIds = activeIds.filter((id) => merged[id])
-        if (activeIds.length > 0 && respondedIds.length === activeIds.length) {
-          const changesRequested = activeIds.filter(
-            (id) => merged[id].response === 'changes_requested'
+        const activeFiles = activeManifestFiles(share.ftp_manifest)
+        const respondedIds = activeFiles.filter((f) => merged[f.id])
+        if (activeFiles.length > 0 && respondedIds.length === activeFiles.length) {
+          const changesRequested = activeFiles.filter(
+            (f) => merged[f.id].response === 'changes_requested'
           ).length
           const rollup = changesRequested > 0 ? 'changes_requested' : 'approved'
-          const combinedNote = activeIds
-            .map((id) => merged[id])
+          const breakdown: FileBreakdown[] = activeFiles.map((f) => ({
+            name: f.name,
+            response: merged[f.id].response === 'changes_requested' ? 'changes_requested' : 'approved',
+            note: merged[f.id].note || null,
+          }))
+          const combinedNote = breakdown
             .filter((r) => r.note)
             .map((r) => r.note)
             .join('\n')
-          await finalizeShare(token, share, rollup, combinedNote || note || null)
+          await finalizeShare(token, share, rollup, combinedNote || note || null, breakdown)
           notifySlack(token, share, rollup, combinedNote || note || null, name || null, {
-            approved: activeIds.length - changesRequested,
+            approved: activeFiles.length - changesRequested,
             changesRequested,
           })
           return NextResponse.json({
@@ -238,7 +264,7 @@ export async function POST(
             complete: true,
             state: rollup,
             responded: respondedIds.length,
-            total: activeIds.length,
+            total: activeFiles.length,
           })
         }
         return NextResponse.json({
@@ -248,16 +274,55 @@ export async function POST(
           complete: false,
           state: 'pending',
           responded: respondedIds.length,
-          total: activeIds.length,
+          total: activeFiles.length,
         })
       }
 
       return NextResponse.json({ ok: true, fileId, response, complete: false, state: 'pending' })
     }
 
-    // ── Whole-proof mode (original behavior) ─────────────────────────────────
-    await finalizeShare(token, share, response, note || null)
-    notifySlack(token, share, response, note || null, name || null)
+    // ── Whole-proof mode ─────────────────────────────────────────────────────
+    // The client approved/requested-changes on the WHOLE proof in one click.
+    // Stamp that same decision onto every file that has no per-file response yet
+    // so the staff roster reads "N approved" instead of "N awaiting" — the bug
+    // Charlie flagged 2026-07-15 (one-click approve left files showing awaiting).
+    let breakdown: FileBreakdown[] | undefined
+    if (share.ftp_folder_path) {
+      const existing: Record<string, FileResponseEntry> =
+        share.file_responses && typeof share.file_responses === 'object' ? share.file_responses : {}
+      const at = new Date().toISOString()
+      const activeFiles = activeManifestFiles(share.ftp_manifest)
+      const backfilled: Record<string, FileResponseEntry> = { ...existing }
+      for (const f of activeFiles) {
+        if (!backfilled[f.id]) backfilled[f.id] = { response, note: null, name: f.name, at }
+      }
+      if (activeFiles.length > 0) {
+        await query(
+          `UPDATE proof_shares SET file_responses = $2::jsonb WHERE token = $1`,
+          [token, JSON.stringify(backfilled)]
+        )
+        breakdown = activeFiles.map((f) => ({
+          name: f.name,
+          response: backfilled[f.id].response === 'changes_requested' ? 'changes_requested' : 'approved',
+          note: backfilled[f.id].note || null,
+        }))
+      }
+    }
+
+    await finalizeShare(token, share, response, note || null, breakdown)
+    notifySlack(
+      token,
+      share,
+      response,
+      note || null,
+      name || null,
+      breakdown
+        ? {
+            approved: breakdown.filter((b) => b.response === 'approved').length,
+            changesRequested: breakdown.filter((b) => b.response === 'changes_requested').length,
+          }
+        : undefined
+    )
 
     return NextResponse.json({
       ok: true,

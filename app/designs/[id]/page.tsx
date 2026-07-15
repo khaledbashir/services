@@ -25,6 +25,7 @@ interface DesignRequestDetail {
   ftp_proof_link: string | null
   legacy_ftp_proof_link?: string | null
   ftp_final_link: string | null
+  project_file_location: string | null
   final_file_name: string | null
   final_duration: string | null
   notes: string | null
@@ -128,6 +129,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
   const [boardsDraft, setBoardsDraft] = useState('')
   const [finalFileDraft, setFinalFileDraft] = useState('')
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
+  const [projectLinkDraft, setProjectLinkDraft] = useState('')
   const [proofLinkDraft, setProofLinkDraft] = useState('')
   const router = useRouter()
 
@@ -148,6 +150,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
       setBoardsDraft(d?.boards_requested || '')
       setFinalFileDraft(d?.final_file_name || '')
       setFinalLinkDraft(d?.ftp_final_link || '')
+      setProjectLinkDraft(d?.project_file_location || '')
       setProofLinkDraft(d?.ftp_proof_link || '')
     } catch (err) {
       console.error(err)
@@ -435,6 +438,19 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
             {/* Final Files & Proof Links — always visible (Alexis 2026-06-11): enter/see these at any stage, not gated to the Approved stage */}
             <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 space-y-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Final Files &amp; Proof Links</div>
+              {/* Project File Location (Charlie 2026-07-15): where the source/working
+                  file lives on ANC's internal servers, so a designer can jump straight
+                  back to it for re-work. Sits above the final-deliverable location. */}
+              <Field label="Project File Location">
+                <input
+                  type="text"
+                  value={projectLinkDraft}
+                  onChange={(e) => setProjectLinkDraft(e.target.value)}
+                  onBlur={() => dr && projectLinkDraft !== (dr.project_file_location || '') && updateField({ project_file_location: projectLinkDraft })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                  placeholder="Internal server path to the project / working files"
+                />
+              </Field>
               <Field label="Final File Location">
                 <input
                   type="text"
@@ -485,7 +501,7 @@ export default function DesignRequestDetailPage({ params }: { params: { id: stri
               {/* Boards + Sizes merged into one field (Charlie 7/14 round 2).
                   Legacy sizes_requested values were folded into boards_requested
                   by a one-time data migration; the column stays for history. */}
-              <Field label="Boards requested and sizes">
+              <Field label="Board & Sizes">
                 <textarea
                   data-ai-target="boards-requested"
                   value={boardsDraft}
