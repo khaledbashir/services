@@ -4,6 +4,7 @@ import {
   generateCampaignArtifact,
   type GeneratedCampaignArtifact,
 } from '@/lib/marketing/compose-generate'
+import { recordComposeRun } from '@/lib/marketing/compose-runs'
 import {
   DEFAULT_NEWSLETTER_VISUAL,
   exportNewsletterFullHtml,
@@ -25,6 +26,7 @@ export type ComposeStreamEvent =
       visual: NewsletterVisualDocument
       audienceId: string | null
       audienceName: string | null
+      runId?: string | null
     }
   | { type: 'error'; message: string }
 
@@ -54,6 +56,7 @@ function buildPartialVisual(
 export async function runComposeStream(input: {
   brief: string
   audienceId?: string | null
+  userId?: string | null
   write: ComposeStreamWriter
 }) {
   const brief = input.brief.trim()
@@ -142,12 +145,24 @@ export async function runComposeStream(input: {
     text: 'Sandbox is ready. Review the render, then ship for approval when it looks right.',
   })
 
+  // Persist the run BEFORE announcing done, so the history entry always exists
+  // by the time the UI shows the finished render.
+  const runId = await recordComposeRun({
+    createdBy: input.userId,
+    brief,
+    artifact,
+    visual,
+    audienceId: audience?.id || null,
+    audienceName: audience?.name || null,
+  })
+
   input.write({
     type: 'done',
     artifact,
     visual,
     audienceId: audience?.id || null,
     audienceName: audience?.name || null,
+    runId,
   })
 }
 

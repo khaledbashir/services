@@ -5,6 +5,7 @@
 import type { Skill } from '@/lib/ai/types'
 import { default as assign_designer } from '@/lib/ai/skills/assign-designer'
 import { default as client_update_draft } from '@/lib/ai/skills/client-update-draft'
+import { default as compose_newsletter } from '@/lib/ai/skills/compose-newsletter'
 import { default as create_design_request } from '@/lib/ai/skills/create-design-request'
 import { default as create_ticket } from '@/lib/ai/skills/create-ticket'
 import { default as dashboard_stats } from '@/lib/ai/skills/dashboard-stats'
@@ -42,6 +43,7 @@ import { default as venue_health_report } from '@/lib/ai/skills/venue-health-rep
 export const fileSkills: Skill[] = [
   assign_designer,
   client_update_draft,
+  compose_newsletter,
   create_design_request,
   create_ticket,
   dashboard_stats,
@@ -81,6 +83,7 @@ export const fileSkills: Skill[] = [
 export const manifestFiles: string[] = [
   'assign-designer',
   'client-update-draft',
+  'compose-newsletter',
   'create-design-request',
   'create-ticket',
   'dashboard-stats',

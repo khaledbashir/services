@@ -7,6 +7,7 @@ import {
   type NewsletterVisualDocument,
 } from '@/lib/marketing/newsletter-visual'
 import type { MarketingComposeContext } from '@/lib/marketing/compose-context'
+import { altForUrl, imageLibraryPromptBlock, sanitizeImageUrl } from '@/lib/marketing/newsletter-visual/image-library'
 
 export type GeneratedSection = {
   type: NewsletterSectionType
@@ -17,6 +18,9 @@ export type GeneratedSection = {
   eventDate?: string
   ctaLabel?: string
   ctaUrl?: string
+  imageUrl?: string
+  imageAlt?: string
+  imagePosition?: 'left' | 'right'
 }
 
 export type GeneratedCampaignArtifact = {
@@ -50,6 +54,8 @@ function extractJson(text: string) {
 
 function normalizeSection(raw: GeneratedSection, index: number): GeneratedSection {
   const type = SECTION_TYPES.includes(raw.type) ? raw.type : (['hero', 'spotlight', 'story', 'event', 'cta'][index] as NewsletterSectionType)
+  // Only curated-library URLs survive — a hallucinated image URL never renders.
+  const imageUrl = sanitizeImageUrl(raw.imageUrl)
   return {
     type,
     eyebrow: raw.eyebrow?.trim() || undefined,
@@ -59,6 +65,9 @@ function normalizeSection(raw: GeneratedSection, index: number): GeneratedSectio
     eventDate: raw.eventDate?.trim() || undefined,
     ctaLabel: raw.ctaLabel?.trim() || undefined,
     ctaUrl: raw.ctaUrl?.trim() || undefined,
+    imageUrl,
+    imageAlt: imageUrl ? (raw.imageAlt?.trim() || altForUrl(imageUrl)) : undefined,
+    imagePosition: raw.imagePosition === 'left' ? 'left' : raw.imagePosition === 'right' ? 'right' : undefined,
   }
 }
 
@@ -144,6 +153,8 @@ function fallbackArtifact(input: {
         headline: subject,
         body: `Here is a focused starting point for ${audience}. ${brief || 'Use this draft to frame the latest ANC venue, partner, and media moments.'}`,
         ctaLabel: 'Review the update',
+        imageUrl: `${process.env.PUBLIC_APP_URL || 'https://services.ancsports.net'}/ad-library/levis-night.jpg`,
+        imageAlt: "Levi's Stadium at night",
       },
       {
         type: 'spotlight',
@@ -173,6 +184,14 @@ function fallbackArtifact(input: {
   }
 }
 
+const ANC_GENERATION_RULES = `ANC brand contract:
+- Visual system: ANC blue #0A52EF, deep navy #07111F, white, cool gray. Optional small cyan accent #00A3FF only for labels or rules.
+- Never use purple, beige, orange/brown, rainbow gradients, decorative blobs, generic SaaS cards, emojis, fake logos, or stock-style hype language.
+- Every output should feel like a premium sports venue/media operator: confident, clean, direct, partner-ready.
+- Write around real venue moments, sponsor value, media inventory, fan engagement, event operations, or partner follow-up.
+- If a fact is not in the brief/context, keep it general instead of inventing a client, venue, score, or quote.
+- CTAs should be practical: review, approve, schedule, follow up, or start a conversation.`
+
 export function artifactToVisualDocument(artifact: GeneratedCampaignArtifact): NewsletterVisualDocument {
   const sections = (artifact.sections.length ? artifact.sections : [{ type: 'hero' as const, headline: artifact.subject, body: artifact.previewText }])
     .slice(0, 7)
@@ -188,6 +207,9 @@ export function artifactToVisualDocument(artifact: GeneratedCampaignArtifact): N
         eventDate: normalized.eventDate ?? base.eventDate,
         ctaLabel: normalized.ctaLabel ?? base.ctaLabel,
         ctaUrl: normalized.ctaUrl ?? base.ctaUrl,
+        imageUrl: normalized.imageUrl ?? base.imageUrl,
+        imageAlt: normalized.imageAlt ?? base.imageAlt,
+        imagePosition: normalized.imagePosition ?? base.imagePosition,
       }
     })
 
@@ -213,22 +235,31 @@ ${input.brief}
 
 ${audienceLine}
 
+${ANC_GENERATION_RULES}
+
+REAL ANC INSTALLATION PHOTOGRAPHY (choose imagery ONLY from this list, copy URLs verbatim):
+${imageLibraryPromptBlock()}
+
 Return ONLY valid JSON (no markdown fences) matching this schema:
 {
   "name": "internal campaign name",
   "subject": "email subject line",
   "previewText": "inbox preview text",
   "sections": [
-    { "type": "hero|spotlight|story|event|cta", "eyebrow": "...", "headline": "...", "body": "...", "venue": "optional", "eventDate": "optional", "ctaLabel": "optional", "ctaUrl": "optional" }
+    { "type": "hero|spotlight|story|event|cta", "eyebrow": "...", "headline": "...", "body": "...", "venue": "optional", "eventDate": "optional", "ctaLabel": "optional", "ctaUrl": "optional", "imageUrl": "optional — URL from the photography list", "imageAlt": "optional", "imagePosition": "left|right (story sections only)" }
   ],
   "social": { "linkedin": "...", "x": "max 240 chars", "slack": "..." }
 }
 
 Rules:
 - Use 4-6 newsletter sections in ANC voice.
+- The hero section MUST carry an imageUrl picked from the photography list — choose the photo that best matches the lead story's venue or mood.
+- Give 1-2 story sections an imageUrl too (alternate imagePosition left/right); spotlight/cta stay text-only.
+- Never invent an image URL — only the listed URLs render; anything else is dropped.
 - Name real venues, partners, or leagues when the brief implies them; do not invent fake clients.
 - LinkedIn 60-180 words; X under 240 characters; Slack internal/casual.
-- Colors/branding reference: navy #212240, accent purple #7350FF, ANC blue #0A52EF.`
+- Keep copy specific, short, and useful for Media & Partnerships review.
+- Colors/branding reference: ANC blue #0A52EF, deep navy #07111F, white, cool gray, optional cyan #00A3FF.`
 
   let parsed: GeneratedCampaignArtifact
   try {

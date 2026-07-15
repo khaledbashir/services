@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { exportNewsletterBodyHtml, type NewsletterVisualDocument } from '@/lib/marketing/newsletter-visual'
+import { markRunStaged } from '@/lib/marketing/compose-runs'
 
 type StageBody = {
   audienceId?: string | null
@@ -18,6 +19,7 @@ type StageBody = {
     slack?: string
   }
   requestApproval?: boolean
+  runId?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -81,6 +83,10 @@ export async function POST(request: NextRequest) {
         ],
       )
       approvalId = String(approvalResult.rows[0]?.id || '')
+    }
+
+    if (body.runId) {
+      await markRunStaged(String(body.runId), campaign.id)
     }
 
     return NextResponse.json({

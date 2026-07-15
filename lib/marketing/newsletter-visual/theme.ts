@@ -17,7 +17,7 @@ export type NewsletterThemeTokens = {
   }
 }
 
-/** Media & Partnerships newsletter palette + DealDeck layout discipline */
+/** Media & Partnerships newsletter palette + DealDeck layout discipline. */
 export const ANC_NEWSLETTER_THEME: NewsletterThemeTokens = {
   id: 'ancNewsletter',
   name: 'ANC Newsletter',
@@ -26,14 +26,14 @@ export const ANC_NEWSLETTER_THEME: NewsletterThemeTokens = {
     body: "Lato, Verdana, Geneva, 'Segoe UI', sans-serif",
   },
   colors: {
-    navy: '#212240',
-    primary: '#0047BB',
-    accent: '#7350FF',
-    background: '#F4F7FB',
+    navy: '#07111F',
+    primary: '#0A52EF',
+    accent: '#00A3FF',
+    background: '#F3F6FA',
     surface: '#FFFFFF',
-    text: '#172033',
-    muted: '#64748B',
-    border: '#E2E8F0',
+    text: '#101828',
+    muted: '#5F6B7A',
+    border: '#D8E0EA',
     buttonText: '#FFFFFF',
   },
 }

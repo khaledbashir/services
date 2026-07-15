@@ -4,7 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
-import { buildNewsletterHtml, cleanEmail, publicBaseUrl } from '@/lib/marketing'
+import { cleanEmail, composeCampaignEmail, publicBaseUrl } from '@/lib/marketing'
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -39,9 +39,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     )
     const recipient = recipientRes.rows[0]
     const baseUrl = publicBaseUrl(request)
-    const html = buildNewsletterHtml({
-      bodyHtml: campaign.body_html,
-      previewText: campaign.preview_text,
+    const html = composeCampaignEmail({
+      campaign,
       recipientId: recipient.id,
       baseUrl,
     })

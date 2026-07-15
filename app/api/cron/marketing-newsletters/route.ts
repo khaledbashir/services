@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
 import { getSupportMailboxHandle } from '@/lib/crm-support-email'
-import { buildNewsletterHtml, publicBaseUrl, requestIp } from '@/lib/marketing'
+import { composeCampaignEmail, publicBaseUrl, requestIp } from '@/lib/marketing'
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,9 +59,10 @@ export async function GET(request: NextRequest) {
         const ok = await sendEmail(
           [recipient.email],
           campaign.subject,
-          buildNewsletterHtml({
-            bodyHtml: campaign.body_html,
-            previewText: campaign.preview_text,
+          // Same renderer as the studio preview — recipients see what the
+          // operator approved, plus their unsubscribe/tracking layer.
+          composeCampaignEmail({
+            campaign,
             recipientId: recipient.id,
             baseUrl: publicBaseUrl(request),
           }),

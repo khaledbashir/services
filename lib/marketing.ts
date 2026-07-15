@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { exportNewsletterFullHtml, parseVisualDocument } from '@/lib/marketing/newsletter-visual'
 
 export function cleanEmail(value: unknown): string {
   return String(value || '').trim().toLowerCase()
@@ -45,6 +46,77 @@ export function requestIp(request: NextRequest): string | null {
   return request.headers.get('x-real-ip')
 }
 
+/** Per-recipient click tracking — rewrites every outbound link through the tracker. */
+function wrapClickTracking(html: string, recipientId?: string, baseUrl?: string): string {
+  if (!recipientId || !baseUrl) return html
+  return html.replace(/<a\s+([^>]*?)href=(["'])(.*?)\2([^>]*?)>/gi, (match, before, quote, url, after) => {
+    if (
+      url.includes('/api/marketing/unsubscribe') ||
+      url.includes('/api/marketing/track/click') ||
+      url.includes('/newsletter/view/') ||
+      url.startsWith('#') ||
+      url.startsWith('mailto:') ||
+      url.startsWith('tel:')
+    ) {
+      return match
+    }
+    const trackingUrl = `${baseUrl}/api/marketing/track/click/${recipientId}?u=${encodeURIComponent(url)}`
+    return `<a ${before}href="${trackingUrl}"${after}>`
+  })
+}
+
+/**
+ * The ONE send composer. Campaigns with a visual document render through the
+ * exact same exporter the studio preview uses — recipients see what the
+ * operator saw, byte for byte (plus their unsubscribe link, hidden preview
+ * text, click tracking and the open pixel). Legacy body-only campaigns fall
+ * back to the old generic wrapper.
+ */
+export function composeCampaignEmail(opts: {
+  campaign: {
+    id: string
+    subject: string
+    preview_text?: string | null
+    body_html?: string | null
+    visual_content?: unknown
+  }
+  recipientId?: string
+  baseUrl?: string
+}): string {
+  const { campaign, recipientId, baseUrl } = opts
+  const visual = parseVisualDocument(campaign.visual_content)
+  if (!visual) {
+    return buildNewsletterHtml({
+      bodyHtml: campaign.body_html || '',
+      previewText: campaign.preview_text,
+      recipientId,
+      baseUrl,
+    })
+  }
+
+  let html = exportNewsletterFullHtml(
+    {
+      ...visual,
+      subject: visual.subject || campaign.subject,
+      previewText: visual.previewText || campaign.preview_text || '',
+    },
+    {
+      unsubscribeUrl: recipientId && baseUrl ? `${baseUrl}/api/marketing/unsubscribe/${recipientId}` : undefined,
+      viewInBrowserUrl: baseUrl ? `${baseUrl}/newsletter/view/${campaign.id}` : undefined,
+    },
+  )
+
+  const previewText = campaign.preview_text || visual.previewText || ''
+  const hiddenPreview = previewText
+    ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(previewText)}</div>`
+    : ''
+  const pixel = recipientId && baseUrl
+    ? `<img src="${baseUrl}/api/marketing/track/open/${recipientId}.png" width="1" height="1" alt="" style="display:none;width:1px;height:1px" />`
+    : ''
+  html = html.replace(/(<body[^>]*>)/i, `$1${hiddenPreview}${pixel}`)
+  return wrapClickTracking(html, recipientId, baseUrl)
+}
+
 export function buildNewsletterHtml(opts: {
   bodyHtml: string
   previewText?: string | null
@@ -60,6 +132,23 @@ export function buildNewsletterHtml(opts: {
   const unsubscribe = opts.recipientId && opts.baseUrl
     ? `<p style="margin:24px 0 0;font-size:11px;line-height:1.5;color:#64748b">You are receiving this because you are on an ANC Sports marketing list. <a href="${opts.baseUrl}/api/marketing/unsubscribe/${opts.recipientId}" style="color:#0A52EF">Unsubscribe</a></p>`
     : ''
+
+  let contentHtml = normalizeHtml(opts.bodyHtml)
+  if (opts.recipientId && opts.baseUrl) {
+    contentHtml = contentHtml.replace(/<a\s+([^>]*?)href=(["'])(.*?)\2([^>]*?)>/gi, (match, before, quote, url, after) => {
+      if (
+        url.includes('/api/marketing/unsubscribe') ||
+        url.includes('/api/marketing/track/click') ||
+        url.startsWith('#') ||
+        url.startsWith('mailto:') ||
+        url.startsWith('tel:')
+      ) {
+        return match
+      }
+      const trackingUrl = `${opts.baseUrl}/api/marketing/track/click/${opts.recipientId}?u=${encodeURIComponent(url)}`
+      return `<a ${before}href="${trackingUrl}"${after}>`
+    })
+  }
 
   return `<!doctype html>
 <html>
@@ -107,7 +196,7 @@ export function buildNewsletterHtml(opts: {
             </tr>
             <tr>
               <td style="padding:24px 22px 26px;font-size:15px;line-height:1.6;color:#1f2937">
-                ${normalizeHtml(opts.bodyHtml)}
+                ${contentHtml}
                 ${unsubscribe}
               </td>
             </tr>
