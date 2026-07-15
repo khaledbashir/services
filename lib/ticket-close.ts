@@ -1,11 +1,12 @@
 /**
- * Closing a ticket — the single code path.
+ * Ticket status side-effects — the single code path.
  *
- * Two surfaces close tickets: the Close button (PATCH /api/tickets/[id]) and
- * "Post and close" on the comment composer (Chris D, 7/14 — posting then
- * closing fired two separate Slack notifications for one action). Both run the
- * same side-effects here; only the Slack message differs, so the caller owns
- * that and this returns everything needed to compose it.
+ * Three surfaces change ticket status: the status buttons (PATCH
+ * /api/tickets/[id]), the comment composer's one-click actions ("Post & Close"
+ * 7/14, "Post & In Progress" 7/15 — both Chris D, both about ONE notification
+ * per action instead of two), and the action buttons on Slack ticket cards.
+ * All run the same side-effects here; only the Slack message differs, so the
+ * caller owns that and this returns everything needed to compose it.
  */
 
 import fs from 'fs'
@@ -108,4 +109,45 @@ export async function applyTicketClose({
   }
 
   return { caseNumber, slackChannelId, previousStatus: ticket.status }
+}
+
+/**
+ * Move a ticket forward to In Progress. Only New and On Hold advance —
+ * Escalated never quietly drops back (Chris D's explicit guard) and Closed
+ * doesn't reopen this way. Returns false when the guard blocks the move; the
+ * caller decides how to surface that. No Slack message here — caller owns it.
+ */
+export async function applyTicketInProgress({
+  ticketId,
+  ticket,
+  venueName,
+  actor,
+}: {
+  ticketId: string
+  ticket: ClosableTicket
+  venueName: string
+  actor: { userId?: string | null; fullName?: string | null }
+}): Promise<boolean> {
+  if (ticket.status !== 'new' && ticket.status !== 'on_hold') return false
+
+  await query(`UPDATE tickets SET status = 'in_progress', updated_at = NOW() WHERE id = $1`, [ticketId])
+  await query(
+    `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
+     VALUES ('ticket_status_change', 'ticket', $1, $2, $3)`,
+    [ticketId, actor.userId || null, JSON.stringify({
+      entity_name: ticket.title,
+      venue_name: venueName,
+      old_status: ticket.status,
+      new_status: 'in_progress',
+    })]
+  )
+
+  try {
+    fs.appendFileSync(
+      '/tmp/anc-ticket-notifications.log',
+      `TICKET|status_changed|${actor.fullName || 'User'}|${ticket.title}|${venueName}|from ${ticket.status} to In Progress|${new Date().toISOString()}\n`
+    )
+  } catch { /* log file is best-effort */ }
+
+  return true
 }

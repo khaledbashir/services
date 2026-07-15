@@ -3,7 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { sendSlackMessage } from '@/lib/slack'
+import { sendSlackMessage, ticketActionBlock } from '@/lib/slack'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
@@ -236,13 +236,12 @@ export async function PATCH(
       if (channelId) {
         const action = status === 'closed' ? 'resolved' : 'updated'
         const emoji = action === 'resolved' ? ':white_check_mark:' : ':pencil2:'
-        const ticketUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
         sendSlackMessage({
           channel: channelId,
           text: `${emoji} Case #${caseNum} ${action}: ${oldTicket.title}`,
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} ${action}*\n*${oldTicket.title}*\nStatus: ${fmtStatus(oldTicket.status)} → ${fmtStatus(status)}` } },
-            { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket>` } },
+            ticketActionBlock(params.id, status),
           ],
         })
       }
@@ -282,13 +281,12 @@ export async function PATCH(
       const assignChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [oldTicket.venue_id])
       const assignChannelId = assignChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (assignChannelId) {
-        const assignUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
         sendSlackMessage({
           channel: assignChannelId,
           text: `:bust_in_silhouette: Case #${assignCaseNum} assigned to ${assignedName}`,
           blocks: [
             { type: 'section', text: { type: 'mrkdwn', text: `:bust_in_silhouette: *Case #${assignCaseNum} — Assigned*\n*${oldTicket.title}*\nOwner: ${assignedName}` } },
-            { type: 'section', text: { type: 'mrkdwn', text: `<${assignUrl}|:link: View Ticket>` } },
+            ticketActionBlock(params.id, status || oldTicket.status),
           ],
         })
       }

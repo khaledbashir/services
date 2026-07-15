@@ -152,12 +152,52 @@ export async function createSlackCanvas(params: {
   }
 }
 
-const statusLabels: Record<string, string> = {
+export const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
   escalated: 'Escalated', closed: 'Closed',
 }
 
-const DASHBOARD_URL = DASHBOARD_URL_BASE
+export const DASHBOARD_URL = DASHBOARD_URL_BASE
+
+/**
+ * Action buttons for a ticket card (Chris D 7/15): handle routine tickets
+ * straight from the Slack notification — In Progress / Close / Reply — without
+ * a dashboard round-trip. Buttons are entry points only; the interactivity
+ * handler re-checks every guard server-side, so a stale card can't demote an
+ * Escalated ticket or reopen a Closed one.
+ */
+export function ticketActionBlock(ticketId: string, status?: string): any {
+  const s = status || 'new'
+  const elements: any[] = []
+  if (s === 'new' || s === 'on_hold') {
+    elements.push({
+      type: 'button', action_id: 'ticket_in_progress', value: ticketId,
+      text: { type: 'plain_text', text: 'Mark In Progress' },
+    })
+  }
+  if (s !== 'closed') {
+    elements.push({
+      type: 'button', action_id: 'ticket_close', value: ticketId, style: 'primary',
+      text: { type: 'plain_text', text: 'Close' },
+      confirm: {
+        title: { type: 'plain_text', text: 'Close this ticket?' },
+        text: { type: 'mrkdwn', text: 'This closes the ticket for everyone. It can be reopened from the dashboard if needed.' },
+        confirm: { type: 'plain_text', text: 'Close it' },
+        deny: { type: 'plain_text', text: 'Keep open' },
+      },
+    })
+    elements.push({
+      type: 'button', action_id: 'ticket_reply', value: ticketId,
+      text: { type: 'plain_text', text: 'Reply' },
+    })
+  }
+  elements.push({
+    type: 'button', action_id: 'ticket_view', value: ticketId,
+    text: { type: 'plain_text', text: 'Open Ticket' },
+    url: `${DASHBOARD_URL}/tickets/${ticketId}`,
+  })
+  return { type: 'actions', block_id: `ticket_actions:${ticketId}`, elements }
+}
 
 // Joe 2026-05-04 9:00 PM: keep tickets scannable in-channel; full body in thread.
 const TICKET_TEASER_CHAR_CAP = 400
@@ -290,10 +330,7 @@ export function formatTicketNotification(ticket: {
   }
 
   if (ticket.id) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `<${DASHBOARD_URL}/tickets/${ticket.id}|:link: View Ticket>` },
-    })
+    blocks.push(ticketActionBlock(ticket.id, ticket.status || (action === 'resolved' ? 'closed' : 'new')))
   }
 
   return { text, blocks, channel: '' }
