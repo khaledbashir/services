@@ -51,6 +51,7 @@
     "node_modules",
     "my-customer-portal",
     "calendar-ai-service",
+    "scripts/test-ad-creative-render.ts",
     "tmp",
     "output"
   ]
