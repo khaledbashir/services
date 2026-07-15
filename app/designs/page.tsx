@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -149,6 +149,13 @@ const statusTone: Record<string, string> = {
   cancelled: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
 }
 
+// Keep the ticket panel readable and never let it swallow the whole board:
+// min 380px, max the smaller of 1200px or 95% of the viewport.
+function clampPanelWidth(w: number): number {
+  const max = typeof window !== 'undefined' ? Math.min(1200, window.innerWidth * 0.95) : 1200
+  return Math.max(380, Math.min(w, max))
+}
+
 export default function DesignsPage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -255,6 +262,9 @@ export default function DesignsPage() {
   // Clicking a card opens it here instead of navigating away, so the queue stays
   // visible on the left and you can click straight through it.
   const [panelId, setPanelId] = useState<string | null>(null)
+  // Panel width is user-resizable (drag the left edge) and persisted per user.
+  const [panelWidth, setPanelWidth] = useState(720)
+  const resizingRef = useRef(false)
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkAssignee, setBulkAssignee] = useState<string>('')
@@ -444,6 +454,55 @@ export default function DesignsPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [panelId])
+
+  // On load: restore the saved panel width, and re-open the panel when we arrive
+  // from a full ticket page via ?panel=<id> — that's the "back to the split view"
+  // path so going full screen is never a dead end (Charlie 2026-07-15).
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get('panel')
+      if (p) setPanelId(p)
+    } catch {}
+    fetch(`/api/preferences?key=${encodeURIComponent('designs.panelWidth')}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.value) return
+        const w = Number(JSON.parse(data.value)?.width)
+        if (Number.isFinite(w) && w >= 380) setPanelWidth(clampPanelWidth(w))
+      })
+      .catch(() => {})
+  }, [])
+
+  const persistPanelWidth = (w: number) => {
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'designs.panelWidth', value: JSON.stringify({ width: Math.round(w) }) }),
+    }).catch(() => {})
+  }
+
+  // Drag the panel's left edge to resize. Width is clamped to a readable min and
+  // to the viewport so it can't swallow the whole board or shrink past usable.
+  const startPanelResize = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      setPanelWidth(clampPanelWidth(window.innerWidth - ev.clientX))
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setPanelWidth((w) => { persistPanelWidth(w); return w })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const updateStatus = async (item: DesignRequest, status: string) => {
     try {
@@ -1671,21 +1730,29 @@ export default function DesignsPage() {
             aria-hidden="true"
           />
           <aside
-            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl ring-1 ring-zinc-200 sm:w-[560px] lg:w-[720px] xl:w-[780px]"
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[95vw] flex-col bg-white shadow-2xl ring-1 ring-zinc-200"
+            style={{ width: panelWidth }}
             role="dialog"
             aria-label="Design ticket detail"
           >
+            {/* Drag handle — grab the left edge to resize the panel. */}
+            <div
+              onMouseDown={startPanelResize}
+              className="group absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize"
+              title="Drag to resize"
+              aria-hidden="true"
+            >
+              <div className="h-full w-1.5 bg-transparent transition-colors group-hover:bg-[#0A52EF]/40" />
+            </div>
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2.5">
               <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Ticket</span>
               <div className="flex items-center gap-1.5">
                 <a
                   href={`/designs/${panelId}`}
-                  target="_blank"
-                  rel="noreferrer"
                   className="rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
-                  title="Open the full ticket page in a new tab"
+                  title="Open the full ticket page (Back returns you here)"
                 >
-                  Open full ↗
+                  Open full →
                 </a>
                 <button
                   onClick={() => setPanelId(null)}

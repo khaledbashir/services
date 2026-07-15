@@ -306,13 +306,13 @@ export function DesignDetailBody({
         {/* Header */}
         <div className="space-y-3">
           <button
-            onClick={() => (embedded ? onClose?.() : router.push('/designs'))}
+            onClick={() => (embedded ? onClose?.() : router.push(`/designs?panel=${id}`))}
             className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors flex items-center gap-1.5 group"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            {embedded ? 'Close' : 'All Design Requests'}
+            {embedded ? 'Close' : 'Back to board'}
           </button>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
