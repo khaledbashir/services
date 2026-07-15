@@ -43,6 +43,9 @@ interface Props<T extends FilterableRequest> {
   onMove: (direction: -1 | 1) => void
   isFirst?: boolean
   isLast?: boolean
+  /** When set, clicking a design item opens it in the board's side panel
+   *  instead of navigating away (Charlie 2026-07-16). cg-designs still link out. */
+  onOpenTicket?: (id: string) => void
 }
 
 const SIZE_CLASS: Record<DashboardWidget['size'], string> = {
@@ -108,6 +111,7 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
   onMove,
   isFirst,
   isLast,
+  onOpenTicket,
 }: Props<T>) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const density: WidgetDensity = widget.density || 'comfortable'
@@ -212,6 +216,15 @@ export function DashboardWidgetCard<T extends FilterableRequest>({
                       <li key={item.id}>
                         <Link
                           href={widget.source === 'cg-designs' ? `/cg-designs/${item.id}` : `/designs/${item.id}`}
+                          onClick={(e) => {
+                            // Design tickets open in the board side panel on a plain
+                            // click (matching the kanban view); cmd/ctrl/middle-click
+                            // still opens the full page. cg-designs always link out.
+                            if (widget.source === 'cg-designs' || !onOpenTicket) return
+                            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                            e.preventDefault()
+                            onOpenTicket(item.id)
+                          }}
                           className={`${DENSITY_ROW_CLASS[density]} flex items-center gap-2.5 hover:bg-zinc-50 transition-colors`}
                         >
                           <span

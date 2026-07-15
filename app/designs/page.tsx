@@ -1228,6 +1228,7 @@ export default function DesignsPage() {
             onDeleteWidget={onWidgetDelete}
             onMoveWidget={onWidgetMove}
             onAddWidget={() => setEditingWidget(newBlankWidget())}
+            onOpenTicket={setPanelId}
           />
         )}
 
@@ -1793,6 +1794,7 @@ interface WidgetBoardProps {
   onDeleteWidget: (id: string) => void
   onMoveWidget: (id: string, dir: -1 | 1) => void
   onAddWidget: () => void
+  onOpenTicket?: (id: string) => void
 }
 
 function DesignsWidgetBoard({
@@ -1807,6 +1809,7 @@ function DesignsWidgetBoard({
   onDeleteWidget,
   onMoveWidget,
   onAddWidget,
+  onOpenTicket,
 }: WidgetBoardProps) {
   const staffById: Record<string, string> = {}
   for (const s of staff) staffById[s.id] = s.full_name
@@ -1844,6 +1847,7 @@ function DesignsWidgetBoard({
             onMove={(dir) => onMoveWidget(widget.id, dir)}
             isFirst={idx === 0}
             isLast={idx === widgets.length - 1}
+            onOpenTicket={onOpenTicket}
           />
         ))}
       </div>
