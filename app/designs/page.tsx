@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
+import { DesignDetailBody } from '@/components/design-detail'
 import { DashboardLayoutSettings, applyLayoutPrefs, loadLayoutPrefs, DEFAULT_LAYOUT_PREFS, type DashboardLayoutPrefs } from '@/components/dashboard-layout-settings'
 import { DashboardWidgetCard, WidgetBoardEmptyState } from '@/components/dashboard-widget'
 import { DashboardWidgetConfig } from '@/components/dashboard-widget-config'
@@ -250,6 +251,10 @@ export default function DesignsPage() {
     ;[next[idx], next[swap]] = [next[swap], next[idx]]
     persistWidgets(next)
   }
+  // Master-detail: the ticket opened in the right-hand panel (Charlie 2026-07-15).
+  // Clicking a card opens it here instead of navigating away, so the queue stays
+  // visible on the left and you can click straight through it.
+  const [panelId, setPanelId] = useState<string | null>(null)
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkAssignee, setBulkAssignee] = useState<string>('')
@@ -431,6 +436,14 @@ export default function DesignsPage() {
     if (viewMode === 'board' || viewMode === 'cg') fetchData(sortKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode])
+
+  // Esc closes the ticket panel — expected behavior for a slide-in detail view.
+  useEffect(() => {
+    if (!panelId) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPanelId(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [panelId])
 
   const updateStatus = async (item: DesignRequest, status: string) => {
     try {
@@ -1466,7 +1479,14 @@ export default function DesignsPage() {
                 <Link
                   href={`/designs/${item.id}`}
                   className={`block space-y-3 ${bulkMode ? 'pl-7' : ''}`}
-                  onClick={(e) => { if (bulkMode) { e.preventDefault(); toggleBulk(item.id) } }}
+                  onClick={(e) => {
+                    if (bulkMode) { e.preventDefault(); toggleBulk(item.id); return }
+                    // Plain click opens the side panel; cmd/ctrl/middle-click still
+                    // opens the full ticket page in a new tab.
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                    e.preventDefault()
+                    setPanelId(item.id)
+                  }}
                 >
                 {/* Header: title + tricode pill (priority bell precedes title) */}
                 <div className="flex items-start justify-between gap-2">
@@ -1638,6 +1658,57 @@ export default function DesignsPage() {
             Cancel
           </button>
         </div>
+      )}
+
+      {/* Master-detail ticket panel (Charlie 2026-07-15). Slides in on the right;
+          the queue stays visible + interactive on the left (wide screens), so a
+          designer can click straight through their jobs. Esc or the scrim closes. */}
+      {panelId && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent lg:pointer-events-none"
+            onClick={() => setPanelId(null)}
+            aria-hidden="true"
+          />
+          <aside
+            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl ring-1 ring-zinc-200 sm:w-[560px] lg:w-[720px] xl:w-[780px]"
+            role="dialog"
+            aria-label="Design ticket detail"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Ticket</span>
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={`/designs/${panelId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+                  title="Open the full ticket page in a new tab"
+                >
+                  Open full ↗
+                </a>
+                <button
+                  onClick={() => setPanelId(null)}
+                  aria-label="Close panel"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-800"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <DesignDetailBody
+                key={panelId}
+                id={panelId}
+                embedded
+                onClose={() => setPanelId(null)}
+                onNavigate={(nextId) => setPanelId(nextId)}
+              />
+            </div>
+          </aside>
+        </>
       )}
     </DashboardLayout>
   )
