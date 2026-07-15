@@ -489,13 +489,22 @@ export default function MarketingHubPage() {
               <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.templates?.total || 0}</div><div>templates</div></div>
               <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.formRoutes?.active || 0}</div><div>routes</div></div>
             </div>
-            <Link
-              href="/marketing-hub/studio"
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#7350FF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#8465ff]"
-            >
-              <Sparkles className="size-4" />
-              Marketing Agent
-            </Link>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Link
+                href="/marketing-hub/studio"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#7350FF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#8465ff]"
+              >
+                <Sparkles className="size-4" />
+                Marketing Agent
+              </Link>
+              <Link
+                href="/marketing-hub/creative"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2B66F6]"
+              >
+                <Palette className="size-4" />
+                Ad Creative Studio
+              </Link>
+            </div>
           </div>
           </div>
         </div>
