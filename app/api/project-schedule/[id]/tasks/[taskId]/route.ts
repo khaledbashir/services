@@ -57,7 +57,7 @@ export async function DELETE(
     const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
 
-    const ok = await deleteProjectScheduleTask(params.taskId)
+    const ok = await deleteProjectScheduleTask(params.id, params.taskId)
     if (!ok) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     return NextResponse.json({ data: { deleted: true } })
   } catch (err) {

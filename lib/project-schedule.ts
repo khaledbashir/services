@@ -1403,11 +1403,19 @@ export async function renameProjectSchedulePhase(
   return result.rowCount ?? 0
 }
 
-export async function deleteProjectScheduleTask(taskId: string): Promise<boolean> {
-  // Cascade to direct children so a deleted parent never orphans rows.
+export async function deleteProjectScheduleTask(projectId: string, taskId: string): Promise<boolean> {
+  // Deleting one selected row must never remove its sub-tasks. Detach direct
+  // children first, then delete only the requested task inside this project.
   const result = await query(
-    `DELETE FROM project_schedule_tasks WHERE id = $1 OR parent_id = $1`,
-    [taskId],
+    `WITH detached_children AS (
+       UPDATE project_schedule_tasks
+       SET parent_id = NULL, updated_at = NOW()
+       WHERE project_id = $1 AND parent_id = $2
+     )
+     DELETE FROM project_schedule_tasks
+     WHERE project_id = $1 AND id = $2
+     RETURNING id`,
+    [projectId, taskId],
   )
   return (result.rowCount ?? 0) > 0
 }

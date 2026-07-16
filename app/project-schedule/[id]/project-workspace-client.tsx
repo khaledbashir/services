@@ -1124,7 +1124,7 @@ function TaskDrawer({
               <div className="flex items-center gap-2">
                 <span className="text-xs text-rose-600">
                   {childCount && childCount > 0
-                    ? `Delete “${task?.name}” and ${childCount} sub-task${childCount === 1 ? '' : 's'}?`
+                    ? `Delete “${task?.name}”? ${childCount} sub-task${childCount === 1 ? '' : 's'} will be kept.`
                     : `Delete “${task?.name}”?`}
                 </span>
                 <button
