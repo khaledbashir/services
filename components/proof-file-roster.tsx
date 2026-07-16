@@ -19,6 +19,19 @@ type RosterData = {
   clientResponse: string | null
   clientResponseAt: string | null
   files: RosterFile[]
+  clientUploads: Array<{
+    filename: string
+    contentType: string
+    size: number
+    uploadedAt: string | null
+    downloadUrl: string | null
+  }>
+}
+
+function formatFileSize(bytes: number) {
+  if (!bytes) return ''
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /**
@@ -52,7 +65,7 @@ export function ProofFileRoster({ proofUrl }: { proofUrl: string | null }) {
 
   if (!token || (!data && !error)) return null
   if (error) return <div className="text-xs text-red-600">{error}</div>
-  if (!data || data.files.length === 0) return null
+  if (!data || (data.files.length === 0 && data.clientUploads.length === 0)) return null
 
   return (
     <div className="rounded-lg border border-zinc-200 overflow-hidden">
@@ -102,6 +115,37 @@ export function ProofFileRoster({ proofUrl }: { proofUrl: string | null }) {
           </div>
         ))}
       </div>
+      {data.clientUploads.length > 0 && (
+        <div className="border-t border-zinc-200">
+          <div className="px-3 py-2 bg-blue-50 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+            Replacement media from client
+          </div>
+          <div className="divide-y divide-zinc-100">
+            {data.clientUploads.map((upload, index) => (
+              <div key={`${upload.filename}-${upload.uploadedAt || index}`} className="px-3 py-2 flex items-center gap-3 text-xs">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-zinc-800">{upload.filename}</div>
+                  <div className="text-[10px] text-zinc-500">
+                    {[formatFileSize(upload.size), upload.uploadedAt ? new Date(upload.uploadedAt).toLocaleString() : '']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                </div>
+                {upload.downloadUrl && (
+                  <a
+                    href={upload.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1.5 font-medium text-white hover:bg-blue-700"
+                  >
+                    Download
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

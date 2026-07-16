@@ -8,6 +8,7 @@ import { generateToken, buildPublicUrl, OBJECT_CONFIGS, patchTwentyRecord } from
 import { listProofFiles, resolveSafePath, isConfigured, type FtpManifestEntry } from '@/lib/proof-ftp'
 import { prefetchManifest } from '@/lib/proof-file-cache'
 import { requireAuth, isAuthError } from '@/lib/rbac'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 const CONTENT_LIBRARY_ROLES = new Set(['admin', 'tech_support', 'manager', 'designer', 'design_contractor'])
 
@@ -110,9 +111,13 @@ export async function POST(request: NextRequest) {
   // The native Design Ticket screen passes `designRequest`, but its record is
   // owned by anc-services rather than Twenty. Persist the local object type so
   // the public response handler advances Step 5 to Step 6 in the native ticket.
-  const objectType = linkedToTicket
+  let objectType = linkedToTicket
     ? (twentyObjectType === 'designRequest' ? 'localDesignRequest' : twentyObjectType)
     : 'ftpFolder'
+  if (linkedToTicket && twentyObjectType === 'cgDesignRequest') {
+    const localCg = await query('SELECT id FROM cg_design_requests WHERE id = $1 AND deleted_at IS NULL', [twentyRecordId])
+    if (localCg.rows.length > 0) objectType = 'localCgDesignRequest'
+  }
   const recordId = linkedToTicket ? twentyRecordId : null
   const ftpManifest = files.map((file) => ({
     name: file.name,
@@ -169,12 +174,38 @@ export async function POST(request: NextRequest) {
                END
              ),
              ftp_proof_link = $1,
+             status = 'client_review',
              updated_at = NOW()
          WHERE id = $2`,
         [publicUrl, twentyRecordId]
       )
+    } else if (twentyObjectType === 'cgDesignRequest' && objectType === 'localCgDesignRequest') {
+      await query(
+        `UPDATE cg_design_requests
+         SET legacy_ftp_proof_link = COALESCE(
+               legacy_ftp_proof_link,
+               CASE
+                 WHEN ftp_proof_link IS NOT NULL
+                  AND ftp_proof_link !~ '/proof/[A-Za-z0-9_-]+/?$'
+                 THEN ftp_proof_link
+                 ELSE NULL
+               END
+             ),
+             ftp_proof_link = $1,
+             status = 'client_review',
+             updated_at = NOW()
+         WHERE id = $2`,
+        [publicUrl, twentyRecordId]
+      )
+      await logCgDesignActivity({
+        cgDesignRequestId: twentyRecordId,
+        eventType: 'proof_sent',
+        actor: auth,
+        toValue: publicUrl,
+        detail: { folderPath: safePath, fileCount: files.length },
+      })
     }
-    void patchTwentyRecord(twentyObjectType, twentyRecordId, {
+    if (objectType !== 'localCgDesignRequest') void patchTwentyRecord(twentyObjectType, twentyRecordId, {
       proofShareUrl: publicUrl,
       proofSentAt: new Date().toISOString(),
       proofViewCount: 0,

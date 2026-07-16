@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { parseManifest } from '@/lib/proof-share-sync'
 import { requireAuth, isAuthError } from '@/lib/rbac'
+import { getSignedDownloadUrl } from '@/lib/proof-storage'
 
 const CONTENT_LIBRARY_ROLES = new Set(['admin', 'tech_support', 'manager', 'designer', 'design_contractor'])
 
@@ -28,7 +29,7 @@ export async function GET(
 
   const { token } = await params
   const result = await query(
-    `SELECT ftp_folder_path, ftp_manifest, ftp_last_synced_at, file_responses,
+    `SELECT ftp_folder_path, ftp_manifest, ftp_last_synced_at, file_responses, client_uploads,
             client_response, client_response_at, client_response_note,
             view_count, last_viewed_at, client_name, client_email
      FROM proof_shares
@@ -59,6 +60,22 @@ export async function GET(
       }
     })
 
+  const clientUploads = await Promise.all(
+    (Array.isArray(share.client_uploads) ? share.client_uploads : []).map(async (upload: {
+      key?: string
+      filename?: string
+      contentType?: string
+      size?: number
+      uploadedAt?: string
+    }) => ({
+      filename: upload.filename || 'Client replacement file',
+      contentType: upload.contentType || 'application/octet-stream',
+      size: Number(upload.size || 0),
+      uploadedAt: upload.uploadedAt || null,
+      downloadUrl: upload.key ? await getSignedDownloadUrl(upload.key, 3600) : null,
+    }))
+  )
+
   return NextResponse.json({
     token,
     folderPath: share.ftp_folder_path,
@@ -74,5 +91,6 @@ export async function GET(
     changesRequested: files.filter((f) => f.response === 'changes_requested').length,
     awaiting: files.filter((f) => !f.response).length,
     files,
+    clientUploads,
   })
 }

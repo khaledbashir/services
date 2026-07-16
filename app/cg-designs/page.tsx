@@ -2,8 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
+import { KanbanBoard, type KanbanColumn } from '@/components/kanban-board'
+import { CgDesignDetail } from '@/components/cg-design-detail'
 import { formatDate } from '@/lib/format-date'
 import { normalizeTriCode, venueTriCodes } from '@/lib/tricodes'
 
@@ -45,16 +48,16 @@ function hasAssignment(item: CgDesignRequest, staffId: string | null | undefined
 
 
 const statusColumns = [
-  { key: 'request_submitted', label: 'Request Submitted' },
-  { key: 'in_progress', label: 'In-Progress' },
-  { key: 'submitted_internally', label: 'Submitted Internally' },
-  { key: 'client_review', label: 'Client Review' },
-  { key: 'revisions', label: 'Revisions' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'on_hold', label: 'On Hold' },
-  { key: 'request_closed', label: 'Request Closed' },
-  { key: 'cancelled', label: 'Cancelled' },
-] as const
+  { key: 'request_submitted', label: 'Request Submitted', accent: 'bg-sky-500' },
+  { key: 'in_progress', label: 'In-Progress', accent: 'bg-amber-500' },
+  { key: 'submitted_internally', label: 'Submitted Internally', accent: 'bg-violet-500' },
+  { key: 'client_review', label: 'Client Review', accent: 'bg-blue-500' },
+  { key: 'revisions', label: 'Revisions', accent: 'bg-orange-500' },
+  { key: 'approved', label: 'Approved', accent: 'bg-emerald-500' },
+  { key: 'on_hold', label: 'On Hold', accent: 'bg-rose-500' },
+  { key: 'request_closed', label: 'Request Closed', accent: 'bg-zinc-500' },
+  { key: 'cancelled', label: 'Cancelled', accent: 'bg-rose-600' },
+] satisfies KanbanColumn[]
 
 // User dashboard groupings (Alexis 2026-06-11): Requested / Active / Completed
 const ACTIVE_CG_STATUSES = ['in_progress', 'submitted_internally', 'client_review', 'revisions', 'on_hold']
@@ -73,6 +76,7 @@ const statusTone: Record<string, string> = {
 }
 
 export default function CgDesignsPage() {
+  const router = useRouter()
   const [items, setItems] = useState<CgDesignRequest[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
   const [staff, setStaff] = useState<Staff[]>([])
@@ -90,6 +94,7 @@ export default function CgDesignsPage() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [panelId, setPanelId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     venue_id: '',
     team_name: '',
@@ -100,6 +105,7 @@ export default function CgDesignsPage() {
     designer_ids: [] as string[],
     enterprise_contact_ids: [] as string[],
     due_date: '',
+    project_file_location: '',
   })
   const staffById = useMemo(() => {
     const m = new Map<string, Staff>()
@@ -191,6 +197,7 @@ export default function CgDesignsPage() {
         designer_ids: [],
         enterprise_contact_ids: [],
         due_date: '',
+        project_file_location: '',
       })
       setShowForm(false)
       await fetchData()
@@ -200,6 +207,35 @@ export default function CgDesignsPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  useEffect(() => {
+    if (!panelId) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanelId(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [panelId])
+
+  const openDesignView = (view: 'kanban' | 'board') => {
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'designs.view', value: JSON.stringify({ layout: view, hidden: [], order: [] }) }),
+    }).finally(() => router.push('/designs'))
+  }
+
+  const updateStatus = async (item: CgDesignRequest, status: string) => {
+    const response = await fetch(`/api/cg-designs/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      alert(body.error || 'Could not update this request')
+      return
+    }
+    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status } : row))
   }
 
   const filtered = useMemo(() => {
@@ -268,9 +304,16 @@ export default function CgDesignsPage() {
             <h1 className="text-2xl font-semibold text-zinc-900">CG Design Requests</h1>
             <p className="text-sm text-zinc-500 mt-0.5">{counts.active} active · {counts.all} total</p>
           </div>
-          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
-            {showForm ? 'Cancel' : 'New CG Request'}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg bg-white p-0.5 ring-1 ring-zinc-200">
+              <button onClick={() => openDesignView('kanban')} className="h-8 rounded-md px-3 text-xs font-semibold text-zinc-600 hover:text-zinc-900">Kanban</button>
+              <button onClick={() => openDesignView('board')} className="h-8 rounded-md px-3 text-xs font-semibold text-zinc-600 hover:text-zinc-900">My Board</button>
+              <button className="h-8 rounded-md bg-[#0A52EF] px-3 text-xs font-semibold text-white">CG Design</button>
+            </div>
+            <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors">
+              {showForm ? 'Cancel' : 'New CG Request'}
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -387,6 +430,10 @@ export default function CgDesignsPage() {
                 <label className="block text-xs font-medium text-zinc-600 mb-1">Notes</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} rows={4} className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none resize-none bg-white" />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-600 mb-1">Project File Location</label>
+                <input value={formData.project_file_location} onChange={(e) => setFormData((prev) => ({ ...prev, project_file_location: e.target.value }))} placeholder="Link or folder path for the working files" className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white" />
+              </div>
               <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50">
                 {submitting ? 'Creating...' : 'Create CG Request'}
               </button>
@@ -422,69 +469,51 @@ export default function CgDesignsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {statusColumns
-            // Cancelled is terminal — only surface its lane on the All or
-            // Cancelled tab so it stays out of the active board.
-            .filter((column) => column.key !== 'cancelled' || statusFilter === 'all' || statusFilter === 'cancelled')
-            .map((column) => {
-            const columnItems = filtered.filter((item) => item.status === column.key)
+        <KanbanBoard
+          items={filtered}
+          columns={statusColumns.filter((column) => column.key !== 'cancelled' || statusFilter === 'all' || statusFilter === 'cancelled')}
+          statusOf={(item) => item.status}
+          keyOf={(item) => item.id}
+          onStatusChange={updateStatus}
+          onColumnClick={(column) => setStatusFilter(column.key)}
+          renderCard={(item) => {
+            const designerNames = assignmentNames(item.designers, item.designer_name)
+            const enterpriseNames = assignmentNames(item.enterprise_contacts)
+            const assigneeText = [designerNames || 'No designer assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
             return (
-              <div key={column.key} className="rounded-xl border border-zinc-200 bg-zinc-50 min-h-[18rem] overflow-hidden">
-                <div className="px-4 py-3 border-b border-zinc-200 bg-white flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-zinc-900">{column.label}</h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">{columnItems.length} requests</p>
+              <div className="group relative">
+                <Link
+                  href={`/cg-designs/${item.id}`}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+                    event.preventDefault()
+                    setPanelId(item.id)
+                  }}
+                  className="block space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="pr-5 text-sm font-semibold leading-snug text-zinc-900">{item.job_title}</h3>
+                    <span className={`px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{statusColumns.find((column) => column.key === item.status)?.label || item.status}</span>
                   </div>
-                </div>
-                <div className="p-3 space-y-3">
-                  {columnItems.length === 0 && <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-3 py-5 text-center text-xs text-zinc-400">No requests</div>}
-                  {columnItems.map((item) => {
-                    const designerNames = assignmentNames(item.designers, item.designer_name)
-                    const enterpriseNames = assignmentNames(item.enterprise_contacts)
-                    const assigneeText = [designerNames || 'No designer assigned', enterpriseNames ? `Ent: ${enterpriseNames}` : ''].filter(Boolean).join(' · ')
-                    return (
-                    <div key={item.id} className="group relative">
-                    <Link href={`/cg-designs/${item.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 hover:border-zinc-300 hover:shadow-sm transition-all">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-medium text-zinc-900 leading-snug pr-5">{item.job_title}</h3>
-                        <span className={`px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${statusTone[item.status] || 'bg-zinc-100 text-zinc-600'}`}>{column.label}</span>
-                      </div>
-                      <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
-                        <p>{item.team_name || 'No team'}</p>
-                        <p className="font-mono">{item.tricode || 'No tri-code'}</p>
-                        <p>{item.venue_name || 'No venue linked'}</p>
-                        <p>{assigneeText}</p>
-                        {item.due_date && <p>Due {formatDate(item.due_date)}</p>}
-                      </div>
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteRequest(item.id) }}
-                      disabled={deletingId === item.id}
-                      className="absolute top-2 left-2 p-1 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
-                      title="Delete this request (recoverable)"
-                      aria-label="Delete request"
-                    >
-                      {deletingId === item.id ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
-                          <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      )}
-                    </button>
-                    </div>
-                  )})}
-                </div>
+                  <p className="text-xs text-zinc-500">{item.team_name || item.venue_name || 'No client linked'}</p>
+                  <p className="font-mono text-[11px] text-zinc-500">{item.tricode || 'No tri-code'}</p>
+                  <p className="text-[11px] text-zinc-500">{assigneeText}</p>
+                  {item.due_date && <p className="text-[11px] text-zinc-500">Due {formatDate(item.due_date)}</p>}
+                </Link>
+                <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); deleteRequest(item.id) }} disabled={deletingId === item.id} className="absolute right-0 top-0 rounded-md p-1 text-zinc-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100" aria-label="Delete request">×</button>
               </div>
             )
-          })}
-        </div>
+          }}
+        />
       </div>
+      {panelId && (
+        <>
+          <button className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent" onClick={() => setPanelId(null)} aria-label="Close CG request" />
+          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[760px] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="CG design request detail">
+            <CgDesignDetail params={{ id: panelId }} embedded onClose={() => { setPanelId(null); fetchData() }} />
+          </aside>
+        </>
+      )}
     </DashboardLayout>
   )
 }

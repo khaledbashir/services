@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -39,6 +40,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
        RETURNING id, cg_design_request_id, author_id, author_name, body, mentions, created_at, updated_at`,
       [params.id, auth.userId || null, auth.fullName || null, text, mentions],
     )
+    await logCgDesignActivity({
+      cgDesignRequestId: params.id,
+      eventType: 'comment',
+      actor: auth,
+      detail: { body: text.slice(0, 500) },
+    })
     return NextResponse.json({ comment: res.rows[0] })
   } catch (err) {
     console.error('Error creating CG comment:', err)

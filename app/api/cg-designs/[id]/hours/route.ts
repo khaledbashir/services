@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(request, 'technician')
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     [params.id, designerId, entryDate, hours, description],
   )
 
+  await logCgDesignActivity({
+    cgDesignRequestId: params.id,
+    eventType: 'time_logged',
+    actor: auth,
+    toValue: String(hours),
+    detail: { hours, description, entryDate: entryDate || new Date().toISOString().slice(0, 10) },
+  })
+
   return NextResponse.json({ entry: inserted.rows[0] })
 }
 
@@ -56,6 +65,18 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
   const entryId = new URL(request.url).searchParams.get('entry_id')
   if (!entryId) return NextResponse.json({ error: 'entry_id required' }, { status: 400 })
-  await query(`DELETE FROM designer_time_entries WHERE id = $1 AND cg_design_request_id = $2`, [entryId, params.id])
+  const deleted = await query(
+    `DELETE FROM designer_time_entries WHERE id = $1 AND cg_design_request_id = $2 RETURNING hours, description`,
+    [entryId, params.id],
+  )
+  if (deleted.rows[0]) {
+    await logCgDesignActivity({
+      cgDesignRequestId: params.id,
+      eventType: 'note',
+      actor: auth,
+      toValue: 'time_entry_removed',
+      detail: { hours: Number(deleted.rows[0].hours || 0), description: deleted.rows[0].description || null },
+    })
+  }
   return NextResponse.json({ ok: true })
 }

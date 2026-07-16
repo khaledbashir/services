@@ -7,6 +7,7 @@ import {
 } from '@/lib/proof-share'
 import { sendSlackMessage } from '@/lib/slack'
 import { logDesignActivity } from '@/lib/design-activity'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 import { parseManifest } from '@/lib/proof-share-sync'
 
 /**
@@ -95,6 +96,29 @@ async function finalizeShare(
         changesCount: fileBreakdown ? fileBreakdown.filter((f) => f.response === 'changes_requested').length : null,
       },
     })
+  } else if (share.twenty_object_type === 'localCgDesignRequest') {
+    await query(
+      `UPDATE proof_shares
+       SET client_response = $2, client_response_at = NOW(), client_response_note = $3
+       WHERE token = $1`,
+      [token, response, note]
+    )
+    const newStatus = response === 'approved' ? 'approved' : 'revisions'
+    await query(
+      `UPDATE cg_design_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [newStatus, share.twenty_record_id]
+    )
+    await logCgDesignActivity({
+      cgDesignRequestId: share.twenty_record_id as string,
+      eventType: 'client_response',
+      actor: { fullName: share.client_name || 'Client' },
+      toValue: response,
+      detail: {
+        note: note || null,
+        proofToken: token,
+        fileResponses: fileBreakdown && fileBreakdown.length ? fileBreakdown : null,
+      },
+    })
   } else {
     const cfg = OBJECT_CONFIGS[share.twenty_object_type]
     if (!cfg) throw new Error('Invalid record type')
@@ -135,6 +159,8 @@ function notifySlack(
   const respondentLabel = name ? ` from ${name}` : ''
   const displayLabel = share.twenty_object_type === 'localDesignRequest'
     ? 'Design Request'
+    : share.twenty_object_type === 'localCgDesignRequest'
+    ? 'CG Design Request'
     : share.twenty_object_type === 'ftpFolder'
     ? 'Proof'
     : (OBJECT_CONFIGS[share.twenty_object_type]?.displayLabel || share.twenty_object_type)

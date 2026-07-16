@@ -18,6 +18,8 @@ interface Props<T> {
   onStatusChange: (item: T, newStatus: string) => void | Promise<void>
   renderCard: (item: T) => ReactNode
   keyOf: (item: T) => string
+  /** Optional column-header action, used for count-to-filter workflows. */
+  onColumnClick?: (column: KanbanColumn) => void
   /** 'horizontal' (default) renders the classic side-by-side board.
    * 'stacked' renders each column as a full-width section with a responsive card grid — no horizontal scroll. */
   layout?: 'horizontal' | 'stacked'
@@ -30,7 +32,7 @@ function deriveTint(accent: string): string {
   return `bg-${m[1]}-50/60`
 }
 
-export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, renderCard, keyOf, layout = 'horizontal' }: Props<T>) {
+export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, renderCard, keyOf, onColumnClick, layout = 'horizontal' }: Props<T>) {
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [hoverCol, setHoverCol] = useState<string | null>(null)
 
@@ -78,7 +80,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
                 : 'ring-zinc-200/80 dark:ring-zinc-700/60 bg-white dark:bg-zinc-900/40'
             }`}
           >
-            <div className={`px-3.5 py-2.5 flex items-center justify-between border-b border-zinc-200/70 dark:border-zinc-700/60 ${headerTint}`}>
+            <button type="button" onClick={() => onColumnClick?.(col)} className={`px-3.5 py-2.5 flex w-full items-center justify-between border-b border-zinc-200/70 text-left dark:border-zinc-700/60 ${headerTint} ${onColumnClick ? 'hover:brightness-[0.98]' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className={`w-1.5 h-1.5 rounded-full ${col.accent} ring-2 ring-white dark:ring-zinc-900`} />
                 <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-zinc-700 dark:text-zinc-200">{col.label}</span>
@@ -86,7 +88,7 @@ export function KanbanBoard<T>({ items, columns, statusOf, onStatusChange, rende
               <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 tabular-nums bg-white/70 dark:bg-zinc-800/70 rounded-full px-2 py-0.5 ring-1 ring-zinc-200/60 dark:ring-zinc-700/60">
                 {list.length}
               </span>
-            </div>
+            </button>
             <div className={`p-2 flex-1 min-h-0 bg-zinc-50/40 dark:bg-zinc-900/20 ${
               layout === 'stacked' ? 'grid gap-2' : 'space-y-2 overflow-y-auto'
             }`} style={layout === 'stacked' ? { gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' } : undefined}>

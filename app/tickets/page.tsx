@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useDictation, MicChip } from '@/components/dictation'
+import { TicketDetail } from '@/components/ticket-detail'
 
 interface Ticket {
   id: string
@@ -118,6 +119,7 @@ export default function TicketsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
+  const [panelId, setPanelId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
@@ -157,6 +159,26 @@ export default function TicketsPage() {
   const dictation = useDictation()
   const appendTitle = (t: string) => setFormData(prev => ({ ...prev, title: (prev.title ? prev.title + ' ' : '') + t }))
   const appendDescription = (t: string) => setFormData(prev => ({ ...prev, description: (prev.description ? prev.description + ' ' : '') + t }))
+
+  const openTicket = (event: React.MouseEvent, id: string) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+      window.open(`/tickets/${id}`, '_blank', 'noopener,noreferrer')
+      return
+    }
+    setPanelId(id)
+  }
+
+  const refreshTickets = async () => {
+    const response = await fetch('/api/tickets', { cache: 'no-store' })
+    if (response.ok) setTickets((await response.json()).tickets || [])
+  }
+
+  useEffect(() => {
+    if (!panelId) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanelId(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [panelId])
 
   useEffect(() => {
     Promise.all([
@@ -723,7 +745,7 @@ export default function TicketsPage() {
               const pri = priorityConfig[ticket.priority] || priorityConfig.medium
               const st = statusConfig[ticket.status] || statusConfig.new
               return (
-                <div key={ticket.id} onClick={() => window.open(`/tickets/${ticket.id}`, '_blank', 'noopener,noreferrer')}
+                <div key={ticket.id} onClick={(event) => openTicket(event, ticket.id)}
                   className="bg-white p-4 hover:bg-zinc-50 transition-colors cursor-pointer group">
                   {/* Top: ticket number + priority indicator */}
                   <div className="flex items-center justify-between mb-2">
@@ -857,7 +879,7 @@ export default function TicketsPage() {
                   const pri = priorityConfig[ticket.priority] || priorityConfig.medium
                   const st = statusConfig[ticket.status] || statusConfig.new
                   return (
-                    <tr key={ticket.id} onClick={() => window.open(`/tickets/${ticket.id}`, '_blank', 'noopener,noreferrer')}
+                    <tr key={ticket.id} onClick={(event) => openTicket(event, ticket.id)}
                       className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer transition-colors ${selectedIds.has(ticket.id) ? 'bg-blue-50/50' : ''}`}>
                       <td className="w-10 text-center py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -965,6 +987,15 @@ export default function TicketsPage() {
             </button>
           )}
         </div>
+      )}
+
+      {panelId && (
+        <>
+          <button className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent" onClick={() => setPanelId(null)} aria-label="Close ticket" />
+          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[960px] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="Support ticket detail">
+            <TicketDetail params={{ id: panelId }} embedded onClose={() => { setPanelId(null); refreshTickets() }} />
+          </aside>
+        </>
       )}
     </DashboardLayout>
   )

@@ -8,6 +8,7 @@ import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled, type TwentyCgDesignRequest } from '@/lib/twenty-ops'
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { loadCgAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 // Map Twenty's STATUS_* enum values onto the kanban lane keys the UI renders.
 // Without this every record ends up lumped into 'request_submitted' (or a lane
@@ -21,18 +22,20 @@ function mapTwentyStatus(raw: string | null | undefined): string {
     queued: 'in_queue',
     in_queue: 'in_queue',
     in_progress: 'in_progress',
-    review: 'review',
-    in_review: 'review',
-    client_review: 'review',
+    review: 'submitted_internally',
+    in_review: 'submitted_internally',
+    submitted_internally: 'submitted_internally',
+    client_review: 'client_review',
     revisions: 'revisions',
     in_revisions: 'revisions',
     approved: 'approved',
-    posted: 'posted',
-    done: 'posted',
-    complete: 'posted',
-    completed: 'posted',
-    request_closed: 'posted',
-    closed: 'posted',
+    on_hold: 'on_hold',
+    posted: 'request_closed',
+    done: 'request_closed',
+    complete: 'request_closed',
+    completed: 'request_closed',
+    request_closed: 'request_closed',
+    closed: 'request_closed',
     cancelled: 'cancelled',
     canceled: 'cancelled',
   }
@@ -56,16 +59,21 @@ function reshapeCgDesign(c: TwentyCgDesignRequest) {
     tricode: raw.clientTriCode || null,
     designer_name: raw.cgDesigner ? `${raw.cgDesigner.name.firstName} ${raw.cgDesigner.name.lastName}`.trim() : null,
     designer_id: raw.cgDesignerId || null,
+    project_file_location: raw.projectFileLocation || raw.projectLocation || null,
+    ftp_proof_link: raw.proofShareUrl || raw.proofLink || null,
   }
 }
 
 const ALLOWED_STATUSES = new Set([
   'request_submitted',
-  'in_queue',
   'in_progress',
+  'submitted_internally',
+  'client_review',
   'review',
   'revisions',
   'approved',
+  'on_hold',
+  'request_closed',
   'posted',
   'cancelled',
 ])
@@ -135,6 +143,7 @@ export async function GET(request: NextRequest) {
 
     const result = await query(
       `SELECT cg.id, cg.league, cg.team_name, cg.job_title, cg.tricode, cg.notes, cg.due_date, cg.status,
+              cg.project_file_location, cg.ftp_proof_link,
               TO_CHAR(cg.created_at, 'Mon DD, YYYY') as created_date,
               TO_CHAR(cg.updated_at, 'Mon DD, YYYY') as updated_date,
               v.name as venue_name, v.id as venue_id,
@@ -180,6 +189,7 @@ export async function POST(request: NextRequest) {
       enterprise_contact_ids,
       due_date,
       status,
+      project_file_location,
     } = body
 
     if (!job_title?.trim()) {
@@ -193,6 +203,7 @@ export async function POST(request: NextRequest) {
           teamName: team_name?.trim() || null,
           sport: null,
           status: normalizeStatus(status),
+          ...((project_file_location?.trim() ? { projectFileLocation: project_file_location.trim() } : {}) as any),
         })
         return NextResponse.json({ cg_design_request: { id: created.id, job_title: created.clientTriCode, status: created.status } })
       } catch (err) {
@@ -211,9 +222,9 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO cg_design_requests (
-        venue_id, league, team_name, job_title, tricode, notes, designer_id, due_date, status, updated_at
+        venue_id, league, team_name, job_title, tricode, notes, designer_id, due_date, status, project_file_location, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
       )
       RETURNING id, job_title, status`,
       [
@@ -226,8 +237,17 @@ export async function POST(request: NextRequest) {
         (Array.isArray(designer_ids) && designer_ids[0]) || designer_id || null,
         due_date || null,
         normalizeStatus(status),
+        project_file_location?.trim() || null,
       ],
     )
+
+    await logCgDesignActivity({
+      cgDesignRequestId: result.rows[0].id,
+      eventType: 'created',
+      actor: auth,
+      toValue: result.rows[0].status,
+      detail: { jobTitle: job_title.trim() },
+    })
 
     const created = result.rows[0]
     const designerIds = Array.isArray(designer_ids)

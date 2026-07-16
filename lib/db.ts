@@ -510,6 +510,22 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_enterprise_contacts_staff ON design_request_enterprise_contacts(staff_id)`)
     await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS tricode TEXT`)
+    await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS project_file_location TEXT`)
+    await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS ftp_proof_link TEXT`)
+    await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS legacy_ftp_proof_link TEXT`)
+    await client.query(`CREATE TABLE IF NOT EXISTS cg_design_activity (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      actor_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+      actor_name TEXT,
+      actor_email TEXT,
+      from_value TEXT,
+      to_value TEXT,
+      detail JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cg_design_activity_req ON cg_design_activity(cg_design_request_id, created_at DESC)`)
     await client.query(`CREATE TABLE IF NOT EXISTS cg_design_designers (
       cg_design_request_id UUID NOT NULL REFERENCES cg_design_requests(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

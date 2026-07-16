@@ -11,6 +11,7 @@ import {
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
 import { sendAssignmentEmail } from '@/lib/assignment-emails'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 const ALLOWED_PATCH_FIELDS = new Set([
   'venue_id',
@@ -22,23 +23,41 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'designer_id',
   'due_date',
   'status',
+  'project_file_location',
 ])
 
 const ALLOWED_STATUSES = new Set([
   'request_submitted',
-  'in_queue',
   'in_progress',
+  'submitted_internally',
+  'client_review',
   'review',
   'revisions',
   'approved',
+  'on_hold',
+  'request_closed',
   'posted',
   'cancelled',
 ])
 
+function mapCgStatus(raw: string | null | undefined): string {
+  if (!raw) return 'request_submitted'
+  const stripped = raw.replace(/^STATUS_/i, '').toLowerCase()
+  const aliases: Record<string, string> = {
+    submitted: 'request_submitted',
+    review: 'submitted_internally',
+    in_review: 'submitted_internally',
+    posted: 'request_closed',
+    done: 'request_closed',
+    closed: 'request_closed',
+  }
+  return aliases[stripped] || stripped
+}
+
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'designer_id'].includes(key)) return value || null
-  if (['league', 'team_name', 'job_title', 'notes'].includes(key)) {
+  if (['league', 'team_name', 'job_title', 'notes', 'project_file_location'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
   if (key === 'tricode') {
@@ -62,6 +81,7 @@ async function getAccessibleRecord(request: NextRequest, id: string) {
 
   const result = await query(
     `SELECT cg.id, cg.venue_id, cg.league, cg.team_name, cg.job_title, cg.tricode, cg.notes, cg.designer_id, cg.due_date, cg.status,
+            cg.project_file_location, cg.ftp_proof_link, cg.legacy_ftp_proof_link,
             cg.created_at, cg.updated_at, v.name as venue_name, s.full_name as designer_name
      FROM cg_design_requests cg
      LEFT JOIN venues v ON cg.venue_id = v.id
@@ -84,10 +104,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         cg_design_request: {
           id: c.id, job_title: c.clientTriCode, team_name: c.teamName, league: c.sport,
           tricode: c.clientTriCode,
-          status: c.status, created_at: c.createdAt, updated_at: c.updatedAt,
+          status: mapCgStatus(c.status), created_at: c.createdAt, updated_at: c.updatedAt,
           designer_id: c.cgDesignerId,
           designer_name: c.cgDesigner ? `${c.cgDesigner.name.firstName} ${c.cgDesigner.name.lastName}`.trim() : null,
           venue_name: c.cgClient?.name || null,
+          project_file_location: (c as any).projectFileLocation || (c as any).projectLocation || null,
+          ftp_proof_link: (c as any).proofShareUrl || (c as any).proofLink || null,
         },
       })
     }
@@ -111,12 +133,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (isAuthError(auth)) return auth
       const body = await request.json()
       const prior = await CgDesigns.get(params.id)
+      if (body.status === 'request_closed') {
+        const priorStatus = mapCgStatus((prior as any)?.status || null)
+        const proofUrl = (prior as any)?.proofShareUrl || (prior as any)?.proofLink || null
+        if (!proofUrl || priorStatus !== 'approved') {
+          return NextResponse.json({ error: 'Client proof approval is required before closing this request' }, { status: 409 })
+        }
+      }
       const patch: Record<string, unknown> = {}
       if ('job_title' in body) patch.clientTriCode = body.job_title?.trim() || null
       if ('team_name' in body) patch.teamName = body.team_name?.trim() || null
       if ('tricode' in body) patch.clientTriCode = normalizeValue('tricode', body.tricode)
       if ('league' in body) patch.sport = body.league?.trim() || null
       if ('status' in body && ALLOWED_STATUSES.has(body.status)) patch.status = body.status
+      if ('project_file_location' in body) patch.projectFileLocation = body.project_file_location?.trim() || null
       const updated = await CgDesigns.update(params.id, patch)
       const priorStatus = (prior as any)?.status || null
       const notificationSummary = body.status && ALLOWED_STATUSES.has(body.status) && body.status !== priorStatus
@@ -143,6 +173,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     const body = await request.json()
+    if (body.status === 'request_closed' && (!access.record.ftp_proof_link || access.record.status !== 'approved')) {
+      return NextResponse.json({ error: 'Client proof approval is required before closing this request' }, { status: 409 })
+    }
     const normalizedNextStatus = ALLOWED_STATUSES.has(body.status) ? body.status : null
     const updates: string[] = []
     const values: any[] = []
@@ -196,6 +229,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           assigneeIds: await getCgDesignAssigneeIds(params.id),
         })
       : { target_count: 0, sent_count: 0, skipped_count: 0 }
+
+    if (normalizedNextStatus && normalizedNextStatus !== access.record.status) {
+      await logCgDesignActivity({
+        cgDesignRequestId: params.id,
+        eventType: 'status_change',
+        actor: access.auth,
+        fromValue: access.record.status,
+        toValue: normalizedNextStatus,
+      })
+    }
 
     return NextResponse.json({ cg_design_request: result.rows[0], assignee_notifications: notificationSummary })
   } catch (err) {

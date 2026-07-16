@@ -504,8 +504,7 @@ export default function ProofSharePage() {
       </div>
 
       {/* Charlie 2026-07-16: client can drop replacement media on the proof link */}
-      {data.state !== 'expired' && (
-        <div className="mt-4 rounded-xl bg-white border border-gray-200 p-4">
+      <div className="mt-4 rounded-xl bg-white border border-gray-200 p-4">
           <div className="text-sm font-semibold text-gray-900">Send us replacement media</div>
           <p className="text-xs text-gray-500 mt-1 mb-3">
             Denied the proofs or sent the wrong files? Upload the correct media here and our designers will pick it up on this ticket.
@@ -539,8 +538,7 @@ export default function ProofSharePage() {
             />
             Upload media
           </label>
-        </div>
-      )}
+      </div>
 
       {/* Meta footer */}
       <div className="mt-4 flex items-center justify-between text-xs text-gray-400 px-2">
