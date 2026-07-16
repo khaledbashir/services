@@ -10,8 +10,18 @@ export async function POST(request: NextRequest) {
   if (!process.env.CRON_SECRET || auth !== expected) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const results = await runPhotoSweep({})
-  return NextResponse.json(results)
+  // A full-fleet sweep is paced under Slack's rate limit and runs for
+  // minutes — longer than the reverse proxy allows a response to hang.
+  // Fire-and-forget: results land in slack_photo_files and the ops-channel
+  // summary; failures log server-side.
+  void runPhotoSweep({}).then(
+    report => console.log('[photo-sweep] done', JSON.stringify({
+      ok: report.ok, filed: report.filed, imagesFound: report.imagesFound,
+      skippedDuplicates: report.skippedDuplicates, errors: report.errors.length,
+    })),
+    err => console.error('[photo-sweep] failed', err),
+  )
+  return NextResponse.json({ started: true }, { status: 202 })
 }
 
 export async function GET(request: NextRequest) {
