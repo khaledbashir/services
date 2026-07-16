@@ -70,7 +70,7 @@ async function saveAlertSettings(budgetId: string, thresholds: unknown, recipien
 async function getBudgetRows() {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
-            b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
+            b.total_hours, b.management_times, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
             b.notes, b.tricode, b.created_at, b.updated_at,
             COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
             COUNT(te.id)::int as entry_count
@@ -163,8 +163,8 @@ export async function POST(request: NextRequest) {
 
     const result = await query(
       `INSERT INTO designer_hours_budgets
-         (client_name, venue_id, league, season, total_hours, contract_start, contract_end, notes, tricode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (client_name, venue_id, league, season, total_hours, management_times, contract_start, contract_end, notes, tricode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         client_name,
@@ -172,6 +172,9 @@ export async function POST(request: NextRequest) {
         body.league || null,
         body.season || null,
         total_hours,
+        body.management_times === '' || body.management_times == null
+          ? null
+          : Number(body.management_times),
         body.contract_start || null,
         body.contract_end || null,
         body.notes || null,
@@ -181,7 +184,7 @@ export async function POST(request: NextRequest) {
 
     const created = await query(
       `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
-              b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
+              b.total_hours, b.management_times, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
               b.notes, b.tricode, b.created_at, b.updated_at,
               COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
               COUNT(te.id)::int as entry_count

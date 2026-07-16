@@ -459,6 +459,8 @@ async function runMigrations() {
     // (ftp-<base64url name> for FTP files). Whole-share client_response stays
     // the rollup the ticket workflow reads.
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS file_responses JSONB NOT NULL DEFAULT '{}'::jsonb`)
+    // Charlie 2026-07-16: client media dropped onto a proof link for designers.
+    await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_uploads JSONB NOT NULL DEFAULT '[]'::jsonb`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
@@ -598,6 +600,8 @@ async function runMigrations() {
       recipient_email TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+    // Charlie 2026-07-16: management time multiplier on hours budgets.
+    await client.query(`ALTER TABLE designer_hours_budgets ADD COLUMN IF NOT EXISTS management_times NUMERIC(8,2)`)
     await client.query(`CREATE TABLE IF NOT EXISTS content_schedule_operators (
       content_schedule_id UUID NOT NULL REFERENCES content_schedules(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

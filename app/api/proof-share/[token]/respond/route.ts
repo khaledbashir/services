@@ -73,7 +73,9 @@ async function finalizeShare(
        WHERE token = $1`,
       [token, response, note]
     )
-    const newStatus = response === 'approved' ? 'approved' : 'in_progress'
+    // Charlie 2026-07-16: full approve → approved; any deny / changes → In Queue
+    // so design can re-pick the job, not stay stuck In Progress.
+    const newStatus = response === 'approved' ? 'approved' : 'in_queue'
     await query(
       `UPDATE design_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
       [newStatus, share.twenty_record_id]

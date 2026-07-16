@@ -72,6 +72,21 @@ type StageKey = typeof STAGES[number]['key']
 // cancelled. Cancelled requests drop out of the active dashboard views.
 const STATUS_OPTIONS = [...STAGES.map((s) => ({ value: s.key, label: s.label })), { value: 'cancelled', label: 'Cancelled' }]
 
+/** Kanban-matching status chip colors for the Status dropdown (Charlie 2026-07-16). */
+function statusChipClass(status: string): string {
+  switch (status) {
+    case 'request_submitted': return 'bg-zinc-100 text-zinc-800 ring-1 ring-zinc-300'
+    case 'in_queue': return 'bg-amber-100 text-amber-900 ring-1 ring-amber-300'
+    case 'in_progress': return 'bg-sky-100 text-sky-900 ring-1 ring-sky-300'
+    case 'in_qc': return 'bg-violet-100 text-violet-900 ring-1 ring-violet-300'
+    case 'client_review': return 'bg-blue-600 text-white ring-1 ring-blue-700'
+    case 'approved': return 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
+    case 'done': return 'bg-emerald-600 text-white ring-1 ring-emerald-700'
+    case 'cancelled': return 'bg-rose-100 text-rose-900 ring-1 ring-rose-300'
+    default: return 'bg-white text-zinc-800 ring-1 ring-zinc-200'
+  }
+}
+
 function formatDate(s: string | null | undefined): string {
   if (!s) return '—'
   try { return new Date(s).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) }
@@ -148,6 +163,8 @@ export function DesignDetailBody({
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
   const [projectLinkDraft, setProjectLinkDraft] = useState('')
   const [proofLinkDraft, setProofLinkDraft] = useState('')
+  const [proofFolderPath, setProofFolderPath] = useState<string | null>(null)
+  const [showHoursPanel, setShowHoursPanel] = useState(false)
   const router = useRouter()
 
   const fetchData = async () => {
@@ -169,6 +186,8 @@ export function DesignDetailBody({
       setFinalLinkDraft(d?.ftp_final_link || '')
       setProjectLinkDraft(d?.project_file_location || '')
       setProofLinkDraft(d?.ftp_proof_link || '')
+      // Proof Location auto-populates from the active proof share folder (Charlie 7/16).
+      setProofFolderPath(drData.proof_folder_path || d?.proof_folder_path || null)
     } catch (err) {
       console.error(err)
     } finally {
@@ -373,7 +392,7 @@ export function DesignDetailBody({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={saveAsTemplate}
@@ -406,12 +425,34 @@ export function DesignDetailBody({
                 )}
                 <span>Duplicate</span>
               </button>
+              {/* Charlie 2026-07-16: Add Hours under Status row (replaces removed In Progress card) */}
+              <button
+                type="button"
+                onClick={() => setShowHoursPanel((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg ring-1 px-3 py-2 text-sm transition-colors ${
+                  showHoursPanel
+                    ? 'bg-[#0A52EF] text-white ring-[#0A52EF]'
+                    : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-900'
+                }`}
+                title="Log designer hours on this ticket"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Add Hours</span>
+                {(dr.hours_spent ?? 0) > 0 && (
+                  <span className={`text-[11px] font-semibold ${showHoursPanel ? 'text-white/80' : 'text-zinc-500'}`}>
+                    · {dr.hours_spent}h
+                  </span>
+                )}
+              </button>
+              {/* Status chip — bold label on kanban-matching color (Charlie 2026-07-16) */}
               <select
                 value={dr.status}
                 onChange={(e) => updateField({ status: e.target.value })}
                 disabled={saving}
                 data-ai-target="design-status"
-                className="rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#0A52EF]/30 disabled:opacity-60"
+                className={`rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-[#0A52EF]/40 disabled:opacity-60 border-0 shadow-sm ${statusChipClass(dr.status)}`}
               >
                 {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -419,48 +460,16 @@ export function DesignDetailBody({
           </div>
         </div>
 
-        {/* Timeline strip */}
-        <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 overflow-x-auto">
-          <div className="flex items-center gap-1 min-w-max">
-            {STAGES.map((s, i) => {
-              const state = i < currentIdx ? 'done' : i === currentIdx ? 'active' : 'upcoming'
-              return (
-                <div key={s.key} className="flex items-center gap-1">
-                  <button
-                    onClick={() => updateField({ status: s.key })}
-                    title={`Set status to "${s.label}"`}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      state === 'active'
-                        ? 'bg-[#0A52EF] text-white'
-                        : state === 'done'
-                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:ring-1 hover:ring-emerald-300'
-                          : 'bg-zinc-50 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 hover:ring-1 hover:ring-zinc-300'
-                    }`}
-                  >
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-                      state === 'active' ? 'bg-white/20' : state === 'done' ? 'bg-emerald-500 text-white' : 'bg-zinc-300 text-white'
-                    }`}>
-                      {state === 'done' ? '✓' : i + 1}
-                    </span>
-                    {s.label}
-                  </button>
-                  {i < STAGES.length - 1 && <span className="text-zinc-300">→</span>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        {/* Status strip removed (Charlie 2026-07-16) — use the colored Status dropdown only */}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,280px] gap-6">
           {/* Main: active stage card + submitted summary */}
           <div className="space-y-5">
 
-            {/* Final Files & Proof Links — always visible (Alexis 2026-06-11): enter/see these at any stage, not gated to the Approved stage */}
+            {/* Final Files & Proof Links — always visible; proof UI lives here after
+                Client Review card was removed (Charlie 2026-07-16). */}
             <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 space-y-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Final Files &amp; Proof Links</div>
-              {/* Project File Location (Charlie 2026-07-15): where the source/working
-                  file lives on ANC's internal servers, so a designer can jump straight
-                  back to it for re-work. Sits above the final-deliverable location. */}
               <Field label="Project File Location">
                 <input
                   type="text"
@@ -514,13 +523,97 @@ export function DesignDetailBody({
                   </div>
                 </Field>
               )}
+              {/* Proof Location — FTP folder auto-filled when a proof is created (Charlie 7/16) */}
+              <Field label="Proof Location">
+                <input
+                  type="text"
+                  readOnly
+                  value={proofFolderPath || ''}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm bg-zinc-50 text-zinc-700 font-mono outline-none"
+                  placeholder="Set automatically when you pick a proof folder on the FTP"
+                />
+              </Field>
+              {legacyProofUrl && (
+                <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 p-3 text-sm">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1">Historical client link</div>
+                  <a href={legacyProofUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all font-mono text-xs">{legacyProofUrl}</a>
+                </div>
+              )}
+              {useNewProofFlow ? (
+                <TicketProofFtp
+                  objectType="designRequest"
+                  recordId={dr.id}
+                  triCode={dr.tricode}
+                  clientName={dr.company_name || dr.venue_name}
+                  existingProofUrl={managedProofUrl}
+                  onFolderChosen={(path) => setProofFolderPath(path)}
+                  onCreated={() => fetchData()}
+                />
+              ) : (
+                <>
+                  <Field label="Uploaded Proofs (Legacy Workflow)">
+                    <DesignProofUpload designRequestId={dr.id} />
+                  </Field>
+                  <TicketProofFtp
+                    objectType="designRequest"
+                    recordId={dr.id}
+                    triCode={dr.tricode}
+                    clientName={dr.company_name || dr.venue_name}
+                    onFolderChosen={(path) => setProofFolderPath(path)}
+                    onCreated={() => fetchData()}
+                  />
+                  <AIFirstDraftButton designRequestId={dr.id} />
+                </>
+              )}
+              {dr.status === 'in_qc' && !dr.qc_approved_by_name && (
+                <label className={`flex items-center gap-2.5 rounded-lg ring-1 ring-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 ${saving ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-zinc-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    disabled={saving}
+                    onChange={(e) => {
+                      if (e.target.checked && !saving) updateField({ status: 'client_review', qc_approved: true })
+                    }}
+                    className="h-4 w-4 rounded ring-1 ring-zinc-300 accent-[#0A52EF]"
+                  />
+                  QC passed — send to Client Review
+                </label>
+              )}
+              {dr.qc_approved_by_name && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-700">
+                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>
+                  QC approved by {dr.qc_approved_by_name} on {formatDate(dr.qc_approved_at)}
+                </div>
+              )}
+              {managedProofUrl && (dr.status === 'approved' || dr.status === 'done' || dr.status === 'client_review') && (
+                <ProofFileRoster proofUrl={managedProofUrl} />
+              )}
+              <Field label="Final File Name">
+                <input
+                  type="text"
+                  data-ai-target="final-file-name"
+                  value={finalFileDraft}
+                  onChange={(e) => setFinalFileDraft(e.target.value)}
+                  onBlur={() => finalFileDraft !== (dr.final_file_name || '') && updateField({ final_file_name: finalFileDraft })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                  placeholder="e.g. louisville-playoff-v3.psd"
+                />
+              </Field>
             </div>
 
-            {/* STAGE 1: SUBMITTED — always visible (summary of core fields) */}
+            {/* Add Hours panel — toggled from header (Charlie 2026-07-16) */}
+            {showHoursPanel && (
+              <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Log Hours</div>
+                  <div className="text-sm text-zinc-600">{dr.hours_spent ?? 0}h logged total</div>
+                </div>
+                <HoursLog designRequestId={dr.id} staffList={staffList} />
+              </div>
+            )}
+
+            {/* STAGE 1: SUBMITTED — always visible */}
             <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'} onSetStatus={() => updateField({ status: STAGES[0].key })}>
-              {/* Boards + Sizes merged into one field (Charlie 7/14 round 2).
-                  Legacy sizes_requested values were folded into boards_requested
-                  by a one-time data migration; the column stays for history. */}
               <Field label="Board & Sizes">
                 <textarea
                   data-ai-target="boards-requested"
@@ -543,123 +636,6 @@ export function DesignDetailBody({
                   placeholder="What the client wants + any specific callouts"
                 />
               </Field>
-            </StageCard>
-
-            {/* STAGE 3: IN PROGRESS — hours (logged via entries) + notes */}
-            <StageCard n={3} label="In Progress" desc={STAGES[2].desc} state={currentIdx < 2 ? 'upcoming' : currentIdx === 2 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[2].key })}>
-              <Field label="Hours Logged">
-                <div className="text-sm text-zinc-600">{dr.hours_spent ?? 0}h logged</div>
-              </Field>
-              <HoursLog designRequestId={dr.id} staffList={staffList} />
-            </StageCard>
-
-            {/* STAGE 4: IN QC */}
-            <StageCard n={4} label="In QC" desc={STAGES[3].desc} state={currentIdx < 3 ? 'upcoming' : currentIdx === 3 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[3].key })}>
-              <p className="text-sm text-zinc-500">
-                Internal quality check. When passed, upload the proof below, then explicitly advance this request to Client Review to fire the approval email.
-              </p>
-              {dr.qc_approved_by_name ? (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-700">
-                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>
-                  QC approved by {dr.qc_approved_by_name} on {formatDate(dr.qc_approved_at)}
-                </div>
-              ) : (
-                <label className={`flex items-center gap-2.5 rounded-lg ring-1 ring-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 ${saving ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-zinc-50'}`}>
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    disabled={saving}
-                    onChange={(e) => {
-                      if (e.target.checked && !saving) updateField({ status: 'client_review', qc_approved: true })
-                    }}
-                    className="h-4 w-4 rounded ring-1 ring-zinc-300 accent-[#0A52EF]"
-                  />
-                  QC passed — send to Client Review
-                </label>
-              )}
-            </StageCard>
-
-            {/* STAGE 5: CLIENT REVIEW — THE MONEY STAGE */}
-            <StageCard n={5} label="Client Review" desc={STAGES[4].desc} state={currentIdx < 4 ? 'upcoming' : currentIdx === 4 ? 'active' : 'done'} highlight={currentIdx === 4} onSetStatus={() => updateField({ status: STAGES[4].key })}>
-              <div className="space-y-4">
-                {legacyProofUrl && (
-                  <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 p-3 text-sm">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1">Historical client link</div>
-                    <a href={legacyProofUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all font-mono text-xs">{legacyProofUrl}</a>
-                    <div className="mt-2 text-xs text-blue-600/80">Preserved for this older ticket. New proofs use the proof-server panel below.</div>
-                    {(dr.proof_view_count ?? 0) > 0 && (
-                      <div className="mt-2 text-xs text-blue-600/80">
-                        Viewed {dr.proof_view_count} {dr.proof_view_count === 1 ? 'time' : 'times'} · last opened {formatRelative(dr.proof_last_viewed_at)}
-                      </div>
-                    )}
-                    {dr.proof_sent_at && (
-                      <div className="mt-1 text-xs text-blue-600/80">Email sent {formatRelative(dr.proof_sent_at)}</div>
-                    )}
-                  </div>
-                )}
-                {useNewProofFlow ? (
-                  <TicketProofFtp
-                    objectType="designRequest"
-                    recordId={dr.id}
-                    triCode={dr.tricode}
-                    clientName={dr.company_name || dr.venue_name}
-                    existingProofUrl={managedProofUrl}
-                  />
-                ) : (
-                  <>
-                    <Field label="Uploaded Proofs (Legacy Workflow)">
-                      <DesignProofUpload designRequestId={dr.id} />
-                    </Field>
-                    <TicketProofFtp
-                      objectType="designRequest"
-                      recordId={dr.id}
-                      triCode={dr.tricode}
-                      clientName={dr.company_name || dr.venue_name}
-                    />
-                    <AIFirstDraftButton designRequestId={dr.id} />
-                  </>
-                )}
-                <p className="text-xs text-zinc-500">
-                  {useNewProofFlow
-                    ? 'Choose the proof folder and generate the client link here. The client email fires only when you explicitly advance the status to Client Review.'
-                    : 'This ticket keeps its historical proof workflow and links. New tickets use the single proof-server flow.'}
-                </p>
-              </div>
-            </StageCard>
-
-            {/* STAGE 6: APPROVED — final file */}
-            <StageCard n={6} label="Approved" desc={STAGES[5].desc} state={currentIdx < 5 ? 'upcoming' : currentIdx === 5 ? 'active' : 'done'} onSetStatus={() => updateField({ status: STAGES[5].key })}>
-              {managedProofUrl && (
-                <div className="mb-4">
-                  <ProofFileRoster proofUrl={managedProofUrl} />
-                </div>
-              )}
-              <Field label="Final File Name">
-                <input
-                  type="text"
-                  data-ai-target="final-file-name"
-                  value={finalFileDraft}
-                  onChange={(e) => setFinalFileDraft(e.target.value)}
-                  onBlur={() => finalFileDraft !== (dr.final_file_name || '') && updateField({ final_file_name: finalFileDraft })}
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  placeholder="e.g. louisville-playoff-v3.psd"
-                />
-              </Field>
-              {currentIdx === 5 && dr.final_file_name && (
-                <button
-                  onClick={() => updateField({ status: 'done' })}
-                  className="mt-3 text-xs font-medium text-[#0A52EF] hover:underline"
-                >
-                  → Final delivered? Mark as Done
-                </button>
-              )}
-            </StageCard>
-
-            {/* STAGE 7: DONE */}
-            <StageCard n={7} label="Done" desc={STAGES[6].desc} state={currentIdx < 6 ? 'upcoming' : 'done'} onSetStatus={() => updateField({ status: STAGES[6].key })}>
-              <p className="text-sm text-zinc-500">
-                Request closed. All fields are still visible above for reference.
-              </p>
             </StageCard>
 
             <DesignActivityTimeline designRequestId={dr.id} />

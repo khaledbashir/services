@@ -155,6 +155,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return null
       }
     }
+    // Charlie 2026-07-16: surface the FTP folder used for the active proof share.
+    const lookupProofFolderPath = async (id: string): Promise<string | null> => {
+      try {
+        const r = await query(
+          `SELECT ftp_folder_path FROM proof_shares
+           WHERE twenty_record_id = $1
+             AND twenty_object_type IN ('localDesignRequest', 'designRequest')
+             AND ftp_folder_path IS NOT NULL
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [id],
+        )
+        return r.rows[0]?.ftp_folder_path || null
+      } catch {
+        return null
+      }
+    }
 
     if (isTwentyBackedEnabled('DESIGNS')) {
       const auth = await requireRole(request, 'technician')
@@ -180,6 +197,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         : (d.notes || d.aiPrompt || '')
       const companyName = d.designClient?.name || null
       const qc = await lookupQcApproval(d.id)
+      const proofFolderPath = await lookupProofFolderPath(d.id)
       return NextResponse.json({
         design_request: {
           id: d.id,
@@ -220,6 +238,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           qc_approved_by_email: qc?.qc_approved_by_email || null,
           qc_approved_at: qc?.qc_approved_at || null,
         },
+        proof_folder_path: proofFolderPath,
       })
     }
 
@@ -228,7 +247,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!access.record) {
       return NextResponse.json({ error: 'Design request not found' }, { status: 404 })
     }
-    return NextResponse.json({ design_request: access.record })
+    const proofFolderPath = await lookupProofFolderPath(params.id)
+    return NextResponse.json({ design_request: access.record, proof_folder_path: proofFolderPath })
   } catch (err) {
     console.error('Error fetching design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

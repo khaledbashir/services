@@ -503,6 +503,45 @@ export default function ProofSharePage() {
         </div>
       </div>
 
+      {/* Charlie 2026-07-16: client can drop replacement media on the proof link */}
+      {data.state !== 'expired' && (
+        <div className="mt-4 rounded-xl bg-white border border-gray-200 p-4">
+          <div className="text-sm font-semibold text-gray-900">Send us replacement media</div>
+          <p className="text-xs text-gray-500 mt-1 mb-3">
+            Denied the proofs or sent the wrong files? Upload the correct media here and our designers will pick it up on this ticket.
+          </p>
+          <label className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--anc-brand,#0A52EF)] text-white text-sm font-medium px-3 py-2 cursor-pointer hover:opacity-90">
+            <input
+              type="file"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const fd = new FormData()
+                fd.append('file', file)
+                try {
+                  const res = await fetch(`/api/proof-share/${token}/client-upload`, {
+                    method: 'POST',
+                    body: fd,
+                  })
+                  const body = await res.json().catch(() => ({}))
+                  if (!res.ok) {
+                    alert(body.error || 'Upload failed')
+                    return
+                  }
+                  alert(`Uploaded “${file.name}” — our team can now pick it up.`)
+                } catch {
+                  alert('Upload failed')
+                } finally {
+                  e.target.value = ''
+                }
+              }}
+            />
+            Upload media
+          </label>
+        </div>
+      )}
+
       {/* Meta footer */}
       <div className="mt-4 flex items-center justify-between text-xs text-gray-400 px-2">
         <div>

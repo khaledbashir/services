@@ -85,15 +85,29 @@ export default function DesignRequestFormPage() {
         const parts = [a.name, a.displayType, a.orientation, a.resolution].filter(Boolean)
         return `• ${parts.join(' · ')}`
       })
+    const venueName = String(fd.get('venue') || '').trim()
+    const triCode = String(fd.get('triCode') || '').trim()
+    // Charlie 2026-07-16: Venue + Tri-Code required on every new design request.
+    if (!venueName) {
+      setError('Venue is required')
+      setLoading(false)
+      return
+    }
+    if (!triCode) {
+      setError('Tri-code is required')
+      setLoading(false)
+      return
+    }
+
     const payload = {
       requesterName: fd.get('requesterName'),
       requesterEmail: fd.get('email'),
       clientName: fd.get('client'),
-      venueName: fd.get('venue'),
+      venueName,
       venueId: fd.get('venueId') || undefined,
       assetIds: Array.from(selectedAssetIds),
       boardSection: assetLabels.length > 0 ? assetLabels.join('\n') : undefined,
-      clientTriCode: fd.get('triCode'),
+      clientTriCode: triCode,
       deliverableType: fd.get('deliverableType'),
       sport: fd.get('sport'),
       dueDate: fd.get('dueDate'),
@@ -154,18 +168,57 @@ export default function DesignRequestFormPage() {
         <div className="grid grid-cols-2 gap-4">
           <Field label="Client / team" name="client" placeholder="e.g. Indiana Pacers" required inputRef={clientRef} />
           <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Venue</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Venue<span className="text-red-500 ml-0.5">*</span>
+            </label>
             <input
               type="text"
               name="venue"
-              placeholder="Start typing — Fenway, Gainbridge…"
+              required
+              placeholder="Start typing — Fenway, Gainbridge… or pick ANC for tests"
               onChange={handleVenueInput}
               autoComplete="off"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--anc-brand)] focus:border-transparent"
             />
             <input ref={venueIdRef} type="hidden" name="venueId" />
+            {/* Always offer ANC as a test venue (Charlie 2026-07-16) */}
+            <div className="mt-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (venueIdRef.current) venueIdRef.current.value = ''
+                  const inputEl = document.querySelector<HTMLInputElement>('input[name="venue"]')
+                  if (inputEl) inputEl.value = 'ANC'
+                  const tri = document.querySelector<HTMLInputElement>('input[name="triCode"]')
+                  if (tri) tri.value = 'ANC'
+                  setVenueSuggestions([])
+                  setAssetOptions([])
+                }}
+                className="text-xs font-medium text-[var(--anc-brand)] hover:underline"
+              >
+                Use ANC (test tickets)
+              </button>
+            </div>
             {venueSuggestions.length > 0 && (
               <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (venueIdRef.current) venueIdRef.current.value = ''
+                      const inputEl = document.querySelector<HTMLInputElement>('input[name="venue"]')
+                      if (inputEl) inputEl.value = 'ANC'
+                      const tri = document.querySelector<HTMLInputElement>('input[name="triCode"]')
+                      if (tri) tri.value = 'ANC'
+                      setVenueSuggestions([])
+                      setAssetOptions([])
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100"
+                  >
+                    <div className="font-medium text-gray-900">ANC</div>
+                    <div className="text-xs text-gray-500">Test tickets · tri-code ANC</div>
+                  </button>
+                </li>
                 {venueSuggestions.map((v) => (
                   <li key={v.id}>
                     <button
@@ -219,7 +272,7 @@ export default function DesignRequestFormPage() {
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Tri-code" name="triCode" placeholder="e.g. IND-PAC" />
+          <Field label="Tri-code" name="triCode" placeholder="e.g. IND-PAC" required />
           <Field label="Due date" name="dueDate" type="date" required />
         </div>
 

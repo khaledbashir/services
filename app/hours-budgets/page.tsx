@@ -14,6 +14,7 @@ interface Budget {
   league: string | null
   season: string | null
   total_hours: number
+  management_times: number | null
   contract_start: string | null
   contract_end: string | null
   notes: string | null
@@ -69,11 +70,26 @@ export default function HoursBudgetsPage() {
     league: '',
     season: '',
     total_hours: '',
+    management_times: '',
     contract_start: '',
     contract_end: '',
     notes: '',
     alert_thresholds: '25, 50, 75, 85, 90, 95, 100',
     alert_recipient_email: '',
+  })
+  // Charlie 2026-07-16: click client name on a card to edit the budget in place.
+  const [editBudget, setEditBudget] = useState<Budget | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editForm, setEditForm] = useState({
+    client_name: '',
+    season: '',
+    total_hours: '',
+    management_times: '',
+    league: '',
+    tricode: '',
+    notes: '',
+    contract_start: '',
+    contract_end: '',
   })
 
   const fetchData = async () => {
@@ -124,6 +140,7 @@ export default function HoursBudgetsPage() {
           league: '',
           season: '',
           total_hours: '',
+          management_times: '',
           contract_start: '',
           contract_end: '',
           notes: '',
@@ -137,6 +154,56 @@ export default function HoursBudgetsPage() {
       console.error(err)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const openEdit = (b: Budget) => {
+    setEditBudget(b)
+    setEditForm({
+      client_name: b.client_name || '',
+      season: b.season || '',
+      total_hours: b.total_hours != null ? String(b.total_hours) : '',
+      management_times: b.management_times != null ? String(b.management_times) : '',
+      league: b.league || '',
+      tricode: b.tricode || '',
+      notes: b.notes || '',
+      contract_start: b.contract_start || '',
+      contract_end: b.contract_end || '',
+    })
+  }
+
+  const saveEdit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!editBudget) return
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/hours-budgets/${editBudget.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_name: editForm.client_name.trim(),
+          season: editForm.season || null,
+          total_hours: editForm.total_hours.trim() ? Number(editForm.total_hours) : 0,
+          management_times: editForm.management_times.trim() ? Number(editForm.management_times) : null,
+          league: editForm.league || null,
+          tricode: editForm.tricode || null,
+          notes: editForm.notes || null,
+          contract_start: editForm.contract_start || null,
+          contract_end: editForm.contract_end || null,
+        }),
+      })
+      if (res.ok) {
+        setEditBudget(null)
+        await fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || 'Could not save budget')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Could not save budget')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -292,7 +359,7 @@ export default function HoursBudgetsPage() {
               )}
               <p className="mt-1 text-[11px] text-zinc-500">Design requests with this Tri-Code will roll up to this budget. Leave blank to match by venue only.</p>
             </div>
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               <div>
                 <label className="mb-1 block text-xs font-medium text-zinc-600">League</label>
                 <input
@@ -319,6 +386,17 @@ export default function HoursBudgetsPage() {
                   value={formData.total_hours}
                   onChange={(e) => setFormData((prev) => ({ ...prev, total_hours: e.target.value }))}
                   placeholder="Unlimited"
+                  className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-600">Management Times</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.management_times}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, management_times: e.target.value }))}
+                  placeholder="Hrs · multiplies graphics/year"
                   className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
                 />
               </div>
@@ -418,7 +496,14 @@ export default function HoursBudgetsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2 flex-wrap">
-                      <span className="truncate">{group.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(currentBudget)}
+                        className="truncate text-left hover:text-[#0A52EF] hover:underline"
+                        title="Click to edit this budget"
+                      >
+                        {group.title}
+                      </button>
                       {group.tricode && (
                         <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-700 tracking-wider">{group.tricode}</span>
                       )}
@@ -488,6 +573,115 @@ export default function HoursBudgetsPage() {
             )
           })}
         </div>
+
+        {editBudget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditBudget(null)}>
+            <form
+              onSubmit={saveEdit}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl ring-1 ring-zinc-200"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-900">Edit budget</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Click the client name on any card to open this.</p>
+                </div>
+                <button type="button" onClick={() => setEditBudget(null)} className="text-zinc-400 hover:text-zinc-700 text-sm">Close</button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Client Name</label>
+                  <input
+                    required
+                    value={editForm.client_name}
+                    onChange={(e) => setEditForm((p) => ({ ...p, client_name: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Total Hours</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.total_hours}
+                    onChange={(e) => setEditForm((p) => ({ ...p, total_hours: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Management Times</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.management_times}
+                    onChange={(e) => setEditForm((p) => ({ ...p, management_times: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Season</label>
+                  <input
+                    value={editForm.season}
+                    onChange={(e) => setEditForm((p) => ({ ...p, season: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Tri-Code</label>
+                  <input
+                    value={editForm.tricode}
+                    onChange={(e) => setEditForm((p) => ({ ...p, tricode: e.target.value.toUpperCase() }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm font-mono uppercase outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">League</label>
+                  <input
+                    value={editForm.league}
+                    onChange={(e) => setEditForm((p) => ({ ...p, league: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Notes</label>
+                  <input
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Contract Start</label>
+                  <input
+                    type="date"
+                    value={editForm.contract_start}
+                    onChange={(e) => setEditForm((p) => ({ ...p, contract_start: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Contract End</label>
+                  <input
+                    type="date"
+                    value={editForm.contract_end}
+                    onChange={(e) => setEditForm((p) => ({ ...p, contract_end: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditBudget(null)} className="px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {editSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )

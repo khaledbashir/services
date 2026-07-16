@@ -36,7 +36,7 @@ async function saveAlertSettings(id: string, thresholds: unknown, recipientEmail
 async function loadBudget(id: string) {
   const result = await query(
     `SELECT b.id, b.client_name, b.venue_id, v.name as venue_name, b.league, b.season,
-            b.total_hours, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
+            b.total_hours, b.management_times, b.contract_start::text as contract_start, b.contract_end::text as contract_end,
             b.notes, b.tricode, b.created_at, b.updated_at,
             COALESCE(SUM(te.hours), 0)::float8 as hours_spent,
             COUNT(te.id)::int as entry_count
@@ -154,6 +154,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       league: 'league',
       season: 'season',
       total_hours: 'total_hours',
+      management_times: 'management_times',
       contract_start: 'contract_start',
       contract_end: 'contract_end',
       notes: 'notes',
@@ -163,8 +164,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     for (const [key, column] of Object.entries(columns)) {
       if (body[key] !== undefined) {
         let value: any
-        if (key === 'total_hours') value = Number(body[key])
-        else if (key === 'tricode') value = body[key]?.trim() ? body[key].trim().toUpperCase() : null
+        if (key === 'total_hours' || key === 'management_times') {
+          value = body[key] === '' || body[key] == null ? null : Number(body[key])
+        } else if (key === 'tricode') value = body[key]?.trim() ? body[key].trim().toUpperCase() : null
         else value = body[key] || null
         updates.push(`${column} = $${idx++}`)
         values.push(value)

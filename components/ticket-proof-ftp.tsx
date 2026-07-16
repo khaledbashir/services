@@ -18,6 +18,8 @@ export function TicketProofFtp({
   clientName,
   clientEmail,
   existingProofUrl,
+  onFolderChosen,
+  onCreated,
 }: {
   objectType: 'designRequest' | 'contentSchedule' | 'cgDesignRequest' | 'printRequest'
   recordId: string
@@ -25,6 +27,9 @@ export function TicketProofFtp({
   clientName?: string | null
   clientEmail?: string | null
   existingProofUrl?: string | null
+  /** Charlie 2026-07-16: bubble the selected FTP folder up as Proof Location. */
+  onFolderChosen?: (folderPath: string) => void
+  onCreated?: (info: { url: string; folderPath: string }) => void
 }) {
   const [open, setOpen] = useState(false)
   const [folder, setFolder] = useState<string | null>(null)
@@ -33,6 +38,11 @@ export function TicketProofFtp({
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
+
+  const chooseFolder = (path: string | null) => {
+    setFolder(path)
+    if (path) onFolderChosen?.(path)
+  }
 
   const create = async () => {
     if (!folder) return
@@ -57,6 +67,8 @@ export function TicketProofFtp({
         return
       }
       setResult({ url: data.url, fileCount: data.fileCount })
+      onFolderChosen?.(folder)
+      onCreated?.({ url: data.url, folderPath: folder })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create proof')
     } finally {
@@ -134,7 +146,7 @@ export function TicketProofFtp({
 
       {open && (
         <div className="mt-3 space-y-3">
-          <FtpFolderBrowser selected={folder} onSelect={setFolder} triCode={triCode} />
+          <FtpFolderBrowser selected={folder} onSelect={chooseFolder} triCode={triCode} />
           {error && <div className="rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs text-red-700">{error}</div>}
           {result && (
             <div className="rounded-lg bg-green-50 border border-green-200 p-3">
