@@ -371,6 +371,20 @@ async function runMigrations() {
       PRIMARY KEY (channel_id, thread_ts, entity_type)
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_slack_worklog_threads_entity ON slack_worklog_threads(entity_type, entity_id)`)
+    await client.query(`CREATE TABLE IF NOT EXISTS slack_photo_files (
+      id SERIAL PRIMARY KEY,
+      slack_file_id TEXT UNIQUE NOT NULL,
+      channel_id TEXT NOT NULL,
+      venue_id INTEGER,
+      venue_name TEXT,
+      poster TEXT,
+      posted_at TIMESTAMPTZ,
+      filename TEXT,
+      filed_path TEXT,
+      web_url TEXT,
+      bytes BIGINT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
