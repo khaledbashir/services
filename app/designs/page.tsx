@@ -570,6 +570,14 @@ export default function DesignsPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!formData.job_title.trim()) return
+    if (!formData.venue_id) {
+      setFormError('Venue is required.')
+      return
+    }
+    if (!normalizeTriCode(formData.tricode)) {
+      setFormError('Tri-Code is required.')
+      return
+    }
     setSubmitting(true)
     setFormError(null)
     try {
@@ -933,7 +941,7 @@ export default function DesignsPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
-                    Venue {formData.is_rando && <span className="text-zinc-400 font-normal lowercase tracking-normal">— optional for randos</span>}
+                    Venue <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.venue_id}
@@ -948,8 +956,9 @@ export default function DesignsPage() {
                       }))
                     }}
                     className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
+                    required
                   >
-                    <option value="">Not specified</option>
+                    <option value="">Select venue</option>
                     {venues.map((venue) => (
                       <option key={venue.id} value={venue.id}>{venue.name}</option>
                     ))}
@@ -967,20 +976,21 @@ export default function DesignsPage() {
                 />
                 <div>
                   <div className="text-sm font-medium text-zinc-900">This is a rando / ad-hoc request</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">One-off paid work for a client with no recurring service agreement (e.g. University of Washington). Venue is optional.</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">One-off paid work for a client with no recurring service agreement (e.g. University of Washington).</div>
                 </div>
               </label>
 
               <div className="grid md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
-                    Tri-Code <span className="text-zinc-400 font-normal lowercase tracking-normal">— up to 2 × 3 letters</span>
+                    Tri-Code <span className="text-red-500">*</span> <span className="text-zinc-400 font-normal lowercase tracking-normal">— up to 2 × 3 letters</span>
                   </label>
                   {selectedFormTriCodes.length > 0 ? (
                     <select
                       value={formData.tricode}
                       onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value }))}
                       className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
+                      required
                     >
                       <option value="">Select code</option>
                       {selectedFormTriCodes.map((code) => (
@@ -995,6 +1005,7 @@ export default function DesignsPage() {
                       maxLength={7}
                       placeholder="BSX-FEN"
                       className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
+                      required
                     />
                   )}
                 </div>

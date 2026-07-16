@@ -33,16 +33,22 @@ interface CgDesignRequestDetail {
 interface Staff { id: string; full_name: string }
 
 const statusOptions = [
-  { value: 'request_submitted', label: 'Request Submitted' },
-  { value: 'in_progress', label: 'In-Progress' },
-  { value: 'submitted_internally', label: 'Submitted Internally' },
-  { value: 'client_review', label: 'Client Review' },
-  { value: 'revisions', label: 'Revisions' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'on_hold', label: 'On Hold' },
-  { value: 'request_closed', label: 'Request Closed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'request_submitted', label: 'Request Submitted', description: 'New CG request intake', tone: 'bg-sky-100 text-sky-900 ring-sky-300' },
+  { value: 'in_progress', label: 'In-Progress', description: 'CG work underway', tone: 'bg-amber-100 text-amber-900 ring-amber-300' },
+  { value: 'submitted_internally', label: 'Submitted Internally', description: 'Ready for internal review', tone: 'bg-violet-100 text-violet-900 ring-violet-300' },
+  { value: 'client_review', label: 'Client Review', description: 'Proof awaiting client decision', tone: 'bg-blue-600 text-white ring-blue-700' },
+  { value: 'revisions', label: 'Revisions', description: 'Client changes in progress', tone: 'bg-rose-100 text-rose-900 ring-rose-300' },
+  { value: 'approved', label: 'Approved', description: 'Client approved the proof', tone: 'bg-emerald-100 text-emerald-900 ring-emerald-300' },
+  { value: 'on_hold', label: 'On Hold', description: 'Work intentionally paused', tone: 'bg-zinc-200 text-zinc-800 ring-zinc-300' },
+  { value: 'request_closed', label: 'Request Closed', description: 'Approved work completed', tone: 'bg-zinc-700 text-white ring-zinc-800' },
+  { value: 'cancelled', label: 'Cancelled', description: 'Request cancelled', tone: 'bg-red-100 text-red-900 ring-red-300' },
 ]
+
+const workflowStatuses = statusOptions.filter((option) => option.value !== 'cancelled')
+
+function cgStatusClass(status: string) {
+  return statusOptions.find((option) => option.value === status)?.tone || 'bg-white text-zinc-800 ring-zinc-300'
+}
 
 export function CgDesignDetail({
   params,
@@ -59,6 +65,7 @@ export function CgDesignDetail({
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [updateError, setUpdateError] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
   const [projectFileDraft, setProjectFileDraft] = useState('')
   const router = useRouter()
@@ -96,15 +103,22 @@ export function CgDesignDetail({
 
   const updateField = async (payload: Record<string, any>) => {
     setSaving(true)
+    setUpdateError(null)
     try {
       const res = await fetch(`/api/cg-designs/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (res.ok) await fetchData()
+      if (res.ok) {
+        await fetchData()
+      } else {
+        const body = await res.json().catch(() => ({}))
+        setUpdateError(body.error || 'Could not update this CG request.')
+      }
     } catch (err) {
       console.error(err)
+      setUpdateError('Could not update this CG request.')
     } finally {
       setSaving(false)
     }
@@ -141,7 +155,7 @@ export function CgDesignDetail({
   return (
     <PageFrame embedded={embedded}>
       <div className={`${embedded ? 'px-5 py-5' : 'max-w-6xl mx-auto py-2'} space-y-8`}>
-        <div className="space-y-4">
+        <div className="space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <button onClick={() => embedded ? onClose?.() : router.push('/cg-designs')} className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors flex items-center gap-1.5 group">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -167,11 +181,55 @@ export function CgDesignDetail({
                 )}
               </div>
             </div>
-            <select value={item.status} onChange={(e) => updateField({ status: e.target.value })} className="border border-zinc-300 px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-zinc-400">
+            <select
+              value={item.status}
+              onChange={(e) => updateField({ status: e.target.value })}
+              disabled={saving}
+              className={`rounded-lg px-3 py-2 text-sm font-bold outline-none ring-1 focus:ring-2 focus:ring-[#0A52EF]/40 disabled:opacity-60 ${cgStatusClass(item.status)}`}
+            >
               {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
+          {updateError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{updateError}</div>
+          )}
         </div>
+
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-zinc-900">CG Workflow</h2>
+            <p className="mt-1 text-xs text-zinc-500">Click any numbered status card to move this request.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {workflowStatuses.map((status, index) => {
+              const active = item.status === status.value
+              return (
+                <button
+                  key={status.value}
+                  type="button"
+                  onClick={() => updateField({ status: status.value })}
+                  disabled={saving}
+                  aria-current={active ? 'step' : undefined}
+                  className={`flex items-start gap-3 rounded-xl p-3 text-left ring-1 transition hover:-translate-y-0.5 hover:shadow-sm disabled:opacity-60 ${
+                    active ? status.tone : 'bg-zinc-50 text-zinc-800 ring-zinc-200 hover:bg-white'
+                  }`}
+                >
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    active ? 'bg-white/90 text-zinc-900' : 'bg-white text-zinc-700 ring-1 ring-zinc-200'
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold">{status.label}</span>
+                    <span className={`mt-0.5 block text-[10px] leading-snug ${active && ['client_review', 'request_closed'].includes(status.value) ? 'text-white/80' : 'text-zinc-500'}`}>
+                      {status.description}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-8">
           <div className="space-y-6">
@@ -222,12 +280,6 @@ export function CgDesignDetail({
 
             <HoursLog cgDesignRequestId={item.id} staffList={staffList} />
             <AttachmentPanel cgDesignRequestId={item.id} />
-            <CommentThread
-              baseUrl={`/api/cg-designs/${item.id}/comments`}
-              staff={staffList}
-              currentUserId={currentUserId}
-              isAdmin={isAdmin}
-            />
             <CgDesignActivityTimeline requestId={item.id} />
           </div>
 
@@ -244,6 +296,12 @@ export function CgDesignDetail({
                 <div className="flex justify-between gap-4"><span className="text-zinc-500">Tri-Code</span><span className="text-zinc-900 font-mono">{item.tricode || '—'}</span></div>
               </div>
             </div>
+            <CommentThread
+              baseUrl={`/api/cg-designs/${item.id}/comments`}
+              staff={staffList}
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+            />
           </div>
         </div>
       </div>

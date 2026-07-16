@@ -50,5 +50,6 @@ export async function POST(
     updated: result.updated,
     unpublished: result.removed,
     unchanged: result.unchanged,
+    approvalReset: result.approvalReset,
   })
 }

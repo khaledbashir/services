@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  archiveSupersededProofDecisions,
+  buildFtpAttachmentId,
   buildSourceVersion,
   fingerprintHostKey,
   isPathWithinRoots,
@@ -66,6 +68,41 @@ test('manual sync deduplicates, versions replacements, and soft-unpublishes miss
   assert.equal(result.manifest.find((entry) => entry.name === 'changed.pdf').previousSourceVersion, 'old')
   assert.equal(result.manifest.find((entry) => entry.name === 'gone.png').active, false)
   assert.equal(result.manifest.find((entry) => entry.name === 'gone.png').removedAt, '2026-07-12T12:00:00.000Z')
+})
+
+test('same-name proof replacement archives the prior approval and clears the active decision', () => {
+  const previous = [{ name: 'review.mp4', size: 100, modifiedAt: '2026-07-09T12:00:00.000Z', kind: 'video', sourceVersion: 'r1', active: true }]
+  const current = [{ ...previous[0], size: 120, modifiedAt: '2026-07-10T12:00:00.000Z', sourceVersion: 'r2' }]
+  const reconciled = reconcileProofManifest(previous, current, '2026-07-10T12:01:00.000Z')
+  const id = buildFtpAttachmentId('review.mp4')
+  const archived = archiveSupersededProofDecisions({
+    previous,
+    manifest: reconciled.manifest,
+    fileResponses: { [id]: { response: 'approved', note: 'Approved R1', at: '2026-07-09T15:00:00.000Z' } },
+    archivedAt: '2026-07-10T12:01:00.000Z',
+  })
+  assert.equal(archived.fileResponses[id], undefined)
+  assert.equal(archived.manifest[0].approvalHistory.length, 1)
+  assert.equal(archived.manifest[0].approvalHistory[0].sourceVersion, 'r1')
+  assert.equal(archived.manifest[0].approvalHistory[0].response, 'approved')
+})
+
+test('renamed R2 proof preserves R1 approval while the new file remains pending', () => {
+  const previous = [{ name: 'review-R1.pdf', size: 100, modifiedAt: '2026-07-09T12:00:00.000Z', kind: 'pdf', sourceVersion: 'r1', active: true }]
+  const current = [{ name: 'review-R2.pdf', size: 120, modifiedAt: '2026-07-10T12:00:00.000Z', kind: 'pdf', sourceVersion: 'r2', active: true }]
+  const reconciled = reconcileProofManifest(previous, current, '2026-07-10T12:01:00.000Z')
+  const oldId = buildFtpAttachmentId('review-R1.pdf')
+  const newId = buildFtpAttachmentId('review-R2.pdf')
+  const archived = archiveSupersededProofDecisions({
+    previous,
+    manifest: reconciled.manifest,
+    fileResponses: { [oldId]: { response: 'approved', at: '2026-07-09T15:00:00.000Z' } },
+    archivedAt: '2026-07-10T12:01:00.000Z',
+  })
+  assert.equal(archived.fileResponses[oldId], undefined)
+  assert.equal(archived.fileResponses[newId], undefined)
+  assert.equal(archived.manifest.find((entry) => entry.name === 'review-R1.pdf').approvalHistory[0].response, 'approved')
+  assert.equal(archived.manifest.find((entry) => entry.name === 'review-R2.pdf').active, true)
 })
 
 test('host key verification accepts only the pinned SHA-256 fingerprint', () => {

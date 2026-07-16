@@ -1,5 +1,5 @@
 /**
- * Proof FTP — read-only browse/stream source backed by ANC's own SFTP server.
+ * Proof FTP — browse/stream source backed by ANC's own SFTP server.
  *
  * The third proof source, alongside Twenty attachments (`proof-share.ts`) and
  * self-hosted MinIO (`proof-storage.ts`). Where those *hold* files, this one
@@ -19,8 +19,9 @@
  *   3. The root holds ~20,000 client folders, never pruned. We NEVER list the
  *      whole tree — every call lists exactly one directory level.
  *
- * Access is a dedicated read-only account. We additionally jail every path to
- * the account root so a crafted path can't walk above it.
+ * Access uses a dedicated jailed account. Normal proof operations are read-
+ * only; the one intentional write path stores client replacement media inside
+ * a `Client Uploads` child folder beneath the selected proof folder.
  */
 
 import SftpClient from 'ssh2-sftp-client'
@@ -298,6 +299,58 @@ async function withClient<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
   return queued
 }
 
+export type ClientMediaUploadResult = {
+  folderPath: string
+  targetPath: string
+  storedFilename: string
+}
+
+/**
+ * Put client-supplied replacement media beside the proof source, inside a
+ * dedicated child folder so it is easy for the designer to find but never
+ * becomes part of the client-facing proof roster by accident.
+ */
+export async function uploadClientMediaToProofFolder(opts: {
+  proofFolderPath: string
+  filename: string
+  body: Buffer | Uint8Array
+}): Promise<ClientMediaUploadResult> {
+  const proofFolder = resolveSafePath(opts.proofFolderPath)
+  const original = path.posix.basename(String(opts.filename || 'client-upload'))
+  if (!original || original === '.' || original === '..' || /[\u0000-\u001f]/.test(original)) {
+    throw new Error('Invalid upload filename')
+  }
+  const safeName = original
+    .replace(/[/\\]/g, '_')
+    .replace(/[^A-Za-z0-9._()\- ]/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 170) || 'client-upload'
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
+  const storedFilename = `${stamp}_${safeName}`
+  const folderPath = resolveSafePath(path.posix.join(proofFolder, 'Client Uploads'))
+  const targetPath = resolveSafePath(path.posix.join(folderPath, storedFilename))
+  const tempPath = resolveSafePath(path.posix.join(folderPath, `.${storedFilename}.uploading`))
+
+  await withClient(async (sftp) => {
+    const existing = await sftp.exists(folderPath)
+    if (!existing) await sftp.mkdir(folderPath, true)
+    if (await sftp.exists(targetPath)) return
+    try {
+      await sftp.put(Buffer.from(opts.body), tempPath)
+      await sftp.rename(tempPath, targetPath)
+    } catch (error) {
+      try {
+        if (await sftp.exists(tempPath)) await sftp.delete(tempPath)
+      } catch { /* best-effort cleanup */ }
+      throw error
+    }
+  })
+
+  listingCache.delete(proofFolder)
+  listingCache.delete(folderPath)
+  return { folderPath, targetPath, storedFilename }
+}
+
 /**
  * When a fingerprint is pinned, every connection must present that exact host
  * key — otherwise the session is refused. Unpinned (no env var) keeps today's
@@ -483,6 +536,19 @@ export interface FtpManifestEntry {
   active: boolean
   previousSourceVersion?: string  // set when a sync sees a replaced revision
   removedAt?: string              // set when a sync soft-unpublishes the file
+  approvalHistory?: Array<{
+    name: string
+    sourceVersion: string
+    response: 'approved' | 'changes_requested'
+    note?: string | null
+    at?: string | null
+    archivedAt: string
+  }>
+}
+
+/** Stable response key used by the public proof and staff roster. */
+export function buildFtpAttachmentId(name: string): string {
+  return `ftp-${Buffer.from(name).toString('base64url')}`
 }
 
 /**
@@ -520,10 +586,15 @@ export function reconcileProofManifest(
     if (prev.active === false) {
       // File came back after being unpublished.
       added += 1
-      manifest.push({ ...now, active: true })
+      manifest.push({ ...now, active: true, approvalHistory: prev.approvalHistory || [] })
     } else if (prev.sourceVersion !== now.sourceVersion) {
       updated += 1
-      manifest.push({ ...now, active: true, previousSourceVersion: prev.sourceVersion })
+      manifest.push({
+        ...now,
+        active: true,
+        previousSourceVersion: prev.sourceVersion,
+        approvalHistory: prev.approvalHistory || [],
+      })
     } else {
       unchanged += 1
       manifest.push({ ...prev, active: true })
@@ -535,6 +606,54 @@ export function reconcileProofManifest(
     manifest.push({ ...now, active: true })
   }
   return { manifest, added, updated, removed, unchanged }
+}
+
+export type FtpFileDecision = {
+  response: 'approved' | 'changes_requested'
+  note?: string | null
+  name?: string | null
+  at?: string | null
+}
+
+/**
+ * Move decisions for replaced or removed revisions into immutable manifest
+ * history. The active response slot is cleared so a replacement must be
+ * reviewed, while prior approvals remain visible on the stable proof link.
+ */
+export function archiveSupersededProofDecisions(opts: {
+  previous: FtpManifestEntry[]
+  manifest: FtpManifestEntry[]
+  fileResponses: Record<string, FtpFileDecision>
+  archivedAt: string
+}): { manifest: FtpManifestEntry[]; fileResponses: Record<string, FtpFileDecision> } {
+  const previousByName = new Map(opts.previous.map((entry) => [entry.name, entry]))
+  const fileResponses = { ...opts.fileResponses }
+  const manifest = opts.manifest.map((entry) => {
+    const prior = previousByName.get(entry.name)
+    if (!prior) return entry
+    const changed = prior.active !== false && entry.active !== false && prior.sourceVersion !== entry.sourceVersion
+    const removed = prior.active !== false && entry.active === false
+    if (!changed && !removed) return entry
+
+    const responseId = buildFtpAttachmentId(entry.name)
+    const decision = fileResponses[responseId]
+    if (!decision) return entry
+    const archived = {
+      name: entry.name,
+      sourceVersion: prior.sourceVersion,
+      response: decision.response,
+      note: decision.note || null,
+      at: decision.at || null,
+      archivedAt: opts.archivedAt,
+    }
+    const history = Array.isArray(prior.approvalHistory) ? [...prior.approvalHistory] : []
+    if (!history.some((item) => item.sourceVersion === archived.sourceVersion && item.response === archived.response)) {
+      history.push(archived)
+    }
+    delete fileResponses[responseId]
+    return { ...entry, approvalHistory: history }
+  })
+  return { manifest, fileResponses }
 }
 
 export interface FtpListing {

@@ -38,6 +38,13 @@ interface ProofData {
   clientResponseAt: string | null
   clientResponseNote: string | null
   attachments: Attachment[]
+  previouslyApproved?: Array<{
+    name: string
+    sourceVersion: string
+    note?: string | null
+    at?: string | null
+    archivedAt: string
+  }>
 }
 
 export default function ProofSharePage() {
@@ -293,6 +300,26 @@ export default function ProofSharePage() {
           </div>
         )}
 
+        {!!data.previouslyApproved?.length && (
+          <div className="px-6 py-4 border-b border-emerald-100 bg-emerald-50/70">
+            <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+              Previously approved — no action needed
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {data.previouslyApproved.map((item, index) => (
+                <div key={`${item.name}-${item.sourceVersion}-${index}`} className="flex items-center gap-2 text-sm text-emerald-900">
+                  <span className="font-semibold">✓</span>
+                  <span className="min-w-0 truncate">{item.name}</span>
+                  <span className="ml-auto shrink-0 text-xs text-emerald-700">
+                    {item.at ? new Date(item.at).toLocaleDateString() : 'Earlier version'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-emerald-700">Only the revised files below require a new decision.</p>
+          </div>
+        )}
+
         {/* File preview */}
         <div className="bg-gray-50 border-b border-gray-100">
           {activeAtt ? (
@@ -528,7 +555,11 @@ export default function ProofSharePage() {
                     alert(body.error || 'Upload failed')
                     return
                   }
-                  alert(`Uploaded “${file.name}” — our team can now pick it up.`)
+                  alert(
+                    body.proofFolderPath
+                      ? `Uploaded “${file.name}” to the proof folder for our team.`
+                      : `Uploaded “${file.name}” — our team can now pick it up.`
+                  )
                 } catch {
                   alert('Upload failed')
                 } finally {

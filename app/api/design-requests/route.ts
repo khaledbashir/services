@@ -309,6 +309,13 @@ export async function POST(request: NextRequest) {
     if (!job_title?.trim()) {
       return NextResponse.json({ error: 'job_title is required' }, { status: 400 })
     }
+    if (!venue_id) {
+      return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
+    }
+    const normalizedTriCode = normalizeTriCode(tricode)
+    if (!normalizedTriCode) {
+      return NextResponse.json({ error: 'tricode is required' }, { status: 400 })
+    }
 
     if (isTwentyBackedEnabled('DESIGNS')) {
       try {
@@ -322,7 +329,7 @@ export async function POST(request: NextRequest) {
           status: toTwentyStatus(status) as any,
         })
         // Twenty's designRequests has no tri-code field — persist via side table.
-        const savedTriCode = await upsertTriCode('design_request_tricodes', created.id, tricode)
+        const savedTriCode = await upsertTriCode('design_request_tricodes', created.id, normalizedTriCode)
         return NextResponse.json({ design_request: { id: created.id, job_title: created.name, status: created.status, tricode: savedTriCode } })
       } catch (err) {
         console.error('[design-requests POST twenty-backed] error:', err)
@@ -337,8 +344,7 @@ export async function POST(request: NextRequest) {
 
     // Auto-resolve venue from tricode using venues.aliases (Alexis 5/27: try
     // codes like PACERS-XXX should land on the right venue automatically).
-    let resolvedVenueId = venue_id || null
-    const normalizedTriCode = normalizeTriCode(tricode)
+    let resolvedVenueId = venue_id
     if (!resolvedVenueId && normalizedTriCode) resolvedVenueId = await resolveVenueIdFromTriCode(normalizedTriCode)
 
     const result = await query(

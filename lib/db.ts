@@ -195,6 +195,14 @@ async function runMigrations() {
     // like "Philadelphia Flyers" — typing "Flyers" should resolve to Xfinity
     // Mobile Arena. Stored as a TEXT[] of free-form strings.
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS aliases TEXT[] DEFAULT '{}'`)
+    // Charlie 2026-07-16: permanent internal venue for test Design tickets.
+    // Seed idempotently so every deployment and recovered database exposes
+    // the same ANC venue with the ANC tri-code.
+    await client.query(`
+      INSERT INTO venues (name, venue_type, requires_assignment, is_active, aliases, portal_token)
+      SELECT 'ANC', 'facility', false, true, ARRAY['ANC']::text[], encode(gen_random_bytes(16), 'hex')
+      WHERE NOT EXISTS (SELECT 1 FROM venues WHERE LOWER(name) = 'anc')
+    `)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`)
     await client.query(`CREATE TABLE IF NOT EXISTS venue_documents (

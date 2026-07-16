@@ -2,14 +2,14 @@
  * POST /api/proof-share/[token]/client-upload
  *
  * Charlie 2026-07-16: when a client denies proofs (or sends wrong media),
- * they can drop replacement assets on the proof link. Files land in proof
- * storage under client-uploads/<token>/ and are recorded on proof_shares
- * for designers to pick up — FTP is read-only so we cannot write back into
- * the original proof folder.
+ * they can drop replacement assets on the proof link. FTP-backed shares put
+ * the file into a `Client Uploads` child folder beneath the selected proof
+ * folder, and every upload is also attached to the staff ticket for pickup.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { uploadProof } from '@/lib/proof-storage'
+import { deleteProof, uploadProof } from '@/lib/proof-storage'
+import { uploadClientMediaToProofFolder } from '@/lib/proof-ftp'
 import { logDesignActivity } from '@/lib/design-activity'
 import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
@@ -22,6 +22,8 @@ type ClientUpload = {
   contentType: string
   size: number
   uploadedAt: string
+  proofFolderPath?: string | null
+  ftpPath?: string | null
 }
 
 export async function POST(
@@ -31,7 +33,7 @@ export async function POST(
   try {
     const token = params.token
     const shareRes = await query(
-      `SELECT token, twenty_object_type, twenty_record_id, client_uploads, expires_at
+      `SELECT token, twenty_object_type, twenty_record_id, client_uploads, expires_at, ftp_folder_path
        FROM proof_shares WHERE token = $1`,
       [token],
     )
@@ -65,12 +67,30 @@ export async function POST(
       body: buffer,
     })
 
+    let ftpUpload: Awaited<ReturnType<typeof uploadClientMediaToProofFolder>> | null = null
+    if (share.ftp_folder_path) {
+      try {
+        ftpUpload = await uploadClientMediaToProofFolder({
+          proofFolderPath: share.ftp_folder_path,
+          filename: file.name || 'client-upload',
+          body: buffer,
+        })
+      } catch (error) {
+        await deleteProof(stored.key).catch(() => {})
+        throw new Error(
+          `Could not place the file in the proof folder: ${error instanceof Error ? error.message : 'upload failed'}`
+        )
+      }
+    }
+
     const entry: ClientUpload = {
       key: stored.key,
       filename: stored.filename,
       contentType: stored.contentType,
       size: stored.size,
       uploadedAt: stored.uploadedAt,
+      proofFolderPath: ftpUpload?.folderPath || null,
+      ftpPath: ftpUpload?.targetPath || null,
     }
 
     if (share.twenty_object_type === 'localCgDesignRequest' && share.twenty_record_id) {
@@ -83,7 +103,7 @@ export async function POST(
         eventType: 'client_upload',
         actor: { fullName: 'Client' },
         toValue: entry.filename,
-        detail: { proofToken: token, key: entry.key, size: entry.size },
+        detail: { proofToken: token, key: entry.key, size: entry.size, ftpPath: entry.ftpPath },
       })
     }
 
@@ -108,11 +128,16 @@ export async function POST(
         eventType: 'client_upload',
         actor: { fullName: 'Client' },
         toValue: entry.filename,
-        detail: { proofToken: token, key: entry.key, size: entry.size },
+        detail: { proofToken: token, key: entry.key, size: entry.size, ftpPath: entry.ftpPath },
       }).catch(() => {})
     }
 
-    return NextResponse.json({ ok: true, upload: entry, uploads: next })
+    return NextResponse.json({
+      ok: true,
+      upload: entry,
+      uploads: next,
+      proofFolderPath: entry.proofFolderPath,
+    })
   } catch (err) {
     console.error('[proof client-upload]', err)
     return NextResponse.json(

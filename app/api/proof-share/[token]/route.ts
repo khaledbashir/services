@@ -9,8 +9,13 @@ import {
   fetchAttachmentsForRecord,
   classifyFile,
 } from '@/lib/proof-share'
-import { listProofFiles, isConfigured as ftpConfigured } from '@/lib/proof-ftp'
-import { isManifestStale, parseManifest, syncFtpShareManifest } from '@/lib/proof-share-sync'
+import { buildFtpAttachmentId, listProofFiles, isConfigured as ftpConfigured } from '@/lib/proof-ftp'
+import {
+  isManifestStale,
+  parseManifest,
+  syncFtpShareManifest,
+  type FileResponseDecision,
+} from '@/lib/proof-share-sync'
 
 /**
  * GET /api/proof-share/[token]
@@ -79,17 +84,23 @@ export async function GET(
       // On any sync failure we fall back to the stored snapshot silently.
       let manifestRaw: unknown = share.ftp_manifest
       let manifestSource = 'stored'
+      let liveFileResponses: Record<string, FileResponseDecision> =
+        share.file_responses && typeof share.file_responses === 'object' ? share.file_responses : {}
+      let liveClientResponse: 'approved' | 'changes_requested' | null = share.client_response || null
       if (ftpConfigured() && isManifestStale(share.ftp_last_synced_at)) {
         try {
           const synced = await syncFtpShareManifest(token, folder, share.ftp_manifest)
           manifestRaw = synced.manifest
           manifestSource = 'live-sync'
+          liveFileResponses = synced.fileResponses
+          liveClientResponse = synced.clientResponse
         } catch (err) {
           console.error('[proof-share/get] freshness sync failed, serving stored manifest:', err)
         }
       }
 
-      const storedManifest = parseManifest(manifestRaw).filter(
+      const fullManifest = parseManifest(manifestRaw)
+      const storedManifest = fullManifest.filter(
         (file) => file.active !== false
       ) as FtpProofFile[]
       let files: FtpProofFile[] = storedManifest
@@ -115,10 +126,9 @@ export async function GET(
         source: manifestSource,
         fileCount: files.length,
       }))
-      const fileResponses: Record<string, { response: string; note?: string; name?: string; at?: string }> =
-        share.file_responses && typeof share.file_responses === 'object' ? share.file_responses : {}
+      const fileResponses = liveFileResponses
       const attachments = files.map((f, index) => {
-        const id = `ftp-${Buffer.from(f.name).toString('base64url')}`
+        const id = buildFtpAttachmentId(f.name)
         return {
           id,
           name: f.name,
@@ -133,11 +143,28 @@ export async function GET(
           responseAt: fileResponses[id]?.at || null,
         }
       })
+      const previouslyApproved = fullManifest.flatMap((file) => {
+        const history = Array.isArray(file.approvalHistory)
+          ? file.approvalHistory.filter((item) => item.response === 'approved')
+          : []
+        const legacyDecision = file.active === false ? fileResponses[buildFtpAttachmentId(file.name)] : null
+        const legacy = legacyDecision?.response === 'approved'
+          ? [{
+              name: file.name,
+              sourceVersion: file.sourceVersion,
+              response: 'approved' as const,
+              note: legacyDecision.note || null,
+              at: legacyDecision.at || null,
+              archivedAt: file.removedAt || file.modifiedAt,
+            }]
+          : []
+        return [...history, ...legacy]
+      })
       const folderLabel = folder.replace(/\/+$/, '').split('/').pop() || 'Proof'
       return NextResponse.json({
         token,
-        state: share.client_response
-          ? share.client_response === 'approved' ? 'approved' : 'changes_requested'
+        state: liveClientResponse
+          ? liveClientResponse === 'approved' ? 'approved' : 'changes_requested'
           : 'pending',
         recordType: 'Proof',
         recordName: folderLabel,
@@ -149,9 +176,10 @@ export async function GET(
         expiresAt: share.expires_at,
         viewCount: share.view_count,
         lastViewedAt: share.last_viewed_at,
-        clientResponse: share.client_response,
+        clientResponse: liveClientResponse,
         clientResponseAt: share.client_response_at,
         clientResponseNote: share.client_response_note,
+        previouslyApproved,
         attachments,
       })
     }

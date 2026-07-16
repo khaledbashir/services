@@ -7,6 +7,7 @@ import { query } from '@/lib/db'
 import { parseManifest } from '@/lib/proof-share-sync'
 import { requireAuth, isAuthError } from '@/lib/rbac'
 import { getSignedDownloadUrl } from '@/lib/proof-storage'
+import { buildFtpAttachmentId } from '@/lib/proof-ftp'
 
 const CONTENT_LIBRARY_ROLES = new Set(['admin', 'tech_support', 'manager', 'designer', 'design_contractor'])
 
@@ -43,10 +44,11 @@ export async function GET(
   const fileResponses: Record<string, { response?: string; note?: string; name?: string; at?: string }> =
     share.file_responses && typeof share.file_responses === 'object' ? share.file_responses : {}
 
-  const files = parseManifest(share.ftp_manifest)
+  const manifest = parseManifest(share.ftp_manifest)
+  const files = manifest
     .filter((file) => file.active !== false)
     .map((file, index) => {
-      const id = `ftp-${Buffer.from(file.name).toString('base64url')}`
+      const id = buildFtpAttachmentId(file.name)
       const decision = fileResponses[id]
       return {
         id,
@@ -60,6 +62,24 @@ export async function GET(
       }
     })
 
+  const previouslyApproved = manifest.flatMap((file) => {
+    const history = Array.isArray(file.approvalHistory)
+      ? file.approvalHistory.filter((item) => item.response === 'approved')
+      : []
+    const legacyDecision = file.active === false ? fileResponses[buildFtpAttachmentId(file.name)] : null
+    const legacy = legacyDecision?.response === 'approved'
+      ? [{
+          name: file.name,
+          sourceVersion: file.sourceVersion,
+          response: 'approved' as const,
+          note: legacyDecision.note || null,
+          at: legacyDecision.at || null,
+          archivedAt: file.removedAt || file.modifiedAt,
+        }]
+      : []
+    return [...history, ...legacy]
+  })
+
   const clientUploads = await Promise.all(
     (Array.isArray(share.client_uploads) ? share.client_uploads : []).map(async (upload: {
       key?: string
@@ -67,12 +87,16 @@ export async function GET(
       contentType?: string
       size?: number
       uploadedAt?: string
+      proofFolderPath?: string | null
+      ftpPath?: string | null
     }) => ({
       filename: upload.filename || 'Client replacement file',
       contentType: upload.contentType || 'application/octet-stream',
       size: Number(upload.size || 0),
       uploadedAt: upload.uploadedAt || null,
       downloadUrl: upload.key ? await getSignedDownloadUrl(upload.key, 3600) : null,
+      proofFolderPath: upload.proofFolderPath || null,
+      ftpPath: upload.ftpPath || null,
     }))
   )
 
@@ -91,6 +115,7 @@ export async function GET(
     changesRequested: files.filter((f) => f.response === 'changes_requested').length,
     awaiting: files.filter((f) => !f.response).length,
     files,
+    previouslyApproved,
     clientUploads,
   })
 }

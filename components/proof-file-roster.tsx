@@ -19,12 +19,21 @@ type RosterData = {
   clientResponse: string | null
   clientResponseAt: string | null
   files: RosterFile[]
+  previouslyApproved: Array<{
+    name: string
+    sourceVersion: string
+    note?: string | null
+    at?: string | null
+    archivedAt: string
+  }>
   clientUploads: Array<{
     filename: string
     contentType: string
     size: number
     uploadedAt: string | null
     downloadUrl: string | null
+    proofFolderPath: string | null
+    ftpPath: string | null
   }>
 }
 
@@ -65,7 +74,7 @@ export function ProofFileRoster({ proofUrl }: { proofUrl: string | null }) {
 
   if (!token || (!data && !error)) return null
   if (error) return <div className="text-xs text-red-600">{error}</div>
-  if (!data || (data.files.length === 0 && data.clientUploads.length === 0)) return null
+  if (!data || (data.files.length === 0 && data.clientUploads.length === 0 && data.previouslyApproved.length === 0)) return null
 
   return (
     <div className="rounded-lg border border-zinc-200 overflow-hidden">
@@ -115,6 +124,22 @@ export function ProofFileRoster({ proofUrl }: { proofUrl: string | null }) {
           </div>
         ))}
       </div>
+      {data.previouslyApproved.length > 0 && (
+        <div className="border-t border-emerald-200 bg-emerald-50/70">
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+            Previously approved versions
+          </div>
+          <div className="divide-y divide-emerald-100">
+            {data.previouslyApproved.map((item, index) => (
+              <div key={`${item.name}-${item.sourceVersion}-${index}`} className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-900">
+                <span className="font-semibold">✓</span>
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                <span className="shrink-0 text-[10px] text-emerald-700">No re-approval needed</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {data.clientUploads.length > 0 && (
         <div className="border-t border-zinc-200">
           <div className="px-3 py-2 bg-blue-50 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
@@ -130,6 +155,11 @@ export function ProofFileRoster({ proofUrl }: { proofUrl: string | null }) {
                       .filter(Boolean)
                       .join(' · ')}
                   </div>
+                  {upload.proofFolderPath && (
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-blue-700" title={upload.ftpPath || upload.proofFolderPath}>
+                      {upload.proofFolderPath}
+                    </div>
+                  )}
                 </div>
                 {upload.downloadUrl && (
                   <a

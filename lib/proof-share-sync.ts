@@ -9,6 +9,7 @@
 
 import { query } from '@/lib/db'
 import {
+  archiveSupersededProofDecisions,
   type FtpManifestEntry,
   listProofFiles,
   reconcileProofManifest,
@@ -28,6 +29,16 @@ export type ShareSyncResult = {
   removed: number
   unchanged: number
   syncedAt: string
+  fileResponses: Record<string, FileResponseDecision>
+  clientResponse: 'approved' | 'changes_requested' | null
+  approvalReset: boolean
+}
+
+export type FileResponseDecision = {
+  response: 'approved' | 'changes_requested'
+  note?: string | null
+  name?: string | null
+  at?: string | null
 }
 
 export function parseManifest(raw: unknown): FtpManifestEntry[] {
@@ -75,11 +86,36 @@ export async function syncFtpShareManifest(
     const syncedAt = new Date().toISOString()
     const result = reconcileProofManifest(previous, current, syncedAt)
 
+    const decisionResult = await query(
+      `SELECT file_responses, client_response FROM proof_shares WHERE token = $1`,
+      [token]
+    )
+    const decisionRow = decisionResult.rows[0] || {}
+    const existingResponses: Record<string, FileResponseDecision> =
+      decisionRow.file_responses && typeof decisionRow.file_responses === 'object'
+        ? { ...decisionRow.file_responses }
+        : {}
+    const archived = archiveSupersededProofDecisions({
+      previous,
+      manifest: result.manifest,
+      fileResponses: existingResponses,
+      archivedAt: syncedAt,
+    })
+    result.manifest = archived.manifest
+    const nextResponses = archived.fileResponses
+
+    const approvalReset = result.added > 0 || result.updated > 0
+
     await query(
       `UPDATE proof_shares
-       SET ftp_manifest = $2::jsonb, ftp_last_synced_at = $3
+       SET ftp_manifest = $2::jsonb,
+           ftp_last_synced_at = $3,
+           file_responses = $4::jsonb,
+           client_response = CASE WHEN $5 THEN NULL ELSE client_response END,
+           client_response_at = CASE WHEN $5 THEN NULL ELSE client_response_at END,
+           client_response_note = CASE WHEN $5 THEN NULL ELSE client_response_note END
        WHERE token = $1`,
-      [token, JSON.stringify(result.manifest), syncedAt]
+      [token, JSON.stringify(result.manifest), syncedAt, JSON.stringify(nextResponses), approvalReset]
     )
     if (result.added || result.updated || result.removed) {
       console.info('[proof-share:sync]', JSON.stringify({
@@ -91,7 +127,13 @@ export async function syncFtpShareManifest(
     }
     // Warm the local file cache so new/revised proofs stream fast on first view.
     prefetchManifest(folderPath, result.manifest)
-    return { ...result, syncedAt }
+    return {
+      ...result,
+      syncedAt,
+      fileResponses: nextResponses,
+      clientResponse: approvalReset ? null : (decisionRow.client_response || null),
+      approvalReset,
+    }
   })()
 
   inFlight.set(token, run)
