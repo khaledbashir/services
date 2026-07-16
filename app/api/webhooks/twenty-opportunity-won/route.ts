@@ -7,7 +7,7 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
 const WIN_NOTIFY_TO = [
   'krissy.carter@anc.com',
   'kirsten.savage@anc.com',
-  'jireh.billings@anc.com',
+  'jbillings@anc.com',
   'alexis.ventarola@anc.com',
 ]
 // A deal whose name contains this sentinel routes the alert to the test

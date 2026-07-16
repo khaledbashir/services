@@ -68,6 +68,28 @@ async function historyPage(channel: string, oldest: string, cursor?: string): Pr
   return slackApi('conversations.history', body)
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// conversations.history is a Slack Tier-3 method (~50 calls/min). The sweep
+// walks 150+ venue channels in one run, so calls are paced to stay under the
+// tier and `ratelimited` responses back off and retry instead of dropping the
+// channel (a full-fleet sweep at ~1.2s/call runs a few minutes — fine for a
+// weekly cron).
+const HISTORY_PACE_MS = 1200
+let lastHistoryAt = 0
+
+async function pacedHistoryPage(channel: string, oldest: string, cursor?: string): Promise<any> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const wait = lastHistoryAt + HISTORY_PACE_MS - Date.now()
+    if (wait > 0) await sleep(wait)
+    lastHistoryAt = Date.now()
+    const response = await historyPage(channel, oldest, cursor)
+    if (response.ok || response.error !== 'ratelimited') return response
+    await sleep((attempt + 1) * 10_000)
+  }
+  return { ok: false, error: 'ratelimited after retries' }
+}
+
 async function channelImages(venue: Venue, oldest: string, errors: SweepError[]): Promise<SlackImage[]> {
   const images = new Map<string, SlackImage>()
   let cursor = ''
@@ -75,7 +97,7 @@ async function channelImages(venue: Venue, oldest: string, errors: SweepError[])
 
   while (true) {
     try {
-      let response = await historyPage(venue.slack_channel_id, oldest, cursor || undefined)
+      let response = await pacedHistoryPage(venue.slack_channel_id, oldest, cursor || undefined)
       if (!response.ok && response.error === 'not_in_channel' && !joined) {
         joined = true
         const join = await slackApi('conversations.join', { channel: venue.slack_channel_id })
@@ -83,7 +105,7 @@ async function channelImages(venue: Venue, oldest: string, errors: SweepError[])
           errors.push({ channel: venue.slack_channel_id, error: join.error || 'conversations.join failed' })
           break
         }
-        response = await historyPage(venue.slack_channel_id, oldest, cursor || undefined)
+        response = await pacedHistoryPage(venue.slack_channel_id, oldest, cursor || undefined)
       }
       if (!response.ok) {
         errors.push({ channel: venue.slack_channel_id, error: response.error || 'conversations.history failed' })
