@@ -846,14 +846,62 @@ export function getProjectScheduleInsights(): ProjectScheduleInsights {
   return buildInsights(activeProjects, onsiteAssignments, opportunities)
 }
 
+function projectFromOverride(override: ProjectScheduleOverrideRow): ActiveProject {
+  const installDate = coerceDate(override.install_onsite)
+  const completionDate = coerceDate(override.substantial_completion)
+  const base: Partial<ActiveProject> = {
+    id: override.project_id,
+    project: override.project_name || override.project_id,
+    pm: override.pm ?? '',
+    pmList: splitPeople(override.pm ?? ''),
+    notes: override.notes ?? '',
+    installOnsite: override.install_onsite ?? '',
+    substantialCompletion: override.substantial_completion ?? '',
+    controlSystem: '',
+    productSupplier: '',
+    ledShipDate: '',
+    shippingMethod: '',
+    ledOnSite: '',
+    integrationManager: '',
+    integrationSub: '',
+    commissioningDate: '',
+    ancCommissioning: '',
+    installSub: '',
+    electricalSub: '',
+  }
+  const risk = classifyRisk(base, installDate, completionDate)
+  const deploymentDocuments = deriveDeploymentDocuments(base, installDate)
+  const nextActions = deriveNextActions(base, installDate, completionDate, risk.reasons)
+  const submittals = deriveSubmittals(base, deploymentDocuments, installDate, risk.risk)
+
+  return {
+    ...base,
+    risk: risk.risk,
+    riskReasons: risk.reasons,
+    phase: override.phase ?? classifyPhase(base, installDate, completionDate),
+    deploymentStatus: override.deployment_status ?? deriveDeploymentStatus(base, deploymentDocuments, risk.risk),
+    deploymentDocuments,
+    deploymentChecklist: deriveDeploymentChecklist(base, deploymentDocuments, nextActions),
+    submittals,
+    documentGapCount: deploymentDocuments.filter((item) => item.status !== 'ready').length,
+    submittalGapCount: submittals.filter((item) => item.status === 'needed' || item.status === 'returned').length,
+    nextActions,
+    nextDate: override.next_date,
+    nextDateLabel: override.next_date_label,
+    documentFolderUrl: override.document_folder_url,
+  } as ActiveProject
+}
+
 function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOverrideRow[]) {
   const byId = new Map(overrides.map((item) => [item.project_id, item]))
-  return projects.map((project) => {
+  const workbookProjectIds = new Set(projects.map((project) => project.id))
+  const updatedProjects = projects.map((project) => {
     const override = byId.get(project.id)
     if (!override) return project
     const pm = override.pm ?? project.pm
     return {
       ...project,
+      project: override.project_name || project.project,
       pm,
       pmList: splitPeople(pm),
       phase: override.phase ?? project.phase,
@@ -866,6 +914,12 @@ function applyOverrides(projects: ActiveProject[], overrides: ProjectScheduleOve
       documentFolderUrl: override.document_folder_url ?? project.documentFolderUrl,
     }
   })
+
+  const generatedProjects = overrides
+    .filter((override) => !workbookProjectIds.has(override.project_id))
+    .map(projectFromOverride)
+
+  return [...updatedProjects, ...generatedProjects]
 }
 
 // Item override key: `${projectId}::${itemKind}::${itemKey}`.
@@ -1006,8 +1060,8 @@ function applyExtraSubmittals(projects: ActiveProject[], rows: ExtraSubmittalRow
 }
 
 export async function listExtraSubmittals(projectId: string): Promise<SubmittalRegisterItem[]> {
-  const { activeProjects } = readWorkbookData()
-  const project = activeProjects.find((item) => item.id === projectId)
+  const live = await getProjectScheduleInsightsLive()
+  const project = live.activeProjects.find((item) => item.id === projectId)
   const projectName = project?.project ?? projectId
   const result = await query(
     `SELECT * FROM project_schedule_extra_submittals WHERE project_id = $1 ORDER BY created_at ASC`,
@@ -1023,8 +1077,8 @@ export async function createExtraSubmittals(
   inputs: ExtraSubmittalInput[],
   createdBy = 'dashboard',
 ): Promise<{ created: SubmittalRegisterItem[]; data: ProjectScheduleInsights }> {
-  const { activeProjects } = readWorkbookData()
-  const project = activeProjects.find((item) => item.id === projectId)
+  const live = await getProjectScheduleInsightsLive()
+  const project = live.activeProjects.find((item) => item.id === projectId)
   const projectName = project?.project ?? projectId
 
   const created: SubmittalRegisterItem[] = []
@@ -1136,8 +1190,8 @@ export async function updateProjectScheduleDeploymentDocumentOverride(
   patch: DeploymentDocumentPatch,
   updatedBy = 'dashboard',
 ) {
-  const { activeProjects } = readWorkbookData()
-  const project = activeProjects.find((item) => item.id === projectId)
+  const live = await getProjectScheduleInsightsLive()
+  const project = live.activeProjects.find((item) => item.id === projectId)
   if (!project) return null
   const doc = project.deploymentDocuments.find((item) => item.key === documentKey)
   if (!doc) return null
@@ -1166,8 +1220,8 @@ export async function updateProjectScheduleDeploymentDocumentOverride(
 }
 
 export async function updateProjectScheduleOverride(projectId: string, patch: ProjectSchedulePatch, updatedBy = 'dashboard') {
-  const { activeProjects } = readWorkbookData()
-  const project = activeProjects.find((item) => item.id === projectId)
+  const live = await getProjectScheduleInsightsLive()
+  const project = live.activeProjects.find((item) => item.id === projectId)
   if (!project) return null
 
   await query(
@@ -1549,6 +1603,19 @@ export async function generateProjectScheduleFromTemplate(
   createdBy = 'dashboard',
 ): Promise<ProjectScheduleTask[]> {
   const structured = buildScheduleFromTemplate(input)
+
+  // Generated schedules can exist independently of the legacy workbook. Keep
+  // a lightweight project row so the new workspace route resolves immediately
+  // after generation and all four workspace tabs share the same project name.
+  await query(
+    `INSERT INTO project_schedule_overrides (project_id, project_name, updated_by, updated_at)
+     VALUES ($1,$2,$3,NOW())
+     ON CONFLICT (project_id) DO UPDATE SET
+       project_name = EXCLUDED.project_name,
+       updated_by = EXCLUDED.updated_by,
+       updated_at = NOW()`,
+    [projectId, input.projectName, createdBy],
+  )
 
   await query(`DELETE FROM project_schedule_tasks WHERE project_id = $1`, [projectId])
 
