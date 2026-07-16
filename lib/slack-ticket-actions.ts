@@ -10,7 +10,7 @@
 
 import { query } from '@/lib/db'
 import { applyTicketClose, applyTicketInProgress } from '@/lib/ticket-close'
-import { slackApi, statusLabels, ticketActionBlock } from '@/lib/slack'
+import { statusLabels, ticketActionBlock } from '@/lib/slack'
 import { postTicketComment } from '@/lib/ticket-comment'
 
 async function resolveStaffBySlackId(slackUserId?: string) {
@@ -42,13 +42,51 @@ function ephemeral(text: string) {
   return { response_type: 'ephemeral', replace_original: false, text }
 }
 
+const REPLY_COMPOSER_BLOCK_PREFIX = 'ticket_reply_composer'
+
+function stripReplyComposerBlocks(blocks: any[]): any[] {
+  return blocks.filter(block => !String(block?.block_id || '').startsWith(REPLY_COMPOSER_BLOCK_PREFIX))
+}
+
+// Socket Mode is owned by the existing @ANC assistant. Its plugin adapter
+// intentionally exposes the active action, not a modal's full view state, so
+// the quick reply stays on the message itself: click Reply, type an internal
+// note, press Enter. Slack sends the input value as a normal block_action.
+function replyComposerBlocks(message: any, ticketId: string): any[] {
+  const source: any[] = Array.isArray(message?.blocks) ? message.blocks : []
+  const blocks = stripReplyComposerBlocks(source)
+  blocks.push({
+    type: 'input',
+    block_id: `${REPLY_COMPOSER_BLOCK_PREFIX}_input`,
+    dispatch_action: true,
+    label: { type: 'plain_text', text: 'Internal note — press Enter to post' },
+    element: {
+      type: 'plain_text_input',
+      action_id: `ticket_reply_input:${ticketId}`,
+      placeholder: { type: 'plain_text', text: 'Type a quick internal note…' },
+      dispatch_action_config: { trigger_actions_on: ['on_enter_pressed'] },
+    },
+  })
+  blocks.push({
+    type: 'actions',
+    block_id: `${REPLY_COMPOSER_BLOCK_PREFIX}_controls`,
+    elements: [{
+      type: 'button',
+      action_id: 'ticket_reply_cancel',
+      value: ticketId,
+      text: { type: 'plain_text', text: 'Cancel' },
+    }],
+  })
+  return blocks
+}
+
 // Rebuild the clicked card: refresh the Status field, drop the old button row,
 // append a "who did what" context line and a fresh button row for the new
 // status. Slack echoes back render-time props on image blocks that
 // chat.update rejects, so strip those before resending.
 function updatedCardBlocks(message: any, ticketId: string, newStatus: string, note: string): any[] {
   const source: any[] = Array.isArray(message?.blocks) ? message.blocks : []
-  const blocks = source
+  const blocks = stripReplyComposerBlocks(source)
     .filter(b => !(b?.type === 'actions' && String(b?.block_id || '').startsWith('ticket_actions')))
     .map(b => {
       if (b?.type === 'image') {
@@ -85,8 +123,20 @@ export async function handleTicketBlockAction(payload: any): Promise<boolean> {
   // Link-out button — Slack still POSTs an interaction for url buttons; just ack.
   if (actionId === 'ticket_view') return true
 
-  const ticketId = String(action?.value || '')
+  const ticketId = actionId.startsWith('ticket_reply_input:')
+    ? actionId.slice('ticket_reply_input:'.length)
+    : String(action?.value || '')
   const responseUrl: string | undefined = payload?.response_url
+
+  if (actionId === 'ticket_reply_cancel') {
+    const blocks = stripReplyComposerBlocks(Array.isArray(payload?.message?.blocks) ? payload.message.blocks : [])
+    await respond(responseUrl, {
+      replace_original: true,
+      text: payload?.message?.text || 'Ticket update',
+      blocks,
+    })
+    return true
+  }
 
   const staff = await resolveStaffBySlackId(payload?.user?.id)
   if (!staff) {
@@ -150,46 +200,35 @@ export async function handleTicketBlockAction(payload: any): Promise<boolean> {
   }
 
   if (actionId === 'ticket_reply') {
-    const open = await slackApi('views.open', {
-      trigger_id: payload.trigger_id,
-      view: {
-        type: 'modal',
-        callback_id: 'ticket_reply',
-        private_metadata: JSON.stringify({ ticketId }),
-        title: { type: 'plain_text', text: `Case #${caseNum}`.slice(0, 24) },
-        submit: { type: 'plain_text', text: 'Post' },
-        close: { type: 'plain_text', text: 'Cancel' },
-        blocks: [
-          { type: 'context', elements: [{ type: 'mrkdwn', text: `*${ti.title}* — ${ti.venue_name}` }] },
-          {
-            type: 'input', block_id: 'note',
-            label: { type: 'plain_text', text: 'Note' },
-            element: {
-              type: 'plain_text_input', action_id: 'body', multiline: true,
-              placeholder: { type: 'plain_text', text: 'Write your note…' },
-            },
-          },
-          {
-            type: 'input', block_id: 'visibility',
-            label: { type: 'plain_text', text: 'Visibility' },
-            element: {
-              type: 'radio_buttons', action_id: 'choice',
-              initial_option: {
-                text: { type: 'plain_text', text: 'Internal note (team only)' }, value: 'internal',
-              },
-              options: [
-                { text: { type: 'plain_text', text: 'Internal note (team only)' }, value: 'internal' },
-                { text: { type: 'plain_text', text: 'Client-visible (emails the venue distribution list)' }, value: 'client' },
-              ],
-            },
-          },
-        ],
-      },
+    await respond(responseUrl, {
+      replace_original: true,
+      text: payload?.message?.text || `:speech_balloon: Case #${caseNum} — Quick reply`,
+      blocks: replyComposerBlocks(payload.message, ticketId),
     })
-    if (!open?.ok) {
-      console.error('[slack-ticket-actions] views.open failed:', open?.error)
-      await respond(responseUrl, ephemeral('Could not open the reply form — try again, or reply from the dashboard.'))
+    return true
+  }
+
+  if (actionId.startsWith('ticket_reply_input:')) {
+    const body = String(action?.value || '').trim()
+    if (!body) {
+      await respond(responseUrl, ephemeral('Write a note before pressing Enter.'))
+      return true
     }
+
+    await postTicketComment({
+      ticketId,
+      body,
+      isInternal: true,
+      actor: { userId: staff.id, fullName: staff.full_name },
+      via: 'slack',
+    })
+
+    await respond(responseUrl, {
+      replace_original: true,
+      text: `:memo: Case #${caseNum} — Internal note by ${staff.full_name}`,
+      blocks: updatedCardBlocks(payload.message, ticketId, ti.status,
+        `:memo: Internal note posted by *${staff.full_name}* from Slack`),
+    })
     return true
   }
 
