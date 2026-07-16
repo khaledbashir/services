@@ -171,7 +171,7 @@ function baseReport(dry: boolean): SweepReport {
   }
 }
 
-export async function runPhotoSweep(opts: { days?: number; dry?: boolean }): Promise<SweepReport> {
+export async function runPhotoSweep(opts: { days?: number; dry?: boolean; venue?: string }): Promise<SweepReport> {
   const dry = opts.dry === true
   const report = baseReport(dry)
 
@@ -185,7 +185,18 @@ export async function runPhotoSweep(opts: { days?: number; dry?: boolean }): Pro
     `SELECT id, name, slack_channel_id FROM venues
      WHERE slack_channel_id IS NOT NULL AND slack_channel_id <> ''`
   )
-  const venues = venuesResult.rows as Venue[]
+  let venues = venuesResult.rows as Venue[]
+  // Optional scope filter — a venue-name substring or exact channel id. Lets
+  // an operator spot-check one channel synchronously (seconds) while the
+  // full-fleet sweep stays an async, minutes-long run.
+  const venueFilter = (opts.venue || '').trim().toLowerCase()
+  if (venueFilter) {
+    venues = venues.filter(
+      v =>
+        v.slack_channel_id.toLowerCase() === venueFilter ||
+        v.name.toLowerCase().includes(venueFilter)
+    )
+  }
   const userCache = new Map<string, string>()
   const seenFileIds = new Set<string>()
   const pending: PendingImage[] = []

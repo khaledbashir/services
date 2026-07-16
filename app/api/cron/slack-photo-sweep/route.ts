@@ -32,6 +32,17 @@ export async function GET(request: NextRequest) {
   const dry = url.searchParams.get('dry') === '1'
   const requestedDays = Number.parseInt(url.searchParams.get('days') || '7', 10)
   const days = Math.min(31, Math.max(1, Number.isFinite(requestedDays) ? requestedDays : 7))
-  const results = await runPhotoSweep({ dry, days })
+  const venue = url.searchParams.get('venue') || undefined
+  // A full-fleet run holds the connection for minutes — longer than the
+  // reverse proxy tolerates. ?async=1 detaches it: 202 now, full report to
+  // the server log (visible in container logs).
+  if (url.searchParams.get('async') === '1') {
+    void runPhotoSweep({ dry, days, venue }).then(
+      report => console.log('[photo-sweep] report', JSON.stringify(report)),
+      err => console.error('[photo-sweep] failed', err),
+    )
+    return NextResponse.json({ started: true, dry, days, venue: venue || null }, { status: 202 })
+  }
+  const results = await runPhotoSweep({ dry, days, venue })
   return NextResponse.json(results)
 }
