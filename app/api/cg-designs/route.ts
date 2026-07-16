@@ -159,6 +159,10 @@ export async function GET(request: NextRequest) {
     const rows = result.rows
     const assignmentMap = await loadCgAssignmentSummaries(rows.map((row) => row.id))
     for (const row of rows) {
+      // Keep legacy rows visible in Charlie's exact eight-lane workflow.
+      // Older imports used `review` / `posted`; the client should never have
+      // to render those retired labels or drop the records into no lane.
+      row.status = mapTwentyStatus(row.status)
       const split = splitDesignAssignments(assignmentMap.get(row.id))
       row.designers = split.designers
       row.enterprise_contacts = split.enterprise_contacts
