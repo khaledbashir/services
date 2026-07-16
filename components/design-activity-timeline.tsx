@@ -39,6 +39,7 @@ const EVENT_DOT: Record<string, string> = {
   proof_created: 'bg-violet-500',
   proof_sent: 'bg-violet-600',
   client_response: 'bg-emerald-500',
+  client_upload: 'bg-blue-500',
   assigned: 'bg-teal-500',
   unassigned: 'bg-zinc-400',
   rescheduled: 'bg-orange-500',
@@ -91,6 +92,11 @@ function describe(e: ActivityEvent): { title: string; sub?: string } {
         sub: counts || (d.note as string) || undefined,
       }
     }
+    case 'client_upload':
+      return {
+        title: 'Client uploaded replacement media',
+        sub: e.toValue || undefined,
+      }
     case 'assigned':
       return { title: 'Assigned', sub: e.toValue || undefined }
     case 'unassigned':

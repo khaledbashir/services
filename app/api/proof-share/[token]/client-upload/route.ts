@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { uploadProof } from '@/lib/proof-storage'
 import { logDesignActivity } from '@/lib/design-activity'
+import { logCgDesignActivity } from '@/lib/cg-design-activity'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -70,6 +71,20 @@ export async function POST(
       contentType: stored.contentType,
       size: stored.size,
       uploadedAt: stored.uploadedAt,
+    }
+
+    if (share.twenty_object_type === 'localCgDesignRequest' && share.twenty_record_id) {
+      await query(
+        `UPDATE cg_design_requests SET status = 'revisions', updated_at = NOW() WHERE id = $1`,
+        [share.twenty_record_id],
+      )
+      await logCgDesignActivity({
+        cgDesignRequestId: String(share.twenty_record_id),
+        eventType: 'client_upload',
+        actor: { fullName: 'Client' },
+        toValue: entry.filename,
+        detail: { proofToken: token, key: entry.key, size: entry.size },
+      })
     }
 
     const prior: ClientUpload[] = Array.isArray(share.client_uploads) ? share.client_uploads : []

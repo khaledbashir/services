@@ -17,6 +17,7 @@ export type DesignActivityType =
   | 'proof_created'
   | 'proof_sent'
   | 'client_response'
+  | 'client_upload'
   | 'assigned'
   | 'unassigned'
   | 'rescheduled'
