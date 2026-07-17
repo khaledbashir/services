@@ -17,7 +17,7 @@ Analyze this photo of an LED display issue. Provide:
 
 ${context ? `Additional context from the technician: ${context}` : ''}
 
-CRITICAL: Respond with ONLY raw JSON, no markdown, no code blocks, no backticks, no explanation. Keep each field under 200 characters. Just the JSON object:
+CRITICAL: Respond with ONLY raw JSON, no markdown, no code blocks, no backticks, no explanation. Every field must be complete and non-empty. Keep each field under 200 characters. Just the JSON object:
 {"title":"...","issue_type":"...","description":"...","likely_cause":"...","suggested_fix":"...","urgency":"..."}`
 
 export async function POST(request: NextRequest) {
@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
           { inline_data: { mime_type: image.mimeType || 'image/jpeg', data: raw } },
         ],
       }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 2000, responseMimeType: 'application/json' },
+      // Gemini 3 can spend roughly 2,000 tokens on internal reasoning before
+      // emitting the JSON. Leave enough headroom for every technician-facing
+      // field to finish; the completeness validator below rejects any partial.
+      generationConfig: { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: 'application/json' },
     })
 
     // Try models and credentials in order. A quota-exhausted or revoked key
