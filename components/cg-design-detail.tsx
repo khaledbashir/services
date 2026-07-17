@@ -34,7 +34,7 @@ interface Staff { id: string; full_name: string }
 
 const statusOptions = [
   { value: 'request_submitted', label: 'Request Submitted', description: 'New CG request intake', tone: 'bg-sky-100 text-sky-900 ring-sky-300' },
-  { value: 'in_progress', label: 'In-Progress', description: 'CG work underway', tone: 'bg-amber-100 text-amber-900 ring-amber-300' },
+  { value: 'in_progress', label: 'In Progress', description: 'CG work underway', tone: 'bg-amber-100 text-amber-900 ring-amber-300' },
   { value: 'submitted_internally', label: 'Submitted Internally', description: 'Ready for internal review', tone: 'bg-violet-100 text-violet-900 ring-violet-300' },
   { value: 'client_review', label: 'Client Review', description: 'Proof awaiting client decision', tone: 'bg-blue-600 text-white ring-blue-700' },
   { value: 'revisions', label: 'Revisions', description: 'Client changes in progress', tone: 'bg-rose-100 text-rose-900 ring-rose-300' },

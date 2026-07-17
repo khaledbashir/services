@@ -49,7 +49,7 @@ function hasAssignment(item: CgDesignRequest, staffId: string | null | undefined
 
 const statusColumns = [
   { key: 'request_submitted', label: 'Request Submitted', accent: 'bg-sky-500' },
-  { key: 'in_progress', label: 'In-Progress', accent: 'bg-amber-500' },
+  { key: 'in_progress', label: 'In Progress', accent: 'bg-amber-500' },
   { key: 'submitted_internally', label: 'Submitted Internally', accent: 'bg-violet-500' },
   { key: 'client_review', label: 'Client Review', accent: 'bg-blue-500' },
   { key: 'revisions', label: 'Revisions', accent: 'bg-orange-500' },
