@@ -120,6 +120,49 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Gemini exhausted (all models). Fall back to OpenAI vision — Gemini's
+    // prepaid credits ran dry 2026-07-17 and took this endpoint down entirely.
+    const openaiKey = process.env.OPENAI_API_KEY || ''
+    if (openaiKey) {
+      try {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: process.env.OPENAI_VISION_MODEL || 'gpt-5.4-mini',
+            // newer OpenAI models reject `max_tokens` and non-default temperature
+            max_completion_tokens: 2000,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'text', text: PROMPT(context) },
+                { type: 'image_url', image_url: { url: `data:${image.mimeType || 'image/jpeg'};base64,${raw}` } },
+              ],
+            }],
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const text = data.choices?.[0]?.message?.content || ''
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0])
+              if (parsed.title) {
+                console.log(`[kb-diagnose] Success with OpenAI fallback: ${parsed.title}`)
+                return NextResponse.json({ ok: true, diagnosis: parsed, model: 'openai-fallback' })
+              }
+            } catch { /* fall through to error */ }
+          }
+          lastError = `OpenAI parse failed: ${text.substring(0, 150)}`
+        } else {
+          lastError = `OpenAI ${res.status}: ${(await res.text()).substring(0, 150)}`
+        }
+      } catch (err: any) {
+        lastError = `OpenAI: ${err.message}`
+      }
+    }
+
     console.error(`[kb-diagnose] All models failed. Last error: ${lastError}`)
     return NextResponse.json({ error: `All AI models unavailable. Last: ${lastError.substring(0, 200)}` }, { status: 503 })
   } catch (err) {
