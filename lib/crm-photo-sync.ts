@@ -111,10 +111,11 @@ export async function syncPhotosToCrm(): Promise<SyncReport> {
       ]
       for (const p of photos) {
         const caption = [p.ai_title || p.slack_file_id, p.ai_category].filter(Boolean).join(' — ')
-        lines.push(`![${caption}](${PUBLIC_BASE}/api/photos/shared/${p.share_token})`)
-        lines.push(`**${caption}**${p.poster ? ` · ${p.poster}` : ''}`)
-        lines.push('')
+        // Raw Slack IDs (bot posters / unresolved users) read as noise — drop them.
+        const poster = p.poster && !/^U[A-Z0-9]{8,}$/.test(p.poster) ? p.poster : ''
+        lines.push(`- [${caption}](${PUBLIC_BASE}/api/photos/shared/${p.share_token})${poster ? ` · ${poster}` : ''}`)
       }
+      lines.push('')
       lines.push(`[Open this account's visual story](${PUBLIC_BASE}/photo-story/${venueId}) · [Browse the full photo gallery](${PUBLIC_BASE}/gallery)`)
 
       const note = await twentyRest('notes', {
