@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGeminiApiKeys } from '@/lib/gemini-key-pool'
+import { extractKBDiagnosis } from '@/lib/kb-diagnosis'
 
 const MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash-001']
 
@@ -59,60 +60,14 @@ export async function POST(request: NextRequest) {
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
             console.log(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} response received`)
 
-            // Try to extract JSON from response — handle markdown code blocks, loose text, etc.
-            let jsonStr = ''
-            const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-            if (codeBlock) {
-              jsonStr = codeBlock[1].trim()
-            } else {
-              const jsonMatch = text.match(/\{[\s\S]*\}/)
-              if (jsonMatch) jsonStr = jsonMatch[0]
-            }
-
-          // Try to parse — if truncated, extract what we can
-          function extractDiagnosis(str: string) {
-            // Try direct parse first
-            try { return JSON.parse(str) } catch {}
-            // Try cleaning
-            try { return JSON.parse(str.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']')) } catch {}
-            // Try closing truncated JSON
-            let attempt = str
-            const openBraces = (attempt.match(/{/g) || []).length
-            const closeBraces = (attempt.match(/}/g) || []).length
-            if (openBraces > closeBraces) {
-              // Close any open string
-              if ((attempt.match(/"/g) || []).length % 2 !== 0) attempt += '"'
-              for (let i = 0; i < openBraces - closeBraces; i++) attempt += '}'
-              try { return JSON.parse(attempt) } catch {}
-            }
-            // Extract individual fields with regex
-            const title = str.match(/"title"\s*:\s*"([^"]*)"/)
-            const issue = str.match(/"issue_type"\s*:\s*"([^"]*)"/)
-            const desc = str.match(/"description"\s*:\s*"([^"]*)"/)
-            const cause = str.match(/"likely_cause"\s*:\s*"([^"]*)"/)
-            const fix = str.match(/"suggested_fix"\s*:\s*"([^"]*)"/)
-            const urg = str.match(/"urgency"\s*:\s*"([^"]*)"/)
-            if (title) {
-              return {
-                title: title[1],
-                issue_type: issue?.[1] || 'Other',
-                description: desc?.[1] || '',
-                likely_cause: cause?.[1] || 'See description',
-                suggested_fix: fix?.[1] || 'Refer to the diagnosis description',
-                urgency: urg?.[1] || 'Medium',
-              }
-            }
-            return null
-          }
-
-            const parsed = extractDiagnosis(jsonStr || text)
+            const parsed = extractKBDiagnosis(text)
             if (parsed) {
               console.log(`[kb-diagnose] Success with ${model} using key ${keyIndex + 1}/${geminiKeys.length}: ${parsed.title}`)
               return NextResponse.json({ ok: true, diagnosis: parsed, model, provider: 'gemini' })
             }
 
-            lastError = `Could not parse ${model} response`
-            console.warn(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} parse failed, trying next...`)
+            lastError = `Incomplete or invalid ${model} response`
+            console.warn(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} response incomplete, trying next...`)
             continue
           }
 
@@ -149,17 +104,12 @@ export async function POST(request: NextRequest) {
         if (res.ok) {
           const data = await res.json()
           const text = data.choices?.[0]?.message?.content || ''
-          const jsonMatch = text.match(/\{[\s\S]*\}/)
-          if (jsonMatch) {
-            try {
-              const parsed = JSON.parse(jsonMatch[0])
-              if (parsed.title) {
-                console.log(`[kb-diagnose] Success with OpenAI fallback: ${parsed.title}`)
-                return NextResponse.json({ ok: true, diagnosis: parsed, model: process.env.OPENAI_VISION_MODEL || 'gpt-5.4-mini', provider: 'secondary-vision' })
-              }
-            } catch { /* fall through to error */ }
+          const parsed = extractKBDiagnosis(text)
+          if (parsed) {
+            console.log(`[kb-diagnose] Success with OpenAI fallback: ${parsed.title}`)
+            return NextResponse.json({ ok: true, diagnosis: parsed, model: process.env.OPENAI_VISION_MODEL || 'gpt-5.4-mini', provider: 'secondary-vision' })
           }
-          lastError = `OpenAI parse failed: ${text.substring(0, 150)}`
+          lastError = 'Secondary vision response was incomplete or invalid'
         } else {
           lastError = `OpenAI ${res.status}: ${(await res.text()).substring(0, 150)}`
         }
