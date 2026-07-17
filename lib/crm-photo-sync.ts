@@ -115,7 +115,7 @@ export async function syncPhotosToCrm(): Promise<SyncReport> {
         lines.push(`**${caption}**${p.poster ? ` · ${p.poster}` : ''}`)
         lines.push('')
       }
-      lines.push(`[Browse the full photo gallery](${PUBLIC_BASE}/gallery)`)
+      lines.push(`[Open this account's visual story](${PUBLIC_BASE}/photo-story/${venueId}) · [Browse the full photo gallery](${PUBLIC_BASE}/gallery)`)
 
       const note = await twentyRest('notes', {
         method: 'POST',

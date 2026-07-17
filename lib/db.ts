@@ -419,6 +419,12 @@ async function runMigrations() {
     await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS share_token TEXT`)
     await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS crm_synced_at TIMESTAMPTZ`)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_slack_photo_share_token ON slack_photo_files(share_token) WHERE share_token IS NOT NULL`)
+    // Client-facing visual story pages — one share token per venue (Jireh).
+    await client.query(`CREATE TABLE IF NOT EXISTS photo_story_shares (
+      venue_id UUID PRIMARY KEY,
+      token TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)
