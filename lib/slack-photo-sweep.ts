@@ -296,6 +296,26 @@ export async function runPhotoSweep(opts: { days?: number; dry?: boolean; venue?
         text: `📸 Weekly photo sweep: filed ${report.filed} technician photos from ${venuesFiled} venues → ${process.env.SLACK_PHOTO_FOLDER_URL}`,
       })
     }
+
+    // Confirm in each swept channel too — the teams that posted the photos
+    // see them get filed (Ahmad 2026-07-17: results go to the normal channels,
+    // not only an ops channel). Fail-soft per channel.
+    const folderUrl = process.env.SLACK_PHOTO_FOLDER_URL || ''
+    const confirmed = new Set<string>()
+    for (const image of pending) {
+      const venueReport = report.perVenue.find(item => item.venue === image.venue.name)
+      if (!venueReport || venueReport.filed === 0) continue
+      if (confirmed.has(image.venue.slack_channel_id)) continue
+      confirmed.add(image.venue.slack_channel_id)
+      try {
+        await sendSlackMessage({
+          channel: image.venue.slack_channel_id,
+          text: `📸 Filed ${venueReport.filed} photo${venueReport.filed === 1 ? '' : 's'} from this channel to the Sales library → ${folderUrl}`,
+        })
+      } catch {
+        // channel confirmation is best-effort — never fail the sweep over it
+      }
+    }
   }
 
   return report
