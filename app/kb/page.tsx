@@ -409,7 +409,7 @@ export default function KBPage() {
 
             {/* Action bar */}
             <div className="px-5 py-3 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between">
-              <p className="text-[10px] text-zinc-400">Powered by Gemini AI</p>
+              <p className="text-[10px] text-zinc-400">Powered by AI Diagnostics</p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleSaveToDB}
