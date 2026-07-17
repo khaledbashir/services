@@ -12,7 +12,10 @@ const complete = {
 }
 
 test('accepts and normalizes a complete diagnosis', () => {
-  assert.deepEqual(normalizeKBDiagnosis({ ...complete, urgency: 'medium' }), complete)
+  assert.deepEqual(normalizeKBDiagnosis({
+    ...complete,
+    urgency: 'Medium (noticeable but functional)',
+  }), complete)
 })
 
 test('rejects diagnoses with blank or half-written technician guidance', () => {

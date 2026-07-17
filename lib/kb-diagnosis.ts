@@ -31,7 +31,13 @@ function cleanText(value: unknown, maxLength: number): string {
 
 function canonicalValue<T extends readonly string[]>(value: unknown, allowed: T): T[number] | null {
   const text = cleanText(value, 80).toLowerCase()
-  return allowed.find(item => item.toLowerCase() === text) || null
+  return allowed.find(item => {
+    const canonical = item.toLowerCase()
+    return text === canonical ||
+      text.startsWith(`${canonical} (`) ||
+      text.startsWith(`${canonical} -`) ||
+      text.startsWith(`${canonical}:`)
+  }) || null
 }
 
 /**
