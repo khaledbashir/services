@@ -39,23 +39,32 @@ async function resolveCrmVenue(
   servicesVenueId: string,
   venueName: string,
 ): Promise<{ crmVenueId: string; companyId: string | null } | null> {
+  // The WHOLE filter expression must be encoded, not just the value. Sending raw
+  // `[` / `]` in the query string makes the request fail outright — it does not
+  // return an empty list, it never completes. That is what produced 8 "Field
+  // Photos" notes attached to ZERO records: the note lookup below encodes the
+  // full expression and worked, while these two encoded only the value and always
+  // threw, so resolveCrmVenue returned null and nothing was ever targeted.
+  // Verified 2026-07-17 against the live CRM:
+  //   filter=name[ilike]:%25Toyota%25        -> request fails
+  //   filter=name%5Bilike%5D%3A%25Toyota%25  -> 200, Toyota Center
   try {
-    const byServiceId = await twentyRest(
-      `venues?filter=servicesId[eq]:${encodeURIComponent(servicesVenueId)}&limit=1`
-    )
+    const filter = encodeURIComponent(`servicesId[eq]:${servicesVenueId}`)
+    const byServiceId = await twentyRest(`venues?filter=${filter}&limit=1`)
     const hit = byServiceId?.data?.venues?.[0]
     if (hit) return { crmVenueId: hit.id, companyId: hit.companyId || null }
-  } catch {
-    /* fall through to name match */
+  } catch (err) {
+    // Never silent: a lookup failure here is why photos silently stop reaching
+    // accounts. Surface it, then fall through to the name match.
+    console.error('[crm-photo-sync] venue lookup by servicesId failed:', err)
   }
   try {
-    const byName = await twentyRest(
-      `venues?filter=name[ilike]:${encodeURIComponent(venueName)}&limit=1`
-    )
+    const filter = encodeURIComponent(`name[ilike]:${venueName}`)
+    const byName = await twentyRest(`venues?filter=${filter}&limit=1`)
     const hit = byName?.data?.venues?.[0]
     if (hit) return { crmVenueId: hit.id, companyId: hit.companyId || null }
-  } catch {
-    /* unresolved */
+  } catch (err) {
+    console.error('[crm-photo-sync] venue lookup by name failed:', err)
   }
   return null
 }
