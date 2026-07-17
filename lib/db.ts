@@ -414,6 +414,11 @@ async function runMigrations() {
     await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS ai_tags JSONB`)
     await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS embedding FLOAT8[]`)
     await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS slack_permalink TEXT`)
+    // CRM photo routing (Jireh 2026-07-17): public share token so CRM notes can
+    // embed thumbnails; crm_synced_at marks photos already routed to a note.
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS share_token TEXT`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS crm_synced_at TIMESTAMPTZ`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_slack_photo_share_token ON slack_photo_files(share_token) WHERE share_token IS NOT NULL`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)

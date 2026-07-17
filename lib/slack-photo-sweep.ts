@@ -403,6 +403,20 @@ export async function runPhotoSweep(opts: { days?: number; dry?: boolean; venue?
     }
   }
 
+  // Route newly filed photos onto their CRM account records (fail-soft).
+  if (report.filed > 0) {
+    try {
+      const { syncPhotosToCrm } = await import('@/lib/crm-photo-sync')
+      const crm = await syncPhotosToCrm()
+      if (crm.notes > 0) {
+        console.log(`[photo-sweep] CRM routing: ${crm.photos} photos → ${crm.notes} account notes`)
+      }
+      for (const err of crm.errors) console.warn(`[photo-sweep] CRM routing: ${err}`)
+    } catch (error) {
+      console.warn('[photo-sweep] CRM routing failed:', error instanceof Error ? error.message : error)
+    }
+  }
+
   if (report.filed > 0) {
     const venuesFiled = report.perVenue.filter(venue => venue.filed > 0).length
     const channel = process.env.SLACK_DEFAULT_CHANNEL || ''
