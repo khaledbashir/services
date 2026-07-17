@@ -3,6 +3,18 @@ import { getGeminiApiKeys } from '@/lib/gemini-key-pool'
 import { extractKBDiagnosis } from '@/lib/kb-diagnosis'
 
 const MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash-001']
+const GEMINI_TIMEOUT_MS = 35_000
+const SECONDARY_TIMEOUT_MS = 45_000
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 const PROMPT = (context?: string) => `You are an LED display diagnostics expert for ANC Sports, a company that installs and maintains large LED displays in sports arenas and entertainment venues.
 
@@ -53,9 +65,10 @@ export async function POST(request: NextRequest) {
       for (let keyIndex = 0; keyIndex < geminiKeys.length; keyIndex += 1) {
         const key = geminiKeys[keyIndex]
         try {
-          const res = await fetch(
+          const res = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload }
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload },
+            GEMINI_TIMEOUT_MS,
           )
 
           if (res.ok) {
@@ -88,7 +101,7 @@ export async function POST(request: NextRequest) {
     const openaiKey = process.env.OPENAI_API_KEY || ''
     if (openaiKey) {
       try {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -103,7 +116,7 @@ export async function POST(request: NextRequest) {
               ],
             }],
           }),
-        })
+        }, SECONDARY_TIMEOUT_MS)
         if (res.ok) {
           const data = await res.json()
           const text = data.choices?.[0]?.message?.content || ''
