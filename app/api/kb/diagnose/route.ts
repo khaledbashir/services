@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getGeminiApiKeys } from '@/lib/gemini-key-pool'
 
 const MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash-001']
 
@@ -27,8 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Image required' }, { status: 400 })
     }
 
-    const key = process.env.GEMINI_API_KEY || ''
-    if (!key) return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
+    const geminiKeys = getGeminiApiKeys()
 
     const raw = image.data.includes(',') ? image.data.split(',')[1] : image.data
 
@@ -42,29 +42,32 @@ export async function POST(request: NextRequest) {
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000, responseMimeType: 'application/json' },
     })
 
-    // Try models in order — fallback if one is overloaded or unavailable
+    // Try models and credentials in order. A quota-exhausted or revoked key
+    // must not disable Diagnostics when another configured key is healthy.
     let lastError = ''
     for (const model of MODELS) {
-      try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload }
-        )
+      for (let keyIndex = 0; keyIndex < geminiKeys.length; keyIndex += 1) {
+        const key = geminiKeys[keyIndex]
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload }
+          )
 
-        if (res.ok) {
-          const data = await res.json()
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-          console.log(`[kb-diagnose] ${model} raw response (first 500):`, text.substring(0, 500))
+          if (res.ok) {
+            const data = await res.json()
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+            console.log(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} response received`)
 
-          // Try to extract JSON from response — handle markdown code blocks, loose text, etc.
-          let jsonStr = ''
-          const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
-          if (codeBlock) {
-            jsonStr = codeBlock[1].trim()
-          } else {
-            const jsonMatch = text.match(/\{[\s\S]*\}/)
-            if (jsonMatch) jsonStr = jsonMatch[0]
-          }
+            // Try to extract JSON from response — handle markdown code blocks, loose text, etc.
+            let jsonStr = ''
+            const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+            if (codeBlock) {
+              jsonStr = codeBlock[1].trim()
+            } else {
+              const jsonMatch = text.match(/\{[\s\S]*\}/)
+              if (jsonMatch) jsonStr = jsonMatch[0]
+            }
 
           // Try to parse — if truncated, extract what we can
           function extractDiagnosis(str: string) {
@@ -102,21 +105,23 @@ export async function POST(request: NextRequest) {
             return null
           }
 
-          const parsed = extractDiagnosis(jsonStr || text)
-          if (parsed) {
-            console.log(`[kb-diagnose] Success with ${model}: ${parsed.title}`)
-            return NextResponse.json({ ok: true, diagnosis: parsed, model })
+            const parsed = extractDiagnosis(jsonStr || text)
+            if (parsed) {
+              console.log(`[kb-diagnose] Success with ${model} using key ${keyIndex + 1}/${geminiKeys.length}: ${parsed.title}`)
+              return NextResponse.json({ ok: true, diagnosis: parsed, model, provider: 'gemini' })
+            }
+
+            lastError = `Could not parse ${model} response`
+            console.warn(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} parse failed, trying next...`)
+            continue
           }
 
-          lastError = `Could not parse: ${(jsonStr || text).substring(0, 200)}`
-          console.warn(`[kb-diagnose] ${model} parse failed, trying next...`)
+          lastError = `${model} returned ${res.status}`
+          console.warn(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} returned ${res.status}, trying next...`)
+        } catch (err: any) {
+          lastError = `${model}: ${err.message}`
+          console.warn(`[kb-diagnose] ${model} key ${keyIndex + 1}/${geminiKeys.length} failed, trying next...`)
         }
-
-        lastError = await res.text()
-        console.warn(`[kb-diagnose] ${model} returned ${res.status}, trying next...`)
-      } catch (err: any) {
-        lastError = err.message
-        console.warn(`[kb-diagnose] ${model} failed: ${err.message}, trying next...`)
       }
     }
 
@@ -150,7 +155,7 @@ export async function POST(request: NextRequest) {
               const parsed = JSON.parse(jsonMatch[0])
               if (parsed.title) {
                 console.log(`[kb-diagnose] Success with OpenAI fallback: ${parsed.title}`)
-                return NextResponse.json({ ok: true, diagnosis: parsed, model: 'openai-fallback' })
+                return NextResponse.json({ ok: true, diagnosis: parsed, model: process.env.OPENAI_VISION_MODEL || 'gpt-5.4-mini', provider: 'secondary-vision' })
               }
             } catch { /* fall through to error */ }
           }
@@ -164,7 +169,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.error(`[kb-diagnose] All models failed. Last error: ${lastError}`)
-    return NextResponse.json({ error: `All AI models unavailable. Last: ${lastError.substring(0, 200)}` }, { status: 503 })
+    const configurationHint = geminiKeys.length === 0 && !openaiKey
+      ? 'No vision provider credentials are configured.'
+      : 'All configured vision providers are temporarily unavailable.'
+    return NextResponse.json({ error: configurationHint, detail: lastError.substring(0, 200) }, { status: 503 })
   } catch (err) {
     console.error('KB diagnose error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

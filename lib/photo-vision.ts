@@ -4,6 +4,8 @@
 // through the weekly sweep. Fail-soft by design: enrichment must never block
 // a photo from being filed.
 
+import { getGeminiApiKeys } from './gemini-key-pool'
+
 const MODELS = ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash-001']
 
 export type PhotoAnalysis = {
@@ -63,35 +65,37 @@ async function analyzeWithGemini(
   mimeType: string,
   context?: string,
 ): Promise<PhotoAnalysis | null> {
-  const key = process.env.GEMINI_API_KEY || ''
-  if (!key) return null
+  const keys = getGeminiApiKeys()
+  if (!keys.length) return null
 
   for (const model of MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: PROMPT(context) },
-                  { inline_data: { mime_type: mimeType, data: base64Data } },
-                ],
-              },
-            ],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 800 },
-          }),
-        },
-      )
-      if (!res.ok) continue
-      const data = await res.json()
-      const analysis = parseAnalysis(data?.candidates?.[0]?.content?.parts?.[0]?.text || '')
-      if (analysis) return analysis
-    } catch {
-      // try next model
+    for (const key of keys) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: PROMPT(context) },
+                    { inline_data: { mime_type: mimeType, data: base64Data } },
+                  ],
+                },
+              ],
+              generationConfig: { temperature: 0.2, maxOutputTokens: 800 },
+            }),
+          },
+        )
+        if (!res.ok) continue
+        const data = await res.json()
+        const analysis = parseAnalysis(data?.candidates?.[0]?.content?.parts?.[0]?.text || '')
+        if (analysis) return analysis
+      } catch {
+        // try the next key/model combination
+      }
     }
   }
   return null
