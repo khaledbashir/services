@@ -5,7 +5,10 @@
 // record itself either way. Photos embed via public share-token thumbnails.
 //
 // Join: services venues.id → CRM venue.servicesId (fallback: exact name).
-// Fail-soft everywhere — CRM routing must never fail the sweep.
+// Fail-soft at the sweep level — a CRM outage must never fail the photo sweep —
+// but never silent: a group whose note or targeting fails records the error and
+// stays unstamped so the next run retries it. Note creation is idempotent by
+// title, so a retry re-targets the existing note instead of duplicating it.
 
 import { randomBytes } from 'crypto'
 import { query } from '@/lib/db'
@@ -55,6 +58,20 @@ async function resolveCrmVenue(
     /* unresolved */
   }
   return null
+}
+
+// The sweep may retry a group whose note landed but whose targeting failed, so
+// look for the week's note before creating a second one.
+async function findNoteByTitle(title: string): Promise<string | null> {
+  const filter = encodeURIComponent(`title[eq]:${title}`)
+  const res = await twentyRest(`notes?filter=${filter}&limit=1`)
+  return res?.data?.notes?.[0]?.id || null
+}
+
+async function existingTargets(noteId: string): Promise<any[]> {
+  const filter = encodeURIComponent(`noteId[eq]:${noteId}`)
+  const res = await twentyRest(`noteTargets?filter=${filter}&limit=30`)
+  return res?.data?.noteTargets || []
 }
 
 function weekLabel(postedAt: Date): string {
@@ -118,27 +135,38 @@ export async function syncPhotosToCrm(): Promise<SyncReport> {
       lines.push('')
       lines.push(`[Open this account's visual story](${PUBLIC_BASE}/photo-story/${venueId}) · [Browse the full photo gallery](${PUBLIC_BASE}/gallery)`)
 
-      const note = await twentyRest('notes', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: `Field Photos — ${venueName} — Week of ${week}`,
-          bodyV2: { markdown: lines.join('\n') },
-        }),
-      })
-      const noteId = note?.data?.createNote?.id
-      if (!noteId) throw new Error('note create returned no id')
+      const title = `Field Photos — ${venueName} — Week of ${week}`
+      let noteId = await findNoteByTitle(title)
+      if (!noteId) {
+        const note = await twentyRest('notes', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            bodyV2: { markdown: lines.join('\n') },
+          }),
+        })
+        noteId = note?.data?.createNote?.id
+        if (!noteId) throw new Error('note create returned no id')
+      }
 
       // Target the company when linked; always target the CRM venue record.
-      if (crm.companyId) {
+      // noteTargets keys are target*Id — a plain companyId/venueId is accepted
+      // by the request and bound to nothing, which orphaned every note until
+      // 2026-07-17. Errors here must surface: a note attached to no record is
+      // invisible on the account, so the group stays unstamped and retries.
+      const targets = await existingTargets(noteId)
+      if (crm.companyId && !targets.some(t => t.targetCompanyId === crm.companyId)) {
         await twentyRest('noteTargets', {
           method: 'POST',
-          body: JSON.stringify({ noteId, companyId: crm.companyId }),
-        }).catch(() => null)
+          body: JSON.stringify({ noteId, targetCompanyId: crm.companyId }),
+        })
       }
-      await twentyRest('noteTargets', {
-        method: 'POST',
-        body: JSON.stringify({ noteId, venueId: crm.crmVenueId }),
-      }).catch(() => null)
+      if (!targets.some(t => t.targetVenueId === crm.crmVenueId)) {
+        await twentyRest('noteTargets', {
+          method: 'POST',
+          body: JSON.stringify({ noteId, targetVenueId: crm.crmVenueId }),
+        })
+      }
 
       await query(
         `UPDATE slack_photo_files SET crm_synced_at = NOW() WHERE id = ANY($1::int[])`,
