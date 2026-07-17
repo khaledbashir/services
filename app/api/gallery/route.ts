@@ -36,7 +36,25 @@ export async function GET(request: NextRequest) {
       [limit]
     )
 
-    let items = [...kbResult.rows, ...ticketResult.rows]
+    // Swept technician photos (weekly Slack sweep → Sales library). Thumbnails
+    // are served from our DB; the OneDrive original + Slack permalink ride
+    // along for the detail view.
+    const slackResult = await query(
+      `SELECT p.id, COALESCE(p.ai_title, p.filename) as title,
+              COALESCE(p.ai_description, 'Technician photo from Slack') as description,
+              COALESCE(p.ai_category, 'Uncategorized') as issue_type,
+              NULL as suggested_fix,
+              '/api/photos/' || p.id || '/img' as image_url,
+              p.posted_at as created_at, 'slack' as source, p.venue_name, NULL as ticket_number,
+              p.poster, p.web_url, p.slack_permalink, p.ai_tags
+       FROM slack_photo_files p
+       WHERE p.thumb IS NOT NULL
+       ORDER BY p.posted_at DESC
+       LIMIT $1`,
+      [limit]
+    )
+
+    let items = [...kbResult.rows, ...ticketResult.rows, ...slackResult.rows]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     // Filter
@@ -87,9 +105,28 @@ export async function POST(request: NextRequest) {
       [embeddingStr, limit]
     )
 
+    // Swept Slack photos with embeddings join the same similarity search
+    const slackSearch = await query(
+      `SELECT p.id, COALESCE(p.ai_title, p.filename) as title,
+              COALESCE(p.ai_description, '') as description,
+              COALESCE(p.ai_category, 'Uncategorized') as issue_type,
+              NULL as suggested_fix,
+              '/api/photos/' || p.id || '/img' as image_url,
+              p.posted_at as created_at, 'slack' as source, p.venue_name, NULL as ticket_number,
+              p.poster, p.web_url, p.slack_permalink,
+              cosine_similarity(p.embedding, $1::float8[]) as similarity
+       FROM slack_photo_files p
+       WHERE p.embedding IS NOT NULL AND p.thumb IS NOT NULL
+       ORDER BY cosine_similarity(p.embedding, $1::float8[]) DESC
+       LIMIT $2`,
+      [embeddingStr, limit]
+    )
+
     // Combine and filter
-    const matches = kbResult.rows
+    const matches = [...kbResult.rows, ...slackSearch.rows]
       .filter((r: any) => r.similarity > 0.25)
+      .sort((a: any, b: any) => b.similarity - a.similarity)
+      .slice(0, limit)
       .map((r: any) => ({
         ...r,
         similarity: Math.round(r.similarity * 1000) / 10,

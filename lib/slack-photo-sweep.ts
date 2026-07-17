@@ -1,6 +1,8 @@
 import { query } from '@/lib/db'
 import { slackApi, sendSlackMessage } from '@/lib/slack'
 import { ensureConfigError, graphConfigured, uploadFile } from '@/lib/msgraph-files'
+import { analyzeTechPhoto } from '@/lib/photo-vision'
+import { getMultimodalEmbedding } from '@/lib/embeddings'
 
 type SweepError = { channel?: string; file?: string; error: string }
 
@@ -158,6 +160,115 @@ async function posterName(userId: string, cache: Map<string, string>): Promise<s
   }
 }
 
+/**
+ * Gallery enrichment for one photo: in-DB thumbnail (SharePoint URLs need
+ * Jeremy's drive permissions — the gallery serves its own copy), Gemini vision
+ * analysis, multimodal embedding for the gallery's similarity search, and the
+ * Slack permalink. Every step fail-soft — filing never waits on enrichment.
+ */
+async function enrichPhoto(
+  data: Buffer,
+  image: { id: string; mimetype: string; ts: string },
+  channelId: string,
+  venueName: string,
+): Promise<void> {
+  try {
+    const sharp = (await import('sharp')).default
+    const thumb = await sharp(data)
+      .rotate()
+      .resize(900, 900, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer()
+
+    const base64 = thumb.toString('base64')
+    const analysis = await analyzeTechPhoto(base64, 'image/jpeg', `Venue: ${venueName}`)
+
+    let embedding: number[] | null = null
+    try {
+      embedding = await getMultimodalEmbedding(
+        [analysis?.title, analysis?.description, venueName].filter(Boolean).join(' — ') || venueName,
+        base64,
+        'image/jpeg',
+      )
+    } catch {
+      // embedding is search sugar — never required
+    }
+
+    let permalink: string | null = null
+    try {
+      const linkRes = await slackApi('chat.getPermalink', { channel: channelId, message_ts: image.ts })
+      if (linkRes.ok) permalink = linkRes.permalink || null
+    } catch {
+      // permalink is a nice-to-have
+    }
+
+    await query(
+      `UPDATE slack_photo_files
+       SET thumb = $2, thumb_mime = 'image/jpeg', ai_title = $3, ai_category = $4,
+           ai_description = $5, ai_tags = $6, embedding = $7, slack_permalink = $8
+       WHERE slack_file_id = $1`,
+      [
+        image.id,
+        thumb,
+        analysis?.title || null,
+        analysis?.category || null,
+        analysis?.description || null,
+        analysis ? JSON.stringify(analysis.tags) : null,
+        embedding,
+        permalink,
+      ]
+    )
+  } catch (error) {
+    console.warn(`[photo-sweep] enrichment failed for ${image.id}:`, error instanceof Error ? error.message : error)
+  }
+}
+
+/**
+ * Enrich any already-filed rows that predate the gallery columns (or whose
+ * enrichment failed). Re-downloads the original from Slack via files.info.
+ * Runs at the start of every real sweep — self-healing, capped per run.
+ */
+async function backfillEnrichment(): Promise<void> {
+  try {
+    const rows = await query(
+      `SELECT slack_file_id, channel_id, venue_name, posted_at
+       FROM slack_photo_files WHERE thumb IS NULL ORDER BY created_at DESC LIMIT 25`
+    )
+    for (const row of rows.rows) {
+      try {
+        // files.info is a GET-family method — it rejects JSON POST bodies
+        // (invalid_arguments), so it can't go through slackApi().
+        const infoRes = await fetch(
+          `https://slack.com/api/files.info?file=${encodeURIComponent(row.slack_file_id)}`,
+          { headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN || ''}` } },
+        )
+        const info: any = await infoRes.json()
+        const url = info?.file?.url_private_download || info?.file?.url_private
+        if (!info.ok || !url) continue
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN || ''}` },
+        })
+        if (!res.ok) continue
+        const data = Buffer.from(await res.arrayBuffer())
+        await enrichPhoto(
+          data,
+          {
+            id: row.slack_file_id,
+            mimetype: info.file?.mimetype || 'image/jpeg',
+            ts: String(new Date(row.posted_at).getTime() / 1000),
+          },
+          row.channel_id,
+          row.venue_name || ''
+        )
+      } catch {
+        // per-row fail-soft
+      }
+    }
+  } catch (error) {
+    console.warn('[photo-sweep] backfill enrichment failed:', error instanceof Error ? error.message : error)
+  }
+}
+
 function baseReport(dry: boolean): SweepReport {
   return {
     ok: true,
@@ -240,6 +351,8 @@ export async function runPhotoSweep(opts: { days?: number; dry?: boolean; venue?
     return report
   }
 
+  await backfillEnrichment()
+
   let missingFilesScope = false
   for (const image of pending) {
     if (missingFilesScope) break
@@ -278,6 +391,9 @@ export async function runPhotoSweep(opts: { days?: number; dry?: boolean; venue?
       report.filed += 1
       const venueReport = report.perVenue.find(item => item.venue === image.venue.name)
       if (venueReport) venueReport.filed += 1
+
+      // Gallery enrichment — thumbnail + AI analysis + embedding. Fail-soft.
+      await enrichPhoto(data, image, image.venue.slack_channel_id, image.venue.name)
     } catch (error) {
       report.errors.push({
         channel: image.venue.slack_channel_id,

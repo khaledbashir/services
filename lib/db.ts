@@ -383,7 +383,7 @@ async function runMigrations() {
       id SERIAL PRIMARY KEY,
       slack_file_id TEXT UNIQUE NOT NULL,
       channel_id TEXT NOT NULL,
-      venue_id INTEGER,
+      venue_id UUID,
       venue_name TEXT,
       poster TEXT,
       posted_at TIMESTAMPTZ,
@@ -393,6 +393,27 @@ async function runMigrations() {
       bytes BIGINT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`)
+
+    // slack_photo_files.venue_id shipped as INTEGER while venues.id is UUID —
+    // every filing INSERT failed. Applied to prod 2026-07-17; kept here so
+    // fresh environments converge.
+    await client.query(`DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='slack_photo_files' AND column_name='venue_id' AND data_type='integer') THEN
+        ALTER TABLE slack_photo_files ALTER COLUMN venue_id TYPE uuid USING NULL;
+      END IF;
+    END $$`)
+
+    // Photo gallery enrichment (2026-07-17): AI analysis + in-DB thumbnail so
+    // swept photos render in the gallery without SharePoint permissions.
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS thumb BYTEA`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS thumb_mime TEXT`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS ai_title TEXT`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS ai_category TEXT`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS ai_description TEXT`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS ai_tags JSONB`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS embedding FLOAT8[]`)
+    await client.query(`ALTER TABLE slack_photo_files ADD COLUMN IF NOT EXISTS slack_permalink TEXT`)
 
     // Normalize older client schema versions into the Option B shape.
     await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_kind TEXT`)

@@ -12,10 +12,13 @@ interface GalleryItem {
   suggested_fix: string
   image_url: string
   created_at: string
-  source: 'kb' | 'ticket'
+  source: 'kb' | 'ticket' | 'slack'
   venue_name: string | null
   ticket_number: number | null
   similarity?: number
+  poster?: string | null
+  web_url?: string | null
+  slack_permalink?: string | null
 }
 
 export default function GalleryPage() {
@@ -185,9 +188,10 @@ export default function GalleryPage() {
                     </div>
                   )}
                   <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                    item.source === 'ticket' ? 'bg-blue-500 text-white' : 'bg-violet-500 text-white'
+                    item.source === 'ticket' ? 'bg-blue-500 text-white' :
+                    item.source === 'slack' ? 'bg-emerald-600 text-white' : 'bg-violet-500 text-white'
                   }`}>
-                    {item.source === 'ticket' ? 'Ticket' : 'KB'}
+                    {item.source === 'ticket' ? 'Ticket' : item.source === 'slack' ? 'Field Photo' : 'KB'}
                   </div>
                 </div>
                 {/* Info */}
@@ -237,9 +241,15 @@ export default function GalleryPage() {
                   {selected.issue_type && <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{selected.issue_type}</span>}
                   {selected.venue_name && <span className="text-[11px] text-zinc-400">{selected.venue_name}</span>}
                   <span className="text-[11px] text-zinc-300">{new Date(selected.created_at).toLocaleDateString()}</span>
-                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${selected.source === 'ticket' ? 'bg-blue-100 text-blue-600' : 'bg-violet-100 text-violet-600'}`}>
-                    {selected.source === 'ticket' ? `Ticket #${selected.ticket_number}` : 'Knowledge Base'}
+                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    selected.source === 'ticket' ? 'bg-blue-100 text-blue-600' :
+                    selected.source === 'slack' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-600'
+                  }`}>
+                    {selected.source === 'ticket' ? `Ticket #${selected.ticket_number}` : selected.source === 'slack' ? 'Field Photo' : 'Knowledge Base'}
                   </span>
+                  {selected.source === 'slack' && selected.poster && (
+                    <span className="text-[11px] text-zinc-400">by {selected.poster}</span>
+                  )}
                 </div>
                 {selected.description && (
                   <p className="text-sm text-zinc-700 leading-relaxed mb-4">{selected.description}</p>
@@ -259,6 +269,22 @@ export default function GalleryPage() {
                   >
                     View Full Ticket →
                   </button>
+                )}
+                {selected.source === 'slack' && (
+                  <div className="mt-4 flex items-center gap-2">
+                    {selected.web_url && (
+                      <a href={selected.web_url} target="_blank" rel="noreferrer"
+                        className="px-4 py-2 bg-[#0A52EF] text-white text-xs font-medium rounded-lg hover:bg-[#0840C0] transition-colors">
+                        Open in Sales Library →
+                      </a>
+                    )}
+                    {selected.slack_permalink && (
+                      <a href={selected.slack_permalink} target="_blank" rel="noreferrer"
+                        className="px-4 py-2 bg-zinc-100 text-zinc-700 text-xs font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+                        View in Slack
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
