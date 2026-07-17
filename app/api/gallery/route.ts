@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
               NULL as suggested_fix,
               '/api/photos/' || p.id || '/img' as image_url,
               p.posted_at as created_at, 'slack' as source, p.venue_name, NULL as ticket_number,
-              p.poster, p.web_url, p.slack_permalink, p.ai_tags
+              p.poster, p.web_url, p.slack_permalink, p.ai_tags, p.venue_id
        FROM slack_photo_files p
        WHERE p.thumb IS NOT NULL
        ORDER BY p.posted_at DESC
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
               NULL as suggested_fix,
               '/api/photos/' || p.id || '/img' as image_url,
               p.posted_at as created_at, 'slack' as source, p.venue_name, NULL as ticket_number,
-              p.poster, p.web_url, p.slack_permalink,
+              p.poster, p.web_url, p.slack_permalink, p.venue_id,
               cosine_similarity(p.embedding, $1::float8[]) as similarity
        FROM slack_photo_files p
        WHERE p.embedding IS NOT NULL AND p.thumb IS NOT NULL
