@@ -14,11 +14,12 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
 
     // Get KB entries with images
+    // Photos only — KB videos (data:video/*) can't render in an <img> grid
     const kbResult = await query(
       `SELECT k.id, k.title, k.description, k.issue_type, k.suggested_fix, k.image_url,
               k.created_at, 'kb' as source, NULL as venue_name, NULL as ticket_number
        FROM kb_entries k
-       WHERE k.image_url IS NOT NULL
+       WHERE k.image_url IS NOT NULL AND k.image_url NOT LIKE 'data:video%'
        ORDER BY k.created_at DESC
        LIMIT $1`,
       [limit]
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
               t.image_url, t.created_at, 'ticket' as source, v.name as venue_name, t.ticket_number
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
-       WHERE t.image_url IS NOT NULL
+       WHERE t.image_url IS NOT NULL AND t.image_url NOT LIKE 'data:video%'
        ORDER BY t.created_at DESC
        LIMIT $1`,
       [limit]
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
               cosine_similarity(k.embedding, $1::float8[]) as similarity
        FROM kb_entries k
        WHERE k.embedding IS NOT NULL
+         AND k.image_url IS NOT NULL AND k.image_url NOT LIKE 'data:video%'
        ORDER BY cosine_similarity(k.embedding, $1::float8[]) DESC
        LIMIT $2`,
       [embeddingStr, limit]
