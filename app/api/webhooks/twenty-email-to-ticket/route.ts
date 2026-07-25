@@ -42,6 +42,8 @@ async function gql<T = any>(query: string, variables: Record<string, unknown> = 
   return json.data as T
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 function htmlEscape(s: string) {
   return s.replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;'
@@ -146,25 +148,28 @@ async function addDashboardEmailComment(params: {
   body: string
   senderName: string
   senderEmail: string
-}) {
-  if (!params.body.trim()) return null
+  twentyMessageId: string
+}): Promise<{ status: 'inserted' | 'duplicate' | 'no_ticket' | 'empty'; comment: { id: string } | null }> {
+  if (!params.body.trim()) return { status: 'empty', comment: null }
 
   const ticket = await query(
     `SELECT id FROM tickets WHERE twenty_ticket_id = $1 LIMIT 1`,
     [params.twentyTicketId]
   )
   const localTicket = ticket.rows[0]
-  if (!localTicket) return null
+  if (!localTicket) return { status: 'no_ticket', comment: null }
 
   const commentBody = `Email from ${params.senderName} (${params.senderEmail}):\n\n${params.body.slice(0, 5000)}`
   const comment = await query(
-    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
-     VALUES ($1, $2, $3, false, NOW())
+    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, twenty_message_id, created_at)
+     VALUES ($1, $2, $3, false, $4, NOW())
+     ON CONFLICT DO NOTHING
      RETURNING id`,
-    [localTicket.id, CLAW_STAFF_ID, commentBody]
+    [localTicket.id, CLAW_STAFF_ID, commentBody, params.twentyMessageId]
   )
   await query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [localTicket.id])
-  return comment.rows[0]
+  if (!comment.rows[0]) return { status: 'duplicate', comment: null }
+  return { status: 'inserted', comment: comment.rows[0] }
 }
 
 async function addTwentyEmailReplyToDashboardTicket(params: {
@@ -172,6 +177,7 @@ async function addTwentyEmailReplyToDashboardTicket(params: {
   body: string
   senderName: string
   senderEmail: string
+  twentyMessageId: string
 }) {
   const ticket = await query(
     `SELECT id, twenty_ticket_id FROM tickets WHERE ticket_number = $1 LIMIT 1`,
@@ -182,13 +188,14 @@ async function addTwentyEmailReplyToDashboardTicket(params: {
 
   const commentBody = `Email from ${params.senderName} (${params.senderEmail}):\n\n${params.body.slice(0, 5000)}`
   const comment = await query(
-    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
-     VALUES ($1, $2, $3, false, NOW())
+    `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, twenty_message_id, created_at)
+     VALUES ($1, $2, $3, false, $4, NOW())
+     ON CONFLICT DO NOTHING
      RETURNING id`,
-    [localTicket.id, CLAW_STAFF_ID, commentBody],
+    [localTicket.id, CLAW_STAFF_ID, commentBody, params.twentyMessageId],
   )
   await query('UPDATE tickets SET updated_at = NOW() WHERE id = $1', [localTicket.id])
-  return { comment: comment.rows[0], twentyTicketId: localTicket.twenty_ticket_id || null }
+  return { comment: comment.rows[0] || null, twentyTicketId: localTicket.twenty_ticket_id || null }
 }
 
 /**
@@ -233,6 +240,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ skipped: true, reason: 'not INCOMING' })
     }
 
+    // Twenty's sync is two-stage: the message row exists (subject/participants)
+    // before the body text is imported. This trigger fires on message.created,
+    // so poll briefly for the text instead of storing the subject-only fallback.
+    // The repair-email-tickets cron catches anything that lands even later.
+    for (let attempt = 0; attempt < 5 && !(msg.text || '').trim(); attempt++) {
+      await sleep(3000)
+      const refetch = await gql<{ message: any }>(
+        `query($id: UUID!){ message(filter:{id:{eq:$id}}){ text } }`,
+        { id: messageId }
+      ).catch(() => null)
+      if (refetch?.message?.text?.trim()) msg.text = refetch.message.text
+    }
+
     const participants: Participant[] = (msg.messageParticipants?.edges ?? []).map(
       (e: any) => e.node
     )
@@ -268,9 +288,12 @@ export async function POST(request: NextRequest) {
         body: msg.text || '',
         senderName,
         senderEmail,
+        twentyMessageId: msg.id,
       }).catch((e) => ({ error: String(e) }))
 
-      if (dashboardComment && !('error' in dashboardComment) && dashboardComment.twentyTicketId) {
+      // comment === null means the message id was already ingested (duplicate
+      // delivery) — don't mirror it to the CRM a second time.
+      if (dashboardComment && !('error' in dashboardComment) && dashboardComment.twentyTicketId && dashboardComment.comment) {
         const tipTapBody = textToTipTap(msg.text || '')
         await tw('POST', '/rest/ticketComments', {
           name: `Reply from ${senderName}`,
@@ -301,25 +324,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3a. Reply path — add a comment to the existing ticket
+    // 3a. Reply path — add a comment to the existing ticket. Dashboard insert
+    // runs first: it dedupes on twenty_message_id, and a null result means this
+    // message was already ingested, so we skip the CRM mirror too.
     if (linkedTicketId) {
-      const tipTapBody = textToTipTap(msg.text || '')
-      const comment = await tw('POST', '/rest/ticketComments', {
-        name: `Reply from ${senderName}`,
-        body: { blocknote: tipTapBody, markdown: (msg.text || '').slice(0, 5000) },
-        commentType: 'CLIENT_VISIBLE',
-        isInternal: false,
-        authorName: `${senderName} <${senderEmail}>`,
-        serviceTicketId: linkedTicketId,
-      }).catch((e) => ({ error: String(e) }))
       const dashboardComment = await addDashboardEmailComment({
         twentyTicketId: linkedTicketId,
         body: msg.text || '',
         senderName,
         senderEmail,
+        twentyMessageId: msg.id,
       }).catch((e) => ({ error: String(e) }))
+
+      let comment: unknown = null
+      const isDuplicate = !!dashboardComment && !('error' in dashboardComment) && dashboardComment.status === 'duplicate'
+      if (!isDuplicate) {
+        const tipTapBody = textToTipTap(msg.text || '')
+        comment = await tw('POST', '/rest/ticketComments', {
+          name: `Reply from ${senderName}`,
+          body: { blocknote: tipTapBody, markdown: (msg.text || '').slice(0, 5000) },
+          commentType: 'CLIENT_VISIBLE',
+          isInternal: false,
+          authorName: `${senderName} <${senderEmail}>`,
+          serviceTicketId: linkedTicketId,
+        }).catch((e) => ({ error: String(e) }))
+      }
       return NextResponse.json({
-        action: 'comment_created',
+        action: isDuplicate ? 'comment_duplicate_skipped' : 'comment_created',
         ticketId: linkedTicketId,
         comment,
         dashboardComment,

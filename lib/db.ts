@@ -113,6 +113,11 @@ async function runMigrations() {
       is_internal BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`)
+    // Source CRM message id for comments ingested from email, so the
+    // email-ticket repair sweep and the webhook stay idempotent together.
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS twenty_message_id TEXT`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_comments_twenty_message
+      ON ticket_comments(ticket_id, twenty_message_id) WHERE twenty_message_id IS NOT NULL`)
     await client.query(`CREATE TABLE IF NOT EXISTS ticket_attachments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

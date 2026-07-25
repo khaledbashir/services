@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { parseTicketReplyAddress } from '@/lib/email'
+import { cleanEmailReply, scheduleEmailTicketRepair } from '@/lib/email-ticket-repair'
 
 const RESEND_RECEIVING_API_KEY = process.env.RESEND_RECEIVING_API_KEY || ''
 const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
@@ -50,36 +51,6 @@ async function fetchBodyFromTwenty(senderEmail: string, subject: string): Promis
     console.error('[email-webhook] Twenty fallback failed:', e)
     return ''
   }
-}
-
-/**
- * Strip quoted reply text and email signatures from an email body.
- */
-function cleanEmailReply(body: string): string {
-  if (!body) return ''
-  const lines = body.split('\n')
-  const cleaned: string[] = []
-  for (const line of lines) {
-    // Stop at quoted text markers
-    if (line.match(/^On .+ wrote:$/)) break
-    if (line.match(/^-{3,}$/)) break
-    if (line.match(/^_{3,}$/)) break
-    if (line.match(/^From:/i)) break
-    if (line.match(/^Sent:/i)) break
-    // Stop at common signature markers
-    if (line.trim() === '--') break
-    if (line.match(/^Get Outlook for/i)) break
-    if (line.match(/^Sent from my/i)) break
-    // Skip quoted lines (but don't stop — there might be content after)
-    if (line.match(/^>+ /)) continue
-    cleaned.push(line)
-  }
-  const result = cleaned.join('\n').trim()
-  // If stripping removed everything, fall back to the raw body (first 500 chars)
-  if (!result && body.trim()) {
-    return body.replace(/<[^>]*>/g, '').trim().substring(0, 500)
-  }
-  return result
 }
 
 function textFromHtml(value: string): string {
@@ -365,6 +336,12 @@ export async function POST(request: NextRequest) {
     const ticket = result.rows[0]
     const caseNum = String(ticket.ticket_number).padStart(8, '0')
 
+    // No body from Resend or Twenty yet (Twenty imports message text after the
+    // message row exists) — self-heal fills original_message once it lands.
+    if (!emailBody) {
+      scheduleEmailTicketRepair(ticket.ticket_number)
+    }
+
     // 5. Unmatched — Slack warning with email body + ticket link (ticket was still created)
     if (!venueId) {
       const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
@@ -462,8 +439,11 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
     console.log(`[email-webhook] Cleaned body (${cleanBody.length} chars): ${cleanBody.substring(0, 200)}`)
 
     if (!cleanBody) {
-      console.warn(`[email-webhook] Empty reply body for ticket #${ticketNumber}; subject was "${subject}"`)
-      return NextResponse.json({ ok: true, message: 'Empty reply body after cleanup' })
+      // Twenty's body import may not have landed yet — self-heal pulls the
+      // reply in as a comment once the text exists (idempotent).
+      console.warn(`[email-webhook] Empty reply body for ticket #${ticketNumber}; subject was "${subject}" — scheduling repair`)
+      scheduleEmailTicketRepair(ticketNumber)
+      return NextResponse.json({ ok: true, message: 'Empty reply body after cleanup — repair scheduled' })
     }
 
     // Add as external comment
