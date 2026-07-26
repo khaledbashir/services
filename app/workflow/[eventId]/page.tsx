@@ -77,6 +77,61 @@ export default function WorkflowPage() {
   const appendToTitle = (t: string) => setReportTitle(prev => (prev ? prev + ' ' : '') + t)
   const appendToDescription = (t: string) => setReportDescription(prev => (prev ? prev + ' ' : '') + t)
 
+  // Email the event/service summary to the client (Jireh ask 2026-07-26).
+  // Staff-only (hidden from technicians); recipients prefill from the portal
+  // accounts linked to this venue.
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailTo, setEmailTo] = useState('')
+  const [emailNote, setEmailNote] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSuggestions, setEmailSuggestions] = useState<{ email: string; full_name: string; client_name: string | null }[]>([])
+  const [lastSummarySent, setLastSummarySent] = useState<{ recipients: string[]; sent_by_name?: string | null; sent_at: string } | null>(null)
+  const canEmailSummary = viewer !== null && viewer.role !== 'technician'
+
+  useEffect(() => {
+    if (!canEmailSummary) return
+    fetch(`/api/workflow/${eventId}/email-summary`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data) return
+        setEmailSuggestions(data.suggestions || [])
+        setLastSummarySent(data.lastSent || null)
+        if (data.suggestions?.length) {
+          setEmailTo(data.suggestions.map((s: { email: string }) => s.email).join(', '))
+        }
+      })
+      .catch(() => {})
+  }, [canEmailSummary, eventId])
+
+  const sendSummary = async () => {
+    const to = emailTo.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+    if (to.length === 0) {
+      showToast('Add at least one recipient', 'error')
+      return
+    }
+    try {
+      setEmailSending(true)
+      const res = await fetch(`/api/workflow/${eventId}/email-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, note: emailNote.trim() }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        showToast(data?.error || 'Could not send summary', 'error')
+        return
+      }
+      setLastSummarySent({ recipients: data.recipients, sent_at: data.sentAt })
+      setEmailNote('')
+      setEmailOpen(false)
+      showToast('Summary emailed to client', 'success')
+    } catch {
+      showToast('Could not send summary', 'error')
+    } finally {
+      setEmailSending(false)
+    }
+  }
+
   const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -737,6 +792,77 @@ export default function WorkflowPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* Email the event/service summary to the client — staff only */}
+        {canEmailSummary && (
+          <div className="mt-6 bg-white rounded-2xl border border-[#E8E8E8] shadow-sm overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setEmailOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-4 text-left hover:bg-zinc-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0A52EF] flex items-center justify-center flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-zinc-900">Email summary to client</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    {lastSummarySent
+                      ? `Last sent ${new Date(lastSummarySent.sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                      : 'Send this event’s service summary'}
+                  </p>
+                </div>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-zinc-400 transition-transform ${emailOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {emailOpen && (
+              <div className="px-4 pb-4 border-t border-[#E8E8E8] space-y-3 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-900 mb-2">Send to</label>
+                  <input
+                    type="text"
+                    value={emailTo}
+                    onChange={(e) => setEmailTo(e.target.value)}
+                    placeholder="client@example.com, second@example.com"
+                    className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {emailSuggestions.length > 0
+                      ? `Prefilled from the client accounts on file for ${event.venue_name}. Edit freely — separate addresses with commas.`
+                      : 'No client accounts on file for this venue — enter the address(es) directly.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-900 mb-2">Message (optional)</label>
+                  <textarea
+                    value={emailNote}
+                    onChange={(e) => setEmailNote(e.target.value)}
+                    rows={2}
+                    placeholder="A short note that appears at the top of the summary."
+                    className="w-full p-3 border border-slate-300 rounded text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0A52EF]/30 text-sm"
+                  />
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Sends a branded summary of this event — on-site team, service milestones, post-game notes and incidents.
+                </p>
+                <button
+                  type="button"
+                  onClick={sendSummary}
+                  disabled={emailSending || !emailTo.trim()}
+                  className="w-full bg-[#0A52EF] text-white py-3 rounded font-medium hover:bg-[#0840C0] transition-colors disabled:opacity-50"
+                >
+                  {emailSending ? 'Sending...' : 'Send summary'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

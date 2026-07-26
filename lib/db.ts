@@ -1819,6 +1819,27 @@ async function runMigrations() {
     )`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_project_schedule_extra_submittals_project ON project_schedule_extra_submittals(project_id)`)
 
+    // ============================================================
+    // event_summary_emails — history of client-facing event/service
+    // summary emails sent from the workflow page (Jireh ask 2026-07-26).
+    // Every send is recorded so the page can show "last sent" and the
+    // team has an audit trail of what went to the client.
+    // ============================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS event_summary_emails (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        sent_by UUID,
+        sent_by_name TEXT,
+        recipients TEXT[] NOT NULL,
+        cc TEXT[],
+        note TEXT,
+        subject TEXT,
+        sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_event_summary_emails_event ON event_summary_emails(event_id, sent_at DESC)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
