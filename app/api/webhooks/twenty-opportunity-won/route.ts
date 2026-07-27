@@ -17,12 +17,20 @@ const WIN_TEST_SENTINEL = 'ZZWEBHOOKTEST'
 const WIN_TEST_TO = ['ahmadbasheerr@gmail.com']
 
 const TWENTY_BASE = 'https://crm.ancsports.net'
+const TWENTY_REST = `${process.env.TWENTY_API_URL || 'https://abc-twenty.izcgmb.easypanel.host'}/rest`
+const TWENTY_API_KEY = process.env.TWENTY_API_KEY || ''
 
 function fmtMoney(amountMicros: number | string | null | undefined, currencyCode: string | null | undefined): string {
   // Null/0 renders as $0, matching the Slack alert's `Number(micros || 0)` behavior.
   const amount = Number(amountMicros ?? 0) / 1_000_000
   const cc = currencyCode || 'USD'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: cc, maximumFractionDigits: 0 }).format(amount)
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  // UTC like the Slack alert's fmtDate — a bare DATE field must not shift a day in ET.
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 }
 
 interface OpportunityRecord {
@@ -34,10 +42,75 @@ interface OpportunityRecord {
   amount?: { amountMicros?: number; currencyCode?: string } | null
   dealValue?: { amountMicros?: number; currencyCode?: string } | null
   totalProjectRevenue?: { amountMicros?: number; currencyCode?: string } | null
+  totalProjectMargin?: { amountMicros?: number; currencyCode?: string } | null
   closeDate?: string | null
+  substantialCompletionDate?: string | null
   businessUnit?: string | null
   serviceType?: string[] | null
   league?: string | null
+  companyId?: string | null
+  company?: { name?: string | null } | null
+  owner?: { name?: { firstName?: string | null; lastName?: string | null } | null; userEmail?: string | null } | null
+  accountExecutive?: string | null
+  createdBy?: { source?: string | null; workspaceMemberId?: string | null; name?: string | null } | null
+}
+
+// Same businessUnit → display label map as the Slack alert.
+const TYPE_LABEL: Record<string, string> = {
+  TECHNOLOGY: 'Technology',
+  VENUE_SERVICES: 'Service',
+  MEDIA_SPONSORSHIP: 'Ad Sales',
+}
+
+// Same fallback chain as the Slack alert's resolveOwnerName (notify-deal-won):
+// owner relation → accountExecutive (SF mirror) → manual creator → Unassigned.
+function resolveOwnerName(opp: OpportunityRecord): string {
+  const first = (opp.owner?.name?.firstName || '').trim()
+  const last = (opp.owner?.name?.lastName || '').trim()
+  const full = [first, last].filter(Boolean).join(' ')
+  if (full) return full
+  const email = (opp.owner?.userEmail || '').trim()
+  if (email) return email
+  const ae = (opp.accountExecutive || '').trim()
+  if (ae) return ae
+  if (opp.createdBy?.source === 'MANUAL' && opp.createdBy?.workspaceMemberId) {
+    const cbName = (opp.createdBy?.name || '').trim()
+    if (cbName && cbName !== 'System') return cbName
+  }
+  return 'Unassigned'
+}
+
+// The webhook payload's record has no relations (owner/company) and can predate
+// the totals rollup by a beat — re-read the record like the Slack alert does so
+// both surfaces render identical numbers. Falls back to the payload record.
+async function fetchFullOpportunity(id: string): Promise<OpportunityRecord | null> {
+  if (!TWENTY_API_KEY) return null
+  try {
+    const res = await fetch(`${TWENTY_REST}/opportunities/${id}`, {
+      headers: { Authorization: `Bearer ${TWENTY_API_KEY}`, 'Content-Type': 'application/json' },
+    })
+    if (!res.ok) return null
+    const body = await res.json()
+    return body?.data?.opportunity || body?.opportunity || null
+  } catch {
+    return null
+  }
+}
+
+// REST record reads return companyId but not the company relation (same for the
+// Slack alert, which does this exact fallback fetch).
+async function fetchCompanyName(companyId: string | null | undefined): Promise<string> {
+  if (!companyId || !TWENTY_API_KEY) return ''
+  try {
+    const res = await fetch(`${TWENTY_REST}/companies/${companyId}`, {
+      headers: { Authorization: `Bearer ${TWENTY_API_KEY}`, 'Content-Type': 'application/json' },
+    })
+    if (!res.ok) return ''
+    const body = await res.json()
+    return body?.data?.company?.name || body?.company?.name || body?.name || ''
+  } catch {
+    return ''
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -139,32 +212,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const oppNum = record.opportunityNumber || '—'
-    const dealName = record.name || '(no name)'
-    // Value MUST mirror the #revenue-new-win-alert Slack alert (notify-deal-won),
-    // which renders totalProjectRevenue — never dealValue/amount (SF Sale_Price /
-    // Actual_Revenue mirrors that can disagree with it).
-    const dealValue = fmtMoney(
-      record.totalProjectRevenue?.amountMicros,
-      record.totalProjectRevenue?.currencyCode,
-    )
-    const closeDate = record.closeDate ? new Date(record.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
-    const businessUnit = record.businessUnit || '—'
-    const league = record.league || '—'
+    // Financials MUST mirror the #revenue-new-win-alert Slack alert (notify-deal-won):
+    // totalProjectRevenue / totalProjectMargin — never dealValue/amount (SF Sale_Price /
+    // Actual_Revenue mirrors that can disagree). Re-read the record like the Slack fn
+    // does; fall back to the webhook payload if the CRM read fails.
+    const opp: OpportunityRecord = (await fetchFullOpportunity(record.id)) || record
+
+    const oppNum = opp.opportunityNumber || record.opportunityNumber || '—'
+    const dealName = opp.name || record.name || '(no name)'
+    const revenueMicros = Number(opp.totalProjectRevenue?.amountMicros ?? 0)
+    const marginMicros = Number(opp.totalProjectMargin?.amountMicros ?? 0)
+    const costMicros = revenueMicros - marginMicros
+    const currency = opp.totalProjectRevenue?.currencyCode
+    const revenue = fmtMoney(revenueMicros, currency)
+    const cost = fmtMoney(costMicros, currency)
+    const margin = fmtMoney(marginMicros, opp.totalProjectMargin?.currencyCode || currency)
+    const marginPct = revenueMicros > 0
+      ? `${((marginMicros / revenueMicros) * 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
+      : '0%'
+    const account = opp.company?.name || (await fetchCompanyName(opp.companyId || record.companyId)) || '—'
+    const owner = resolveOwnerName(opp)
+    const closeDate = fmtDate(opp.closeDate || record.closeDate)
+    const completionDate = fmtDate(opp.substantialCompletionDate || record.substantialCompletionDate)
+    const rawBu = opp.businessUnit || record.businessUnit || ''
+    const businessUnit = TYPE_LABEL[rawBu] || rawBu || '—'
+    const league = opp.league || record.league || '—'
     const url = `${TWENTY_BASE}/object/opportunity/${record.id}`
 
-    const subject = `🎉 Closed/Won — ${dealName} (${dealValue})`
+    const subject = `🎉 Closed/Won — ${dealName} (${revenue} rev / ${margin} margin)`
+    const row = (label: string, value: string, bold = false) =>
+      `<tr><td style="padding:6px 0;color:#666;width:190px">${label}</td><td style="padding:6px 0">${bold ? `<strong>${value}</strong>` : value}</td></tr>`
     const html = `
       <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px">
         <h2 style="margin:0 0 12px;color:#0a52ef">🎉 New Win</h2>
         <p style="margin:0 0 20px;color:#333">A deal just moved to <strong>Closed/Won</strong>.</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333">
-          <tr><td style="padding:6px 0;color:#666;width:160px">Deal name</td><td style="padding:6px 0"><a href="${url}" style="color:#0a52ef;text-decoration:none">${dealName}</a></td></tr>
-          <tr><td style="padding:6px 0;color:#666">Opportunity #</td><td style="padding:6px 0"><strong>${oppNum}</strong></td></tr>
-          <tr><td style="padding:6px 0;color:#666">Total Project Revenue</td><td style="padding:6px 0"><strong>${dealValue}</strong></td></tr>
-          <tr><td style="padding:6px 0;color:#666">Close date</td><td style="padding:6px 0">${closeDate}</td></tr>
-          <tr><td style="padding:6px 0;color:#666">Business unit</td><td style="padding:6px 0">${businessUnit}</td></tr>
-          <tr><td style="padding:6px 0;color:#666">League</td><td style="padding:6px 0">${league}</td></tr>
+          ${row('Deal name', `<a href="${url}" style="color:#0a52ef;text-decoration:none">${dealName}</a>`)}
+          ${row('Opportunity #', oppNum, true)}
+          ${row('Account', account)}
+          ${row('Opportunity Owner', owner)}
+          ${row('Total Project Revenue', revenue, true)}
+          ${row('Total Project Cost', cost)}
+          ${row('Total Project Margin', margin, true)}
+          ${row('Margin %', marginPct)}
+          ${row('Close date', closeDate)}
+          ${row('Substantial Completion', completionDate)}
+          ${row('Business unit', businessUnit)}
+          ${row('League', league)}
         </table>
         <p style="margin:20px 0 0">
           <a href="${url}" style="display:inline-block;background:#0a52ef;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:500">Open in CRM →</a>
