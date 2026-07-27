@@ -43,7 +43,7 @@ interface OpportunityRecord {
   dealValue?: { amountMicros?: number; currencyCode?: string } | null
   totalProjectRevenue?: { amountMicros?: number; currencyCode?: string } | null
   totalProjectMargin?: { amountMicros?: number; currencyCode?: string } | null
-  substantialCompletionDate?: string | null
+  closeDate?: string | null
   businessUnit?: string | null
 }
 
@@ -177,9 +177,9 @@ export async function POST(request: NextRequest) {
     const opp: OpportunityRecord = (await fetchFullOpportunity(record.id)) || record
 
     // Field list is Krissy's spec (2026-07-27) — exactly these six rows, no extras.
-    // "Contract Award Date" = substantialCompletionDate (CRM label "Contract
-    // Completion Date"; the date the Won Gate requires at win time — Jireh's
-    // "completion/contract award date").
+    // "Contract Award Date" = closeDate: the SF-parity forecast export maps its
+    // Award Date column to closeDate (Contract Completion Date is a separate,
+    // later milestone).
     const oppNum = opp.opportunityNumber || record.opportunityNumber || '—'
     const dealName = opp.name || record.name || '(no name)'
     const revenueMicros = Number(opp.totalProjectRevenue?.amountMicros ?? 0)
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     const currency = opp.totalProjectRevenue?.currencyCode
     const revenue = fmtMoney(revenueMicros, currency)
     const margin = fmtMoney(marginMicros, opp.totalProjectMargin?.currencyCode || currency)
-    const awardDate = fmtDate(opp.substantialCompletionDate || record.substantialCompletionDate)
+    const awardDate = fmtDate(opp.closeDate || record.closeDate)
     const rawBu = opp.businessUnit || record.businessUnit || ''
     const businessUnit = TYPE_LABEL[rawBu] || rawBu || '—'
     const url = `${TWENTY_BASE}/object/opportunity/${record.id}`
