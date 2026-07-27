@@ -18,9 +18,9 @@ const WIN_TEST_TO = ['ahmadbasheerr@gmail.com']
 
 const TWENTY_BASE = 'https://crm.ancsports.net'
 
-function fmtMoney(amountMicros: number | null | undefined, currencyCode: string | null | undefined): string {
-  if (!amountMicros) return '—'
-  const amount = Number(amountMicros) / 1_000_000
+function fmtMoney(amountMicros: number | string | null | undefined, currencyCode: string | null | undefined): string {
+  // Null/0 renders as $0, matching the Slack alert's `Number(micros || 0)` behavior.
+  const amount = Number(amountMicros ?? 0) / 1_000_000
   const cc = currencyCode || 'USD'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: cc, maximumFractionDigits: 0 }).format(amount)
 }
@@ -33,6 +33,7 @@ interface OpportunityRecord {
   opportunityNumber?: string | null
   amount?: { amountMicros?: number; currencyCode?: string } | null
   dealValue?: { amountMicros?: number; currencyCode?: string } | null
+  totalProjectRevenue?: { amountMicros?: number; currencyCode?: string } | null
   closeDate?: string | null
   businessUnit?: string | null
   serviceType?: string[] | null
@@ -140,9 +141,12 @@ export async function POST(request: NextRequest) {
 
     const oppNum = record.opportunityNumber || '—'
     const dealName = record.name || '(no name)'
+    // Value MUST mirror the #revenue-new-win-alert Slack alert (notify-deal-won),
+    // which renders totalProjectRevenue — never dealValue/amount (SF Sale_Price /
+    // Actual_Revenue mirrors that can disagree with it).
     const dealValue = fmtMoney(
-      record.dealValue?.amountMicros || record.amount?.amountMicros,
-      record.dealValue?.currencyCode || record.amount?.currencyCode,
+      record.totalProjectRevenue?.amountMicros,
+      record.totalProjectRevenue?.currencyCode,
     )
     const closeDate = record.closeDate ? new Date(record.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
     const businessUnit = record.businessUnit || '—'
@@ -157,7 +161,7 @@ export async function POST(request: NextRequest) {
         <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333">
           <tr><td style="padding:6px 0;color:#666;width:160px">Deal name</td><td style="padding:6px 0"><a href="${url}" style="color:#0a52ef;text-decoration:none">${dealName}</a></td></tr>
           <tr><td style="padding:6px 0;color:#666">Opportunity #</td><td style="padding:6px 0"><strong>${oppNum}</strong></td></tr>
-          <tr><td style="padding:6px 0;color:#666">Value</td><td style="padding:6px 0"><strong>${dealValue}</strong></td></tr>
+          <tr><td style="padding:6px 0;color:#666">Total Project Revenue</td><td style="padding:6px 0"><strong>${dealValue}</strong></td></tr>
           <tr><td style="padding:6px 0;color:#666">Close date</td><td style="padding:6px 0">${closeDate}</td></tr>
           <tr><td style="padding:6px 0;color:#666">Business unit</td><td style="padding:6px 0">${businessUnit}</td></tr>
           <tr><td style="padding:6px 0;color:#666">League</td><td style="padding:6px 0">${league}</td></tr>
