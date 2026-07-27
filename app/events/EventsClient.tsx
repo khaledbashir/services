@@ -1,12 +1,13 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DiscoveryLoader } from '@/components/discovery-loader'
 import { DiscoveryReviewCard } from '@/components/discovery-review-card'
 import { Skeleton, TableSkeleton } from '@/components/skeleton'
 import { todayInOperationsTimeZone } from '@/lib/ops-date'
+import { EventDetailBody } from '@/components/event-detail'
 
 interface Event {
   id: string
@@ -90,6 +91,11 @@ interface DiscoveryEventRow {
   selected: boolean
 }
 
+function clampEventPanelWidth(w: number): number {
+  const max = typeof window !== 'undefined' ? Math.min(1200, window.innerWidth * 0.95) : 1200
+  return Math.max(380, Math.min(w, max))
+}
+
 export default function EventsPageWrapper() {
   return <Suspense><EventsPageInner /></Suspense>
 }
@@ -143,6 +149,54 @@ function EventsPageInner() {
     venue_id: '', client_id: '', league: '', staff_ids: [] as string[], event_type: 'event',
   })
   const router = useRouter()
+  // Click an event to open it in a resizable side panel — scheduling without
+  // page hops (Charlie 7/27). Width persisted per user, designs-board pattern.
+  const [panelId, setPanelId] = useState<string | null>(null)
+  const [panelWidth, setPanelWidth] = useState(760)
+  const resizingRef = useRef(false)
+  useEffect(() => {
+    fetch(`/api/preferences?key=${encodeURIComponent('events.panelWidth')}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.value) return
+        const w = Number(JSON.parse(data.value)?.width)
+        if (Number.isFinite(w) && w >= 380) setPanelWidth(clampEventPanelWidth(w))
+      })
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!panelId) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanelId(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [panelId])
+  const persistEventPanelWidth = (w: number) => {
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'events.panelWidth', value: JSON.stringify({ width: Math.round(w) }) }),
+    }).catch(() => {})
+  }
+  const startPanelResize = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      setPanelWidth(clampEventPanelWidth(window.innerWidth - ev.clientX))
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setPanelWidth((w) => { persistEventPanelWidth(w); return w })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   // Joe 2026-05-07: rank events that NEED assignment first, ones that don't
   // (warranty-only venues / explicit no-staff override) at the bottom. Ties
@@ -774,7 +828,7 @@ function EventsPageInner() {
                         return (
                           <button
                             key={event.id}
-                            onClick={() => router.push(`/events/${event.id}`)}
+                            onClick={() => setPanelId(event.id)}
                             className={`w-full text-left p-2 rounded mb-1 transition-all hover:shadow-md text-xs ${cardToneClass}`}
                             style={{ borderLeft: `3px solid ${borderColor}` }}
                           >
@@ -858,7 +912,7 @@ function EventsPageInner() {
                   <tr
                     key={event.id}
                     className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors"
-                    onClick={() => router.push(`/events/${event.id}`)}
+                    onClick={() => setPanelId(event.id)}
                   >
                     <td className="py-3 px-6 text-zinc-600 text-xs">{formatDate(event.event_date)}</td>
                     <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time, event.venue_timezone)}</td>
@@ -1597,6 +1651,23 @@ function EventsPageInner() {
           </div>
         )}
       </div>
+      {panelId && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent lg:pointer-events-none"
+            onClick={() => setPanelId(null)}
+            aria-hidden="true"
+          />
+          <aside style={{ width: panelWidth }} className="fixed inset-y-0 right-0 z-50 max-w-[95vw] overflow-y-auto bg-zinc-50 p-5 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="Event detail">
+            <div
+              onMouseDown={startPanelResize}
+              className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#0A52EF]/40 active:bg-[#0A52EF]/60"
+              title="Drag to resize"
+            />
+            <EventDetailBody key={panelId} id={panelId} embedded onClose={() => setPanelId(null)} />
+          </aside>
+        </>
+      )}
     </DashboardLayout>
   )
 }

@@ -63,7 +63,9 @@ export async function authenticateUser(email: string, password: string): Promise
     const isValidPassword = await bcrypt.compare(password, passwordHash)
 
     if (!isValidPassword) return null
-    
+
+    await query('UPDATE staff SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {})
+
     return {
       userId: user.id,
       email: user.email,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createJWT } from '@/lib/auth'
+import { query } from '@/lib/db'
 import {
   assertAllowedEmail,
   emailFromClaims,
@@ -73,6 +74,8 @@ export async function GET(request: NextRequest) {
 
     const staff = await findActiveStaffByEmail(email)
     if (!staff) return loginRedirect(request, 'microsoft_no_staff')
+
+    await query('UPDATE staff SET last_login_at = NOW() WHERE id = $1', [staff.userId]).catch(() => {})
 
     const token = await createJWT(staff)
     const completeUrl = new URL('/login/sso-complete', request.url)

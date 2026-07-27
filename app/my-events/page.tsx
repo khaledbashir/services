@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useAuth } from '@/lib/useAuth'
 import { Skeleton } from '@/components/skeleton'
 import { todayInOperationsTimeZone } from '@/lib/ops-date'
+import { WorkflowBody } from '@/components/event-workflow'
 
 interface MyEvent {
   id: string
@@ -24,7 +25,61 @@ const workflowStatusColors: Record<string, { dot: string; label: string; pill: s
   post_game_submitted: { dot: 'bg-blue-500', label: 'Complete', pill: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200' },
 }
 
+function clampPanelWidth(w: number): number {
+  const max = typeof window !== 'undefined' ? Math.min(1200, window.innerWidth * 0.95) : 1200
+  return Math.max(380, Math.min(w, max))
+}
+
 export default function MyEventsPage() {
+  // Click an assignment to run its workflow in a resizable side panel —
+  // no page hop between events (Charlie 7/27).
+  const [panelId, setPanelId] = useState<string | null>(null)
+  const [panelWidth, setPanelWidth] = useState(760)
+  const resizingRef = useRef(false)
+  useEffect(() => {
+    fetch(`/api/preferences?key=${encodeURIComponent('myEvents.panelWidth')}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.value) return
+        const w = Number(JSON.parse(data.value)?.width)
+        if (Number.isFinite(w) && w >= 380) setPanelWidth(clampPanelWidth(w))
+      })
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!panelId) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanelId(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [panelId])
+  const persistPanelWidth = (w: number) => {
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'myEvents.panelWidth', value: JSON.stringify({ width: Math.round(w) }) }),
+    }).catch(() => {})
+  }
+  const startPanelResize = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      setPanelWidth(clampPanelWidth(window.innerWidth - ev.clientX))
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setPanelWidth((w) => { persistPanelWidth(w); return w })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   const auth = useAuth()
   const [events, setEvents] = useState<MyEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,6 +175,11 @@ export default function MyEventsPage() {
               <Link
                 key={event.id}
                 href={`/workflow/${event.id}`}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                  e.preventDefault()
+                  setPanelId(event.id)
+                }}
                 className="block px-5 py-4 hover:bg-zinc-50 transition-colors"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -268,6 +328,27 @@ export default function MyEventsPage() {
           </div>
         )}
       </div>
+      {panelId && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent lg:pointer-events-none"
+            onClick={() => setPanelId(null)}
+            aria-hidden="true"
+          />
+          <aside style={{ width: panelWidth }} className="fixed inset-y-0 right-0 z-50 max-w-[95vw] overflow-y-auto bg-zinc-50 p-5 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="Event workflow">
+            <div
+              onMouseDown={startPanelResize}
+              className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#0A52EF]/40 active:bg-[#0A52EF]/60"
+              title="Drag to resize"
+            />
+            <div className="mb-3 flex items-center justify-between">
+              <button onClick={() => setPanelId(null)} className="text-sm font-medium text-[#0A52EF] hover:text-[#0840C0]">← Close</button>
+              <Link href={`/workflow/${panelId}`} className="text-xs font-medium text-zinc-500 hover:text-zinc-800">Open full →</Link>
+            </div>
+            <WorkflowBody key={panelId} eventId={panelId} />
+          </aside>
+        </>
+      )}
     </DashboardLayout>
   )
 }

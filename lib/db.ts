@@ -276,6 +276,22 @@ async function runMigrations() {
     // inbound Slack user to a real staff record + role when calling skills
     // via /api/ai/invoke. Array because Ahmad has multiple Slack IDs.
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS slack_user_ids TEXT[] DEFAULT '{}'::text[]`)
+    // Stamped on every successful sign-in (password + SSO) so admins can see
+    // who's actually using the platform (Charlie 7/27).
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`)
+    // Per-ticket file attachments for design requests (Charlie 7/27) — same
+    // shape as cg_design_attachments; the space-quota admin comes later.
+    await client.query(`CREATE TABLE IF NOT EXISTS design_request_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes BIGINT NOT NULL DEFAULT 0,
+      data BYTEA,
+      uploaded_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_design_request_attachments_request ON design_request_attachments(design_request_id, created_at DESC)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_slack_user_ids ON staff USING GIN(slack_user_ids)`)
     await client.query(`CREATE TABLE IF NOT EXISTS ai_chats (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

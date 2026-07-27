@@ -159,12 +159,12 @@ export function DesignDetailBody({
   const [notesDraft, setNotesDraft] = useState('')
   const [hoursSpentDraft, setHoursSpentDraft] = useState('')
   const [boardsDraft, setBoardsDraft] = useState('')
-  const [finalFileDraft, setFinalFileDraft] = useState('')
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
   const [projectLinkDraft, setProjectLinkDraft] = useState('')
   const [proofLinkDraft, setProofLinkDraft] = useState('')
   const [proofFolderPath, setProofFolderPath] = useState<string | null>(null)
   const [showHoursPanel, setShowHoursPanel] = useState(false)
+  const [showAttachmentsPanel, setShowAttachmentsPanel] = useState(false)
   const router = useRouter()
 
   const fetchData = async () => {
@@ -182,7 +182,6 @@ export function DesignDetailBody({
       setNotesDraft(d?.notes || '')
       setHoursSpentDraft(d?.hours_spent?.toString() || '')
       setBoardsDraft(d?.boards_requested || '')
-      setFinalFileDraft(d?.final_file_name || '')
       setFinalLinkDraft(d?.ftp_final_link || '')
       setProjectLinkDraft(d?.project_file_location || '')
       setProofLinkDraft(d?.ftp_proof_link || '')
@@ -446,6 +445,22 @@ export function DesignDetailBody({
                   </span>
                 )}
               </button>
+              {/* Attachments toggle — same interaction as Add Hours (Charlie 7/27) */}
+              <button
+                type="button"
+                onClick={() => setShowAttachmentsPanel((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg ring-1 px-3 py-2 text-sm transition-colors ${
+                  showAttachmentsPanel
+                    ? 'bg-[#0A52EF] text-white ring-[#0A52EF]'
+                    : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-900'
+                }`}
+                title="Attach files to this ticket"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                <span>Attachments</span>
+              </button>
               {/* Status chip — bold label on kanban-matching color (Charlie 2026-07-16) */}
               <select
                 value={dr.status}
@@ -502,27 +517,6 @@ export function DesignDetailBody({
                   />
                 </Field>
               )}
-              {useNewProofFlow && managedProofUrl && (
-                <Field label="Client Proof Link">
-                  <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 ring-1 ring-blue-200">
-                    <a
-                      href={managedProofUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-w-0 flex-1 break-all font-mono text-xs text-blue-700 hover:underline"
-                    >
-                      {managedProofUrl}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(managedProofUrl)}
-                      className="shrink-0 rounded bg-white px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </Field>
-              )}
               {/* Proof Location — FTP folder auto-filled when a proof is created (Charlie 7/16) */}
               <Field label="Proof Location">
                 <input
@@ -565,40 +559,23 @@ export function DesignDetailBody({
                   <AIFirstDraftButton designRequestId={dr.id} />
                 </>
               )}
-              {dr.status === 'in_qc' && !dr.qc_approved_by_name && (
-                <label className={`flex items-center gap-2.5 rounded-lg ring-1 ring-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 ${saving ? 'opacity-60 cursor-wait' : 'cursor-pointer hover:bg-zinc-50'}`}>
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    disabled={saving}
-                    onChange={(e) => {
-                      if (e.target.checked && !saving) updateField({ status: 'client_review', qc_approved: true })
-                    }}
-                    className="h-4 w-4 rounded ring-1 ring-zinc-300 accent-[#0A52EF]"
-                  />
-                  QC passed — send to Client Review
-                </label>
-              )}
               {dr.qc_approved_by_name && (
                 <div className="flex items-center gap-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-700">
                   <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>
                   QC approved by {dr.qc_approved_by_name} on {formatDate(dr.qc_approved_at)}
                 </div>
               )}
-              {managedProofUrl && (dr.status === 'approved' || dr.status === 'done' || dr.status === 'client_review') && (
-                <ProofFileRoster proofUrl={managedProofUrl} />
+              {managedProofUrl && (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Client Approval</div>
+                  <ProofFileRoster proofUrl={managedProofUrl} />
+                </div>
               )}
-              <Field label="Final File Name">
-                <input
-                  type="text"
-                  data-ai-target="final-file-name"
-                  value={finalFileDraft}
-                  onChange={(e) => setFinalFileDraft(e.target.value)}
-                  onBlur={() => finalFileDraft !== (dr.final_file_name || '') && updateField({ final_file_name: finalFileDraft })}
-                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white"
-                  placeholder="e.g. louisville-playoff-v3.psd"
-                />
-              </Field>
+              {!managedProofUrl && (
+                <div className="rounded-lg bg-zinc-50 ring-1 ring-zinc-200 px-3 py-2 text-xs text-zinc-500">
+                  Awaiting client — create a proof above to start the approval trail.
+                </div>
+              )}
             </div>
 
             {/* Add Hours panel — toggled from header (Charlie 2026-07-16) */}
@@ -611,6 +588,9 @@ export function DesignDetailBody({
                 <HoursLog designRequestId={dr.id} staffList={staffList} />
               </div>
             )}
+
+            {/* Attachments panel — toggled from header (Charlie 7/27) */}
+            {showAttachmentsPanel && <DesignAttachmentPanel designRequestId={dr.id} />}
 
             {/* STAGE 1: SUBMITTED — always visible */}
             <StageCard n={1} label="Submitted" desc={STAGES[0].desc} state={currentIdx >= 0 ? (currentIdx === 0 ? 'active' : 'done') : 'upcoming'} onSetStatus={() => updateField({ status: STAGES[0].key })}>
@@ -647,7 +627,13 @@ export function DesignDetailBody({
             <div className="rounded-xl bg-zinc-50 ring-1 ring-zinc-200 p-4 space-y-3 text-sm">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 mb-1">Client</div>
-                <div className="text-zinc-900">{dr.company_name || '—'}</div>
+                <input
+                  type="text"
+                  defaultValue={dr.company_name || ''}
+                  placeholder="—"
+                  onBlur={(e) => e.target.value !== (dr.company_name || '') && updateField({ company_name: e.target.value })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-2 py-1.5 text-sm text-zinc-900 bg-white focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
+                />
               </div>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 mb-1">Designer</div>
@@ -655,7 +641,12 @@ export function DesignDetailBody({
               </div>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 mb-1">Due</div>
-                <div className="text-zinc-900">{formatDate(dr.due_date)}</div>
+                <input
+                  type="date"
+                  defaultValue={dr.due_date ? dr.due_date.slice(0, 10) : ''}
+                  onChange={(e) => e.target.value && e.target.value !== (dr.due_date || '').slice(0, 10) && updateField({ due_date: e.target.value })}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-2 py-1.5 text-sm text-zinc-900 bg-white focus:ring-2 focus:ring-[#0A52EF]/30 outline-none"
+                />
               </div>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 mb-1">Created</div>
@@ -1115,6 +1106,73 @@ function AIFirstDraftButton({ designRequestId }: { designRequestId: string }) {
           {busy ? 'Generating…' : 'Generate draft'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Per-ticket attachments, same interaction as the hours panel. Space-quota
+// admin is a later phase (Charlie 7/27).
+function DesignAttachmentPanel({ designRequestId }: { designRequestId: string }) {
+  const [attachments, setAttachments] = useState<Array<{ id: string; filename: string; size_bytes: number; created_at: string; download_url: string }>>([])
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    try {
+      const res = await fetch(`/api/design-requests/${designRequestId}/attachments`)
+      if (res.ok) setAttachments((await res.json()).attachments || [])
+    } catch {}
+  }
+  useEffect(() => { load() }, [designRequestId])
+
+  const upload = async (file: File) => {
+    setUploading(true)
+    setError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/design-requests/${designRequestId}/attachments`, { method: 'POST', body: form })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error || 'Upload failed')
+      }
+      await load()
+    } catch {
+      setError('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const fmtSize = (b: number) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
+
+  return (
+    <div className="rounded-xl bg-white ring-1 ring-zinc-200 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Attachments</div>
+        <label className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 transition ${uploading ? 'bg-zinc-100 text-zinc-400 ring-zinc-200' : 'bg-[#0A52EF] text-white ring-[#0A52EF] hover:bg-[#0846c9]'}`}>
+          {uploading ? 'Uploading…' : 'Attach file'}
+          <input
+            type="file"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+          />
+        </label>
+      </div>
+      {error && <div className="rounded-lg bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-xs text-rose-700">{error}</div>}
+      {attachments.length === 0 ? (
+        <p className="text-xs text-zinc-400">No files attached yet.</p>
+      ) : (
+        <ul className="divide-y divide-zinc-100">
+          {attachments.map((a) => (
+            <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+              <a href={a.download_url} className="min-w-0 flex-1 truncate text-sm text-blue-700 hover:underline">{a.filename}</a>
+              <span className="shrink-0 text-[11px] text-zinc-400">{fmtSize(a.size_bytes)} · {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

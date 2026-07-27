@@ -991,9 +991,15 @@ export default function TicketsPage() {
 
       {panelId && (
         <>
-          <button className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent" onClick={() => setPanelId(null)} aria-label="Close ticket" />
+          {/* lg:pointer-events-none — on desktop the invisible backdrop must not eat
+              clicks on the list, or switching tickets takes two clicks (Charlie 7/27) */}
+          <div
+            className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent lg:pointer-events-none"
+            onClick={() => setPanelId(null)}
+            aria-hidden="true"
+          />
           <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[960px] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="Support ticket detail">
-            <TicketDetail params={{ id: panelId }} embedded onClose={() => { setPanelId(null); refreshTickets() }} />
+            <TicketDetail key={panelId} params={{ id: panelId }} embedded onClose={() => { setPanelId(null); refreshTickets() }} />
           </aside>
         </>
       )}

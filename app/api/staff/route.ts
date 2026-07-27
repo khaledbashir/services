@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const assignable = searchParams.get('assignable')
     const filter = buildAssignableStaffWhere(assignable)
     const result = await query(
-      `SELECT id, full_name, email, phone, role, title, city, profile_image, is_active
+      `SELECT id, full_name, email, phone, role, title, city, profile_image, is_active, last_login_at
        FROM staff
        ${filter.clause}
        ORDER BY full_name`,

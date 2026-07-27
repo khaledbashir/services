@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -75,6 +75,13 @@ const statusTone: Record<string, string> = {
   cancelled: 'bg-rose-50 text-rose-700',
 }
 
+// Keep the CG panel readable and never let it swallow the whole board:
+// min 380px, max the smaller of 1200px or 95% of the viewport.
+function clampPanelWidth(w: number): number {
+  const max = typeof window !== 'undefined' ? Math.min(1200, window.innerWidth * 0.95) : 1200
+  return Math.max(380, Math.min(w, max))
+}
+
 export default function CgDesignsPage() {
   const router = useRouter()
   const [items, setItems] = useState<CgDesignRequest[]>([])
@@ -95,6 +102,46 @@ export default function CgDesignsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [panelId, setPanelId] = useState<string | null>(null)
+  // Panel width is user-resizable (drag the left edge) and persisted per user.
+  const [panelWidth, setPanelWidth] = useState(760)
+  const resizingRef = useRef(false)
+  useEffect(() => {
+    fetch(`/api/preferences?key=${encodeURIComponent('cgDesigns.panelWidth')}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.value) return
+        const w = Number(JSON.parse(data.value)?.width)
+        if (Number.isFinite(w) && w >= 380) setPanelWidth(clampPanelWidth(w))
+      })
+      .catch(() => {})
+  }, [])
+  const persistPanelWidth = (w: number) => {
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'cgDesigns.panelWidth', value: JSON.stringify({ width: Math.round(w) }) }),
+    }).catch(() => {})
+  }
+  const startPanelResize = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      setPanelWidth(clampPanelWidth(window.innerWidth - ev.clientX))
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setPanelWidth((w) => { persistPanelWidth(w); return w })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
   const [formData, setFormData] = useState({
     venue_id: '',
     team_name: '',
@@ -508,8 +555,17 @@ export default function CgDesignsPage() {
       </div>
       {panelId && (
         <>
-          <button className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent" onClick={() => setPanelId(null)} aria-label="Close CG request" />
-          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[760px] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="CG design request detail">
+          <div
+            className="fixed inset-0 z-40 bg-zinc-900/20 lg:bg-transparent lg:pointer-events-none"
+            onClick={() => setPanelId(null)}
+            aria-hidden="true"
+          />
+          <aside style={{ width: panelWidth }} className="fixed inset-y-0 right-0 z-50 max-w-[95vw] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="CG design request detail">
+            <div
+              onMouseDown={startPanelResize}
+              className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-[#0A52EF]/40 active:bg-[#0A52EF]/60"
+              title="Drag to resize"
+            />
             <CgDesignDetail params={{ id: panelId }} embedded onClose={() => { setPanelId(null); fetchData() }} />
           </aside>
         </>

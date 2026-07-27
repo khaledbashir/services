@@ -265,6 +265,7 @@ export default function DesignsPage() {
   // Panel width is user-resizable (drag the left edge) and persisted per user.
   const [panelWidth, setPanelWidth] = useState(720)
   const resizingRef = useRef(false)
+  const [customTriCode, setCustomTriCode] = useState(false)
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkAssignee, setBulkAssignee] = useState<string>('')
@@ -574,7 +575,8 @@ export default function DesignsPage() {
       setFormError('Venue is required.')
       return
     }
-    if (!normalizeTriCode(formData.tricode)) {
+    // Rando / ad-hoc requests have no recurring client — tri-code not needed (Charlie 7/27)
+    if (!formData.is_rando && !normalizeTriCode(formData.tricode)) {
       setFormError('Tri-Code is required.')
       return
     }
@@ -983,12 +985,33 @@ export default function DesignsPage() {
               <div className="grid md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
-                    Tri-Code <span className="text-red-500">*</span> <span className="text-zinc-400 font-normal lowercase tracking-normal">— up to 2 × 3 letters</span>
+                    Tri-Code {!formData.is_rando && <span className="text-red-500">*</span>}{' '}
+                    <span className="text-zinc-400 font-normal lowercase tracking-normal">
+                      {formData.is_rando ? '— not needed for rando requests' : '— up to 2 × 3 letters'}
+                    </span>
                   </label>
-                  {selectedFormTriCodes.length > 0 ? (
+                  {formData.is_rando ? (
+                    <input
+                      type="text"
+                      value={formData.tricode}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
+                      maxLength={7}
+                      placeholder="Optional"
+                      className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-zinc-50 font-mono uppercase"
+                    />
+                  ) : selectedFormTriCodes.length > 0 && !customTriCode ? (
                     <select
                       value={formData.tricode}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: e.target.value }))}
+                      onChange={(e) => {
+                        // "Add a new code…" flips the dropdown into a free-text input so the
+                        // list is never a dead end (Charlie 7/27)
+                        if (e.target.value === '__custom__') {
+                          setCustomTriCode(true)
+                          setFormData((prev) => ({ ...prev, tricode: '' }))
+                          return
+                        }
+                        setFormData((prev) => ({ ...prev, tricode: e.target.value }))
+                      }}
                       className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
                       required
                     >
@@ -996,17 +1019,30 @@ export default function DesignsPage() {
                       {selectedFormTriCodes.map((code) => (
                         <option key={code} value={code}>{code}</option>
                       ))}
+                      <option value="__custom__">+ Add a new code…</option>
                     </select>
                   ) : (
-                    <input
-                      type="text"
-                      value={formData.tricode}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
-                      maxLength={7}
-                      placeholder="BSX-FEN"
-                      className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
-                      required
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.tricode}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, tricode: normalizeTriCode(e.target.value) }))}
+                        maxLength={7}
+                        placeholder="BSX-FEN"
+                        autoFocus={customTriCode}
+                        className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white font-mono uppercase"
+                        required
+                      />
+                      {customTriCode && (
+                        <button
+                          type="button"
+                          onClick={() => { setCustomTriCode(false); setFormData((prev) => ({ ...prev, tricode: '' })) }}
+                          className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50"
+                        >
+                          Back to list
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div>

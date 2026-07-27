@@ -18,6 +18,7 @@ interface Staff {
   city: string | null
   profile_image: string | null
   is_active: boolean
+  last_login_at: string | null
 }
 
 const roleColors: Record<string, { bg: string; text: string }> = {
@@ -326,6 +327,11 @@ export default function StaffPage() {
                 <div className={`w-1.5 h-1.5 rounded-full ${member.is_active ? 'bg-emerald-500' : 'bg-zinc-300'}`}></div>
                 <span className="text-xs">{member.is_active ? 'Active' : 'Inactive'}</span>
               </div>
+              <p className="text-[11px] text-zinc-400 mt-1">
+                {member.last_login_at
+                  ? `Last signed in ${new Date(member.last_login_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${new Date(member.last_login_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                  : 'Never signed in'}
+              </p>
             </div>
 
             <div className="border-t border-[#E8E8E8] px-6 py-3 space-y-1.5 bg-zinc-50/50">
