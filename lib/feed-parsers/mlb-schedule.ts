@@ -1,4 +1,4 @@
-import { dedupeFeedEvents } from '@/lib/feed-parsers/shared'
+import { dedupeFeedEvents, fetchFeedJson } from '@/lib/feed-parsers/shared'
 import type { FeedEvent } from '@/lib/feed-parsers/types'
 
 const MLB_VENUE_TEAM_ABBR: Record<string, string> = {
@@ -57,17 +57,21 @@ export async function parseMlbScheduleFeed(params: {
     url = parsed.toString()
   }
 
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANCBot/1.0)' },
-    signal: AbortSignal.timeout(20000),
-    cache: 'no-store',
-  })
-  if (!res.ok) {
+  let payload: { dates?: Array<{ games?: Array<Record<string, any>> }> }
+  try {
+    payload = await fetchFeedJson(url)
+  } catch (err) {
     const fallbackEvents = await parseEspnMlbScheduleFeed(params.venueName)
     if (fallbackEvents.length > 0) return fallbackEvents
-    throw new Error(`MLB Schedule API failed: ${res.status}`)
+    throw err instanceof Error ? err : new Error('MLB Schedule API failed')
   }
-  const payload = await res.json()
+
+  // statsapi serves MiLB levels through the same endpoint via sportId
+  // (11=AAA … 16=Rookie); label those events accurately.
+  const sportId = (() => {
+    try { return new URL(url).searchParams.get('sportId') || '1' } catch { return '1' }
+  })()
+  const league = sportId === '1' ? 'MLB' : 'MiLB'
 
   const venueNorm = params.venueName.toLowerCase().trim()
   const events: FeedEvent[] = []
@@ -90,11 +94,13 @@ export async function parseMlbScheduleFeed(params: {
           : null,
         teams: [away, home],
         eventType: 'game',
-        league: 'MLB',
+        league,
         source: 'league_schedule',
         confidence: 0.98,
-        sourceUrl: `https://www.mlb.com/schedule/${game.officialDate}`,
-        sourceLabel: 'MLB Schedule',
+        sourceUrl: league === 'MLB'
+          ? `https://www.mlb.com/schedule/${game.officialDate}`
+          : `https://www.milb.com/schedule/${game.officialDate}`,
+        sourceLabel: `${league} Schedule`,
         evidenceSnippet: `${away} at ${home} — ${game.venue?.name || params.venueName} — ${game.officialDate}`,
       })
     }

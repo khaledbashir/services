@@ -72,4 +72,31 @@ export const Browserless = {
     const arr = await res.arrayBuffer()
     return Buffer.from(arr)
   },
+
+  // Navigates Chromium to a URL, waits for the page's JS to settle, and
+  // returns the fully rendered HTML. Used by feed discovery for venue
+  // sites that 403/406 plain server-side fetches or render their event
+  // calendars client-side.
+  async fetchContent(url: string, opts?: { waitUntil?: 'load' | 'domcontentloaded' | 'networkidle0' | 'networkidle2'; timeoutMs?: number }): Promise<string> {
+    const timeoutMs = opts?.timeoutMs ?? 45_000
+    const endpoint = `${baseUrl()}/content?token=${encodeURIComponent(token())}`
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        gotoOptions: { waitUntil: opts?.waitUntil ?? 'networkidle2', timeout: timeoutMs },
+      }),
+      signal: AbortSignal.timeout(timeoutMs + 15_000),
+    })
+    if (!res.ok) {
+      const preview = await res.text().then((t) => t.slice(0, 300)).catch(() => '')
+      throw new BrowserlessError(
+        `Browserless content render failed (${res.status}): ${preview}`,
+        res.status,
+        preview,
+      )
+    }
+    return res.text()
+  },
 }

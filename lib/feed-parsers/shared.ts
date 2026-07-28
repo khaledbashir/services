@@ -1,13 +1,34 @@
+import { Browserless } from '@/lib/browserless'
 import type { FeedEvent } from '@/lib/feed-parsers/types'
 
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+// Ollama web_fetch fetches from Ollama's own network, so it clears IP-range
+// blocks (MLBAM 406s this VPS's whole range across statsapi/milb/tickets.com)
+// that Browserless — which egresses from this box — cannot.
+async function ollamaWebFetch(url: string): Promise<string | null> {
+  const ollamaKey = process.env.OLLAMA_API_KEY || process.env.AI_API_KEY || ''
+  if (!ollamaKey) return null
+  try {
+    const res = await fetch(process.env.OLLAMA_FETCH_URL || 'https://ollama.com/api/web_fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ollamaKey}` },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(25000),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { content?: string; text?: string; error?: string }
+    return data.content || data.text || null
+  } catch {
+    return null
+  }
+}
 
 export async function fetchFeedText(url: string): Promise<{ text: string; contentType: string | null }> {
   const cleanUrl = url.trim().replace(/\s+/g, '')
   // First try a direct fetch with a real browser UA. Ticketmaster and other
   // large venues 403 anything identifying itself as a bot, so we cosplay as
-  // Chrome. If we still get 403/blocked, fall through to Ollama web_fetch
-  // which renders the page in a real browser.
+  // Chrome. Blocked or failed requests fall through to the render fallbacks.
   try {
     const res = await fetch(cleanUrl, {
       headers: {
@@ -21,39 +42,61 @@ export async function fetchFeedText(url: string): Promise<{ text: string; conten
     if (res.ok) {
       return { text: await res.text(), contentType: res.headers.get('content-type') }
     }
-    if (res.status !== 403 && res.status !== 429 && res.status !== 503) {
-      throw new Error(`Feed request failed: ${res.status}`)
-    }
-  } catch (err) {
-    // network-level failure — try fallback
-    if (!(err instanceof Error) || !/Feed request failed/.test(err.message)) {
+  } catch {
+    // fall through to fallbacks
+  }
+
+  // Fallback 1: Browserless renders the page in real Chromium, executing the
+  // JS that client-side calendars (Carbonhouse, SPA ticketing) need before
+  // any event rows exist in the DOM. Bot filters keyed on headless/plain
+  // fetches pass; IP-range blocks do not (same egress IP as direct fetch).
+  if (Browserless.configured()) {
+    try {
+      const html = await Browserless.fetchContent(cleanUrl)
+      // Blocked pages come back tiny ("406 Not Acceptable" / "We'll be right
+      // back!" interstitials); treat them as a miss so the next fallback runs.
+      if (html && html.length > 5000) {
+        return { text: html, contentType: 'text/html' }
+      }
+    } catch {
       // fall through
     }
   }
 
-  // Fallback: Ollama web_fetch. Uses a real browser so TM's bot filter
-  // passes. Returns plain text content which our HTML parsers can still
-  // regex over (they don't need raw markup for snippet extraction).
-  const ollamaKey = process.env.OLLAMA_API_KEY || process.env.AI_API_KEY || ''
-  if (ollamaKey) {
+  // Fallback 2: Ollama web_fetch — external egress clears IP-range blocks.
+  const text = await ollamaWebFetch(cleanUrl)
+  if (text) return { text, contentType: 'text/plain' }
+
+  throw new Error(`Feed request failed: direct fetch blocked and browser-render/web-fetch fallbacks unavailable`)
+}
+
+// JSON-API variant of fetchFeedText for league schedule endpoints. Direct
+// fetch first; on failure re-fetch through Ollama web_fetch (external
+// egress) and parse its text payload as JSON. Browserless is skipped here —
+// it wraps JSON responses in an HTML viewer shell.
+export async function fetchFeedJson<T>(url: string): Promise<T> {
+  const cleanUrl = url.trim().replace(/\s+/g, '')
+  try {
+    const res = await fetch(cleanUrl, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+      signal: AbortSignal.timeout(20000),
+      cache: 'no-store',
+    })
+    if (res.ok) return await res.json() as T
+  } catch {
+    // fall through
+  }
+
+  const text = await ollamaWebFetch(cleanUrl)
+  if (text) {
     try {
-      const res = await fetch(process.env.OLLAMA_FETCH_URL || 'https://ollama.com/api/web_fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ollamaKey}` },
-        body: JSON.stringify({ url: cleanUrl }),
-        signal: AbortSignal.timeout(25000),
-      })
-      if (res.ok) {
-        const data = await res.json() as { content?: string; text?: string; error?: string }
-        const text = data.content || data.text || ''
-        if (text) return { text, contentType: 'text/plain' }
-      }
+      return JSON.parse(text) as T
     } catch {
-      // fall through to error
+      // truncated or non-JSON payload — fall through to error
     }
   }
 
-  throw new Error(`Feed request failed: direct fetch blocked and Ollama fallback unavailable`)
+  throw new Error(`Feed JSON request failed: direct fetch blocked and web-fetch fallback unavailable`)
 }
 
 export function toIsoDate(month: string, day: string): string | null {
