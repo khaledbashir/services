@@ -138,6 +138,24 @@ interface RawDiscoveryCandidate {
   confidence: number | null
 }
 
+function isLeagueScheduleOnlyVenue(venue: Pick<DiscoveryVenue, 'feed_type' | 'likely_leagues'>): boolean {
+  return venue.feed_type === 'mlb-schedule'
+}
+
+function candidateFitsVenueSchedule(
+  candidate: Pick<DiscoveryCandidate, 'event_type' | 'league' | 'source_kind'>,
+  venue: Pick<DiscoveryVenue, 'feed_type' | 'likely_leagues'>
+): boolean {
+  if (!isLeagueScheduleOnlyVenue(venue)) return true
+
+  // MLB schedule-fed venues are operational game schedules, not public venue
+  // calendars. Mixed-source discovery used to import concerts/charity rows
+  // onto off days, which made team dashboards look wrong.
+  return candidate.source_kind === 'league_schedule'
+    && candidate.event_type === 'game'
+    && (candidate.league || '').toUpperCase() === 'MLB'
+}
+
 export interface DiscoveryBatchResult {
   venues: Array<{ id: string; name: string }>
   discovered: DiscoveryCandidate[]
@@ -485,6 +503,31 @@ function findDuplicate(candidate: DiscoveryCandidate, existingEvents: ExistingEv
     if ((!normalizedTime || !existingTime) && wordSimilarity(existing.summary, candidate.summary) >= 0.8) {
       return { duplicate: true, reason: 'Similar event already exists on this date' }
     }
+
+    // Search/ticket sources routinely carry a different showtime (door time
+    // vs bell time) AND a different billing for the same production the venue
+    // calendar already has — e.g. Ticketmaster's "WWE Friday Night SmackDown"
+    // 19:00 vs the venue's "WWE RAW & SmackDown" 17:30. Without this, the
+    // discovery cron re-imports the renamed copy daily and the nightly feed
+    // sync cancels it again. Identical titles at different times stay
+    // non-duplicate (real matinee + evening double shows); the venue feed's
+    // own parser (feed-sync) keeps its separate matching and still imports
+    // genuine second showings.
+    if (normalizedTime && existingTime && normalizedTime !== existingTime
+      && normalizeSummary(existing.summary) !== normalizedSummary) {
+      const candidateWords = new Set(normalizeWords(candidate.summary))
+      const existingWords = new Set(normalizeWords(existing.summary))
+      const smaller = Math.min(candidateWords.size, existingWords.size)
+      if (smaller > 0) {
+        let overlap = 0
+        for (const word of candidateWords) {
+          if (existingWords.has(word)) overlap++
+        }
+        if (overlap / smaller >= 0.6) {
+          return { duplicate: true, reason: 'Same-day event with matching title already exists at a different listed time' }
+        }
+      }
+    }
   }
 
   return { duplicate: false, reason: null }
@@ -602,6 +645,7 @@ async function discoverFromConfiguredFeed(
           duplicate_reason: duplicate.reason,
         }
       })
+      .filter((candidate) => candidateFitsVenueSchedule(candidate, venue))
   } catch (error) {
     console.warn(`Configured feed discovery failed for ${venue.name}:`, error)
     return []
@@ -928,7 +972,7 @@ export async function discoverForVenue(
     ...raw
     .map(candidate => hydrateCandidate(candidate, venue))
     .filter((candidate): candidate is DiscoveryCandidate => Boolean(candidate)),
-  ]
+  ].filter((candidate) => candidateFitsVenueSchedule(candidate, venue))
 
   if (includeExisting && existingEvents.length > 0) {
     candidates.push(...buildExistingDemoCandidates(venue, existingEvents))
@@ -1091,6 +1135,7 @@ export async function importDiscoveryEvents(
   const eventIds: string[] = []
   const byVenue: Record<string, number> = {}
   const automationByVenue = new Map<string, Awaited<ReturnType<typeof getVenueAutomationInfo>>>()
+  const feedTypeByVenue = new Map<string, FeedType | null>()
   const venueTimezoneCache = new Map<string, string>()
   let imported = 0
   let skipped = 0
@@ -1109,6 +1154,19 @@ export async function importDiscoveryEvents(
     // the Events calendar. Support does not change based on those public
     // schedules; managers can still create specific OOH events manually.
     if ((automation.venue_type || 'sports') !== 'sports') {
+      skipped++
+      continue
+    }
+
+    if (!feedTypeByVenue.has(venueId)) {
+      const venueConfigResult = await query(`SELECT COALESCE(feed_type, 'other') AS feed_type FROM venues WHERE id = $1`, [venueId])
+      feedTypeByVenue.set(venueId, (venueConfigResult.rows[0]?.feed_type || null) as FeedType | null)
+    }
+    const venueConfig = {
+      feed_type: feedTypeByVenue.get(venueId) || null,
+      likely_leagues: event.league ? [event.league] : [],
+    }
+    if (!candidateFitsVenueSchedule(event, venueConfig)) {
       skipped++
       continue
     }

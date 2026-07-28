@@ -12,7 +12,12 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const filter = searchParams.get('filter') || 'all'
-    const limit = searchParams.get('limit') || '100'
+    // Discovery/feed sync keeps thousands of upcoming events live (a single
+    // month window holds 1,200+ rows). A 100-row cap silently dropped
+    // everything more than a few days out — Stevie's "Rocket Arena events
+    // missing from the dashboard" 2026-07-27. The cap is a runaway-query
+    // backstop, not a page size.
+    const limit = searchParams.get('limit') || '10000'
 
     const user = await getAuthUser(request)
     // `mine=true` forces personal-assignment scope even for admin/manager/tech_support —
@@ -47,6 +52,13 @@ export async function GET(request: NextRequest) {
       params.push(todayStr, monthStr)
     } else if (filter === 'pending_workflow') {
       whereClause = "WHERE (e.workflow_status IS NULL OR e.workflow_status = 'pending') AND e.event_date >= $1"
+      params.push(todayStr)
+    } else if (filter === 'all') {
+      // "All" is the operational list — every upcoming event. Without a
+      // lower bound the ascending sort + row cap returned the oldest rows
+      // in the table (2021 history) and nothing current. Past events remain
+      // reachable through the calendar view's explicit date ranges.
+      whereClause = 'WHERE e.event_date >= $1'
       params.push(todayStr)
     }
 
@@ -131,6 +143,7 @@ export async function GET(request: NextRequest) {
         COALESCE(v.venue_type, 'sports') <> 'sports'
         AND e.source IS NOT NULL
       )
+      AND e.status <> 'cancelled'
       GROUP BY
         e.id,
         v.name,
