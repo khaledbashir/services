@@ -138,6 +138,7 @@ export async function sendPortalInviteEmail(opts: {
       <p style="margin:0 0 12px;font-size:14px;color:#1e293b;line-height:1.5">You've been given access to the ANC Customer Portal, where you can submit service requests, follow their status, and see updates from the ANC service team.</p>
       <p style="margin:0 0 16px;font-size:14px;color:#1e293b;line-height:1.5">Use the button below to set your password and activate your account. This link is valid for 14 days.</p>
       <p style="margin:0 0 16px"><a href="${opts.inviteUrl}" style="display:inline-block;background:#0A52EF;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 22px;border-radius:8px">Activate your account</a></p>
+      <p style="margin:0 0 16px;font-size:13px;color:#475569;line-height:1.5">New to the portal? <a href="https://services.ancsports.net/orientation-videos/getting-started.mp4" style="color:#0A52EF">Watch the 30-second tour</a>.</p>
       <p style="margin:0 0 12px;font-size:12px;color:#64748b;line-height:1.5">If the button doesn't work, copy and paste this link into your browser:<br><a href="${opts.inviteUrl}" style="color:#0A52EF;word-break:break-all">${opts.inviteUrl}</a></p>
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
       <p style="margin:0;font-size:12px;color:#94a3b8">If you weren't expecting this invitation, you can ignore this email.</p>
