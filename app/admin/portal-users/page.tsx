@@ -53,6 +53,9 @@ export default function PortalUsersAdminPage() {
   const [inviteUrl, setInviteUrl] = useState('')
   const [customerUrl, setCustomerUrl] = useState('')
   const [copied, setCopied] = useState('')
+  const [inviteSent, setInviteSent] = useState<boolean | null>(null)
+  const [inviteSentEmail, setInviteSentEmail] = useState('')
+  const [resent, setResent] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -169,11 +172,29 @@ export default function PortalUsersAdminPage() {
 
       setInviteUrl(data.invite_url)
       setCustomerUrl(data.customer_url || `${window.location.origin}/customer`)
+      setInviteSent(Boolean(data.invite_sent))
+      setInviteSentEmail(data.user?.email || email)
       resetForm()
       await load()
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function resendInvite(user: PortalUser) {
+    setResent(`sending:${user.id}`)
+    try {
+      const res = await fetch('/api/customer-users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id, resend_invite: true }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setResent(res.ok && data.invite_sent ? `sent:${user.id}` : `fail:${user.id}`)
+    } catch {
+      setResent(`fail:${user.id}`)
+    }
+    load()
   }
 
   async function toggleActive(user: PortalUser) {
@@ -216,7 +237,9 @@ export default function PortalUsersAdminPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-green-700">
                   <Check className="h-4 w-4" />
-                  Customer portal invite is ready
+                  {inviteSent
+                    ? `Invite emailed to ${inviteSentEmail} — link below is a backup if they can't find it`
+                    : 'Customer portal invite is ready — email delivery failed, send them the link below'}
                 </div>
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
                   <input readOnly value={inviteUrl} className="min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700" />
@@ -422,9 +445,14 @@ export default function PortalUsersAdminPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3 whitespace-nowrap">
                       {user.is_active && !user.has_password && user.invite_token && (
-                        <button onClick={() => copyText(inviteFor(user), user.id)} className="text-xs font-medium text-[#0A52EF] hover:underline">
-                          {copied === user.id ? 'Copied' : 'Copy invite'}
-                        </button>
+                        <>
+                          <button onClick={() => resendInvite(user)} className="text-xs font-medium text-[#0A52EF] hover:underline">
+                            {resent === `sending:${user.id}` ? 'Sending…' : resent === `sent:${user.id}` ? 'Invite emailed' : resent === `fail:${user.id}` ? 'Email failed — copy link' : 'Email invite'}
+                          </button>
+                          <button onClick={() => copyText(inviteFor(user), user.id)} className="text-xs font-medium text-[#0A52EF] hover:underline">
+                            {copied === user.id ? 'Copied' : 'Copy invite'}
+                          </button>
+                        </>
                       )}
                       <button onClick={() => toggleActive(user)} className="text-xs font-medium text-slate-500 hover:underline">
                         {user.is_active ? 'Deactivate' : 'Reactivate'}

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getClient, query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { generateInviteToken } from '@/lib/portal-auth'
+import { sendPortalInviteEmail } from '@/lib/email'
 
 // Staff-side management of customer portal accounts.
 
@@ -103,10 +104,30 @@ export async function POST(request: NextRequest) {
     }
 
     const origin = request.headers.get('origin') || `https://${request.headers.get('host')}`
+    const inviteUrl = `${origin}/customer/invite/${user.invite_token}`
+
+    // Auto-send the invite so staff don't have to copy/paste the link manually.
+    // A failed send never fails the request — the copyable link remains the fallback.
+    let inviteSent = false
+    try {
+      const clientRow = user.client_id
+        ? await query('SELECT name FROM clients WHERE id = $1', [user.client_id])
+        : null
+      inviteSent = await sendPortalInviteEmail({
+        to: user.email,
+        fullName: user.full_name,
+        clientName: clientRow?.rows[0]?.name || organization_name || null,
+        inviteUrl,
+      })
+    } catch (err) {
+      console.error('[customer-users] Invite email failed:', err)
+    }
+
     return NextResponse.json({
       user,
-      invite_url: `${origin}/customer/invite/${user.invite_token}`,
+      invite_url: inviteUrl,
       customer_url: `${origin}/customer`,
+      invite_sent: inviteSent,
     })
   } catch (err) {
     console.error('Customer user create error:', err)
@@ -119,8 +140,38 @@ export async function PATCH(request: NextRequest) {
     const auth = await requireRole(request, 'manager')
     if (isAuthError(auth)) return auth
 
-    const { id, is_active, client_id } = await request.json()
+    const { id, is_active, client_id, resend_invite } = await request.json()
     if (!id) return NextResponse.json({ error: 'User id required' }, { status: 400 })
+
+    if (resend_invite) {
+      const inviteToken = generateInviteToken()
+      const result = await query(
+        `UPDATE portal_users
+         SET invite_token = $2, invite_expires_at = NOW() + INTERVAL '14 days', is_active = true, updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, email, full_name, client_id`,
+        [id, inviteToken]
+      )
+      if (result.rows.length === 0) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      const user = result.rows[0]
+      const origin = request.headers.get('origin') || `https://${request.headers.get('host')}`
+      const inviteUrl = `${origin}/customer/invite/${inviteToken}`
+      let inviteSent = false
+      try {
+        const clientRow = user.client_id
+          ? await query('SELECT name FROM clients WHERE id = $1', [user.client_id])
+          : null
+        inviteSent = await sendPortalInviteEmail({
+          to: user.email,
+          fullName: user.full_name,
+          clientName: clientRow?.rows[0]?.name || null,
+          inviteUrl,
+        })
+      } catch (err) {
+        console.error('[customer-users] Invite resend email failed:', err)
+      }
+      return NextResponse.json({ user, invite_url: inviteUrl, invite_sent: inviteSent })
+    }
 
     const sets: string[] = ['updated_at = NOW()']
     const params: any[] = [id]

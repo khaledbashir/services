@@ -114,6 +114,39 @@ function ticketEmailHtml(caseNum: string, title: string, venueName: string, body
   </div>`
 }
 
+/**
+ * Send a customer-portal invite email with the personal invite link.
+ * Returns true when SendGrid accepted the message.
+ */
+export async function sendPortalInviteEmail(opts: {
+  to: string
+  fullName: string
+  clientName?: string | null
+  inviteUrl: string
+}): Promise<boolean> {
+  const firstName = opts.fullName.trim().split(/\s+/)[0] || opts.fullName
+  const orgLine = opts.clientName
+    ? `<p style="margin:4px 0 0;opacity:0.7;font-size:13px">${escapeHtml(opts.clientName)}</p>`
+    : ''
+  const html = `<div style="font-family:sans-serif;max-width:600px">
+    <div style="background:#002C73;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+      <h2 style="margin:0;font-size:16px">Your ANC Customer Portal access</h2>
+      ${orgLine}
+    </div>
+    <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+      <p style="margin:0 0 12px;font-size:14px;color:#1e293b;line-height:1.5">Hi ${escapeHtml(firstName)},</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#1e293b;line-height:1.5">You've been given access to the ANC Customer Portal, where you can submit service requests, follow their status, and see updates from the ANC service team.</p>
+      <p style="margin:0 0 16px;font-size:14px;color:#1e293b;line-height:1.5">Use the button below to set your password and activate your account. This link is valid for 14 days.</p>
+      <p style="margin:0 0 16px"><a href="${opts.inviteUrl}" style="display:inline-block;background:#0A52EF;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 22px;border-radius:8px">Activate your account</a></p>
+      <p style="margin:0 0 12px;font-size:12px;color:#64748b;line-height:1.5">If the button doesn't work, copy and paste this link into your browser:<br><a href="${opts.inviteUrl}" style="color:#0A52EF;word-break:break-all">${opts.inviteUrl}</a></p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+      <p style="margin:0;font-size:12px;color:#94a3b8">If you weren't expecting this invitation, you can ignore this email.</p>
+      <p style="margin:0;font-size:12px;color:#94a3b8">ANC Sports + Entertainment</p>
+    </div>
+  </div>`
+  return sendEmail([opts.to], 'Your ANC Customer Portal invitation', html)
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     if (char === '&') return '&amp;'
