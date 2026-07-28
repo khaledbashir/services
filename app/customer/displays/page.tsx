@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import PortalShell from '../PortalShell'
 
 interface Display {
@@ -129,6 +130,14 @@ function DisplaysContent() {
                           {d.issue}
                         </div>
                       )}
+                      <div className="mt-4 flex justify-end">
+                        <Link
+                          href={`/customer/requests?new=1&venue=${v.id}&display=${encodeURIComponent(d.name)}`}
+                          className="cp-link-sm"
+                        >
+                          Report issue on this display →
+                        </Link>
+                      </div>
                     </div>
                   )
                 })}

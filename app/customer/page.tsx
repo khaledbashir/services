@@ -14,6 +14,21 @@ interface Ticket {
   venue_name: string
 }
 
+interface DisplayVenueSummary {
+  id: string
+  name: string
+  display_count: number
+  open_issues: number
+  last_service: string | null
+}
+
+interface DocumentSummary {
+  id: string
+  name: string
+  venue_name: string
+  created_at: string
+}
+
 function ledClass(status: string) {
   if (status === 'new' || status === 'open') return 'is-open'
   if (status === 'in_progress') return 'is-work'
@@ -30,20 +45,46 @@ function OverviewContent() {
   const { user, venues, refreshSignal } = usePortal()
   const [stats, setStats] = useState({ open: 0, closed: 0, total: 0 })
   const [recent, setRecent] = useState<Ticket[]>([])
+  const [displayVenues, setDisplayVenues] = useState<DisplayVenueSummary[]>([])
+  const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/tickets?status=all')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!data) return
-        setStats(data.stats || { open: 0, closed: 0, total: 0 })
-        setRecent((data.tickets || []).slice(0, 6))
+    let cancelled = false
+    Promise.all([
+      fetch('/api/customer/tickets?status=all').then(res => res.ok ? res.json() : null),
+      fetch('/api/customer/displays').then(res => res.ok ? res.json() : null),
+      fetch('/api/customer/documents').then(res => res.ok ? res.json() : null),
+    ])
+      .then(([ticketData, displayData, docData]) => {
+        if (cancelled) return
+        if (ticketData) {
+          setStats(ticketData.stats || { open: 0, closed: 0, total: 0 })
+          setRecent((ticketData.tickets || []).slice(0, 6))
+        }
+        setDisplayVenues((displayData?.venues || []).map((v: any) => ({
+          id: v.id,
+          name: v.name,
+          display_count: Number(v.display_count || 0),
+          open_issues: Number(v.open_issues || 0),
+          last_service: v.last_service || null,
+        })))
+        setDocuments((docData?.documents || []).slice(0, 4))
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [refreshSignal])
 
   const firstName = user?.fullName?.split(' ')[0]
+  const totalDisplays = displayVenues.reduce((sum, v) => sum + v.display_count, 0)
+  const openDisplayIssues = displayVenues.reduce((sum, v) => sum + v.open_issues, 0)
+  const serviceDates = displayVenues
+    .map(v => v.last_service)
+    .filter(Boolean)
+    .sort()
+  const lastService = serviceDates.length ? serviceDates[serviceDates.length - 1] : null
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -51,15 +92,17 @@ function OverviewContent() {
         <div>
           <h1 className="cp-hero-title">{firstName ? `Welcome back, ${firstName}` : 'Welcome back'}</h1>
           <p className="cp-hero-sub">
-            {stats.open === 0
-              ? 'No open requests — everything is running clean.'
-              : `${stats.open} open request${stats.open === 1 ? '' : 's'} being worked by the ANC team.`}
+            {openDisplayIssues > 0
+              ? `${openDisplayIssues} display-health item${openDisplayIssues === 1 ? '' : 's'} currently being watched by ANC.`
+              : stats.open === 0
+                ? 'No open requests — everything is running clean.'
+                : `${stats.open} open request${stats.open === 1 ? '' : 's'} being worked by the ANC team.`}
           </p>
         </div>
         <Link href="/customer/requests?new=1" className="cp-btn whitespace-nowrap">+ New request</Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 cp-stagger">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8 cp-stagger">
         <Link href="/customer/requests" className="cp-panel cp-panel-hover p-5 block">
           <div className="cp-stat-value is-blue">{stats.open}</div>
           <div className="cp-stat-label mt-2">Open requests</div>
@@ -72,6 +115,10 @@ function OverviewContent() {
           <div className="cp-stat-value">{venues.length}</div>
           <div className="cp-stat-label mt-2">Venue{venues.length === 1 ? '' : 's'} under service</div>
         </div>
+        <Link href="/customer/displays" className="cp-panel cp-panel-hover p-5 block">
+          <div className={`cp-stat-value ${openDisplayIssues > 0 ? '' : 'is-green'}`}>{openDisplayIssues}</div>
+          <div className="cp-stat-label mt-2">Display-health items</div>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -109,6 +156,37 @@ function OverviewContent() {
         </div>
 
         <div>
+          <h2 className="cp-section-title mb-3">Service snapshot</h2>
+          <div className="cp-panel p-4 mb-6 space-y-4">
+            <Link href="/customer/displays" className="flex items-center justify-between gap-3 cp-panel-hover rounded p-1 -m-1">
+              <div>
+                <div className="text-sm font-medium">Displays under service</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--anc-muted)' }}>
+                  {totalDisplays || 'Display registry in setup'}
+                </div>
+              </div>
+              <span className={`cp-led ${openDisplayIssues > 0 ? 'is-work' : 'is-done'}`} />
+            </Link>
+            <Link href="/customer/documents" className="flex items-center justify-between gap-3 cp-panel-hover rounded p-1 -m-1">
+              <div>
+                <div className="text-sm font-medium">Shared documents</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--anc-muted)' }}>
+                  {documents.length ? `${documents.length} recent file${documents.length === 1 ? '' : 's'}` : 'No recent files'}
+                </div>
+              </div>
+              <span className="cp-led is-open" />
+            </Link>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">Last service activity</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--anc-muted)' }}>
+                  {lastService ? fmtDate(lastService) : 'No completed service logged yet'}
+                </div>
+              </div>
+              <span className="cp-led is-closed" />
+            </div>
+          </div>
+
           <h2 className="cp-section-title mb-3">Your venues</h2>
           <div className="cp-panel p-2">
             {venues.length === 0 ? (

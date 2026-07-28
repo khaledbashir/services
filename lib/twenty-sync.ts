@@ -310,6 +310,17 @@ export async function syncTicketsToTwenty(
     'general': 'CAT_OTHER',
     'operational': 'CAT_OTHER',
     'voicemail': 'CAT_OTHER',
+    // Client-side taxonomy (lib/ticket-categories.ts) folded into Twenty's coarser buckets
+    'stats_data': 'CAT_SOFTWARE',
+    'led_display': 'CAT_HARDWARE',
+    'computer_server': 'CAT_HARDWARE',
+    'livesync_software': 'CAT_SOFTWARE',
+    'video_signal': 'CAT_HARDWARE',
+    'network_connectivity': 'CAT_HARDWARE',
+    'audio': 'CAT_HARDWARE',
+    'other_equipment': 'CAT_HARDWARE',
+    'service_request': 'CAT_OTHER',
+    'urgent_issue': 'CAT_OTHER',
   }
 
   const sourceMap: Record<string, string> = {

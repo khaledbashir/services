@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import PortalShell, { usePortal } from '../PortalShell'
+import { CLIENT_TICKET_CATEGORIES, ticketCategoryLabel } from '@/lib/ticket-categories'
 
 interface Ticket {
   id: string
@@ -12,6 +13,7 @@ interface Ticket {
   priority: string
   status: string
   category: string | null
+  subcategory: string | null
   created_at: string
   updated_at: string
   venue_name: string
@@ -52,13 +54,26 @@ function RequestsContent() {
   const [ntVenue, setNtVenue] = useState('')
   const [ntTitle, setNtTitle] = useState('')
   const [ntDesc, setNtDesc] = useState('')
+  const [ntCategory, setNtCategory] = useState('')
+  const [ntIssue, setNtIssue] = useState('')
   const [ntPriority, setNtPriority] = useState('medium')
+  const [ntAttachment, setNtAttachment] = useState<{ data: string; mimeType: string; name: string } | null>(null)
   const [ntSubmitting, setNtSubmitting] = useState(false)
   const [ntError, setNtError] = useState('')
 
   useEffect(() => {
     if (venues.length === 1) setNtVenue(venues[0].id)
   }, [venues])
+
+  useEffect(() => {
+    const venueParam = searchParams.get('venue')
+    const displayParam = searchParams.get('display')
+    if (venueParam) setNtVenue(venueParam)
+    if (displayParam && !ntTitle) {
+      setNtTitle(`Issue with ${displayParam}`)
+      setNtDesc(`Display: ${displayParam}\n\nWhat happened:\n`)
+    }
+  }, [searchParams, ntTitle])
 
   const loadTickets = useCallback(async () => {
     setLoading(true)
@@ -88,17 +103,27 @@ function RequestsContent() {
       const res = await fetch('/api/customer/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ venue_id: ntVenue, title: ntTitle, description: ntDesc, priority: ntPriority }),
+        body: JSON.stringify({ venue_id: ntVenue, title: ntTitle, description: ntDesc, category: ntCategory, subcategory: ntIssue || null, priority: ntPriority, attachment: ntAttachment }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setNtError(data.error || 'Could not submit request'); return }
       setShowNew(false)
-      setNtTitle(''); setNtDesc(''); setNtPriority('medium')
+      setNtTitle(''); setNtDesc(''); setNtCategory(''); setNtIssue(''); setNtPriority('medium'); setNtAttachment(null)
       setTab('open')
       loadTickets()
     } finally {
       setNtSubmitting(false)
     }
+  }
+
+  async function readAttachment(file: File) {
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    setNtAttachment({ data, mimeType: file.type || 'application/octet-stream', name: file.name })
   }
 
   return (
@@ -149,7 +174,8 @@ function RequestsContent() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{t.title}</div>
                     <div className="text-xs mt-1" style={{ color: 'var(--anc-muted)' }}>
-                      {t.venue_name} · {fmtDate(t.created_at)}
+                      {t.venue_name} · {ticketCategoryLabel(t.category)}
+                      {t.subcategory ? ` — ${t.subcategory}` : ''} · {fmtDate(t.created_at)}
                       {t.comment_count > 0 && ` · ${t.comment_count} ${t.comment_count === 1 ? 'reply' : 'replies'}`}
                     </div>
                   </div>
@@ -178,6 +204,36 @@ function RequestsContent() {
               </select>
             </div>
             <div>
+              <label className="cp-label">Category</label>
+              <select
+                value={ntCategory}
+                onChange={e => {
+                  const next = e.target.value
+                  setNtCategory(next)
+                  setNtIssue('')
+                  if (next === 'urgent_issue') setNtPriority('urgent')
+                }}
+                required
+                className="cp-input"
+              >
+                <option value="">Select a category…</option>
+                {CLIENT_TICKET_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            {(() => {
+              const issues = CLIENT_TICKET_CATEGORIES.find(c => c.value === ntCategory)?.issues || []
+              if (!issues.length) return null
+              return (
+                <div>
+                  <label className="cp-label">Specific issue <span style={{ color: 'var(--anc-muted)', fontWeight: 400 }}>(optional)</span></label>
+                  <select value={ntIssue} onChange={e => setNtIssue(e.target.value)} className="cp-input">
+                    <option value="">Select the closest match…</option>
+                    {issues.map(i => <option key={i} value={i}>{i}</option>)}
+                  </select>
+                </div>
+              )
+            })()}
+            <div>
               <label className="cp-label">Summary</label>
               <input
                 value={ntTitle}
@@ -196,6 +252,24 @@ function RequestsContent() {
                 placeholder="What's happening? Include the display location if relevant."
                 className="cp-input"
               />
+            </div>
+            <div>
+              <label className="cp-label">Photo or file</label>
+              <input
+                type="file"
+                className="cp-input"
+                accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) void readAttachment(file)
+                  else setNtAttachment(null)
+                }}
+              />
+              {ntAttachment && (
+                <div className="mt-2 text-xs" style={{ color: 'var(--anc-muted)' }}>
+                  Attached: {ntAttachment.name}
+                </div>
+              )}
             </div>
             <div>
               <label className="cp-label">Priority</label>

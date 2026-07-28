@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useDictation, MicChip } from '@/components/dictation'
 import { TicketDetail } from '@/components/ticket-detail'
+import { TICKET_CATEGORY_LABELS } from '@/lib/ticket-categories'
 
 interface Ticket {
   id: string
@@ -15,6 +16,7 @@ interface Ticket {
   status: string
   priority: string
   category: string
+  subcategory?: string | null
   venue_id?: string
   venue_name: string
   event_name?: string
@@ -57,14 +59,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; t
   closed: { label: 'Closed', color: 'bg-zinc-400', bg: 'bg-zinc-100', text: 'text-zinc-600' },
 }
 
-const categoryLabels: Record<string, string> = {
-  hardware: 'Hardware',
-  software: 'Software',
-  content: 'Content',
-  operational: 'Operational',
-  general: 'General',
-  voicemail: 'Voicemail',
-}
+const categoryLabels: Record<string, string> = TICKET_CATEGORY_LABELS
 
 const ticketBucketTabs: Array<{ key: TicketBucket; label: string }> = [
   { key: 'all', label: 'All Work' },
@@ -592,11 +587,9 @@ export default function TicketsPage() {
                   <label className="block text-xs font-medium text-zinc-600 mb-1">Category</label>
                   <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
                     className="w-full border border-zinc-300 px-3 py-2 text-sm focus:ring-1 focus:ring-zinc-400 outline-none bg-white">
-                    <option value="hardware">Hardware</option>
-                    <option value="software">Software</option>
-                    <option value="content">Content</option>
-                    <option value="operational">Operational</option>
-                    <option value="general">General</option>
+                    {Object.entries(categoryLabels).filter(([key]) => key !== 'voicemail').map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -815,7 +808,7 @@ export default function TicketsPage() {
                   <div className="flex items-center gap-1.5 text-xs text-zinc-500 mb-3">
                     <span className="truncate max-w-[140px]">{ticket.venue_name || 'No venue'}</span>
                     <span className="text-zinc-300">·</span>
-                    <span>{categoryLabels[ticket.category] || ticket.category}</span>
+                    <span>{(categoryLabels[ticket.category] || ticket.category) + (ticket.subcategory ? ` — ${ticket.subcategory}` : '')}</span>
                     {ticket.source === 'voicemail' && (
                       <>
                         <span className="text-zinc-300">·</span>
@@ -926,7 +919,7 @@ export default function TicketsPage() {
                         )}
                       </td>
                       <td className="py-2.5 px-4 text-zinc-600 text-xs">{ticket.venue_name || '—'}</td>
-                      <td className="py-2.5 px-4 text-zinc-600 text-xs">{categoryLabels[ticket.category] || ticket.category}</td>
+                      <td className="py-2.5 px-4 text-zinc-600 text-xs">{(categoryLabels[ticket.category] || ticket.category) + (ticket.subcategory ? ` — ${ticket.subcategory}` : '')}</td>
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-1.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${pri.dot}`}></span>

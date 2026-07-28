@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ReactMarkdown from 'react-markdown'
+import { ticketCategoryLabel } from '@/lib/ticket-categories'
 
 // const VenueMap3D = dynamic(() => import('./venue-3d/VenueMap3D'), { ssr: false })
 
@@ -667,7 +668,7 @@ export default function PortalPage() {
                         <p className="text-sm font-medium text-emerald-900">Ticket {String(aiResult.ticket.ticket_number).padStart(8, '0')} created</p>
                         <p className="text-xs text-emerald-700 mt-1">{aiResult.parsed?.title || aiResult.ticket.title}</p>
                         <div className="flex gap-2 mt-2">
-                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.category}</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">{ticketCategoryLabel(aiResult.ticket.category)}</span>
                           <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 capitalize">{aiResult.ticket.priority} priority</span>
                         </div>
                       </div>
@@ -746,7 +747,7 @@ export default function PortalPage() {
                               <p className="text-sm font-medium text-zinc-900">{ticket.title}</p>
                               <span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span>
                             </div>
-                            <p className="text-xs text-zinc-400 mt-1">{String(ticket.ticket_number).padStart(8, '0')} • {ticket.category} • {ticket.created_at}</p>
+                            <p className="text-xs text-zinc-400 mt-1">{String(ticket.ticket_number).padStart(8, '0')} • {ticketCategoryLabel(ticket.category)} • {ticket.created_at}</p>
                           </div>
                         )
                       })}
@@ -852,7 +853,7 @@ export default function PortalPage() {
                   <p className="text-sm font-medium">Ticket {String(aiResult.ticket.ticket_number).padStart(8, '0')} created</p>
                   <p className="text-xs opacity-75 mt-1">{aiResult.parsed?.title}</p>
                   <div className="flex gap-2 mt-2">
-                    <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.category}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-white/20">{ticketCategoryLabel(aiResult.ticket.category)}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-white/20 capitalize">{aiResult.ticket.priority}</span>
                   </div>
                   {aiResult.parsed?.follow_up && aiResult.parsed.follow_up.length > 0 && !followUpDone && (
@@ -1035,7 +1036,7 @@ export default function PortalPage() {
                             <tr key={ticket.id} onClick={() => viewTicket(ticket.id)} className="border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer">
                               <td className="py-3 px-6 text-zinc-400 text-xs font-mono">{ticket.ticket_number}</td>
                               <td className="py-3 px-6 font-medium text-zinc-900">{ticket.title}</td>
-                              <td className="py-3 px-6 text-zinc-600 text-xs capitalize">{ticket.category}</td>
+                              <td className="py-3 px-6 text-zinc-600 text-xs">{ticketCategoryLabel(ticket.category)}</td>
                               <td className="py-3 px-6"><span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: pc.color, backgroundColor: pc.bg }}>{ticket.priority}</span></td>
                               <td className="py-3 px-6"><span className="text-xs font-medium px-2 py-0.5 rounded capitalize" style={{ color: sc.color, backgroundColor: sc.bg }}>{ticket.status.replace('_', ' ')}</span></td>
                               <td className="py-3 px-6 text-zinc-500 text-xs">{ticket.created_at}</td>

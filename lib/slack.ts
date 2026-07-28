@@ -1,3 +1,5 @@
+import { ticketCategoryLabel } from '@/lib/ticket-categories'
+
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || ''
 
 // Global kill switch. Set SLACK_NOTIFICATIONS_ENABLED=false on EasyPanel to
@@ -290,7 +292,7 @@ export function formatTicketNotification(ticket: {
       type: 'section',
       fields: [
         { type: 'mrkdwn', text: `*Venue:*\n${ticket.venue_name}` },
-        { type: 'mrkdwn', text: `*Category:*\n${ticket.category}` },
+        { type: 'mrkdwn', text: `*Category:*\n${ticketCategoryLabel(ticket.category)}` },
         { type: 'mrkdwn', text: `*Priority:*\n${priorityEmoji} ${ticket.priority}` },
         { type: 'mrkdwn', text: `*Status:*\n${displayStatus}` },
       ],

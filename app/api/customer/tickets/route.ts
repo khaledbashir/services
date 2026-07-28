@@ -6,6 +6,8 @@ import { query } from '@/lib/db'
 import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
 import { sendSlackMessage, formatTicketNotification } from '@/lib/slack'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { normalizeAttachment } from '@/lib/ticket-attachments'
+import { isClientTicketCategory } from '@/lib/ticket-categories'
 
 // Service account used as created_by/author_id for customer-originated rows
 // (tickets.created_by is a non-null FK to staff). Same account the token
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     const ticketsResult = await query(
-      `SELECT t.id, t.ticket_number, t.title, t.priority, t.status, t.category,
+      `SELECT t.id, t.ticket_number, t.title, t.priority, t.status, t.category, t.subcategory,
               t.created_at, t.updated_at, t.resolved_at,
               v.name AS venue_name,
               (SELECT COUNT(*)::int FROM ticket_comments tc
@@ -84,7 +86,7 @@ export async function POST(request: NextRequest) {
     const session = await getPortalSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { venue_id, title, description, category, priority } = await request.json()
+    const { venue_id, title, description, category, subcategory, priority, attachment, image } = await request.json()
     if (!title || !venue_id) {
       return NextResponse.json({ error: 'Venue and title are required' }, { status: 400 })
     }
@@ -94,15 +96,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Venue not in your account' }, { status: 403 })
     }
 
+    const ticketCategory = isClientTicketCategory(category) ? category : 'general'
+    const specificIssue = typeof subcategory === 'string' && subcategory.trim() ? subcategory.trim().slice(0, 120) : null
+    // "Urgent Issue" category is an urgency signal in itself — never let it sit at default priority
+    const ticketPriority = ticketCategory === 'urgent_issue' ? 'urgent' : (priority || 'medium')
+
     const result = await query(
-      `INSERT INTO tickets (venue_id, title, description, category, priority, status,
+      `INSERT INTO tickets (venue_id, title, description, category, subcategory, priority, status,
                             created_by, source, contact_name, contact_email)
-       VALUES ($1, $2, $3, $4, $5, 'new', $6, 'customer_portal', $7, $8)
-       RETURNING id, ticket_number, title, category, priority, status, created_at`,
-      [venue_id, title, description || '', category || 'general', priority || 'medium',
+       VALUES ($1, $2, $3, $4, $5, $6, 'new', $7, 'customer_portal', $8, $9)
+       RETURNING id, ticket_number, title, category, subcategory, priority, status, created_at`,
+      [venue_id, title, description || '', ticketCategory, specificIssue, ticketPriority,
        PORTAL_SERVICE_STAFF_ID, session.fullName, session.email]
     )
     const ticket = result.rows[0]
+    const normalizedAttachment = normalizeAttachment(attachment ?? image)
+    if (normalizedAttachment) {
+      await query(
+        `INSERT INTO ticket_attachments (ticket_id, filename, mime_type, image_url, caption, uploaded_by, is_internal)
+         VALUES ($1, $2, $3, $4, $5, $6, false)`,
+        [
+          ticket.id,
+          normalizedAttachment.filename,
+          normalizedAttachment.mimeType,
+          normalizedAttachment.imageUrl,
+          'Submitted with customer request',
+          PORTAL_SERVICE_STAFF_ID,
+        ]
+      )
+      if (normalizedAttachment.mimeType.startsWith('image/')) {
+        await query('UPDATE tickets SET image_url = $1 WHERE id = $2', [normalizedAttachment.imageUrl, ticket.id])
+      }
+    }
 
     const venueResult = await query('SELECT name, slack_channel_id FROM venues WHERE id = $1', [venue_id])
     const venueName = venueResult.rows[0]?.name || 'Unknown venue'
@@ -113,10 +138,15 @@ export async function POST(request: NextRequest) {
         id: ticket.id,
         ticket_number: ticket.ticket_number,
         title: ticket.title,
-        category: category || 'general',
-        priority: priority || 'medium',
+        category: ticketCategory,
+        priority: ticketPriority,
         venue_name: venueName,
-        description: description ? `${description}\n— submitted by ${session.fullName} (${session.email})` : `Submitted by ${session.fullName} (${session.email})`,
+        description: [
+          specificIssue ? `Issue: ${specificIssue}` : '',
+          description || '',
+          normalizedAttachment ? `Attachment: ${normalizedAttachment.filename || normalizedAttachment.mimeType}` : '',
+          `Submitted by ${session.fullName} (${session.email})`,
+        ].filter(Boolean).join('\n'),
       }, 'created')
       msg.channel = channelId
       sendSlackMessage(msg)

@@ -7,11 +7,12 @@ import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { TicketContent, CommentContent } from '@/components/ticket-content'
 import { ATTACHMENT_ACCEPT } from '@/lib/ticket-attachments'
+import { TICKET_CATEGORY_LABELS } from '@/lib/ticket-categories'
 import Link from 'next/link'
 
 interface TicketDetail {
   id: string; ticket_number: number; title: string; description: string
-  priority: string; status: string; category: string; resolution_notes: string | null
+  priority: string; status: string; category: string; subcategory?: string | null; resolution_notes: string | null
   event_id: string | null; event_name: string | null; venue_name: string; venue_id: string
   created_by: string; created_by_name: string; assigned_to_name: string | null; assigned_to: string | null
   assignees?: { id: string; full_name: string }[]
@@ -81,9 +82,7 @@ const statusSteps = [
   { key: 'escalated', label: 'Escalated', color: '#ef4444' },
   { key: 'closed', label: 'Closed', color: '#6b7280' },
 ]
-const categoryLabels: Record<string, string> = {
-  hardware: 'Hardware', software: 'Software', content: 'Content', operational: 'Operational', general: 'General', voicemail: 'Voicemail',
-}
+const categoryLabels: Record<string, string> = TICKET_CATEGORY_LABELS
 
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
 type ContentTab = 'timeline' | 'details' | 'description' | 'emails' | 'attachments' | 'notes'
@@ -1285,11 +1284,17 @@ export function TicketDetail({
                           <InlineEdit
                             value={ticket.category || 'general'}
                             type="select"
-                            options={[{ value: 'hardware', label: 'Hardware' }, { value: 'software', label: 'Software' }, { value: 'content', label: 'Content' }, { value: 'operational', label: 'Operational' }, { value: 'general', label: 'General' }, { value: 'voicemail', label: 'Voicemail' }]}
+                            options={Object.entries(categoryLabels).map(([value, label]) => ({ value, label }))}
                             onSave={v => updateField('category', v)}
                             displayClassName="text-sm text-zinc-800 font-medium"
                           />
                         </div>
+                        {ticket.subcategory && (
+                          <div className="flex flex-col">
+                            <span className="text-[11px] text-zinc-400">Specific Issue</span>
+                            <span className="text-sm text-zinc-800 font-medium mt-0.5">{ticket.subcategory}</span>
+                          </div>
+                        )}
                         <div className="flex flex-col">
                           <span className="text-[11px] text-zinc-400">Contact Name</span>
                           <InlineEdit value={ticket.contact_name || ''} onSave={v => updateField('contact_name', v)} placeholder="Add contact name" emptyText="Not set" displayClassName="text-sm text-zinc-800 font-medium" />

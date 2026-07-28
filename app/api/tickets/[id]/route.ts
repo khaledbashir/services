@@ -34,7 +34,7 @@ export async function GET(
   try {
     const ticketResult = await query(
       `SELECT t.id, t.ticket_number, t.title, t.description, t.priority, t.status,
-              t.category, t.resolution_notes, t.event_id,
+              t.category, t.subcategory, t.resolution_notes, t.event_id,
               t.venue_id, v.name as venue_name, v.primary_contact_email as venue_contact_email,
               COALESCE(v.distribution_emails, '{}') as venue_distribution_emails,
               COALESCE(array_length(v.distribution_emails, 1), 0) as venue_distribution_count,

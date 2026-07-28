@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PortalShell from '../../PortalShell'
+import { ticketCategoryLabel } from '@/lib/ticket-categories'
 
 interface TicketDetail {
   id: string
@@ -11,6 +12,7 @@ interface TicketDetail {
   title: string
   description: string | null
   category: string | null
+  subcategory: string | null
   priority: string
   status: string
   resolution_notes: string | null
@@ -32,6 +34,7 @@ interface Attachment {
   id: string
   comment_id: string | null
   filename: string | null
+  mime_type: string
   image_url: string
   caption: string | null
 }
@@ -58,6 +61,32 @@ function fmtDateTime(value: string) {
   })
 }
 
+function AttachmentLink({ attachment }: { attachment: Attachment }) {
+  const isImage = attachment.mime_type?.startsWith('image/')
+  if (isImage) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={attachment.image_url}
+        alt={attachment.caption || attachment.filename || 'Attachment'}
+        className="mt-3 rounded max-h-64"
+        style={{ border: '1px solid var(--cp-line-strong)' }}
+      />
+    )
+  }
+  return (
+    <a
+      href={attachment.image_url}
+      download={attachment.filename || 'attachment'}
+      className="mt-3 flex items-center justify-between gap-3 rounded px-3 py-2 text-sm"
+      style={{ border: '1px solid var(--cp-line-strong)', color: 'var(--anc-brand)' }}
+    >
+      <span className="truncate">{attachment.filename || attachment.mime_type || 'Attachment'}</span>
+      <span className="text-xs" style={{ color: 'var(--anc-muted)' }}>Download</span>
+    </a>
+  )
+}
+
 function TicketContent() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -66,6 +95,7 @@ function TicketContent() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [notFound, setNotFound] = useState(false)
   const [reply, setReply] = useState('')
+  const [replyAttachment, setReplyAttachment] = useState<{ data: string; mimeType: string; name: string } | null>(null)
   const [sending, setSending] = useState(false)
 
   const load = useCallback(async () => {
@@ -82,21 +112,32 @@ function TicketContent() {
 
   async function sendReply(e: React.FormEvent) {
     e.preventDefault()
-    if (!reply.trim()) return
+    if (!reply.trim() && !replyAttachment) return
     setSending(true)
     try {
       const res = await fetch(`/api/customer/tickets/${params.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: reply }),
+        body: JSON.stringify({ body: reply, attachment: replyAttachment, caption: reply }),
       })
       if (res.ok) {
         setReply('')
+        setReplyAttachment(null)
         load()
       }
     } finally {
       setSending(false)
     }
+  }
+
+  async function readAttachment(file: File) {
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    setReplyAttachment({ data, mimeType: file.type || 'application/octet-stream', name: file.name })
   }
 
   if (notFound) {
@@ -142,7 +183,8 @@ function TicketContent() {
             {ticket.title}
           </h1>
           <div className="cp-mono mt-2" style={{ fontSize: 11, color: 'var(--cp-dim)' }}>
-            {ticket.venue_name} · Opened {fmtDateTime(ticket.created_at)}
+            {ticket.venue_name} · {ticketCategoryLabel(ticket.category)}
+            {ticket.subcategory ? ` — ${ticket.subcategory}` : ''} · Opened {fmtDateTime(ticket.created_at)}
           </div>
           {ticket.description && (
             <p className="text-sm mt-5 whitespace-pre-wrap" style={{ color: 'var(--cp-muted)', lineHeight: 1.7 }}>
@@ -154,8 +196,7 @@ function TicketContent() {
             <img src={ticket.image_url} alt="Ticket attachment" className="mt-5 rounded max-h-80" style={{ border: '1px solid var(--cp-line-strong)' }} />
           )}
           {standaloneAttachments.map(a => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={a.id} src={a.image_url} alt={a.caption || a.filename || 'Attachment'} className="mt-4 rounded max-h-80" style={{ border: '1px solid var(--cp-line-strong)' }} />
+            <AttachmentLink key={a.id} attachment={a} />
           ))}
           {isClosed && ticket.resolution_notes && (
             <div className="cp-resolution mt-6">
@@ -187,8 +228,7 @@ function TicketContent() {
                 </div>
                 <p className="text-sm whitespace-pre-wrap" style={{ lineHeight: 1.65 }}>{c.body}</p>
                 {commentAttachments.map(a => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={a.id} src={a.image_url} alt={a.caption || 'Attachment'} className="mt-3 rounded max-h-64" style={{ border: '1px solid var(--cp-line-strong)' }} />
+                  <AttachmentLink key={a.id} attachment={a} />
                 ))}
               </div>
             )
@@ -203,8 +243,26 @@ function TicketContent() {
             placeholder={isClosed ? 'This request is closed — reply to reopen the conversation.' : 'Write a reply…'}
             className="cp-input"
           />
+          <div className="mt-3">
+            <label className="cp-label">Attach photo or file</label>
+            <input
+              type="file"
+              className="cp-input"
+              accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) void readAttachment(file)
+                else setReplyAttachment(null)
+              }}
+            />
+            {replyAttachment && (
+              <div className="mt-2 text-xs" style={{ color: 'var(--anc-muted)' }}>
+                Attached: {replyAttachment.name}
+              </div>
+            )}
+          </div>
           <div className="flex justify-end mt-4">
-            <button type="submit" disabled={sending || !reply.trim()} className="cp-btn">
+            <button type="submit" disabled={sending || (!reply.trim() && !replyAttachment)} className="cp-btn">
               {sending ? 'Sending…' : 'Send reply'}
             </button>
           </div>

@@ -93,6 +93,7 @@ async function runMigrations() {
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS parent_ticket_id UUID REFERENCES tickets(id)`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sf_case_number TEXT`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS twenty_ticket_id TEXT`)
+    await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT`) // specific issue under category (client-side taxonomy)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_twenty_ticket_id ON tickets(twenty_ticket_id) WHERE twenty_ticket_id IS NOT NULL`)
     // Per-tech email signature, appended to ticket replies they send (which all
     // go out from the shared support@anc.com mailbox).

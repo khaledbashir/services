@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
 import { notifyOps } from '@/lib/slack'
+import { normalizeAttachment } from '@/lib/ticket-attachments'
 
 const PORTAL_SERVICE_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
 
 async function loadScopedTicket(ticketId: string, venueIds: string[]) {
   const result = await query(
-    `SELECT t.id, t.ticket_number, t.title, t.description, t.category, t.priority,
+    `SELECT t.id, t.ticket_number, t.title, t.description, t.category, t.subcategory, t.priority,
             t.status, t.resolution_notes, t.image_url, t.created_at, t.updated_at,
             t.resolved_at, t.venue_id, v.name AS venue_name, v.slack_channel_id
      FROM tickets t
@@ -82,20 +83,42 @@ export async function POST(
     const ticket = await loadScopedTicket(params.id, venueIds)
     if (!ticket) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const { body } = await request.json()
-    if (!body || typeof body !== 'string' || !body.trim()) {
-      return NextResponse.json({ error: 'Comment body required' }, { status: 400 })
+    const { body, attachment, image, caption } = await request.json()
+    const normalizedAttachment = normalizeAttachment(attachment ?? image)
+    const commentBody = typeof body === 'string' ? body.trim() : ''
+    if (!commentBody && !normalizedAttachment) {
+      return NextResponse.json({ error: 'Reply or attachment required' }, { status: 400 })
     }
 
     const comment = await query(
       `INSERT INTO ticket_comments (ticket_id, author_id, author_name, body, is_internal)
        VALUES ($1, $2, $3, $4, false)
        RETURNING id, body, created_at`,
-      [params.id, PORTAL_SERVICE_STAFF_ID, `${session.fullName} (${session.clientName || 'Customer'})`, body.trim()]
+      [
+        params.id,
+        PORTAL_SERVICE_STAFF_ID,
+        `${session.fullName} (${session.clientName || 'Customer'})`,
+        commentBody || (caption ? `Attachment: ${caption}` : 'Attachment added'),
+      ]
     )
+    if (normalizedAttachment) {
+      await query(
+        `INSERT INTO ticket_attachments (ticket_id, comment_id, filename, mime_type, image_url, caption, uploaded_by, is_internal)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, false)`,
+        [
+          params.id,
+          comment.rows[0].id,
+          normalizedAttachment.filename,
+          normalizedAttachment.mimeType,
+          normalizedAttachment.imageUrl,
+          typeof caption === 'string' ? caption.trim().slice(0, 500) || null : null,
+          PORTAL_SERVICE_STAFF_ID,
+        ]
+      )
+    }
 
     const caseNum = String(ticket.ticket_number).padStart(8, '0')
-    const preview = body.trim()
+    const preview = commentBody || (normalizedAttachment ? `Attachment added: ${normalizedAttachment.filename || normalizedAttachment.mimeType}` : '')
     notifyOps(
       ':speech_balloon:',
       `*Customer reply* from ${session.fullName} on Case #${caseNum} (${ticket.venue_name}):\n> ${preview.substring(0, 200)}${preview.length > 200 ? '...' : ''}`,
