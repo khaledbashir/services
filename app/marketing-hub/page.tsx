@@ -3,7 +3,7 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DEFAULT_NEWSLETTER_VISUAL, exportNewsletterBodyHtml } from '@/lib/marketing/newsletter-visual'
-import { BarChart3, CalendarClock, CheckCircle2, Clock3, FileText, LayoutTemplate, Mail, Megaphone, Palette, Send, Sparkles, Users, Workflow } from 'lucide-react'
+import { BarChart3, CalendarClock, CheckCircle2, Clock3, LayoutTemplate, Mail, Megaphone, Palette, Send, Sparkles, Users } from 'lucide-react'
 import Link from 'next/link'
 
 type Audience = { id: string; name: string; description?: string; member_count?: number }
@@ -65,11 +65,11 @@ type FormSubmission = {
   timeline_status: string
 }
 
-const inputClass = 'w-full rounded-md border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-[#4F7CFF] focus:ring-2 focus:ring-[#4F7CFF]/20'
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2B66F6] disabled:cursor-not-allowed disabled:opacity-50'
-const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50'
-const panelClass = 'rounded-md border border-zinc-800 bg-zinc-950/70 shadow-[0_20px_80px_rgba(0,0,0,0.28)]'
-const mutedPanelClass = 'rounded-md border border-zinc-800 bg-zinc-900/45'
+const inputClass = 'w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-[#0A52EF] focus:ring-2 focus:ring-[#0A52EF]/15'
+const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0840C0] disabled:cursor-not-allowed disabled:opacity-50'
+const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50'
+const panelClass = 'rounded-xl border border-zinc-200 bg-white shadow-sm'
+const mutedPanelClass = 'rounded-xl border border-zinc-200 bg-zinc-50'
 
 const defaultCampaignBodyHtml = `<h1 style="margin:0 0 10px;font-size:26px;line-height:1.18;color:#0f172a">Media & Partnerships Brief</h1>
 <p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#334155">A focused update on the partner-facing moments, venue media opportunities, and audience signals moving through ANC Sports.</p>
@@ -89,36 +89,54 @@ const defaultCampaignBodyHtml = `<h1 style="margin:0 0 10px;font-size:26px;line-
 <h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;color:#111827">What To Watch</h2>
 <p style="margin:0;font-size:14px;line-height:1.65;color:#334155">Close with the next action: a meeting, a partner follow-up, an upcoming event, or the one opportunity the audience should keep on their radar.</p>`
 
-function Stat({ label, value, tone = 'default', icon }: { label: string; value: string | number; tone?: 'default' | 'warn' | 'good'; icon?: ReactNode }) {
-  const colors = tone === 'good' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : tone === 'warn' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-zinc-800 bg-zinc-950/70 text-zinc-100'
+/* Primary KPI — the only stats that get card weight. Colour is reserved for
+   numbers that need an operator to act; everything else stays neutral. */
+function Stat({ label, value, tone = 'default', icon, hint }: { label: string; value: string | number; tone?: 'default' | 'warn' | 'good'; icon?: ReactNode; hint?: string }) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  const live = tone !== 'default' && Number.isFinite(numeric) && numeric > 0
+  const valueTone = live && tone === 'warn' ? 'text-amber-700' : 'text-zinc-900'
   return (
-    <div className={`rounded-md border p-4 ${colors}`}>
+    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-2xl font-semibold tabular-nums">{value}</div>
-        {icon && <div className="text-zinc-500">{icon}</div>}
+        <div className="text-xs font-medium text-zinc-600">{label}</div>
+        {icon && <div className="text-zinc-400">{icon}</div>}
       </div>
-      <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{label}</div>
+      <div className={`mt-2 flex items-baseline gap-2 text-3xl font-semibold tabular-nums tracking-tight ${valueTone}`}>
+        {value}
+        {live && <span className={`size-1.5 rounded-full ${tone === 'good' ? 'bg-emerald-500' : 'bg-amber-500'}`} />}
+      </div>
+      {hint && <div className="mt-1 text-[11px] text-zinc-500">{hint}</div>}
+    </div>
+  )
+}
+
+/* Secondary metric — dense, no card chrome, deliberately quieter than a Stat. */
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="px-4 py-3">
+      <div className="text-lg font-semibold tabular-nums tracking-tight text-zinc-900">{value}</div>
+      <div className="mt-0.5 text-[11px] leading-tight text-zinc-500">{label}</div>
     </div>
   )
 }
 
 function StatusPill({ value }: { value: string }) {
   const color = value === 'sent' || value === 'published'
-    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : value === 'scheduled' || value === 'approved'
-      ? 'bg-blue-500/10 text-blue-300 border-blue-500/25'
+      ? 'bg-blue-50 text-blue-700 border-blue-200'
       : value.includes('fail')
-        ? 'bg-rose-500/10 text-rose-300 border-rose-500/25'
-        : 'bg-zinc-800 text-zinc-300 border-zinc-700'
-  return <span className={`inline-flex rounded border px-2 py-0.5 text-[11px] font-medium capitalize ${color}`}>{value.replace(/_/g, ' ')}</span>
+        ? 'bg-rose-50 text-rose-700 border-rose-200'
+        : 'bg-zinc-50 text-zinc-600 border-zinc-200'
+  return <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize ${color}`}>{value.replace(/_/g, ' ')}</span>
 }
 
 function SectionHeader({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle?: string }) {
   return (
-    <div className="flex items-start gap-3 border-b border-zinc-800 px-4 py-3">
-      <div className="mt-0.5 rounded-md border border-zinc-800 bg-zinc-900 p-2 text-zinc-300">{icon}</div>
+    <div className="flex items-start gap-3 border-b border-zinc-200 px-4 py-3">
+      <div className="mt-0.5 rounded-md border border-zinc-200 bg-zinc-50 p-2 text-zinc-700">{icon}</div>
       <div>
-        <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+        <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
         {subtitle && <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>}
       </div>
     </div>
@@ -131,11 +149,11 @@ function TemplateCard({ template, onUse }: { template: Template; onUse: () => vo
     <button
       type="button"
       onClick={onUse}
-      className="group rounded-md border border-zinc-800 bg-zinc-950/70 p-3 text-left transition-colors hover:border-[#4F7CFF]/70 hover:bg-zinc-900"
+      className="group rounded-lg border border-zinc-200 bg-white p-3 text-left shadow-sm transition-colors hover:border-[#0A52EF]/40 hover:bg-zinc-50"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="font-medium text-zinc-100">{template.name}</div>
-        <span className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500 group-hover:text-zinc-300">
+        <div className="font-medium text-zinc-900">{template.name}</div>
+        <span className="rounded border border-zinc-300 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500 group-hover:text-zinc-700">
           {template.platform || template.template_type}
         </span>
       </div>
@@ -149,7 +167,7 @@ function ChannelButton({ active, label, onClick }: { active: boolean; label: str
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${active ? 'border-[#4F7CFF] bg-[#0A52EF] text-white' : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'}`}
+      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${active ? 'border-[#0A52EF] bg-[#0A52EF] text-white' : 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-zinc-300 hover:bg-zinc-50'}`}
     >
       {label}
     </button>
@@ -475,60 +493,45 @@ export default function MarketingHubPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 text-zinc-100">
-        <div className="overflow-hidden rounded-md border border-zinc-800 bg-[radial-gradient(circle_at_top_left,rgba(10,82,239,0.24),transparent_36%),linear-gradient(135deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))] px-5 py-5 shadow-[0_24px_90px_rgba(0,0,0,0.34)]">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FF4655]">Media & Partnerships</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-normal text-white">Marketing Command Center</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">Audiences, newsletters, forms, approvals, and social planning in one operator surface.</p>
-            </div>
-          <div className="flex flex-col gap-3 lg:items-end">
-            <div className="grid grid-cols-3 gap-2 rounded-md border border-white/10 bg-black/20 p-2 text-center text-xs text-zinc-400">
-              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.contacts?.subscribed || 0}</div><div>send-safe</div></div>
-              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.templates?.total || 0}</div><div>templates</div></div>
-              <div className="px-3 py-2"><div className="text-lg font-semibold text-white">{summary?.formRoutes?.active || 0}</div><div>routes</div></div>
-            </div>
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Link
-                href="/marketing-hub/studio"
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#7350FF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#8465ff]"
-              >
-                <Sparkles className="size-4" />
-                Marketing Agent
-              </Link>
-              <Link
-                href="/marketing-hub/creative"
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2B66F6]"
-              >
-                <Palette className="size-4" />
-                Ad Creative Studio
-              </Link>
-            </div>
+      <div className="space-y-5 text-zinc-900">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Media &amp; Partnerships</p>
+            <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-900">Marketing Command Center</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-600">Audiences, newsletters, forms, approvals, and social planning in one operator surface.</p>
           </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Link
+              href="/marketing-hub/studio"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+            >
+              <Sparkles className="size-4 text-zinc-400" />
+              Marketing Agent
+            </Link>
+            <Link
+              href="/marketing-hub/creative"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0A52EF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#0840C0]"
+            >
+              <Palette className="size-4" />
+              Ad Creative Studio
+            </Link>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-zinc-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs text-zinc-500">Workspace</p>
-            <h2 className="mt-1 text-sm font-medium text-zinc-300">Pick the workflow the marketing team is working on.</h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {tabs.map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${tab === key ? 'border-[#4F7CFF] bg-[#0A52EF] text-white' : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="-mb-px flex flex-wrap items-center gap-1 border-b border-zinc-200">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${tab === key ? 'border-[#0A52EF] text-zinc-900' : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {message && (
-          <div className="rounded-md border border-[#4F7CFF]/25 bg-[#0A52EF]/10 px-4 py-3 text-sm text-blue-100">{message}</div>
+          <div className="rounded-md border border-[#0A52EF]/20 bg-[#0A52EF]/[0.06] px-4 py-3 text-sm text-[#0840C0]">{message}</div>
         )}
 
         {loading ? (
@@ -537,29 +540,56 @@ export default function MarketingHubPage() {
           <>
             {tab === 'overview' && (
               <div className="space-y-5">
+                {/* Tier 1 — the four numbers an operator acts on. Only these get card weight. */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Send-Safe Contacts" value={summary?.contacts?.subscribed || 0} tone="good" icon={<Users className="size-4" />} />
-                  <Stat label="Campaigns" value={summary?.campaigns?.total || 0} icon={<Mail className="size-4" />} />
-                  <Stat label="Suppressed" value={summary?.contacts?.suppressed || 0} tone="warn" icon={<CheckCircle2 className="size-4" />} />
-                  <Stat label="Pending Channels" value={summary?.socialChannels?.pendingChannels?.length ?? summary?.postiz?.missingChannels?.length ?? 0} tone="warn" icon={<Megaphone className="size-4" />} />
+                  <Stat label="Send-Safe Contacts" value={summary?.contacts?.subscribed || 0} tone="good" hint="Cleared to receive" icon={<Users className="size-4" />} />
+                  <Stat label="Campaigns" value={summary?.campaigns?.total || 0} hint="Drafts, imports, and sends" icon={<Mail className="size-4" />} />
+                  <Stat label="Pending Approval" value={summary?.approvals?.pending || 0} tone="warn" hint="Waiting on a decision" icon={<CheckCircle2 className="size-4" />} />
+                  <Stat label="Pending Channels" value={summary?.socialChannels?.pendingChannels?.length ?? summary?.postiz?.missingChannels?.length ?? 0} tone="warn" hint="Need account connection" icon={<Megaphone className="size-4" />} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="HubSpot Imported" value={summary?.contacts?.hubspot_imported || 0} icon={<Workflow className="size-4" />} />
-                  <Stat label="Non-Marketing" value={summary?.contacts?.non_marketing || 0} icon={<Users className="size-4" />} />
-                  <Stat label="Review Candidates" value={summary?.contacts?.candidate || 0} icon={<Clock3 className="size-4" />} />
-                  <Stat label="Imported Emails" value={summary?.campaigns?.hubspot_imported_reference || 0} icon={<FileText className="size-4" />} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Templates" value={summary?.templates?.total || 0} icon={<LayoutTemplate className="size-4" />} />
-                  <Stat label="Pending Approval" value={summary?.approvals?.pending || 0} tone={summary?.approvals?.pending ? 'warn' : 'default'} icon={<CheckCircle2 className="size-4" />} />
-                  <Stat label="Form Submissions" value={summary?.formSubmissions?.total || 0} icon={<FileText className="size-4" />} />
-                  <Stat label="CRM Notes" value={summary?.formSubmissions?.crm_notes || 0} icon={<Workflow className="size-4" />} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Stat label="Sent Events" value={summary?.events?.sent_events || 0} icon={<Send className="size-4" />} />
-                  <Stat label="Opens" value={summary?.events?.opens || 0} icon={<BarChart3 className="size-4" />} />
-                  <Stat label="Clicks" value={summary?.events?.clicks || 0} icon={<BarChart3 className="size-4" />} />
-                  <Stat label="Unsubscribes" value={summary?.events?.unsubscribes || 0} tone={summary?.events?.unsubscribes ? 'warn' : 'default'} icon={<Users className="size-4" />} />
+
+                {/* Tier 2 — reference counts, grouped and deliberately quieter. */}
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  {[
+                    {
+                      group: 'Audience',
+                      items: [
+                        { label: 'Suppressed', value: summary?.contacts?.suppressed || 0 },
+                        { label: 'HubSpot imported', value: summary?.contacts?.hubspot_imported || 0 },
+                        { label: 'Non-marketing', value: summary?.contacts?.non_marketing || 0 },
+                        { label: 'Review candidates', value: summary?.contacts?.candidate || 0 },
+                      ],
+                    },
+                    {
+                      group: 'Content',
+                      items: [
+                        { label: 'Templates', value: summary?.templates?.total || 0 },
+                        { label: 'Imported emails', value: summary?.campaigns?.hubspot_imported_reference || 0 },
+                        { label: 'Form submissions', value: summary?.formSubmissions?.total || 0 },
+                        { label: 'CRM notes', value: summary?.formSubmissions?.crm_notes || 0 },
+                      ],
+                    },
+                    {
+                      group: 'Delivery',
+                      items: [
+                        { label: 'Sent events', value: summary?.events?.sent_events || 0 },
+                        { label: 'Opens', value: summary?.events?.opens || 0 },
+                        { label: 'Clicks', value: summary?.events?.clicks || 0 },
+                        { label: 'Unsubscribes', value: summary?.events?.unsubscribes || 0 },
+                      ],
+                    },
+                  ].map((row) => (
+                    <div key={row.group} className="grid border-b border-zinc-100 last:border-b-0 lg:grid-cols-[140px_1fr]">
+                      <div className="flex items-center border-b border-zinc-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 lg:border-b-0 lg:border-r lg:py-0">
+                        {row.group}
+                      </div>
+                      <div className="grid grid-cols-2 divide-x divide-zinc-100 sm:grid-cols-4">
+                        {row.items.map((item) => (
+                          <MiniStat key={item.label} label={item.label} value={item.value} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                   <section className={panelClass}>
@@ -568,7 +598,7 @@ export default function MarketingHubPage() {
                       {campaigns.slice(0, 6).map((campaign) => (
                         <div key={campaign.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center">
                           <div>
-                            <div className="font-medium text-zinc-100">{campaign.name}</div>
+                            <div className="font-medium text-zinc-900">{campaign.name}</div>
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients</div>
                           </div>
                           <StatusPill value={campaign.status} />
@@ -581,10 +611,10 @@ export default function MarketingHubPage() {
                   <section className={panelClass}>
                     <SectionHeader icon={<CheckCircle2 className="size-4" />} title="Readiness" subtitle="What is ready to use and what needs account connection." />
                     <div className="space-y-3 p-4 text-sm">
-                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Email provider</span><StatusPill value="connected" /></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Newsletter tracking</span><StatusPill value="connected" /></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Forms routing</span><StatusPill value={`${summary?.formRoutes?.active || 0} active`} /></div>
-                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-300">Social channels</span><span className="text-xs text-amber-300">Planning ready; accounts pending</span></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-700">Email provider</span><StatusPill value="connected" /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-700">Newsletter tracking</span><StatusPill value="connected" /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-700">Forms routing</span><StatusPill value={`${summary?.formRoutes?.active || 0} active`} /></div>
+                      <div className="flex items-center justify-between gap-3"><span className="text-zinc-700">Social channels</span><span className="text-xs text-amber-700">Planning ready; accounts pending</span></div>
                     </div>
                   </section>
                 </div>
@@ -593,7 +623,7 @@ export default function MarketingHubPage() {
 
             {tab === 'audiences' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <form onSubmit={submitContact} className="border border-zinc-200 bg-white p-4">
+                <form onSubmit={submitContact} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
                   <h2 className="text-sm font-semibold text-zinc-900">Add Contact</h2>
                   <div className="mt-4 grid gap-3">
                     <input className={inputClass} placeholder="Name" value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} />
@@ -605,7 +635,7 @@ export default function MarketingHubPage() {
                     <button className={buttonClass} disabled={busy === 'contact'}>Add to Audience</button>
                   </div>
                 </form>
-                <section className="border border-zinc-200 bg-white">
+                <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                   <div className="border-b border-zinc-200 px-4 py-3">
                     <h2 className="text-sm font-semibold text-zinc-900">Contacts</h2>
                   </div>
@@ -646,13 +676,13 @@ export default function MarketingHubPage() {
                     <div className="px-4">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <span className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">Canvas</span>
-                        <div className="flex rounded-md border border-zinc-800 bg-zinc-950 p-1">
-                          <button type="button" onClick={() => setCampaignCanvas('preview')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'preview' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}`}>Preview</button>
-                          <button type="button" onClick={() => setCampaignCanvas('html')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'html' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500'}`}>HTML</button>
+                        <div className="flex rounded-md border border-zinc-200 bg-white p-1">
+                          <button type="button" onClick={() => setCampaignCanvas('preview')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'preview' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'}`}>Preview</button>
+                          <button type="button" onClick={() => setCampaignCanvas('html')} className={`rounded px-2.5 py-1 text-xs ${campaignCanvas === 'html' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'}`}>HTML</button>
                         </div>
                       </div>
                       {campaignCanvas === 'preview' ? (
-                        <div className="max-h-[340px] overflow-auto rounded-md border border-zinc-800 bg-white p-5 text-zinc-900">
+                        <div className="max-h-[340px] overflow-auto rounded-md border border-zinc-200 bg-white p-5 text-zinc-900">
                           <div className="mb-4 border-b border-zinc-200 pb-3">
                             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Subject</div>
                             <div className="mt-1 text-lg font-semibold">{campaignForm.subject}</div>
@@ -664,14 +694,14 @@ export default function MarketingHubPage() {
                         <textarea className={`${inputClass} min-h-[340px] font-mono text-xs`} value={campaignForm.bodyHtml} onChange={(e) => setCampaignForm({ ...campaignForm, bodyHtml: e.target.value })} />
                       )}
                     </div>
-                    <div className="border-t border-zinc-800 p-4">
+                    <div className="border-t border-zinc-200 p-4">
                       <button className={buttonClass + ' w-full'} disabled={busy === 'campaign'}><Sparkles className="size-4" /> Create Draft</button>
                     </div>
                   </div>
                 </form>
                 <section className="space-y-4">
                   <div className={panelClass + ' p-4'}>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><CalendarClock className="size-4 text-zinc-500" /> Send & Schedule</div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900"><CalendarClock className="size-4 text-zinc-500" /> Send & Schedule</div>
                     <div className="mt-4 grid gap-3">
                       <select className={inputClass} value={selectedCampaign?.id || ''} onChange={(e) => setSelectedCampaignId(e.target.value)}>
                         {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
@@ -706,9 +736,9 @@ export default function MarketingHubPage() {
                     <SectionHeader icon={<BarChart3 className="size-4" />} title="Campaigns" subtitle="Select one to test, approve, or schedule." />
                     <div className="divide-y divide-zinc-800">
                       {campaigns.map((campaign) => (
-                        <div key={campaign.id} className="grid w-full gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-zinc-900 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
+                        <div key={campaign.id} className="grid w-full gap-2 px-4 py-3 text-left text-sm transition-colors hover:bg-zinc-50 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
                           <button type="button" onClick={() => setSelectedCampaignId(campaign.id)} className="text-left">
-                            <div className="font-medium text-zinc-100">{campaign.subject}</div>
+                            <div className="font-medium text-zinc-900">{campaign.subject}</div>
                             <div className="text-xs text-zinc-500">{campaign.audience_name || 'No audience'} · {campaign.recipient_count || 0} recipients · {campaign.sent_count || 0} sent · {campaign.pending_count || 0} pending</div>
                           </button>
                           <StatusPill value={campaign.status} />
@@ -771,7 +801,7 @@ export default function MarketingHubPage() {
             )}
 
             {tab === 'approvals' && (
-              <section className="border border-zinc-200 bg-white">
+              <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                 <div className="border-b border-zinc-200 px-4 py-3">
                   <h2 className="text-sm font-semibold text-zinc-900">Approval Queue</h2>
                 </div>
@@ -798,7 +828,7 @@ export default function MarketingHubPage() {
 
             {tab === 'forms' && (
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <form onSubmit={submitRoute} className="border border-zinc-200 bg-white p-4">
+                <form onSubmit={submitRoute} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
                   <h2 className="text-sm font-semibold text-zinc-900">Routing Rule</h2>
                   <div className="mt-4 grid gap-3">
                     <input className={inputClass} placeholder="Form ID" value={routeForm.formId} onChange={(e) => setRouteForm({ ...routeForm, formId: e.target.value })} />
@@ -810,7 +840,7 @@ export default function MarketingHubPage() {
                     <button className={buttonClass} disabled={busy === 'route'}>Save Rule</button>
                   </div>
                 </form>
-                <section className="border border-zinc-200 bg-white">
+                <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
                     <h2 className="text-sm font-semibold text-zinc-900">Active Routes</h2>
                     <button type="button" className={secondaryButton} disabled={busy === 'hubspot-submissions'} onClick={importHubSpotSubmissions}>Import HubSpot History</button>
@@ -839,7 +869,7 @@ export default function MarketingHubPage() {
                             {submission.company_name ? ` · ${submission.company_name}` : ''}
                             {submission.submitted_at ? ` · ${new Date(submission.submitted_at).toLocaleDateString()}` : ''}
                           </div>
-                          {submission.page_url && <div className="mt-1 truncate text-xs text-zinc-400">{submission.page_url}</div>}
+                          {submission.page_url && <div className="mt-1 truncate text-xs text-zinc-600">{submission.page_url}</div>}
                         </div>
                         <StatusPill value={submission.timeline_status} />
                       </div>
@@ -873,12 +903,12 @@ export default function MarketingHubPage() {
                         <span className="font-medium uppercase tracking-[0.12em]">Live Preview</span>
                         <span>{socialForm.content.length} chars</span>
                       </div>
-                      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="font-medium capitalize text-zinc-100">{socialForm.platform || 'Channel'}</div>
+                          <div className="font-medium capitalize text-zinc-900">{socialForm.platform || 'Channel'}</div>
                           <StatusPill value={socialForm.scheduledAt ? 'scheduled' : 'draft'} />
                         </div>
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{socialForm.content || 'Choose a template or write the post copy here.'}</p>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{socialForm.content || 'Choose a template or write the post copy here.'}</p>
                       </div>
                     </div>
                     <button className={buttonClass} disabled={busy === 'social'}><Megaphone className="size-4" /> Save Draft</button>
@@ -887,12 +917,12 @@ export default function MarketingHubPage() {
                 <section className={panelClass + ' overflow-hidden'}>
                   <SectionHeader icon={<Clock3 className="size-4" />} title="Social Queue" subtitle="Drafts, scheduled posts, and approval actions." />
                   <div className="space-y-3 p-4">
-                    <div className="rounded-md border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-200">Signal is ready for planning and approvals. Connect official LinkedIn, X, Instagram, and Slack publishing before live posting.</div>
-                    <div className="divide-y divide-zinc-800 rounded-md border border-zinc-800">
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">Signal is ready for planning and approvals. Connect official LinkedIn, X, Instagram, and Slack publishing before live posting.</div>
+                    <div className="divide-y divide-zinc-800 rounded-md border border-zinc-200">
                       {socialPosts.map((post) => (
                         <div key={post.id} className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
                           <div>
-                            <div className="font-medium capitalize text-zinc-100">{post.platform}{post.channel_name ? ` · ${post.channel_name}` : ''}</div>
+                            <div className="font-medium capitalize text-zinc-900">{post.platform}{post.channel_name ? ` · ${post.channel_name}` : ''}</div>
                             <div className="text-xs text-zinc-500 line-clamp-2">{post.content}</div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
