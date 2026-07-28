@@ -7,11 +7,13 @@ import { default as assign_designer } from '@/lib/ai/skills/assign-designer'
 import { default as client_update_draft } from '@/lib/ai/skills/client-update-draft'
 import { default as compose_newsletter } from '@/lib/ai/skills/compose-newsletter'
 import { default as create_design_request } from '@/lib/ai/skills/create-design-request'
+import { default as create_hub_request } from '@/lib/ai/skills/create-hub-request'
 import { default as create_ticket } from '@/lib/ai/skills/create-ticket'
 import { default as dashboard_stats } from '@/lib/ai/skills/dashboard-stats'
 import { default as enrich_from_salesforce } from '@/lib/ai/skills/enrich-from-salesforce'
 import { default as generate_signage_proof } from '@/lib/ai/skills/generate-signage-proof'
 import { default as jireh_repeat_clients_report } from '@/lib/ai/skills/jireh-repeat-clients-report'
+import { default as list_hub_requests } from '@/lib/ai/skills/list-hub-requests'
 import { default as log_maintenance } from '@/lib/ai/skills/log-maintenance'
 import { default as log_walkthrough } from '@/lib/ai/skills/log-walkthrough'
 import { default as morning_command_center } from '@/lib/ai/skills/morning-command-center'
@@ -45,11 +47,13 @@ export const fileSkills: Skill[] = [
   client_update_draft,
   compose_newsletter,
   create_design_request,
+  create_hub_request,
   create_ticket,
   dashboard_stats,
   enrich_from_salesforce,
   generate_signage_proof,
   jireh_repeat_clients_report,
+  list_hub_requests,
   log_maintenance,
   log_walkthrough,
   morning_command_center,
@@ -85,11 +89,13 @@ export const manifestFiles: string[] = [
   'client-update-draft',
   'compose-newsletter',
   'create-design-request',
+  'create-hub-request',
   'create-ticket',
   'dashboard-stats',
   'enrich-from-salesforce',
   'generate-signage-proof',
   'jireh-repeat-clients-report',
+  'list-hub-requests',
   'log-maintenance',
   'log-walkthrough',
   'morning-command-center',

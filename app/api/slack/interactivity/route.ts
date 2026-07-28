@@ -4,6 +4,11 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { handleTicketBlockAction, handleTicketReplySubmission } from '@/lib/slack-ticket-actions'
+import {
+  handleHubBlockAction,
+  handleHubShortcut,
+  handleHubViewSubmission,
+} from '@/lib/request-hub/slack'
 import crypto from 'crypto'
 
 function verifySlackSignature(requestText: string, headers: Headers): boolean {
@@ -42,11 +47,24 @@ export async function POST(request: NextRequest) {
 
     const payload = JSON.parse(payloadStr)
 
+    // Request Hub: global shortcut + "Turn this into a request" message action.
+    if (payload.type === 'shortcut' || payload.type === 'message_action') {
+      if (await handleHubShortcut(payload)) {
+        return new NextResponse(null, { status: 200 })
+      }
+      return new NextResponse(null, { status: 200 })
+    }
+
     // Ticket card actions + Reply modal (Chris D 7/15) — handled first; the
     // marketing-approval flow below keeps its original shape untouched.
     if (payload.type === 'view_submission') {
+      const hubResponse = await handleHubViewSubmission(payload)
+      if (hubResponse) return NextResponse.json(hubResponse)
       const viewResponse = await handleTicketReplySubmission(payload)
       if (viewResponse) return NextResponse.json(viewResponse)
+      return new NextResponse(null, { status: 200 })
+    }
+    if (await handleHubBlockAction(payload)) {
       return new NextResponse(null, { status: 200 })
     }
     if (await handleTicketBlockAction(payload)) {

@@ -1857,6 +1857,151 @@ async function runMigrations() {
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_event_summary_emails_event ON event_summary_emails(event_id, sent_at DESC)`)
 
+    // ============================================================
+    // Request Hub — one intake system for ideas / builds / changes /
+    // problems (2026-07-29). Distinct from service_requests (the
+    // commercial ledger) and from design/print/ticket queues.
+    // Core record + append-only activity + comments + attachments +
+    // record links + admin config + Slack idempotency.
+    // ============================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_number TEXT UNIQUE,
+        type TEXT NOT NULL DEFAULT 'idea',
+        status TEXT NOT NULL DEFAULT 'draft',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        urgency TEXT,
+        title TEXT,
+        summary TEXT,
+        answers JSONB NOT NULL DEFAULT '{}',
+        requester_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+        requester_name TEXT,
+        requester_email TEXT,
+        requester_slack_id TEXT,
+        owner_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+        builder_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+        team TEXT,
+        venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+        twenty_company_id TEXT,
+        twenty_opportunity_id TEXT,
+        project_ref TEXT,
+        app_surface TEXT,
+        deadline DATE,
+        deadline_reason TEXT,
+        constraints_note TEXT,
+        business_value TEXT,
+        feasibility TEXT,
+        effort TEXT,
+        duration TEXT,
+        dependencies TEXT,
+        risk TEXT,
+        confidence TEXT,
+        recommendation TEXT,
+        assessment JSONB NOT NULL DEFAULT '{}',
+        assessment_ai BOOLEAN NOT NULL DEFAULT false,
+        assessment_updated_by UUID,
+        assessment_updated_at TIMESTAMPTZ,
+        pending_questions JSONB NOT NULL DEFAULT '[]',
+        ai_suggestions JSONB,
+        decision TEXT,
+        decision_reason TEXT,
+        decided_by UUID,
+        decided_at TIMESTAMPTZ,
+        source TEXT NOT NULL DEFAULT 'web',
+        source_channel_id TEXT,
+        source_message_ts TEXT,
+        source_permalink TEXT,
+        slack_thread_channel_id TEXT,
+        slack_thread_ts TEXT,
+        kanban_order DOUBLE PRECISION NOT NULL DEFAULT 0,
+        submitted_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE SEQUENCE IF NOT EXISTS request_hub_number_seq START 1`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_items_status ON request_hub_items(status, updated_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_items_requester ON request_hub_items(requester_id, created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_items_source_msg ON request_hub_items(source_channel_id, source_message_ts)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_activity (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id UUID NOT NULL REFERENCES request_hub_items(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        actor_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+        actor_name TEXT,
+        from_value TEXT,
+        to_value TEXT,
+        detail JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_activity_req ON request_hub_activity(request_id, created_at DESC)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_comments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id UUID NOT NULL REFERENCES request_hub_items(id) ON DELETE CASCADE,
+        author_id UUID REFERENCES staff(id) ON DELETE SET NULL,
+        author_name TEXT,
+        body TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'comment',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_comments_req ON request_hub_comments(request_id, created_at ASC)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_attachments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id UUID NOT NULL REFERENCES request_hub_items(id) ON DELETE CASCADE,
+        file_name TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes BIGINT,
+        data_url TEXT,
+        external_url TEXT,
+        source TEXT NOT NULL DEFAULT 'upload',
+        uploaded_by UUID,
+        uploaded_by_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_attachments_req ON request_hub_attachments(request_id)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_links (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id UUID NOT NULL REFERENCES request_hub_items(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        label TEXT,
+        ref_id TEXT,
+        url TEXT,
+        created_by UUID,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_request_hub_links_req ON request_hub_links(request_id)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_config (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_by UUID,
+        updated_by_name TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS request_hub_slack_events (
+        event_key TEXT PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)
