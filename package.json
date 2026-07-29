@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:proof-security": "node --test tests/proof-ftp-security.test.mjs",
+    "test:impersonation": "node --test tests/portal-impersonation.test.mjs",
     "ai:sync-skills": "node scripts/generate-ai-skill-manifest.mjs",
     "ai:check-skills": "node scripts/generate-ai-skill-manifest.mjs --check",
     "prebuild": "node scripts/generate-ai-skill-manifest.mjs",

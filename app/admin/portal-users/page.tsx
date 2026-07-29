@@ -34,7 +34,9 @@ interface VenueOption {
 }
 
 export default function PortalUsersAdminPage() {
-  useAuth('manager')
+  // Managing portal accounts is a manager job; stepping into a customer's
+  // session is admin-only, so the "View as" control is gated separately below.
+  const { isAdmin } = useAuth('manager')
 
   const [users, setUsers] = useState<PortalUser[]>([])
   const [clients, setClients] = useState<ClientOption[]>([])
@@ -56,6 +58,8 @@ export default function PortalUsersAdminPage() {
   const [inviteSent, setInviteSent] = useState<boolean | null>(null)
   const [inviteSentEmail, setInviteSentEmail] = useState('')
   const [resent, setResent] = useState('')
+  const [impersonating, setImpersonating] = useState('')
+  const [viewAsError, setViewAsError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -195,6 +199,24 @@ export default function PortalUsersAdminPage() {
       setResent(`fail:${user.id}`)
     }
     load()
+  }
+
+  async function viewAs(user: PortalUser) {
+    setViewAsError('')
+    setImpersonating(user.id)
+    try {
+      const res = await fetch(`/api/customer-users/${user.id}/impersonate`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setViewAsError(data.error || 'Could not open that customer view')
+        setImpersonating('')
+        return
+      }
+      window.location.href = data.customer_url || '/customer'
+    } catch {
+      setViewAsError('Could not open that customer view')
+      setImpersonating('')
+    }
   }
 
   async function toggleActive(user: PortalUser) {
@@ -404,6 +426,10 @@ export default function PortalUsersAdminPage() {
           </section>
         )}
 
+        {viewAsError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{viewAsError}</div>
+        )}
+
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.14em] text-slate-500">
@@ -453,6 +479,16 @@ export default function PortalUsersAdminPage() {
                             {copied === user.id ? 'Copied' : 'Copy invite'}
                           </button>
                         </>
+                      )}
+                      {isAdmin && user.is_active && (
+                        <button
+                          onClick={() => viewAs(user)}
+                          disabled={impersonating === user.id}
+                          className="text-xs font-medium text-[#0A52EF] hover:underline disabled:opacity-50"
+                          title={`Open the portal exactly as ${user.full_name} sees it (read-only)`}
+                        >
+                          {impersonating === user.id ? 'Opening…' : 'View as'}
+                        </button>
                       )}
                       <button onClick={() => toggleActive(user)} className="text-xs font-medium text-slate-500 hover:underline">
                         {user.is_active ? 'Deactivate' : 'Reactivate'}

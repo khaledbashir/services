@@ -11,21 +11,34 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secr
 const PORTAL_AUDIENCE = 'anc-customer-portal'
 export const PORTAL_COOKIE = 'portal_session'
 
+// Impersonation sessions are deliberately short-lived. A staff member is
+// "looking at" the portal, not living in it — an hour is plenty and it means
+// a forgotten tab stops acting as the customer on its own.
+export const IMPERSONATION_MAX_AGE_SECONDS = 60 * 60
+
 export interface PortalSession {
   portalUserId: string
   email: string
   fullName: string
   clientId: string | null
   clientName: string | null
+  /** Set only on impersonation sessions minted by staff — never on a real login. */
+  impersonating?: true
+  impersonatorStaffId?: string
+  impersonatorName?: string
+  impersonatorEmail?: string
   [key: string]: any
 }
 
-export async function createPortalJWT(payload: PortalSession): Promise<string> {
+export async function createPortalJWT(
+  payload: PortalSession,
+  expiresIn: string = '7d'
+): Promise<string> {
   return new SignJWT(payload as any)
     .setProtectedHeader({ alg: 'HS256' })
     .setAudience(PORTAL_AUDIENCE)
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime(expiresIn)
     .sign(JWT_SECRET)
 }
 
@@ -79,6 +92,44 @@ export async function authenticatePortalUser(email: string, password: string): P
     fullName: user.full_name,
     clientId: user.client_id,
     clientName: user.client_name,
+  }
+}
+
+/**
+ * Build a portal session for a customer WITHOUT their password, on behalf of a
+ * staff member ("view as"). The impersonation claims are inside the signed JWT
+ * so they cannot be stripped or forged client-side, and every consumer of
+ * getPortalSession() sees exactly what the customer would see.
+ *
+ * Returns null when the account can't be viewed (missing or deactivated) so the
+ * caller can say why instead of minting a session that getPortalSession()
+ * would reject on the next request anyway.
+ */
+export async function buildImpersonationSession(
+  portalUserId: string,
+  staff: { userId: string; fullName: string; email: string }
+): Promise<PortalSession | null> {
+  const result = await query(
+    `SELECT pu.id, pu.email, pu.full_name, pu.client_id, pu.is_active, c.name AS client_name
+     FROM portal_users pu
+     LEFT JOIN clients c ON c.id = pu.client_id
+     WHERE pu.id = $1`,
+    [portalUserId]
+  )
+  if (result.rows.length === 0) return null
+  const user = result.rows[0]
+  if (!user.is_active) return null
+
+  return {
+    portalUserId: user.id,
+    email: user.email,
+    fullName: user.full_name,
+    clientId: user.client_id,
+    clientName: user.client_name,
+    impersonating: true,
+    impersonatorStaffId: staff.userId,
+    impersonatorName: staff.fullName,
+    impersonatorEmail: staff.email,
   }
 }
 

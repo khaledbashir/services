@@ -5,7 +5,13 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import CopilotPanel from './CopilotPanel'
 
-export interface PortalUser { fullName: string; clientName: string | null; email?: string }
+export interface PortalUser {
+  fullName: string
+  clientName: string | null
+  email?: string
+  impersonating?: boolean
+  impersonatorName?: string
+}
 export interface PortalVenue { id: string; name: string }
 
 interface PortalCtx {
@@ -81,6 +87,12 @@ export default function PortalShell({ children, active }: { children: React.Reac
     router.push('/customer/login')
   }
 
+  async function exitImpersonation() {
+    const res = await fetch('/api/customer/auth/exit-impersonation', { method: 'POST' })
+    const data = await res.json().catch(() => ({}))
+    window.location.href = data.redirect || '/admin/portal-users'
+  }
+
   const isActive = (item: typeof NAV[number]) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href)
 
@@ -130,7 +142,24 @@ export default function PortalShell({ children, active }: { children: React.Reac
 
   return (
     <Ctx.Provider value={{ user, venues, refreshSignal, bumpRefresh: () => setRefreshSignal(x => x + 1) }}>
-      <div className="cp-shell">
+      <div className={`cp-shell ${user?.impersonating ? 'is-impersonating' : ''}`}>
+        {user?.impersonating && (
+          <div className="cp-imp-bar">
+            <div className="cp-imp-bar-inner">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+              <span className="cp-imp-bar-text">
+                Viewing as <strong>{user.fullName}</strong>
+                {user.clientName ? ` · ${user.clientName}` : ''}
+                <span className="cp-imp-bar-note"> — read-only</span>
+              </span>
+              <button onClick={exitImpersonation} className="cp-imp-bar-exit">
+                Exit
+              </button>
+            </div>
+          </div>
+        )}
         <aside className={`cp-side ${sidebarOpen ? '' : 'is-collapsed'} hidden md:flex`}>
           {nav()}
         </aside>

@@ -728,3 +728,65 @@
   border-radius: 3px;
   padding: 1px 4px;
 }
+
+/* ── Impersonation ("view as customer") ──────────────────────────────
+   Deliberately loud and always on screen. A staff member must never be
+   able to forget they are looking at someone else's portal, so the bar is
+   fixed rather than scrolled away with the content. */
+.cp-imp-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  height: 36px;
+  background: #7c2d12;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.cp-imp-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding: 0 16px;
+}
+
+.cp-imp-bar-text {
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-imp-bar-text strong { font-weight: 600; }
+
+.cp-imp-bar-note {
+  opacity: 0.72;
+  font-variant: all-small-caps;
+  letter-spacing: 0.06em;
+}
+
+.cp-imp-bar-exit {
+  margin-left: auto;
+  flex: none;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.cp-imp-bar-exit:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* Push the whole shell down so the bar never covers portal chrome. */
+.cp-shell.is-impersonating { padding-top: 36px; }
+.cp-shell.is-impersonating .cp-side { top: 36px; height: calc(100vh - 36px); }

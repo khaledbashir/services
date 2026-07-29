@@ -52,6 +52,37 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
   
+  // Impersonation ("view as customer") is strictly read-only. A staff member
+  // looking through a customer's eyes must never be able to file a request,
+  // approve a proof, or comment as that customer — those write actions are
+  // client-visible and fire notifications, so an accidental one is real damage.
+  // Enforced here rather than per-route so a new /api/customer endpoint can
+  // never forget the check. Sign-out and exit stay reachable.
+  if (
+    pathname.startsWith('/api/customer/') &&
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    !pathname.startsWith('/api/customer/auth/')
+  ) {
+    const portalToken = request.cookies.get('portal_session')?.value
+    if (portalToken) {
+      const portalPayload = await verifyJWT(portalToken)
+      if (portalPayload?.impersonating) {
+        return withCors(
+          request,
+          NextResponse.json(
+            {
+              error:
+                "You're viewing this portal as the customer. Exit to make changes — read-only while impersonating.",
+              impersonating: true,
+            },
+            { status: 403 }
+          )
+        )
+      }
+    }
+  }
+
   // Public routes that don't require auth
   // `/portals` is bypassed here; the page component at app/portals/[slug]/page.tsx
   // gates the admin (UUID slug) flow via getSession() and serves the public
