@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage, ticketActionBlock } from '@/lib/slack'
+import { venueHasClientAudience } from '@/lib/venue-client-audience'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
@@ -125,12 +126,17 @@ export async function GET(
       [params.id]
     )
 
+    // Drives the composer's default visibility (Chris D 7/29): client-visible
+    // when this venue actually has clients who'd receive it, internal when not.
+    const hasClientAudience = await venueHasClientAudience(ticketResult.rows[0]?.venue_id)
+
     return NextResponse.json({
       ticket: ticketResult.rows[0],
       comments: commentsResult.rows,
       attachments: attachmentsResult.rows,
       activity: activityResult.rows || [],
-      related_tickets: relatedResult.rows || []
+      related_tickets: relatedResult.rows || [],
+      has_client_audience: hasClientAudience
     })
   } catch (err) {
     console.error('Error fetching ticket:', err)

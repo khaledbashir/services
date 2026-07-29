@@ -14,6 +14,7 @@ import { sendSlackMessage, ticketActionBlock } from '@/lib/slack'
 import { applyTicketClose, applyTicketInProgress } from '@/lib/ticket-close'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { notifyCustomerReply } from '@/lib/customer-notify'
+import { normalizeAttachment } from '@/lib/ticket-attachments'
 
 const DASHBOARD_URL = 'https://abc-anc-services.izcgmb.easypanel.host'
 
@@ -22,6 +23,7 @@ export type PostTicketCommentResult = {
   closed: boolean
   movedInProgress: boolean
   email: { sent: boolean; recipient_count: number; reason?: string } | null
+  attachments: any[]
 }
 
 export async function postTicketComment({
@@ -31,6 +33,7 @@ export async function postTicketComment({
   actor,
   statusAction,
   via,
+  attachments,
 }: {
   ticketId: string
   body: string
@@ -38,6 +41,8 @@ export async function postTicketComment({
   actor: { userId?: string | null; fullName?: string | null }
   statusAction?: 'close' | 'in_progress'
   via?: 'dashboard' | 'slack'
+  /** Screenshots/files posted with the note (Chris D 7/29). */
+  attachments?: unknown[]
 }): Promise<PostTicketCommentResult> {
   const result = await query(
     `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
@@ -45,6 +50,22 @@ export async function postTicketComment({
      RETURNING id, body, is_internal, created_at`,
     [ticketId, actor.userId, body, isInternal]
   )
+
+  // Files ride with the note and inherit its visibility, so a screenshot on an
+  // internal note can never be more visible than the note it belongs to.
+  const savedAttachments: any[] = []
+  for (const raw of attachments ?? []) {
+    const file = normalizeAttachment(raw)
+    if (!file) continue
+    const inserted = await query(
+      `INSERT INTO ticket_attachments (ticket_id, comment_id, filename, mime_type, image_url, uploaded_by, is_internal)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, ticket_id, comment_id, filename, mime_type, image_url, caption, is_internal,
+                 TO_CHAR(created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date`,
+      [ticketId, result.rows[0].id, file.filename, file.mimeType, file.imageUrl, actor.userId, isInternal]
+    )
+    savedAttachments.push(inserted.rows[0])
+  }
 
   const ticketInfo = await query(
     `SELECT t.ticket_number, t.title, t.venue_id, t.status, t.assigned_to,
@@ -194,5 +215,5 @@ export async function postTicketComment({
     }).catch(err => console.error('[customer-notify] reply email failed:', err))
   }
 
-  return { comment: result.rows[0], closed, movedInProgress, email: emailStatus }
+  return { comment: result.rows[0], closed, movedInProgress, email: emailStatus, attachments: savedAttachments }
 }

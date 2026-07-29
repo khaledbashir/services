@@ -24,9 +24,12 @@ export async function POST(
     // AND closes; `set_status: 'in_progress'` (7/15) posts and moves New/On
     // Hold forward. One Slack notification either way. All side-effects live
     // in lib/ticket-comment.ts, shared with the Slack Reply modal.
-    const { body, is_internal, close_ticket, set_status } = await request.json()
-    if (!body || !body.trim()) {
-      return NextResponse.json({ error: 'Comment body is required' }, { status: 400 })
+    const { body, is_internal, close_ticket, set_status, attachments } = await request.json()
+    const files = Array.isArray(attachments) ? attachments : []
+    // A note carrying files needs no text — a screenshot on its own is a
+    // legitimate post (Chris D 7/29).
+    if ((!body || !body.trim()) && files.length === 0) {
+      return NextResponse.json({ error: 'Add a note or attach a file' }, { status: 400 })
     }
     const statusAction = (close_ticket === true || set_status === 'closed')
       ? 'close' as const
@@ -34,11 +37,12 @@ export async function POST(
 
     const posted = await postTicketComment({
       ticketId: params.id,
-      body,
+      body: (body || '').trim(),
       isInternal: is_internal || false,
       actor: { userId: user.userId, fullName: user.fullName },
       statusAction,
       via: 'dashboard',
+      attachments: files,
     })
 
     return NextResponse.json({
@@ -46,6 +50,7 @@ export async function POST(
       email: posted.email,
       closed: posted.closed,
       moved_in_progress: posted.movedInProgress,
+      attachments: posted.attachments,
     })
   } catch (err) {
     console.error('Error creating comment:', err)

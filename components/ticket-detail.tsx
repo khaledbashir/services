@@ -105,7 +105,14 @@ export function TicketDetail({
   const [showActions, setShowActions] = useState(false)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
+  // Starts Internal and flips to Client once the ticket loads and we know the
+  // venue has clients to send to (Chris D 7/29). Internal is the safe default
+  // while loading — a note can never post client-visible by accident.
   const [isInternal, setIsInternal] = useState(true)
+  const [visibilityTouched, setVisibilityTouched] = useState(false)
+  const [hasClientAudience, setHasClientAudience] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<{ data: string; mimeType: string; name: string }[]>([])
+  const [commentFileError, setCommentFileError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // Surfaces what actually happened with the client email after a Client
   // comment is posted. Chris parity 5/13: External path was silently no-op
@@ -181,6 +188,10 @@ export function TicketDetail({
       setStaffList(staffData.staff || [])
       setVenueOptions(venuesData.venues || [])
       setResolutionNotes(ticketData.ticket?.resolution_notes || '')
+      setHasClientAudience(Boolean(ticketData.has_client_audience))
+      // Only steer the default until the user picks for themselves — after
+      // that their choice stands, including across refetches on this ticket.
+      if (!visibilityTouched) setIsInternal(!ticketData.has_client_audience)
       const cannedRes = await fetch('/api/tickets/canned')
       if (cannedRes.ok) { const cd = await cannedRes.json(); setCannedResponses(cd.responses || []) }
     } catch (err) { console.error(err) }
@@ -311,7 +322,8 @@ export function TicketDetail({
   // Either way the team gets a single Slack notification instead of two.
   const addComment = async (e: FormEvent, statusAction?: 'close' | 'in_progress') => {
     e.preventDefault()
-    if (!newComment.trim()) return
+    // A screenshot on its own is a valid post — don't require text (Chris D 7/29).
+    if (!newComment.trim() && pendingFiles.length === 0) return
     setSubmitting(true)
     setCommentToast(null)
     try {
@@ -322,6 +334,7 @@ export function TicketDetail({
           is_internal: isInternal,
           close_ticket: statusAction === 'close',
           set_status: statusAction === 'in_progress' ? 'in_progress' : undefined,
+          attachments: pendingFiles,
         })
       })
       if (res.ok) {
@@ -341,6 +354,7 @@ export function TicketDetail({
           setCommentToast({ kind: 'send_failed' })
         }
         setNewComment('')
+        setPendingFiles([])
         await fetchData()
         // Auto-clear after 8s; user can dismiss earlier via the X.
         setTimeout(() => setCommentToast(null), 8000)
@@ -372,6 +386,42 @@ export function TicketDetail({
     } finally {
       setSendingEmail(false)
     }
+  }
+
+  // Files staged on the composer, posted together with the note so the note and
+  // its screenshots land as one entry in the feed (Chris D 7/29).
+  const stageFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return
+    setCommentFileError(null)
+    const staged: { data: string; mimeType: string; name: string }[] = []
+    for (const file of Array.from(fileList)) {
+      if (file.size > 22 * 1024 * 1024) {
+        setCommentFileError(`${file.name} is over 22 MB`)
+        continue
+      }
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result || ''))
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        staged.push({ data: dataUrl, mimeType: file.type, name: file.name })
+      } catch {
+        setCommentFileError(`Could not read ${file.name}`)
+      }
+    }
+    if (staged.length) setPendingFiles(prev => [...prev, ...staged])
+  }
+
+  // Screenshot paste — the fastest path for what Chris actually does.
+  const onCommentPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files || [])
+    if (files.length === 0) return
+    e.preventDefault()
+    const dt = new DataTransfer()
+    files.forEach(f => dt.items.add(f))
+    stageFiles(dt.files)
   }
 
   const uploadAttachment = async (file: File | null) => {
@@ -1109,8 +1159,40 @@ export function TicketDetail({
                                     {isEmail ? (
                                       <div className="max-w-prose"><TicketContent content={comment.body} variant="email" /></div>
                                     ) : (
-                                      <div className="max-w-prose"><CommentContent content={comment.body} /></div>
+                                      comment.body?.trim() ? <div className="max-w-prose"><CommentContent content={comment.body} /></div> : null
                                     )}
+                                    {(() => {
+                                      // Files posted with this note (Chris D 7/29). Images preview
+                                      // inline; anything else gets a plain download link.
+                                      const noteFiles = attachments.filter((a: any) => a.comment_id === comment.id)
+                                      if (noteFiles.length === 0) return null
+                                      return (
+                                        <div className={`flex flex-wrap gap-2 ${comment.body?.trim() ? 'mt-3' : ''}`}>
+                                          {noteFiles.map((a: any) => (
+                                            a.mime_type?.startsWith('image/') ? (
+                                              <a key={a.id} href={a.image_url} target="_blank" rel="noreferrer" className="block">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                  src={a.image_url}
+                                                  alt={a.filename || 'Attachment'}
+                                                  className="max-h-44 rounded-md border border-zinc-200 object-cover hover:opacity-90 transition-opacity"
+                                                />
+                                              </a>
+                                            ) : (
+                                              <a
+                                                key={a.id}
+                                                href={a.image_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#0A52EF] border border-zinc-200 bg-white rounded-md px-2.5 py-1.5 hover:bg-zinc-50 transition-colors"
+                                              >
+                                                {a.filename || 'Attachment'}
+                                              </a>
+                                            )
+                                          ))}
+                                        </div>
+                                      )
+                                    })()}
                                   </div>
                                 </div>
                               </div>
@@ -1161,7 +1243,8 @@ export function TicketDetail({
                             value={newComment}
                             onChange={onCommentChange}
                             onKeyDown={onCommentKeyDown}
-                            placeholder={isInternal ? 'Write an internal note... (type @ to tag a teammate)' : 'Write a client-visible comment... (type @ to tag a teammate)'}
+                            onPaste={onCommentPaste}
+                            placeholder={isInternal ? 'Write an internal note... (type @ to tag a teammate, paste a screenshot to attach)' : 'Write a client-visible comment... (type @ to tag a teammate, paste a screenshot to attach)'}
                             className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${isInternal ? 'border-indigo-200 bg-indigo-50/20 focus:ring-indigo-400/20 placeholder:text-indigo-300' : 'border-zinc-200 bg-white focus:ring-blue-500/20 placeholder:text-zinc-300'}`}
                             rows={2}
                           />
@@ -1188,7 +1271,7 @@ export function TicketDetail({
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${showCanned ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Quick Replies
                             </button>
-                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => setIsInternal(false)}
+                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => { setIsInternal(false); setVisibilityTouched(true) }}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Client
                               {ticket && typeof (ticket as any).venue_distribution_count === 'number' && (
@@ -1197,7 +1280,7 @@ export function TicketDetail({
                                 </span>
                               )}
                             </button>
-                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => setIsInternal(true)}
+                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => { setIsInternal(true); setVisibilityTouched(true) }}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Internal
                             </button>
@@ -1221,11 +1304,44 @@ export function TicketDetail({
                                 {submitting ? 'Posting...' : 'Post & Close'}
                               </button>
                             )}
-                            <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || !newComment.trim()}
+                            <button type="submit" data-ai-target="ticket-comment-submit" disabled={submitting || (!newComment.trim() && pendingFiles.length === 0)}
                               className="bg-zinc-900 text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-zinc-800 disabled:opacity-30 transition-all">
                               {submitting ? 'Posting...' : 'Post'}
                             </button>
                           </div>
+                        </div>
+
+                        {/* Screenshots and files ride along with the note (Chris D 7/29) */}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 border border-zinc-200 rounded-md px-2.5 py-1 cursor-pointer hover:bg-zinc-50 transition-colors">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                            </svg>
+                            Attach
+                            <input
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => { stageFiles(e.target.files); e.target.value = '' }}
+                            />
+                          </label>
+                          <span className="text-[10px] text-zinc-400">or paste a screenshot</span>
+                          {pendingFiles.map((f, i) => (
+                            <span key={i} className="inline-flex items-center gap-1.5 text-[10px] bg-zinc-100 text-zinc-700 rounded-md px-2 py-1">
+                              {f.name || 'screenshot'}
+                              <button
+                                type="button"
+                                onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))}
+                                className="text-zinc-400 hover:text-zinc-700"
+                                aria-label="Remove attachment"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                          {commentFileError && (
+                            <span className="text-[10px] text-red-600">{commentFileError}</span>
+                          )}
                         </div>
                       </form>
                     </div>
@@ -1677,11 +1793,11 @@ export function TicketDetail({
                           rows={2} />
                         <div className="flex items-center justify-between gap-3 mt-2">
                           <div className="inline-flex bg-zinc-100/80 rounded-md p-0.5">
-                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => setIsInternal(false)}
+                            <button type="button" data-ai-target="ticket-comment-client" onClick={() => { setIsInternal(false); setVisibilityTouched(true) }}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${!isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Client
                             </button>
-                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => setIsInternal(true)}
+                            <button type="button" data-ai-target="ticket-comment-internal" onClick={() => { setIsInternal(true); setVisibilityTouched(true) }}
                               className={`text-[10px] font-medium px-2.5 py-1 rounded transition-all ${isInternal ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'}`}>
                               Internal
                             </button>
