@@ -52,15 +52,23 @@ export default function StaffPage() {
   const [uploadingImage, setUploadingImage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [showInactive, setShowInactive] = useState(false)
   const { showToast } = useToast()
 
   useEffect(() => {
     const fetchStaff = async () => {
       try {
-        const res = await fetch('/api/staff')
-        if (res.ok) {
-          const data = await res.json()
+        const [staffRes, preferenceRes] = await Promise.all([
+          fetch('/api/staff?include_inactive=true'),
+          fetch(`/api/preferences?key=${encodeURIComponent('staff.showInactive')}`),
+        ])
+        if (staffRes.ok) {
+          const data = await staffRes.json()
           setStaff(data.staff || [])
+        }
+        if (preferenceRes.ok) {
+          const data = await preferenceRes.json()
+          setShowInactive(data.value === 'true')
         }
       } catch (err) {
         console.error('Failed to fetch staff:', err)
@@ -71,6 +79,15 @@ export default function StaffPage() {
 
     fetchStaff()
   }, [])
+
+  const updateShowInactive = (next: boolean) => {
+    setShowInactive(next)
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'staff.showInactive', value: String(next) }),
+    }).catch(() => {})
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -104,7 +121,7 @@ export default function StaffPage() {
           })
         }
         // Refresh list
-        const staffRes = await fetch('/api/staff')
+        const staffRes = await fetch('/api/staff?include_inactive=true')
         if (staffRes.ok) {
           const staffData = await staffRes.json()
           setStaff(staffData.staff || [])
@@ -237,7 +254,7 @@ export default function StaffPage() {
         setImportPreview(null)
         showToast(`Imported ${data.imported} new, updated ${data.updated} existing`, 'success')
 
-        const staffRes = await fetch('/api/staff')
+        const staffRes = await fetch('/api/staff?include_inactive=true')
         if (staffRes.ok) {
           const staffData = await staffRes.json()
           setStaff(staffData.staff || [])
@@ -272,7 +289,8 @@ export default function StaffPage() {
     const q = search.toLowerCase()
     const matchesSearch = !q || m.full_name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q) || (m.city || '').toLowerCase().includes(q) || (m.title || '').toLowerCase().includes(q)
     const matchesRole = roleFilter === 'all' || m.role === roleFilter
-    return matchesSearch && matchesRole
+    const matchesStatus = showInactive || m.is_active
+    return matchesSearch && matchesRole && matchesStatus
   })
 
   const Avatar = ({ member, size = 'md' }: { member: Staff; size?: 'sm' | 'md' | 'lg' }) => {
@@ -668,6 +686,17 @@ export default function StaffPage() {
             <option value="design_contractor">Design Consultant</option>
             <option value="technician">Technician</option>
           </select>
+          <button
+            type="button"
+            onClick={() => updateShowInactive(!showInactive)}
+            className={`rounded border px-3 py-2 text-sm font-medium transition-colors ${
+              showInactive
+                ? 'border-zinc-800 bg-zinc-800 text-white'
+                : 'border-[#E8E8E8] bg-white text-zinc-700 hover:border-zinc-300'
+            }`}
+          >
+            {showInactive ? 'Active + deactivated' : 'Active only'}
+          </button>
         </div>
 
         {loading ? (
@@ -682,7 +711,13 @@ export default function StaffPage() {
           )
         ) : filteredStaff.length === 0 ? (
           <div className="bg-white rounded shadow-sm border border-[#E8E8E8] p-12 text-center">
-            <p className="text-zinc-500 text-sm">{staff.length === 0 ? 'No staff members found' : 'No results match your search'}</p>
+            <p className="text-zinc-500 text-sm">
+              {staff.length === 0
+                ? 'No staff members found'
+                : !showInactive && staff.some((member) => !member.is_active)
+                  ? 'No active accounts match your search'
+                  : 'No results match your search'}
+            </p>
           </div>
         ) : view === 'cards' ? (
           <CardView />

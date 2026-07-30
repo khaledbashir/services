@@ -37,8 +37,6 @@ export async function GET(request: NextRequest) {
       dateFilter = `AND e.event_date >= DATE_TRUNC('month', CURRENT_DATE) AND e.event_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'`
     }
 
-    const activeFilter = includeInactive ? '' : `AND v.is_active = true`
-
     // Convert venue filter for WHERE clause
     let whereClause = ''
     const whereParts = []
@@ -70,7 +68,12 @@ export async function GET(request: NextRequest) {
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT NULLIF(c.sport, '')), NULL) as sports,
         ${buildAutomationSelect('v', 'vs', 'st')},
         COUNT(DISTINCT e.id) as event_count,
-        COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as assigned_count
+        COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as assigned_count,
+        (
+          SELECT COUNT(*)::int
+          FROM tickets venue_ticket
+          WHERE venue_ticket.venue_id = v.id
+        ) as ticket_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN client_venues cv ON cv.venue_id = v.id

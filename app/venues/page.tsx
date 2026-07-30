@@ -12,6 +12,7 @@ interface Venue {
   market: string
   event_count: number
   assigned_count: number
+  ticket_count: number
   requires_assignment: boolean
   venue_type: string
   logo_url: string | null
@@ -50,15 +51,34 @@ export default function VenuesPage() {
   // Joe 2026-05-04 8:56 PM: filter venues by their default-staffing toggle.
   // Mirrors the "Needs Staffing" filter on /events.
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'on' | 'off'>('all')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    if (typeof window === 'undefined') return 'grid'
-    return (localStorage.getItem('venuesViewMode') as 'grid' | 'list') || 'grid'
-  })
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   useEffect(() => {
-    if (typeof window !== 'undefined') localStorage.setItem('venuesViewMode', viewMode)
-  }, [viewMode])
+    fetch('/api/preferences?key=venues.viewMode')
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Preferences request failed (${response.status})`)
+        return response.json()
+      })
+      .then((data) => {
+        if (data.value === 'grid' || data.value === 'list') setViewMode(data.value)
+      })
+      .catch((error) => console.error('Failed to load venue view preference:', error))
+  }, [])
   const router = useRouter()
   const auth = useAuth()
+
+  const updateViewMode = async (mode: 'grid' | 'list') => {
+    setViewMode(mode)
+    try {
+      const response = await fetch('/api/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'venues.viewMode', value: mode }),
+      })
+      if (!response.ok) throw new Error(`Preferences request failed (${response.status})`)
+    } catch (error) {
+      console.error('Failed to save venue view preference:', error)
+    }
+  }
 
   useEffect(() => {
     const fetchVenues = async () => {
@@ -220,7 +240,7 @@ export default function VenuesPage() {
 
           {/* View toggle (Joe 2026-05-04: list view for managers scanning many venues) */}
           <div className="flex bg-zinc-100 rounded-lg p-1 border border-zinc-200">
-            <button onClick={() => setViewMode('grid')} title="Grid view"
+            <button onClick={() => void updateViewMode('grid')} title="Grid view"
               className={`px-3 py-2 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
                 viewMode === 'grid' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
               }`}>
@@ -229,7 +249,7 @@ export default function VenuesPage() {
               </svg>
               Grid
             </button>
-            <button onClick={() => setViewMode('list')} title="List view"
+            <button onClick={() => void updateViewMode('list')} title="List view"
               className={`px-3 py-2 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
                 viewMode === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
               }`}>
@@ -342,6 +362,7 @@ export default function VenuesPage() {
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Aliases</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Events</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Assigned</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Tickets</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Coverage</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Automation</th>
                   </tr>
@@ -405,6 +426,7 @@ export default function VenuesPage() {
                         </td>
                         <td className="px-4 py-2.5 text-right font-semibold text-zinc-900">{eventCount}</td>
                         <td className="px-4 py-2.5 text-right text-zinc-700">{needsAssignment ? `${assignedCount}/${eventCount}` : '—'}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-zinc-700">{Number(venue.ticket_count) || 0}</td>
                         <td className={`px-4 py-2.5 font-bold text-xs ${coverageColor}`}>
                           {!needsAssignment ? 'Support only' : !hasEvents ? `No events ${periodLabel}` : `${coveragePct}%`}
                         </td>
@@ -425,6 +447,7 @@ export default function VenuesPage() {
             {filtered.map((venue) => {
               const eventCount = Number(venue.event_count) || 0
               const assignedCount = Number(venue.assigned_count) || 0
+              const ticketCount = Number(venue.ticket_count) || 0
               const allAssigned = eventCount > 0 && assignedCount >= eventCount
               const hasEvents = eventCount > 0
               const needsAssignment = venue.requires_assignment
@@ -498,6 +521,11 @@ export default function VenuesPage() {
                           </div>
                         </>
                       )}
+                      <div className="w-px h-8 bg-zinc-200"></div>
+                      <div>
+                        <p className="text-xl font-bold text-zinc-900">{ticketCount}</p>
+                        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Tickets</p>
+                      </div>
                     </div>
 
                     {/* Row 4: Coverage bar + status */}

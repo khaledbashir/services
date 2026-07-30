@@ -94,6 +94,7 @@ export async function GET(request: NextRequest) {
         COALESCE(e.event_type, 'event') as event_type,
         e.venue_id,
         v.name as venue_name,
+        COALESCE(m.name, 'Unknown') as market,
         COALESCE(v.venue_type, 'sports') as venue_type,
         c.id as client_id,
         c.name as client_name,
@@ -115,6 +116,7 @@ export async function GET(request: NextRequest) {
         STRING_AGG(s.full_name, ', ') as assigned_techs
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
+      LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN clients c ON e.client_id = c.id
       LEFT JOIN LATERAL (
         SELECT
@@ -147,6 +149,7 @@ export async function GET(request: NextRequest) {
       GROUP BY
         e.id,
         v.name,
+        m.name,
         c.id,
         c.name,
         v.requires_assignment,

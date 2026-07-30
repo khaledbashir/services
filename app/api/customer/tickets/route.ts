@@ -29,18 +29,18 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'all'
     const venue = searchParams.get('venue')
     const q = searchParams.get('q')
+    if (venue && !venueIds.includes(venue)) {
+      return NextResponse.json({ error: 'Venue not in your account' }, { status: 403 })
+    }
+    const scopedVenueIds = venue ? [venue] : venueIds
 
     const conditions = ['t.venue_id = ANY($1::uuid[])']
-    const params: any[] = [venueIds]
+    const params: any[] = [scopedVenueIds]
 
     if (status === 'open') {
       conditions.push(`t.status <> 'closed' AND t.status <> 'resolved'`)
     } else if (status === 'closed') {
       conditions.push(`(t.status = 'closed' OR t.status = 'resolved')`)
-    }
-    if (venue) {
-      params.push(venue)
-      conditions.push(`t.venue_id = $${params.length}::uuid`)
     }
     if (q) {
       params.push(`%${q}%`)
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
          COUNT(*) FILTER (WHERE status = 'closed' OR status = 'resolved')::int AS closed,
          COUNT(*)::int AS total
        FROM tickets WHERE venue_id = ANY($1::uuid[])`,
-      [venueIds]
+      [scopedVenueIds]
     )
 
     return NextResponse.json({

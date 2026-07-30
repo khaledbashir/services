@@ -12,11 +12,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const assignable = searchParams.get('assignable')
+    const includeInactive = searchParams.get('include_inactive') === 'true'
     const filter = buildAssignableStaffWhere(assignable)
+    const activeClause = includeInactive
+      ? filter.clause
+      : filter.clause
+        ? `${filter.clause} AND COALESCE(is_active, true) = true`
+        : 'WHERE COALESCE(is_active, true) = true'
     const result = await query(
       `SELECT id, full_name, email, phone, role, title, city, profile_image, is_active, last_login_at
        FROM staff
-       ${filter.clause}
+       ${activeClause}
        ORDER BY full_name`,
       filter.params,
     )

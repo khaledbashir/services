@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     // Labor hours by staff this week
     const laborByStaffResult = await query(
-      `SELECT s.full_name, SUM(ea.estimated_hours) as total_hours, COUNT(ea.id) as event_count
+      `SELECT s.id, s.full_name, SUM(ea.estimated_hours) as total_hours, COUNT(ea.id) as event_count
        FROM event_assignments ea
        JOIN events e ON ea.event_id = e.id
        JOIN staff s ON ea.staff_id = s.id

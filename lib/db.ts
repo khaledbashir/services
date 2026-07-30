@@ -117,6 +117,18 @@ async function runMigrations() {
     // Source CRM message id for comments ingested from email, so the
     // email-ticket repair sweep and the webhook stay idempotent together.
     await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS twenty_message_id TEXT`)
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS author_email TEXT`)
+    await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS source_channel TEXT NOT NULL DEFAULT 'ticket_update'`)
+    await client.query(`
+      UPDATE ticket_comments
+      SET source_channel = 'email'
+      WHERE source_channel = 'ticket_update'
+        AND (
+          twenty_message_id IS NOT NULL
+          OR body ~* '^(Email (from|sent to)|Outbound email)'
+          OR (author_id IS NULL AND COALESCE(author_name, '') <> '')
+        )
+    `)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_comments_twenty_message
       ON ticket_comments(ticket_id, twenty_message_id) WHERE twenty_message_id IS NOT NULL`)
     await client.query(`CREATE TABLE IF NOT EXISTS ticket_attachments (
@@ -743,6 +755,8 @@ async function runMigrations() {
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_portal_users_client ON portal_users(client_id)`)
+    await client.query(`ALTER TABLE portal_users
+      ADD COLUMN IF NOT EXISTS visible_tabs TEXT[] NOT NULL DEFAULT ARRAY['overview', 'requests']::TEXT[]`)
     // Customer-authored comments carry a display name; author_id stays the
     // service-account staff row so existing joins keep working.
     await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS author_name TEXT`)
@@ -752,6 +766,15 @@ async function runMigrations() {
         venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (portal_user_id, venue_id)
+      )
+    `)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS portal_user_preferences (
+        portal_user_id UUID NOT NULL REFERENCES portal_users(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (portal_user_id, key)
       )
     `)
 

@@ -3,6 +3,10 @@ import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 import { query } from './db'
+import {
+  normalizeCustomerPortalTabs,
+  type CustomerPortalTabKey,
+} from './customer-portal-tabs'
 
 // Customer-portal sessions live in their own cookie with their own audience
 // claim so a customer token can never authenticate against staff routes
@@ -22,6 +26,7 @@ export interface PortalSession {
   fullName: string
   clientId: string | null
   clientName: string | null
+  visibleTabs: CustomerPortalTabKey[]
   /** Set only on impersonation sessions minted by staff — never on a real login. */
   impersonating?: true
   impersonatorStaffId?: string
@@ -61,17 +66,27 @@ export async function getPortalSession(): Promise<PortalSession | null> {
   // Sessions outlive admin actions (deactivation, client reassignment) by up
   // to 7 days unless re-checked — so re-check on every request.
   const result = await query(
-    'SELECT id, is_active, client_id FROM portal_users WHERE id = $1',
+    `SELECT pu.id, pu.is_active, pu.email, pu.full_name, pu.client_id, pu.visible_tabs,
+            c.name AS client_name
+     FROM portal_users pu
+     LEFT JOIN clients c ON c.id = pu.client_id
+     WHERE pu.id = $1`,
     [session.portalUserId]
   )
   if (result.rows.length === 0 || !result.rows[0].is_active) return null
-  session.clientId = result.rows[0].client_id
+  const current = result.rows[0]
+  session.email = current.email
+  session.fullName = current.full_name
+  session.clientId = current.client_id
+  session.clientName = current.client_name
+  session.visibleTabs = normalizeCustomerPortalTabs(current.visible_tabs)
   return session
 }
 
 export async function authenticatePortalUser(email: string, password: string): Promise<PortalSession | null> {
   const result = await query(
-    `SELECT pu.id, pu.email, pu.full_name, pu.password_hash, pu.client_id, c.name AS client_name
+    `SELECT pu.id, pu.email, pu.full_name, pu.password_hash, pu.client_id, pu.visible_tabs,
+            c.name AS client_name
      FROM portal_users pu
      LEFT JOIN clients c ON c.id = pu.client_id
      WHERE LOWER(pu.email) = LOWER($1) AND pu.is_active = true`,
@@ -92,6 +107,7 @@ export async function authenticatePortalUser(email: string, password: string): P
     fullName: user.full_name,
     clientId: user.client_id,
     clientName: user.client_name,
+    visibleTabs: normalizeCustomerPortalTabs(user.visible_tabs),
   }
 }
 
@@ -110,7 +126,8 @@ export async function buildImpersonationSession(
   staff: { userId: string; fullName: string; email: string }
 ): Promise<PortalSession | null> {
   const result = await query(
-    `SELECT pu.id, pu.email, pu.full_name, pu.client_id, pu.is_active, c.name AS client_name
+    `SELECT pu.id, pu.email, pu.full_name, pu.client_id, pu.is_active, pu.visible_tabs,
+            c.name AS client_name
      FROM portal_users pu
      LEFT JOIN clients c ON c.id = pu.client_id
      WHERE pu.id = $1`,
@@ -126,6 +143,7 @@ export async function buildImpersonationSession(
     fullName: user.full_name,
     clientId: user.client_id,
     clientName: user.client_name,
+    visibleTabs: normalizeCustomerPortalTabs(user.visible_tabs),
     impersonating: true,
     impersonatorStaffId: staff.userId,
     impersonatorName: staff.fullName,
@@ -142,17 +160,30 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * The venues this portal user is allowed to see: the union of their
- * client's venues (client_venues) and any direct grants
- * (portal_user_venues). Returns [] when no scope is configured —
- * callers must treat an empty list as "no access", never "all access".
+ * Direct venue grants are the authoritative per-user scope. Accounts created
+ * before direct grants existed retain their client venue scope until staff
+ * edits them, which writes an explicit set. An empty result always means no
+ * access, never all access.
  */
 export async function getPortalUserVenueIds(session: PortalSession): Promise<string[]> {
-  const result = await query(
-    `SELECT venue_id FROM portal_user_venues WHERE portal_user_id = $1
-     UNION
-     SELECT cv.venue_id FROM client_venues cv WHERE cv.client_id = $2::uuid`,
-    [session.portalUserId, session.clientId]
+  const direct = await query(
+    `SELECT venue_id
+     FROM portal_user_venues
+     WHERE portal_user_id = $1
+     ORDER BY created_at, venue_id`,
+    [session.portalUserId]
   )
-  return result.rows.map((r: { venue_id: string }) => r.venue_id)
+  if (direct.rows.length > 0) {
+    return direct.rows.map((row: { venue_id: string }) => row.venue_id)
+  }
+  if (!session.clientId) return []
+
+  const legacyClientScope = await query(
+    `SELECT venue_id
+     FROM client_venues
+     WHERE client_id = $1
+     ORDER BY created_at, venue_id`,
+    [session.clientId]
+  )
+  return legacyClientScope.rows.map((row: { venue_id: string }) => row.venue_id)
 }

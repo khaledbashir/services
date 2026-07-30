@@ -17,8 +17,17 @@ export async function GET(request: NextRequest) {
     if (vfEvent.clause) wfWhere = 'WHERE ' + vfEvent.clause.replace(/^AND /, '')
     let tkWhere = ''
     if (vfTicket.clause) tkWhere = 'WHERE ' + vfTicket.clause.replace(/^AND /, '')
-    let cmWhere = ''
-    if (vfTicket.clause) cmWhere = 'WHERE ' + vfTicket.clause.replace(/^AND /, '').replace('t.venue_id', 't2.venue_id')
+    let logWhere = ''
+    let logParams: string[] = []
+    if (venueIds !== null) {
+      if (venueIds.length === 0) {
+        logWhere = 'WHERE FALSE'
+      } else {
+        const placeholders = venueIds.map((_, index) => `$${index + 1}`).join(', ')
+        logWhere = `WHERE (ticket_entity.venue_id IN (${placeholders}) OR event_entity.venue_id IN (${placeholders}))`
+        logParams = venueIds
+      }
+    }
 
     // Workflow activity
     const workflowResult = await query(
@@ -26,7 +35,7 @@ export async function GET(request: NextRequest) {
         'workflow' as source,
         ws.type,
         ws.submitted_at as created_at,
-        s.full_name as staff_name,
+        COALESCE(s.full_name, 'System') as staff_name,
         e.summary as entity_name,
         v.name as venue_name
       FROM workflow_submissions ws
@@ -45,13 +54,13 @@ export async function GET(request: NextRequest) {
         'ticket' as source,
         'ticket_created' as type,
         t.created_at,
-        s.full_name as staff_name,
-        t.title as entity_name,
+        COALESCE(s.full_name, t.contact_name, t.contact_email, 'System') as staff_name,
+        CONCAT('#', LPAD(t.ticket_number::text, 8, '0'), ' · ', t.title) as entity_name,
         v.name as venue_name,
         t.id as entity_id,
         t.priority as priority
       FROM tickets t
-      JOIN staff s ON t.created_by = s.id
+      LEFT JOIN staff s ON t.created_by = s.id
       LEFT JOIN venues v ON t.venue_id = v.id
       ${tkWhere}
       ORDER BY t.created_at DESC
@@ -65,12 +74,12 @@ export async function GET(request: NextRequest) {
         'comment' as source,
         CASE WHEN tc.is_internal THEN 'internal_comment' ELSE 'external_comment' END as type,
         tc.created_at,
-        s.full_name as staff_name,
-        t.title as entity_name,
+        COALESCE(s.full_name, NULLIF(tc.author_name, ''), t.contact_name, t.contact_email, 'External customer') as staff_name,
+        CONCAT('#', LPAD(t.ticket_number::text, 8, '0'), ' · ', t.title) as entity_name,
         v.name as venue_name,
         t.id as entity_id
       FROM ticket_comments tc
-      JOIN staff s ON tc.author_id = s.id
+      LEFT JOIN staff s ON tc.author_id = s.id
       JOIN tickets t ON tc.ticket_id = t.id
       LEFT JOIN venues v ON t.venue_id = v.id
       ${tkWhere.replace('t.venue_id', 't.venue_id')}
@@ -85,13 +94,33 @@ export async function GET(request: NextRequest) {
         'log' as source,
         al.action as type,
         al.created_at,
-        s.full_name as staff_name,
-        al.details->>'entity_name' as entity_name,
-        al.details->>'venue_name' as venue_name
+        COALESCE(s.full_name, 'System') as staff_name,
+        COALESCE(
+          NULLIF(al.details->>'entity_name', ''),
+          CASE
+            WHEN ticket_entity.id IS NOT NULL
+              THEN CONCAT('#', LPAD(ticket_entity.ticket_number::text, 8, '0'), ' · ', ticket_entity.title)
+            ELSE event_entity.summary
+          END
+        ) as entity_name,
+        COALESCE(
+          NULLIF(al.details->>'venue_name', ''),
+          ticket_venue.name,
+          event_venue.name
+        ) as venue_name,
+        al.details
       FROM activity_log al
       LEFT JOIN staff s ON al.staff_id = s.id
+      LEFT JOIN tickets ticket_entity
+        ON al.entity_type = 'ticket' AND al.entity_id = ticket_entity.id
+      LEFT JOIN venues ticket_venue ON ticket_entity.venue_id = ticket_venue.id
+      LEFT JOIN events event_entity
+        ON al.entity_type = 'event' AND al.entity_id = event_entity.id
+      LEFT JOIN venues event_venue ON event_entity.venue_id = event_venue.id
+      ${logWhere}
       ORDER BY al.created_at DESC
-      LIMIT 10`
+      LIMIT 10`,
+      logParams
     )
 
     // Merge all, sort, take top 15
@@ -112,6 +141,8 @@ export async function GET(request: NextRequest) {
       'external_comment': 'added comment on',
       'ticket_status_change': 'changed ticket status on',
       'ticket_assigned': 'assigned ticket',
+      'ticket_priority_change': 'changed ticket priority on',
+      'ticket_category_change': 'changed ticket category on',
       'tech_assigned': 'was assigned to',
       'tech_removed': 'was removed from',
     }

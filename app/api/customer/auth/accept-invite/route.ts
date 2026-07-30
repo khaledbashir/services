@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { hashPassword, createPortalJWT, PORTAL_COOKIE } from '@/lib/portal-auth'
+import { normalizeCustomerPortalTabs } from '@/lib/customer-portal-tabs'
 
 // GET — validate an invite token so the page can greet the user by name
 export async function GET(request: NextRequest) {
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
        WHERE invite_token = $2
          AND is_active = true
          AND (invite_expires_at IS NULL OR invite_expires_at > NOW())
-       RETURNING id, email, full_name, client_id`,
+       RETURNING id, email, full_name, client_id, visible_tabs`,
       [passwordHash, token]
     )
     if (result.rows.length === 0) {
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       fullName: user.full_name,
       clientId: user.client_id,
       clientName: clientResult.rows[0]?.name || null,
+      visibleTabs: normalizeCustomerPortalTabs(user.visible_tabs),
     }
     const jwt = await createPortalJWT(session)
     const response = NextResponse.json({ user: session })

@@ -6,6 +6,9 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { DashboardLayoutSettings, applyLayoutPrefs, loadLayoutPrefs, DEFAULT_LAYOUT_PREFS, type DashboardLayoutPrefs } from '@/components/dashboard-layout-settings'
 import { Skeleton, CardSkeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
+import { EventDetailBody } from '@/components/event-detail'
+import { TicketDetail } from '@/components/ticket-detail'
+import { ResizableSidePanel } from '@/components/resizable-side-panel'
 
 interface DashboardStats {
   todaysEvents: number
@@ -16,18 +19,20 @@ interface DashboardStats {
   autoSyncingVenues: number
   venuesNeedingFeedUrls: number
   inactiveVenues: number
-  laborByStaff: Array<{ full_name: string; total_hours: number; event_count: number }>
+  laborByStaff: Array<{ id: string; full_name: string; total_hours: number; event_count: number }>
 }
 
 interface Event {
   id: string
   summary: string
   venue_name: string
+  market?: string
   league: string
   start_time: string
   event_date: string
   venue_timezone?: string
   workflow_status: string
+  assigned_techs?: string | null
 }
 
 interface Activity {
@@ -36,8 +41,14 @@ interface Activity {
   type_display: string
   created_at: string
   staff_name: string
-  event_name: string
+  entity_name: string | null
   venue_name: string | null
+  details?: {
+    assigned_to?: string
+    old_status?: string
+    new_status?: string
+    from?: string
+  } | null
 }
 
 interface ChartData {
@@ -45,6 +56,12 @@ interface ChartData {
   eventsByMarket: Array<{ market: string; count: number }>
   eventsByLeague: Array<{ league: string; count: number }>
 }
+
+type DashboardListKind = 'staff' | 'tickets' | 'workflows' | 'labor' | 'market'
+type DashboardPanel =
+  | { kind: 'event'; id: string }
+  | { kind: 'ticket'; id: string }
+  | { kind: 'list'; listKind: DashboardListKind; title: string; items: any[] }
 
 const leagueColors: Record<string, { bg: string; text: string }> = {
   NBA: { bg: 'bg-orange-50', text: 'text-orange-600' },
@@ -94,6 +111,7 @@ export default function DashboardPage() {
     laborByStaff: [],
   })
   const [todaysEvents, setTodaysEvents] = useState<Event[]>([])
+  const [weekEvents, setWeekEvents] = useState<Event[]>([])
   const [activity, setActivity] = useState<Activity[]>([])
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [alerts, setAlerts] = useState<Array<{ type: string; severity: string; title: string; detail: string; count?: number }>>([])
@@ -101,6 +119,8 @@ export default function DashboardPage() {
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const [cardPrefs, setCardPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
   const [sectionPrefs, setSectionPrefs] = useState<DashboardLayoutPrefs>(DEFAULT_LAYOUT_PREFS)
+  const [panel, setPanel] = useState<DashboardPanel | null>(null)
+  const [panelLoading, setPanelLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -119,9 +139,10 @@ export default function DashboardPage() {
 
     const fetchData = async () => {
       try {
-        const [statsRes, todayRes, activityRes, chartRes, alertsRes] = await Promise.all([
+        const [statsRes, todayRes, weekRes, activityRes, chartRes, alertsRes] = await Promise.all([
           fetch('/api/stats'),
           fetch('/api/events?filter=today'),
+          fetch('/api/events?filter=week&limit=250'),
           fetch('/api/activity'),
           fetch('/api/stats/charts'),
           fetch('/api/stats/alerts'),
@@ -131,6 +152,10 @@ export default function DashboardPage() {
         if (todayRes.ok) {
           const data = await todayRes.json()
           setTodaysEvents(data.events || [])
+        }
+        if (weekRes.ok) {
+          const data = await weekRes.json()
+          setWeekEvents(data.events || [])
         }
         if (activityRes.ok) setActivity(await activityRes.json())
         if (chartRes.ok) setChartData(await chartRes.json())
@@ -181,10 +206,42 @@ export default function DashboardPage() {
     return workflowStatusColors[status] || workflowStatusColors.pending
   }
 
-  const StatCard = ({ title, value, color, key: cardKey, href }: { title: string; value: number; color: string; key: string; href?: string }) => (
-    <div
-      onClick={() => href ? router.push(href) : setExpandedCard(expandedCard === cardKey ? null : cardKey)}
-      className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all cursor-pointer"
+  const openListPanel = async (listKind: DashboardListKind, title: string, initialItems?: any[]) => {
+    if (initialItems) {
+      setPanel({ kind: 'list', listKind, title, items: initialItems })
+      return
+    }
+
+    const endpoints: Partial<Record<DashboardListKind, string>> = {
+      staff: '/api/stats/assigned-staff',
+      tickets: '/api/stats/open-tickets',
+      workflows: '/api/stats/pending-workflows',
+    }
+    const endpoint = endpoints[listKind]
+    if (!endpoint) return
+
+    setPanel({ kind: 'list', listKind, title, items: [] })
+    setPanelLoading(true)
+    try {
+      const response = await fetch(endpoint)
+      if (!response.ok) return
+      const data = await response.json()
+      const items = listKind === 'staff'
+        ? data.assignedStaff
+        : listKind === 'tickets'
+          ? data.openTickets
+          : data.pendingWorkflows
+      setPanel({ kind: 'list', listKind, title, items: items || [] })
+    } finally {
+      setPanelLoading(false)
+    }
+  }
+
+  const StatCard = ({ title, value, color, cardKey, onClick, href }: { title: string; value: number; color: string; cardKey: string; onClick?: () => void; href?: string }) => (
+    <button
+      type="button"
+      onClick={() => onClick ? onClick() : href ? router.push(href) : setExpandedCard(expandedCard === cardKey ? null : cardKey)}
+      className="h-full w-full bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all cursor-pointer text-left"
     >
       <div className="flex items-start justify-between">
         <div>
@@ -193,7 +250,7 @@ export default function DashboardPage() {
         </div>
         <div className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: color }}></div>
       </div>
-    </div>
+    </button>
   )
 
   const today = new Date()
@@ -201,7 +258,7 @@ export default function DashboardPage() {
   const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][today.getMonth()]
   const todayFormatted = `${dayName}, ${monthName} ${today.getDate()}, ${today.getFullYear()}`
   const timelineEvents = todaysEvents.slice(0, 8)
-  const upcomingEvents = todaysEvents.slice(0, 10)
+  const upcomingEvents = weekEvents.slice(0, 10)
   const liveActivityItems = activity.slice(0, 5)
   const displayMarketLabel = (market: string) => {
     const label = market?.trim()
@@ -249,11 +306,11 @@ export default function DashboardPage() {
         {/* SECTION 2: Stat Cards (5-column grid) */}
         {visibleSections.has('cards') && (
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${cardPrefs.layout === 'stacked' ? 'lg:grid-cols-1' : 'lg:grid-cols-5 2xl:grid-cols-5'}`} style={{ order: sectionOrder('cards') }}>
-          {visibleCards.includes('events') && <div style={{ order: cardOrder('events') }}><StatCard key="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" /></div>}
-          {visibleCards.includes('staff') && <div style={{ order: cardOrder('staff') }}><StatCard key="staff" title="Staff" value={stats.assignedStaff} color="#10b981" href="/staff" /></div>}
-          {visibleCards.includes('tickets') && <div style={{ order: cardOrder('tickets') }}><StatCard key="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" href="/tickets" /></div>}
-          {visibleCards.includes('workflows') && <div style={{ order: cardOrder('workflows') }}><StatCard key="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" href="/events?filter=pending_workflow" /></div>}
-          {visibleCards.includes('labor-hours') && <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all" style={{ order: cardOrder('labor-hours') }}>
+          {visibleCards.includes('events') && <div style={{ order: cardOrder('events') }}><StatCard cardKey="events" title="Today's Events" value={stats.todaysEvents} color="#0A52EF" href="/events?filter=today" /></div>}
+          {visibleCards.includes('staff') && <div style={{ order: cardOrder('staff') }}><StatCard cardKey="staff" title="Staff" value={stats.assignedStaff} color="#10b981" onClick={() => void openListPanel('staff', 'Staff assigned today')} /></div>}
+          {visibleCards.includes('tickets') && <div style={{ order: cardOrder('tickets') }}><StatCard cardKey="tickets" title="Open Tickets" value={stats.openTickets} color="#f59e0b" onClick={() => void openListPanel('tickets', 'Open tickets')} /></div>}
+          {visibleCards.includes('workflows') && <div style={{ order: cardOrder('workflows') }}><StatCard cardKey="workflows" title="Pending Workflows" value={stats.pendingWorkflows} color="#f43f5e" onClick={() => void openListPanel('workflows', 'Pending workflows')} /></div>}
+          {visibleCards.includes('labor-hours') && <button type="button" onClick={() => void openListPanel('labor', 'Estimated labor hours this week', stats.laborByStaff)} className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 hover:shadow-md transition-all text-left cursor-pointer" style={{ order: cardOrder('labor-hours') }}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Est. Labor Hours</p>
@@ -262,7 +319,7 @@ export default function DashboardPage() {
               </div>
               <div className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: '#8b5cf6' }}></div>
             </div>
-          </div>}
+          </button>}
         </div>
         )}
 
@@ -363,7 +420,7 @@ export default function DashboardPage() {
                       return (
                         <div
                           key={event.id}
-                          onClick={() => router.push(`/events/${event.id}`)}
+                          onClick={() => setPanel({ kind: 'event', id: event.id })}
                           className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-white/5 border-l-4 ${statusColor.bg}`}
                           style={{ borderLeftColor: statusColor.border }}
                         >
@@ -402,7 +459,7 @@ export default function DashboardPage() {
                   <div className="p-6">
                     <CardSkeleton />
                   </div>
-                ) : todaysEvents.length === 0 ? (
+                ) : upcomingEvents.length === 0 ? (
                   <div className="p-6 text-center text-zinc-500 text-sm">No upcoming events</div>
                 ) : (
                   <table className="w-full text-sm">
@@ -414,7 +471,7 @@ export default function DashboardPage() {
                           <tr
                             key={event.id}
                             className="border-b border-[#E8E8E8] hover:bg-zinc-50 cursor-pointer transition-colors"
-                            onClick={() => router.push(`/events/${event.id}`)}
+                            onClick={() => setPanel({ kind: 'event', id: event.id })}
                           >
                             <td className="py-3 px-6 text-zinc-500 font-mono text-xs">{formatTime(event.start_time, event.venue_timezone)}</td>
                             <td className="py-3 px-6 font-medium text-zinc-900">{event.summary}</td>
@@ -537,7 +594,14 @@ export default function DashboardPage() {
                         <p className="text-zinc-900">
                           <span className="font-medium">{item.staff_name}</span>
                           <span className="text-zinc-600"> {item.type_display}</span>
+                          {item.entity_name && (
+                            <span className="font-medium"> “{item.entity_name}”</span>
+                          )}
+                          {item.details?.assigned_to && (
+                            <span className="text-zinc-600"> to {item.details.assigned_to}</span>
+                          )}
                         </p>
+                        {item.venue_name && <p className="truncate text-zinc-500">{item.venue_name}</p>}
                         <p className="text-zinc-400 text-xs">{formatRelativeTime(item.created_at)}</p>
                       </div>
                     </div>
@@ -562,7 +626,13 @@ export default function DashboardPage() {
               {chartData.eventsByMarket.map((market) => (
                 <button
                   key={market.market}
-                  onClick={() => router.push(`/events?market=${market.market}`)}
+                  onClick={() => {
+                    const events = weekEvents.filter((event) => {
+                      const eventMarket = event.market
+                      return eventMarket === market.market
+                    })
+                    void openListPanel('market', `${displayMarketLabel(market.market)} events this week`, events)
+                  }}
                   className="bg-white rounded border border-[#E8E8E8] shadow-sm p-4 hover:shadow-md hover:border-zinc-300 transition-all text-left"
                 >
                   <p className="text-sm font-medium text-zinc-900">{displayMarketLabel(market.market)}</p>
@@ -574,6 +644,128 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      <ResizableSidePanel
+        open={panel !== null}
+        onClose={() => setPanel(null)}
+        preferenceKey="dashboard.detailPanelWidth"
+        ariaLabel="Dashboard detail"
+      >
+        {panel?.kind === 'event' && (
+          <EventDetailBody id={panel.id} embedded onClose={() => setPanel(null)} />
+        )}
+        {panel?.kind === 'ticket' && (
+          <TicketDetail params={{ id: panel.id }} embedded onClose={() => setPanel(null)} />
+        )}
+        {panel?.kind === 'list' && (
+          <div className="min-h-full bg-zinc-50">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Dashboard detail</p>
+                <h2 className="mt-1 text-lg font-semibold text-zinc-900">{panel.title}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPanel(null)}
+                className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3 p-6">
+              {panelLoading && <CardSkeleton />}
+              {!panelLoading && panel.items.length === 0 && (
+                <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
+                  Nothing to show for this period.
+                </div>
+              )}
+              {!panelLoading && panel.listKind === 'staff' && panel.items.map((item) => (
+                <button
+                  key={item.event_id}
+                  type="button"
+                  onClick={() => setPanel({ kind: 'event', id: item.event_id })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-zinc-900">{item.event_name}</p>
+                      <p className="mt-1 text-sm text-zinc-500">{item.venue_name}</p>
+                    </div>
+                    <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600">
+                      {item.technicians?.length || 0} assigned
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-zinc-700">
+                    {item.technicians?.length ? item.technicians.join(', ') : 'No staff assigned'}
+                  </p>
+                </button>
+              ))}
+              {!panelLoading && panel.listKind === 'tickets' && panel.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPanel({ kind: 'ticket', id: item.id })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-zinc-900">#{String(item.ticket_number).padStart(8, '0')} · {item.title}</p>
+                      <p className="mt-1 text-sm text-zinc-500">{item.venue_name || 'No venue'}</p>
+                    </div>
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium capitalize text-amber-700">
+                      {String(item.priority || 'medium').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-zinc-400">
+                    {String(item.status || 'new').replace(/_/g, ' ')}
+                  </p>
+                </button>
+              ))}
+              {!panelLoading && panel.listKind === 'workflows' && panel.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setPanel({ kind: 'event', id: item.id })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow"
+                >
+                  <p className="font-semibold text-zinc-900">{item.event_name}</p>
+                  <p className="mt-1 text-sm text-zinc-500">{item.venue_name}</p>
+                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-rose-600">Workflow pending</p>
+                </button>
+              ))}
+              {!panelLoading && panel.listKind === 'labor' && panel.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => router.push(`/staff/${item.id}`)}
+                  className="flex w-full items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-violet-300 hover:shadow"
+                >
+                  <div>
+                    <p className="font-semibold text-zinc-900">{item.full_name}</p>
+                    <p className="mt-1 text-sm text-zinc-500">{item.event_count} event{Number(item.event_count) === 1 ? '' : 's'}</p>
+                  </div>
+                  <span className="text-lg font-semibold text-violet-700">{Number(item.total_hours)}h</span>
+                </button>
+              ))}
+              {!panelLoading && panel.listKind === 'market' && panel.items.map((event: Event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => setPanel({ kind: 'event', id: event.id })}
+                  className="w-full rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-zinc-900">{event.summary}</p>
+                      <p className="mt-1 text-sm text-zinc-500">{event.venue_name}</p>
+                    </div>
+                    <span className="text-xs font-mono text-zinc-500">{formatTime(event.start_time, event.venue_timezone)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </ResizableSidePanel>
     </DashboardLayout>
   )
 }
