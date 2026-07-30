@@ -3,7 +3,7 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { DEFAULT_NEWSLETTER_VISUAL, exportNewsletterBodyHtml } from '@/lib/marketing/newsletter-visual'
-import { BarChart3, CalendarClock, CheckCircle2, Clock3, LayoutTemplate, Mail, Megaphone, Palette, Send, Sparkles, Users } from 'lucide-react'
+import { BarChart3, CalendarClock, CheckCircle2, Clock3, FileText, LayoutTemplate, Mail, Megaphone, Palette, Send, Sparkles, Users } from 'lucide-react'
 import Link from 'next/link'
 
 type Audience = { id: string; name: string; description?: string; member_count?: number }
@@ -501,6 +501,13 @@ export default function MarketingHubPage() {
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-zinc-600">Audiences, newsletters, forms, approvals, and social planning in one operator surface.</p>
           </div>
           <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Link
+              href="/marketing-hub/release"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+            >
+              <FileText className="size-4 text-zinc-400" />
+              Release Kit
+            </Link>
             <Link
               href="/marketing-hub/studio"
               className="inline-flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50"
