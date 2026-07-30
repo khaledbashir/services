@@ -40,13 +40,35 @@ export async function GET(
     const [commentsResult, attachmentsResult] = await Promise.all([
       query(
         `SELECT tc.id, tc.body, tc.created_at,
-                COALESCE(tc.author_name, s.full_name, 'ANC Support') AS author,
-                (tc.author_name IS NOT NULL) AS is_customer
+                CASE
+                  WHEN tc.source_channel = 'email'
+                    THEN COALESCE(
+                      NULLIF(tc.author_name, ''),
+                      NULLIF(tc.author_email, ''),
+                      NULLIF(t.contact_name, ''),
+                      NULLIF(t.contact_email, ''),
+                      s.full_name,
+                      'ANC Support'
+                    )
+                  ELSE COALESCE(NULLIF(tc.author_name, ''), s.full_name, 'ANC Support')
+                END AS author,
+                (
+                  NULLIF(tc.author_name, '') IS NOT NULL
+                  OR (
+                    tc.source_channel = 'email'
+                    AND tc.author_id = $2::uuid
+                  )
+                ) AS is_customer,
+                CASE
+                  WHEN tc.source_channel = 'email' THEN 'Email response'
+                  ELSE 'Ticket Update'
+                END AS source_label
          FROM ticket_comments tc
+         JOIN tickets t ON t.id = tc.ticket_id
          LEFT JOIN staff s ON tc.author_id = s.id
          WHERE tc.ticket_id = $1 AND tc.is_internal = false
          ORDER BY tc.created_at ASC`,
-        [params.id]
+        [params.id, PORTAL_SERVICE_STAFF_ID]
       ),
       query(
         `SELECT id, comment_id, filename, mime_type, image_url, caption, created_at
@@ -91,13 +113,16 @@ export async function POST(
     }
 
     const comment = await query(
-      `INSERT INTO ticket_comments (ticket_id, author_id, author_name, body, is_internal)
-       VALUES ($1, $2, $3, $4, false)
+      `INSERT INTO ticket_comments (
+         ticket_id, author_id, author_name, author_email, body, is_internal, source_channel
+       )
+       VALUES ($1, $2, $3, $4, $5, false, 'ticket_update')
        RETURNING id, body, created_at`,
       [
         params.id,
         PORTAL_SERVICE_STAFF_ID,
         `${session.fullName} (${session.clientName || 'Customer'})`,
+        session.email,
         commentBody || (caption ? `Attachment: ${caption}` : 'Attachment added'),
       ]
     )
@@ -131,6 +156,7 @@ export async function POST(
         ...comment.rows[0],
         author: `${session.fullName} (${session.clientName || 'Customer'})`,
         is_customer: true,
+        source_label: 'Ticket Update',
       },
     })
   } catch (err) {
