@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Bot,
   CheckCircle2,
+  ChevronDown,
   ExternalLink,
   History,
   Loader2,
@@ -112,6 +113,8 @@ export function MarketingAgentStudio() {
   const [error, setError] = useState('')
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsPinnedRef = useRef(false)
   const [runs, setRuns] = useState<ComposeRun[] | null>(null)
   const [loadingRun, setLoadingRun] = useState<string | null>(null)
   const [testEmail, setTestEmail] = useState('')
@@ -339,6 +342,15 @@ export function MarketingAgentStudio() {
   }
 
   const sandboxEmpty = phase === 'idle' && !previewHtml
+  const socialCount = Object.keys(social).length
+  const hasBuildDetails = outline.length > 0 || revealedSections.length > 0 || socialCount > 0
+
+  // Open the build details while the run streams, fold them away when it lands so
+  // the render gets the height back. A manual toggle pins the choice for the session.
+  useEffect(() => {
+    if (detailsPinnedRef.current) return
+    setDetailsOpen(streaming)
+  }, [streaming])
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#07111F] shadow-[0_40px_120px_rgba(0,0,0,0.42)]">
@@ -641,8 +653,30 @@ export function MarketingAgentStudio() {
               )}
             </div>
 
-            {/* Build timeline */}
-            <div className="max-h-[220px] shrink-0 overflow-y-auto border-t border-slate-200 bg-white px-4 py-3">
+            {/* Build timeline — collapsed by default so the render owns the space */}
+            <div className={cn('shrink-0 bg-white', (hasBuildDetails || (error && !streaming)) && 'border-t border-slate-200')}>
+              {hasBuildDetails && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    detailsPinnedRef.current = true
+                    setDetailsOpen(v => !v)
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-slate-50"
+                >
+                  <ChevronDown className={cn('size-3.5 shrink-0 text-slate-400 transition-transform', detailsOpen ? 'rotate-0' : '-rotate-90')} />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Build details</span>
+                  <span className="truncate text-[11px] text-slate-400">
+                    {[
+                      outline.length > 0 ? `${outline.length} outline` : null,
+                      revealedSections.length > 0 ? `${revealedSections.length} blocks` : null,
+                      socialCount > 0 ? `${socialCount} social` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </button>
+              )}
+
+              <div className={cn('overflow-y-auto px-4 transition-all', detailsOpen ? 'max-h-[220px] pb-3' : 'max-h-0')}>
               <AnimatePresence mode="popLayout">
                 {outline.length > 0 && (
                   <motion.div
@@ -695,9 +729,10 @@ export function MarketingAgentStudio() {
                   </motion.div>
                 )}
               </AnimatePresence>
+              </div>
 
               {error && !streaming && (
-                <p className="mt-2 text-xs text-red-400">{error}</p>
+                <p className="px-4 py-2 text-xs text-red-500">{error}</p>
               )}
             </div>
           </div>
