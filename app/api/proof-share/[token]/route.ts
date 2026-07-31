@@ -23,7 +23,7 @@ import {
  * Public endpoint — no auth required.
  *
  * Returns all the metadata the client-facing page needs to render:
- *   record info, attachments, designer info, expiration, response state.
+ *   record info, attachments, designer info, and response state.
  *
  * Does NOT return the raw Twenty file URLs (those have JWTs and expire).
  * Instead, each attachment has an `fileUrl` pointing at our own proxy
@@ -50,18 +50,6 @@ export async function GET(
     }
 
     const share = shareResult.rows[0]
-
-    // Check expiration
-    if (share.expires_at && new Date(share.expires_at) < new Date()) {
-      return NextResponse.json(
-        {
-          error: 'This proof link has expired.',
-          expiredAt: share.expires_at,
-          state: 'expired',
-        },
-        { status: 410 }
-      )
-    }
 
     // FTP-sourced shares: the proofs are files in a folder on ANC's own FTP.
     // Keyed on ftp_folder_path (not the object type) so this covers BOTH
@@ -173,7 +161,6 @@ export async function GET(
         createdByName: share.created_by_name,
         createdByEmail: share.created_by_email,
         createdAt: share.created_at,
-        expiresAt: share.expires_at,
         viewCount: share.view_count,
         lastViewedAt: share.last_viewed_at,
         clientResponse: liveClientResponse,
@@ -279,7 +266,6 @@ export async function GET(
         createdByName: share.created_by_name,
         createdByEmail: share.created_by_email,
         createdAt: share.created_at,
-        expiresAt: share.expires_at,
         viewCount: share.view_count,
         lastViewedAt: share.last_viewed_at,
         clientResponse: share.client_response,
@@ -341,7 +327,6 @@ export async function GET(
       createdByName: share.created_by_name,
       createdByEmail: share.created_by_email,
       createdAt: share.created_at,
-      expiresAt: share.expires_at,
       viewCount: share.view_count,
       lastViewedAt: share.last_viewed_at,
       clientResponse: share.client_response,

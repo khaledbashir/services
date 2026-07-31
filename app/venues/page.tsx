@@ -362,7 +362,7 @@ export default function VenuesPage() {
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Aliases</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Events</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Assigned</th>
-                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Tickets</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Open Tickets</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Coverage</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Automation</th>
                   </tr>
@@ -524,7 +524,7 @@ export default function VenuesPage() {
                       <div className="w-px h-8 bg-zinc-200"></div>
                       <div>
                         <p className="text-xl font-bold text-zinc-900">{ticketCount}</p>
-                        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Tickets</p>
+                        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Open Tickets</p>
                       </div>
                     </div>
 

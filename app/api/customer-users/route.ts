@@ -135,6 +135,41 @@ function originFor(request: NextRequest): string {
   return request.headers.get('origin') || `https://${request.headers.get('host')}`
 }
 
+interface InvitedPortalUser {
+  id: string
+  email: string
+  full_name: string
+  client_id: string
+  invite_token: string
+}
+
+async function deliverPortalInvitations(
+  request: NextRequest,
+  users: InvitedPortalUser[],
+  clientName: string | null
+) {
+  const origin = originFor(request)
+  return Promise.all(users.map(async (user) => {
+    const inviteUrl = `${origin}/customer/invite/${user.invite_token}`
+    let inviteSent = false
+    try {
+      inviteSent = await sendPortalInviteEmail({
+        to: user.email,
+        fullName: user.full_name,
+        clientName,
+        inviteUrl,
+      })
+    } catch (error) {
+      console.error(`[customer-users] Invite email failed for ${user.email}:`, error)
+    }
+    return {
+      user,
+      invite_url: inviteUrl,
+      invite_sent: inviteSent,
+    }
+  }))
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireRole(request, 'manager')
@@ -258,26 +293,7 @@ export async function POST(request: NextRequest) {
       client.release()
     }
 
-    const origin = originFor(request)
-    const invitations = await Promise.all(createdUsers.map(async (user) => {
-      const inviteUrl = `${origin}/customer/invite/${user.invite_token}`
-      let inviteSent = false
-      try {
-        inviteSent = await sendPortalInviteEmail({
-          to: user.email,
-          fullName: user.full_name,
-          clientName: existingClient.name,
-          inviteUrl,
-        })
-      } catch (error) {
-        console.error(`[customer-users] Invite email failed for ${user.email}:`, error)
-      }
-      return {
-        user,
-        invite_url: inviteUrl,
-        invite_sent: inviteSent,
-      }
-    }))
+    const invitations = await deliverPortalInvitations(request, createdUsers, existingClient.name)
 
     return NextResponse.json({
       invitations,
@@ -335,6 +351,7 @@ export async function PATCH(request: NextRequest) {
 
     let venueIds: string[] | undefined
     let visibleTabs: string[] | undefined
+    let additionalContacts: PortalContactInput[] = []
     try {
       if (body.linked_venue_ids !== undefined) {
         venueIds = cleanVenueIds(body.linked_venue_ids)
@@ -342,6 +359,9 @@ export async function PATCH(request: NextRequest) {
       }
       if (body.visible_tabs !== undefined) {
         visibleTabs = cleanVisibleTabs(body.visible_tabs, false)
+      }
+      if (body.additional_contacts !== undefined) {
+        additionalContacts = cleanContacts({ contacts: body.additional_contacts })
       }
     } catch (error) {
       return requestError(error) || NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -355,11 +375,32 @@ export async function PATCH(request: NextRequest) {
     if (fullName !== undefined && !fullName) {
       return NextResponse.json({ error: 'Customer name is required' }, { status: 400 })
     }
+    if (additionalContacts.length > 0 && !venueIds) {
+      return NextResponse.json({ error: 'Venue access is required when adding customers.' }, { status: 400 })
+    }
+    if (email && additionalContacts.some((contact) => contact.email === email)) {
+      return NextResponse.json({ error: 'Each customer email may only be added once.' }, { status: 400 })
+    }
 
     const client = await getClient()
+    const createdUsers: InvitedPortalUser[] = []
+    let resolvedClient: { id: string; name: string } | null = null
     try {
       await client.query('BEGIN')
-      if (venueIds) await validateActiveVenues(client, venueIds)
+      const currentUser = await client.query(
+        'SELECT id, email FROM portal_users WHERE id = $1 FOR UPDATE',
+        [id]
+      )
+      if (currentUser.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+      const targetEmail = email || String(currentUser.rows[0].email).toLowerCase()
+      if (additionalContacts.some((contact) => contact.email === targetEmail)) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'Each customer email may only be added once.' }, { status: 400 })
+      }
+      if (venueIds) resolvedClient = await resolveExistingClientForVenues(client, venueIds)
 
       const sets = ['updated_at = NOW()']
       const params: any[] = [id]
@@ -371,6 +412,7 @@ export async function PATCH(request: NextRequest) {
       if (email !== undefined) addValue('email', email)
       if (fullName !== undefined) addValue('full_name', fullName)
       if (visibleTabs !== undefined) addValue('visible_tabs', visibleTabs, '::text[]')
+      if (resolvedClient) addValue('client_id', resolvedClient.id)
 
       const result = await client.query(
         `UPDATE portal_users
@@ -384,13 +426,50 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
       if (venueIds) await replaceVenueGrants(client, id, venueIds)
+
+      for (const contact of additionalContacts) {
+        const inviteToken = generateInviteToken()
+        const added = await client.query(
+          `INSERT INTO portal_users (
+             email, full_name, client_id, visible_tabs,
+             invite_token, invite_expires_at, invited_by
+           )
+           VALUES (LOWER($1), $2, $3, $4::text[], $5, NOW() + INTERVAL '14 days', $6)
+           ON CONFLICT (email) DO UPDATE
+             SET full_name = EXCLUDED.full_name,
+                 client_id = EXCLUDED.client_id,
+                 visible_tabs = EXCLUDED.visible_tabs,
+                 invite_token = EXCLUDED.invite_token,
+                 invite_expires_at = EXCLUDED.invite_expires_at,
+                 is_active = true,
+                 updated_at = NOW()
+           RETURNING id, email, full_name, client_id, invite_token`,
+          [
+            contact.email,
+            contact.full_name,
+            resolvedClient!.id,
+            visibleTabs || result.rows[0].visible_tabs,
+            inviteToken,
+            auth.email,
+          ]
+        )
+        const addedUser = added.rows[0] as InvitedPortalUser
+        await replaceVenueGrants(client, addedUser.id, venueIds!)
+        createdUsers.push(addedUser)
+      }
       await client.query('COMMIT')
+      const invitations = await deliverPortalInvitations(
+        request,
+        createdUsers,
+        resolvedClient?.name || null
+      )
       return NextResponse.json({
         user: {
           ...result.rows[0],
           visible_tabs: normalizeCustomerPortalTabs(result.rows[0].visible_tabs),
           venue_ids: venueIds,
         },
+        invitations,
       })
     } catch (error: any) {
       await client.query('ROLLBACK')

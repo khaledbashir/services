@@ -6,6 +6,7 @@ import Link from 'next/link'
 import CopilotPanel from './CopilotPanel'
 import { CustomerTicketConversation } from '@/components/customer-ticket-conversation'
 import { ResizableSidePanel } from '@/components/resizable-side-panel'
+import { ThemeToggle } from '@/components/theme-toggle'
 import {
   CUSTOMER_PORTAL_TABS,
   portalTabForPath,
@@ -125,7 +126,9 @@ export default function PortalShell({ children, active }: { children: React.Reac
         setSelectedVenueIdState(
           storedIsValid
             ? storedVenueId
-            : nextVenues[0]?.id || ''
+            : nextVenues.length > 1
+              ? 'all'
+              : nextVenues[0]?.id || ''
         )
       } catch (error) {
         console.error('Failed to load customer portal shell:', error)
@@ -214,7 +217,6 @@ export default function PortalShell({ children, active }: { children: React.Reac
         {sidebarOpen && (
           <div className="min-w-0">
             <div className="cp-header-tag">Customer Portal</div>
-            {user?.clientName && <div className="cp-side-client">{user.clientName}</div>}
           </div>
         )}
       </div>
@@ -307,21 +309,8 @@ export default function PortalShell({ children, active }: { children: React.Reac
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
             </button>
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--anc-muted)' }}>
+              <div className="text-sm font-semibold" style={{ color: 'var(--anc-text)' }}>
                 {active || 'Customer Portal'}
-              </div>
-              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="truncate text-sm font-semibold" style={{ color: 'var(--anc-text)' }}>
-                  {user?.clientName || 'Customer Portal'}
-                </span>
-                {venues.length > 0 && (
-                  <>
-                    <span style={{ color: 'var(--anc-muted)' }}>·</span>
-                    <span className="truncate text-sm font-medium" style={{ color: 'var(--anc-brand)' }}>
-                      {selectedVenue?.name || (selectedVenueId === 'all' ? `All ${venues.length} venues` : 'Choose venue')}
-                    </span>
-                  </>
-                )}
               </div>
             </div>
             {venues.length > 1 && (
@@ -330,8 +319,12 @@ export default function PortalShell({ children, active }: { children: React.Reac
                 <select
                   value={selectedVenueId}
                   onChange={(event) => void selectVenue(event.target.value)}
-                  className="h-9 max-w-56 rounded-lg border bg-white px-3 text-sm font-medium outline-none"
-                  style={{ borderColor: 'var(--anc-border)', color: 'var(--anc-text)' }}
+                  className="h-9 max-w-56 rounded-lg border px-3 text-sm font-medium outline-none"
+                  style={{
+                    borderColor: 'var(--anc-border)',
+                    color: 'var(--anc-text)',
+                    backgroundColor: 'var(--anc-surface-raised)',
+                  }}
                   aria-label="Venue being viewed"
                 >
                   <option value="all">All venues</option>
@@ -341,12 +334,16 @@ export default function PortalShell({ children, active }: { children: React.Reac
                 </select>
               </label>
             )}
+            <ThemeToggle compact />
             {user && <div className="cp-topbar-user hidden lg:block">{user.fullName}</div>}
           </div>
           <main className="cp-shell-content" onClickCapture={openTicketInSplitView}>{children}</main>
         </div>
 
-        <CopilotPanel onTicketCreated={() => setRefreshSignal(x => x + 1)} />
+        <CopilotPanel
+          venueId={selectedVenueId}
+          onTicketCreated={() => setRefreshSignal(x => x + 1)}
+        />
         <ResizableSidePanel
           open={Boolean(selectedTicketId) && supportsTicketSplitView}
           onClose={() => setSelectedTicketId('')}

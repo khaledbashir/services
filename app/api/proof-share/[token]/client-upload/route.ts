@@ -41,10 +41,6 @@ export async function POST(
     if (!share) {
       return NextResponse.json({ error: 'Proof link not found' }, { status: 404 })
     }
-    if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) {
-      return NextResponse.json({ error: 'This proof link has expired' }, { status: 410 })
-    }
-
     const form = await request.formData()
     const file = form.get('file')
     if (!file || !(file instanceof File)) {

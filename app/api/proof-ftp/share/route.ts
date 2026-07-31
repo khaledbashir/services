@@ -28,7 +28,7 @@ async function authorize(request: NextRequest) {
  * The client opens the returned URL and swipe-reviews whatever files are in
  * that folder — same UI as every other proof share, just a different source.
  *
- * Body: { folderPath, clientName?, clientEmail?, message?, expiresInDays?,
+ * Body: { folderPath, clientName?, clientEmail?, message?,
  *         createdByName?, createdByEmail? }
  */
 export async function POST(request: NextRequest) {
@@ -53,7 +53,6 @@ export async function POST(request: NextRequest) {
     clientName,
     clientEmail,
     message,
-    expiresInDays,
     // Optional ticket linkage — when Alexis creates the proof FROM a ticket, the
     // share ties to that ticket so client approval flows back to its status.
     twentyObjectType,
@@ -99,11 +98,6 @@ export async function POST(request: NextRequest) {
   }
 
   const token = generateToken()
-  const requestedDays = Number(expiresInDays)
-  const days = requestedDays > 0 && Number.isFinite(requestedDays)
-    ? Math.min(Math.floor(requestedDays), 90)
-    : 14
-  const expiresAt = new Date(Date.now() + days * 86_400_000)
 
   // When tied to a ticket, keep the ticket's real object type + id so approval
   // writes back to it; otherwise it's a standalone folder share. Either way the
@@ -144,7 +138,7 @@ export async function POST(request: NextRequest) {
       message || null,
       auth.fullName || null,
       auth.email || null,
-      expiresAt,
+      null,
     ]
   )
 
@@ -221,6 +215,5 @@ export async function POST(request: NextRequest) {
     folderPath: safePath,
     fileCount: files.length,
     linkedToTicket,
-    expiresAt: expiresAt.toISOString(),
   })
 }

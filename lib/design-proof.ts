@@ -61,7 +61,7 @@ export async function createDesignProofShare(params: {
 
   if (!dr) throw new Error('Design request not found')
 
-  // Reuse an unanswered, unexpired share for this record so reruns don't spam.
+  // Reuse an unanswered share for this record so reruns don't spam.
   // When TWENTY_BACKED_DESIGNS is on we write twenty_object_type='designRequest' so
   // the /respond handler (OBJECT_CONFIGS lookup) hits the Twenty REST path instead
   // of trying to UPDATE the local design_requests table (where the row doesn't exist).
@@ -71,7 +71,6 @@ export async function createDesignProofShare(params: {
      WHERE twenty_object_type = $1
        AND twenty_record_id = $2
        AND client_response IS NULL
-       AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY created_at DESC LIMIT 1`,
     [objectType, designRequestId]
   )
@@ -85,7 +84,7 @@ export async function createDesignProofShare(params: {
       `INSERT INTO proof_shares (
          token, twenty_object_type, twenty_record_id, expires_at,
          created_by_name, created_by_email, client_email
-       ) VALUES ($1, $2, $3, NOW() + INTERVAL '30 days', $4, $5, $6)`,
+       ) VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
       [token, objectType, designRequestId, createdByName || null, createdByEmail || null, dr.client_email]
     )
   }
@@ -140,7 +139,6 @@ function renderProofEmail(p: { clientFirst: string; jobTitle: string; url: strin
             <li>You'll get a confirmation immediately</li>
           </ul>
         </td></tr>
-        <tr><td style="padding:20px 32px 28px;color:#a1a1aa;font-size:12px">This link expires in 30 days.</td></tr>
         <tr><td style="padding:18px 32px;background:#fafafa;border-top:1px solid #e4e4e7;color:#71717a;font-size:12px">
           Thanks,<br><strong style="color:#18181b">ANC Sports</strong>
         </td></tr>

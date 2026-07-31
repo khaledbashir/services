@@ -32,7 +32,6 @@ export function warmProofCacheOnBoot(): void {
           `SELECT token, ftp_folder_path, ftp_manifest
            FROM proof_shares
            WHERE ftp_folder_path IS NOT NULL
-             AND (expires_at IS NULL OR expires_at > NOW())
              AND GREATEST(
                    created_at,
                    COALESCE(last_viewed_at, created_at),

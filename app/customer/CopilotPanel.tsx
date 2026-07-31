@@ -16,7 +16,13 @@ const SUGGESTIONS = [
   'My screen is frozen — what should I try?',
 ]
 
-export default function CopilotPanel({ onTicketCreated }: { onTicketCreated?: () => void }) {
+export default function CopilotPanel({
+  onTicketCreated,
+  venueId,
+}: {
+  onTicketCreated?: () => void
+  venueId?: string
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -39,7 +45,10 @@ export default function CopilotPanel({ onTicketCreated }: { onTicketCreated?: ()
       const res = await fetch('/api/customer/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          messages: next.map(m => ({ role: m.role, content: m.content })),
+          venue_id: venueId && venueId !== 'all' ? venueId : undefined,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       setMessages(m => [...m, {

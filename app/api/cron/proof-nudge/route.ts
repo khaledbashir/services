@@ -41,7 +41,6 @@ export async function GET() {
               created_by_name, created_by_email, message, last_nudged_at
        FROM proof_shares
        WHERE client_response IS NULL
-         AND (expires_at IS NULL OR expires_at > NOW())
          AND created_at < NOW() - INTERVAL '${NUDGE_AFTER_HOURS} hours'
          AND (last_nudged_at IS NULL
               OR last_nudged_at < NOW() - INTERVAL '${RE_NUDGE_AFTER_HOURS} hours')

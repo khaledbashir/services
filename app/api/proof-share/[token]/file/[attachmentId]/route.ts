@@ -18,7 +18,7 @@ export const runtime = 'nodejs' // ssh2 (FTP streaming) needs the Node runtime
  * Public file proxy. Streams attachment bytes from Twenty to the client.
  *
  * Security:
- *   1. Validates the proof share token exists and has not expired
+ *   1. Validates that the permanent proof share token exists
  *   2. Validates the attachmentId actually belongs to the record this
  *      share references (prevents token-holders from reading other files)
  *   3. Re-fetches the attachment metadata on every request so the JWT URL
@@ -41,10 +41,6 @@ export async function GET(
       return new NextResponse('Not found', { status: 404 })
     }
     const share = shareResult.rows[0]
-    if (share.expires_at && new Date(share.expires_at) < new Date()) {
-      return new NextResponse('Link expired', { status: 410 })
-    }
-
     // FTP-folder shares: attachment id is `ftp-<base64url(filename)>`. Stream
     // the file straight off ANC's FTP, honoring HTTP Range so the big review
     // videos scrub without downloading whole. The filename is decoded to a bare

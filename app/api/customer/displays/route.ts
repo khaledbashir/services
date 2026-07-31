@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
+import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
 
 const CLOSED = ['completed', 'cancelled', 'resolved', 'skipped', 'complete', 'closed']
 const OFFLINE_PATTERN = '(offline|down|dark|blank|black screen|no signal|outage)'
@@ -13,12 +13,15 @@ const OFFLINE_PATTERN = '(offline|down|dark|blank|black screen|no signal|outage)
 // checking open maintenance logs whose text mentions the display's name or
 // zone. Unmatched open logs are still surfaced at the venue level so nothing
 // in-flight is hidden.
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getPortalSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const venueIds = await getPortalUserVenueIds(session)
+    const venueIds = await getScopedPortalVenueIds(
+      session,
+      request.nextUrl.searchParams.get('venue')
+    )
     if (venueIds.length === 0) return NextResponse.json({ venues: [] })
 
     const [venuesResult, screensResult, logsResult, lastServiceResult] = await Promise.all([

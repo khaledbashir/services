@@ -42,7 +42,7 @@ function fmtDate(value: string) {
 }
 
 function OverviewContent() {
-  const { user, venues, refreshSignal } = usePortal()
+  const { user, venues, refreshSignal, selectedVenueId } = usePortal()
   const [stats, setStats] = useState({ open: 0, closed: 0, total: 0 })
   const [recent, setRecent] = useState<Ticket[]>([])
   const [displayVenues, setDisplayVenues] = useState<DisplayVenueSummary[]>([])
@@ -51,10 +51,14 @@ function OverviewContent() {
 
   useEffect(() => {
     let cancelled = false
+    const scope = selectedVenueId && selectedVenueId !== 'all'
+      ? `venue=${encodeURIComponent(selectedVenueId)}`
+      : ''
+    const scopedUrl = (path: string) => `${path}${scope ? `${path.includes('?') ? '&' : '?'}${scope}` : ''}`
     Promise.all([
-      fetch('/api/customer/tickets?status=all').then(res => res.ok ? res.json() : null),
-      fetch('/api/customer/displays').then(res => res.ok ? res.json() : null),
-      fetch('/api/customer/documents').then(res => res.ok ? res.json() : null),
+      fetch(scopedUrl('/api/customer/tickets?status=all')).then(res => res.ok ? res.json() : null),
+      fetch(scopedUrl('/api/customer/displays')).then(res => res.ok ? res.json() : null),
+      fetch(scopedUrl('/api/customer/documents')).then(res => res.ok ? res.json() : null),
     ])
       .then(([ticketData, displayData, docData]) => {
         if (cancelled) return
@@ -75,9 +79,12 @@ function OverviewContent() {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [refreshSignal])
+  }, [refreshSignal, selectedVenueId])
 
   const firstName = user?.fullName?.split(' ')[0]
+  const visibleVenues = selectedVenueId && selectedVenueId !== 'all'
+    ? venues.filter((venue) => venue.id === selectedVenueId)
+    : venues
   const totalDisplays = displayVenues.reduce((sum, v) => sum + v.display_count, 0)
   const openDisplayIssues = displayVenues.reduce((sum, v) => sum + v.open_issues, 0)
   const serviceDates = displayVenues
@@ -112,8 +119,8 @@ function OverviewContent() {
           <div className="cp-stat-label mt-2">Resolved</div>
         </Link>
         <div className="cp-panel p-5">
-          <div className="cp-stat-value">{venues.length}</div>
-          <div className="cp-stat-label mt-2">Venue{venues.length === 1 ? '' : 's'} under service</div>
+          <div className="cp-stat-value">{visibleVenues.length}</div>
+          <div className="cp-stat-label mt-2">Venue{visibleVenues.length === 1 ? '' : 's'} under service</div>
         </div>
         <Link href="/customer/displays" className="cp-panel cp-panel-hover p-5 block">
           <div className={`cp-stat-value ${openDisplayIssues > 0 ? '' : 'is-green'}`}>{openDisplayIssues}</div>
@@ -189,10 +196,10 @@ function OverviewContent() {
 
           <h2 className="cp-section-title mb-3">Your venues</h2>
           <div className="cp-panel p-2">
-            {venues.length === 0 ? (
+            {visibleVenues.length === 0 ? (
               <div className="p-4 text-sm" style={{ color: 'var(--anc-muted)' }}>No venues linked yet.</div>
             ) : (
-              venues.map(v => (
+              visibleVenues.map(v => (
                 <div key={v.id} className="cp-venue-item">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--anc-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" />

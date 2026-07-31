@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import PortalShell from '../PortalShell'
+import PortalShell, { usePortal } from '../PortalShell'
 
 interface Display {
   id: string
@@ -58,15 +58,19 @@ function specLine(d: Display) {
 }
 
 function DisplaysContent() {
+  const { selectedVenueId } = usePortal()
   const [venues, setVenues] = useState<VenueDisplays[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/displays')
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (selectedVenueId && selectedVenueId !== 'all') params.set('venue', selectedVenueId)
+    fetch(`/api/customer/displays${params.size ? `?${params}` : ''}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => setVenues(data?.venues || []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedVenueId])
 
   const totalDisplays = venues.reduce((n, v) => n + v.display_count, 0)
   const totalIssues = venues.reduce((n, v) => n + v.open_issues, 0)

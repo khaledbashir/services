@@ -1,19 +1,22 @@
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
+import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
 
 // Files staff have uploaded against the customer's venues (venue_documents).
 // Stored under public/uploads/venues/documents/<filename>, so the download
 // URL is the public path — no streaming endpoint needed.
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getPortalSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const venueIds = await getPortalUserVenueIds(session)
+    const venueIds = await getScopedPortalVenueIds(
+      session,
+      request.nextUrl.searchParams.get('venue')
+    )
     if (venueIds.length === 0) return NextResponse.json({ documents: [] })
 
     const result = await query(

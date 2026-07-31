@@ -12,7 +12,6 @@ const OBJECT_TYPES = [
 
 type ShareResult = {
   url: string
-  expiresAt: string | null
   attachmentCount?: number
   fileCount?: number
   recordName?: string
@@ -27,7 +26,6 @@ export default function ProofAdminPage() {
   const [createdByName, setCreatedByName] = useState('')
   const [createdByEmail, setCreatedByEmail] = useState('')
   const [clientEmail, setClientEmail] = useState('')
-  const [expiresInDays, setExpiresInDays] = useState<number | ''>(14)
 
   // CRM mode
   const [objectType, setObjectType] = useState('printRequest')
@@ -50,7 +48,6 @@ export default function ProofAdminPage() {
         body: JSON.stringify({
           twentyObjectType: objectType,
           twentyRecordId: recordId.trim(),
-          expiresInDays: expiresInDays === '' ? undefined : Number(expiresInDays),
           message: message || undefined,
           createdByName: createdByName || undefined,
           createdByEmail: createdByEmail || undefined,
@@ -79,7 +76,6 @@ export default function ProofAdminPage() {
           message: message || undefined,
           createdByName: createdByName || undefined,
           createdByEmail: createdByEmail || undefined,
-          expiresInDays: expiresInDays === '' ? undefined : Number(expiresInDays),
         }),
       })
       const data = await res.json()
@@ -216,17 +212,6 @@ export default function ProofAdminPage() {
             />
           </Field>
 
-          <Field label="Expires in (days)" hint="Leave blank for no expiration">
-            <input
-              type="number"
-              value={expiresInDays}
-              onChange={(e) => setExpiresInDays(e.target.value === '' ? '' : Number(e.target.value))}
-              min={1}
-              placeholder="14"
-              className="w-32 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--anc-brand)] focus:border-transparent"
-            />
-          </Field>
-
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>
           )}
@@ -246,7 +231,7 @@ export default function ProofAdminPage() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-gray-900">Share link created</div>
                   <div className="text-xs text-gray-600 mt-0.5">
-                    {result.recordName || result.folderPath} · {(result.fileCount ?? result.attachmentCount) ?? 0} file{((result.fileCount ?? result.attachmentCount) ?? 0) !== 1 ? 's' : ''} · {result.expiresAt ? `expires ${new Date(result.expiresAt).toLocaleDateString()}` : 'no expiration'}
+                    {result.recordName || result.folderPath} · {(result.fileCount ?? result.attachmentCount) ?? 0} file{((result.fileCount ?? result.attachmentCount) ?? 0) !== 1 ? 's' : ''}
                   </div>
                 </div>
               </div>

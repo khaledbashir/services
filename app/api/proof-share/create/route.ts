@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
     const {
       twentyObjectType,
       twentyRecordId,
-      expiresInDays,
       message,
       createdByName,
       createdByEmail,
@@ -86,7 +85,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Idempotency — if a live (unanswered, unexpired) share already exists for
+    // Idempotency — if an unanswered share already exists for
     // this record, return it instead of creating a duplicate. This makes the
     // workflow safe to fire multiple times for the same status change.
     const { rows: existing } = await query(
@@ -94,7 +93,6 @@ export async function POST(request: NextRequest) {
        WHERE twenty_object_type = $1
          AND twenty_record_id = $2
          AND client_response IS NULL
-         AND (expires_at IS NULL OR expires_at > NOW())
        ORDER BY created_at DESC
        LIMIT 1`,
       [twentyObjectType, twentyRecordId]
@@ -167,11 +165,6 @@ export async function POST(request: NextRequest) {
     }
 
     const token = generateToken()
-    const days = Number(expiresInDays)
-    const expiresAt =
-      (days > 0 && Number.isFinite(days))
-        ? new Date(Date.now() + days * 86_400_000)
-        : null
 
     const recipientEmail = clientEmail || (record as any).proofClientEmail || null
 
@@ -184,7 +177,7 @@ export async function POST(request: NextRequest) {
         token,
         twentyObjectType,
         twentyRecordId,
-        expiresAt,
+        null,
         message || null,
         createdByName || null,
         createdByEmail || null,
@@ -206,7 +199,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       token,
       url: publicUrl,
-      expiresAt: expiresAt ? expiresAt.toISOString() : null,
       attachmentCount: attachments.length,
       recordName: record.name,
       clientName: resolvedClientName,

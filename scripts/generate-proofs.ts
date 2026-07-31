@@ -68,15 +68,6 @@ async function main() {
       const publicUrl = buildPublicUrl(token)
 
       await query(
-        `UPDATE proof_shares
-         SET expires_at = NOW()
-         WHERE twenty_object_type = $1
-           AND twenty_record_id = $2
-           AND (expires_at IS NULL OR expires_at > NOW())`,
-        [twentyObjectType, twentyRecordId]
-      )
-
-      await query(
         `INSERT INTO proof_shares (
           token, twenty_object_type, twenty_record_id, expires_at,
           message, created_by_name, created_by_email, client_email

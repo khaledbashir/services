@@ -20,7 +20,7 @@ interface Attachment {
   responseAt?: string | null
 }
 
-type ShareState = 'pending' | 'approved' | 'changes_requested' | 'expired'
+type ShareState = 'pending' | 'approved' | 'changes_requested'
 
 interface ProofData {
   token: string
@@ -32,7 +32,6 @@ interface ProofData {
   createdByName: string | null
   createdByEmail: string | null
   createdAt: string
-  expiresAt: string | null
   viewCount: number
   clientResponse: 'approved' | 'changes_requested' | null
   clientResponseAt: string | null
@@ -67,12 +66,6 @@ export default function ProofSharePage() {
     try {
       setLoading(true)
       const res = await fetch(`/api/proof-share/${token}`)
-      if (res.status === 410) {
-        const body = await res.json()
-        setError(body.error || 'This proof link has expired.')
-        setData({ ...(body as any), state: 'expired' })
-        return
-      }
       if (res.status === 404) {
         setError('This proof link could not be found. It may have been deleted or never existed.')
         return
@@ -195,7 +188,7 @@ export default function ProofSharePage() {
     )
   }
 
-  // --- Error / expired / 404 ---
+  // --- Error / 404 ---
   if (error && !data) {
     return (
       <Shell>
@@ -214,26 +207,6 @@ export default function ProofSharePage() {
   }
 
   if (!data) return null
-
-  // --- Expired ---
-  if (data.state === 'expired') {
-    return (
-      <Shell>
-        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-          <div className="text-5xl mb-4">⏰</div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
-            This proof link has expired
-          </h1>
-          <p className="text-sm text-gray-600 max-w-md mx-auto">
-            {data.expiresAt && (
-              <>Expired on {new Date(data.expiresAt).toLocaleDateString()}. </>
-            )}
-            Please contact your ANC point of contact for a fresh link.
-          </p>
-        </div>
-      </Shell>
-    )
-  }
 
   const activeAtt = data.attachments.find((a) => a.id === activeAttachment)
   const activeIndex = activeAtt ? data.attachments.findIndex((a) => a.id === activeAtt.id) : -1
@@ -284,9 +257,6 @@ export default function ProofSharePage() {
           <div className="shrink-0 text-right text-xs text-gray-400 space-y-0.5">
             {data.createdByName && <div>Sent by {data.createdByName}</div>}
             <div>{new Date(data.createdAt).toLocaleDateString()}</div>
-            {data.expiresAt && (
-              <div>Expires {new Date(data.expiresAt).toLocaleDateString()}</div>
-            )}
           </div>
         </div>
 

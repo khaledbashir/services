@@ -273,14 +273,10 @@ export function buildProofEmailHtml(opts: {
   proofUrl: string
   message?: string | null
   designerName?: string | null
-  expiresAt?: Date | null
   thumbnailUrl?: string | null
   isRenewal?: boolean
 }): string {
-  const { recordName, proofUrl, expiresAt } = opts
-  const expiresLine = expiresAt
-    ? `This link expires on ${expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`
-    : 'This link expires in 30 days.'
+  const { recordName, proofUrl } = opts
   const safeName = escapeHtml(recordName)
   const safeUrl = escapeHtml(proofUrl)
   return `<!DOCTYPE html>
@@ -309,9 +305,6 @@ export function buildProofEmailHtml(opts: {
 </td></tr>
 <tr><td style="font-size:13px;line-height:1.6;color:#0A52EF;word-break:break-all;padding:0 0 24px 0;">
   <a href="${safeUrl}" style="color:#0A52EF;text-decoration:underline;">${safeUrl}</a>
-</td></tr>
-<tr><td style="font-size:12px;line-height:1.6;color:#888;padding:0 0 24px 0;">
-  ${escapeHtml(expiresLine)}
 </td></tr>
 <tr><td style="font-size:14px;line-height:1.6;color:#111;padding:24px 0 0 0;border-top:1px solid #eeeeee;">
   Best regards,<br>ANC Sports
@@ -345,7 +338,6 @@ export async function sendProofEmailToClient(opts: {
   message?: string | null
   designerName?: string | null
   designerEmail?: string | null
-  expiresAt?: Date | null
   attachments?: TwentyAttachment[]
   isRenewal?: boolean
 }): Promise<boolean> {
@@ -365,7 +357,6 @@ export async function sendProofEmailToClient(opts: {
     proofUrl,
     message: opts.message,
     designerName: opts.designerName,
-    expiresAt: opts.expiresAt,
     thumbnailUrl,
     isRenewal: opts.isRenewal,
   })

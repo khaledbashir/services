@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
           SELECT COUNT(*)::int
           FROM tickets venue_ticket
           WHERE venue_ticket.venue_id = v.id
-        ) as ticket_count
+            AND venue_ticket.status IN ('new', 'on_hold', 'in_progress', 'escalated')
+        ) as open_ticket_count
       FROM venues v
       LEFT JOIN markets m ON v.market_id = m.id
       LEFT JOIN client_venues cv ON cv.venue_id = v.id
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
       const hydrated = withComputedAutomation(row)
       return {
         ...hydrated,
+        ticket_count: Number(hydrated.open_ticket_count) || 0,
         automation_status: classifyVenueAutomationStatus({
           is_active: Boolean(hydrated.is_active),
           active_service_count: hydrated.active_service_count,

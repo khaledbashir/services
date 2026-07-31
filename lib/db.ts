@@ -535,8 +535,11 @@ async function runMigrations() {
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS file_responses JSONB NOT NULL DEFAULT '{}'::jsonb`)
     // Charlie 2026-07-16: client media dropped onto a proof link for designers.
     await client.query(`ALTER TABLE proof_shares ADD COLUMN IF NOT EXISTS client_uploads JSONB NOT NULL DEFAULT '[]'::jsonb`)
+    // Charlie 2026-07-31: proof review URLs are permanent. Clear historical
+    // expirations at boot so links already sent to clients remain usable.
+    await client.query(`UPDATE proof_shares SET expires_at = NULL WHERE expires_at IS NOT NULL`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_record ON proof_shares(twenty_record_id)`)
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_expires ON proof_shares(expires_at)`)
+    await client.query(`DROP INDEX IF EXISTS idx_proof_shares_expires`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_proof_shares_created ON proof_shares(created_at) WHERE client_response IS NULL`)
     await client.query(`ALTER TABLE design_request_files ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`)
     await client.query(`ALTER TABLE design_request_files ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ`)

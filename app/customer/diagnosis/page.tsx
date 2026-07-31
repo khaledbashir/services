@@ -41,7 +41,7 @@ function diagnose(summary: string): DiagnosisResult {
 }
 
 function DiagnosisContent() {
-  const { venues } = usePortal()
+  const { venues, selectedVenueId } = usePortal()
   const [venueId, setVenueId] = useState('')
   const [summary, setSummary] = useState('')
   const [photoName, setPhotoName] = useState('')
@@ -51,8 +51,16 @@ function DiagnosisContent() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (venues.length === 1) setVenueId(venues[0].id)
-  }, [venues])
+    if (selectedVenueId && selectedVenueId !== 'all') {
+      setVenueId(selectedVenueId)
+    } else if (venues.length === 1) {
+      setVenueId(venues[0].id)
+    }
+  }, [selectedVenueId, venues])
+
+  const availableVenues = selectedVenueId && selectedVenueId !== 'all'
+    ? venues.filter((venue) => venue.id === selectedVenueId)
+    : venues
 
   function runDiagnosis() {
     setCreated(null)
@@ -108,7 +116,7 @@ function DiagnosisContent() {
               <label className="cp-label">Venue</label>
               <select value={venueId} onChange={e => setVenueId(e.target.value)} className="cp-input">
                 <option value="">Select venue...</option>
-                {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {availableVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </div>
             <div>

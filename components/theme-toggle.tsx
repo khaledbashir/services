@@ -55,7 +55,7 @@ function Icon({ theme }: { theme: Theme }) {
   )
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean } = {}) {
   const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
@@ -86,17 +86,22 @@ export function ThemeToggle() {
         applyTheme(nextTheme)
         setTheme(nextTheme)
       }}
-      className="w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-[13px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+      title={compact ? `${theme === 'dark' ? 'Dark' : 'Light'} mode` : undefined}
+      className={compact
+        ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--anc-border)] text-[var(--anc-muted)] transition-colors hover:bg-[var(--anc-surface-muted)] hover:text-[var(--anc-text)]'
+        : 'w-full flex items-center justify-between gap-3 rounded-md px-3 py-2 text-[13px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-white'}
     >
-      <span className="flex items-center gap-2.5">
+      <span className={`flex items-center ${compact ? '' : 'gap-2.5'}`}>
         <span className="opacity-70">
           <Icon theme={theme} />
         </span>
-        {theme === 'dark' ? 'Dark mode' : 'Light mode'}
+        {!compact && (theme === 'dark' ? 'Dark mode' : 'Light mode')}
       </span>
-      <span className={`flex h-5 w-9 items-center rounded-full border p-0.5 transition-colors ${theme === 'dark' ? 'border-[#0A52EF]/60 bg-[#0A52EF]/50' : 'border-white/10 bg-white/10'}`}>
-        <span className={`h-3.5 w-3.5 rounded-full bg-white transition-transform ${theme === 'dark' ? 'translate-x-4' : 'translate-x-0'}`} />
-      </span>
+      {!compact && (
+        <span className={`flex h-5 w-9 items-center rounded-full border p-0.5 transition-colors ${theme === 'dark' ? 'border-[#0A52EF]/60 bg-[#0A52EF]/50' : 'border-white/10 bg-white/10'}`}>
+          <span className={`h-3.5 w-3.5 rounded-full bg-white transition-transform ${theme === 'dark' ? 'translate-x-4' : 'translate-x-0'}`} />
+        </span>
+      )}
     </button>
   )
 }

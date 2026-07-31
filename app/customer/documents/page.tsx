@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import PortalShell from '../PortalShell'
+import PortalShell, { usePortal } from '../PortalShell'
 
 interface Doc {
   id: string
@@ -37,16 +37,20 @@ function typeLabel(mime: string) {
 }
 
 function DocumentsContent() {
+  const { selectedVenueId } = usePortal()
   const [docs, setDocs] = useState<Doc[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    fetch('/api/customer/documents')
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (selectedVenueId && selectedVenueId !== 'all') params.set('venue', selectedVenueId)
+    fetch(`/api/customer/documents${params.size ? `?${params}` : ''}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => setDocs(data?.documents || []))
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedVenueId])
 
   const filtered = search
     ? docs.filter(d =>

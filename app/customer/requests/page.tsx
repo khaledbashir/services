@@ -43,7 +43,7 @@ function fmtDate(value: string) {
 function RequestsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { venues, refreshSignal } = usePortal()
+  const { venues, refreshSignal, selectedVenueId } = usePortal()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [stats, setStats] = useState({ open: 0, closed: 0, total: 0 })
   const [tab, setTab] = useState<'open' | 'closed' | 'all'>('open')
@@ -61,9 +61,19 @@ function RequestsContent() {
   const [ntSubmitting, setNtSubmitting] = useState(false)
   const [ntError, setNtError] = useState('')
 
+  const availableVenues = selectedVenueId && selectedVenueId !== 'all'
+    ? venues.filter((venue) => venue.id === selectedVenueId)
+    : venues
+
   useEffect(() => {
-    if (venues.length === 1) setNtVenue(venues[0].id)
-  }, [venues])
+    if (selectedVenueId && selectedVenueId !== 'all') {
+      setNtVenue(selectedVenueId)
+    } else if (venues.length === 1) {
+      setNtVenue(venues[0].id)
+    } else if (ntVenue && !venues.some((venue) => venue.id === ntVenue)) {
+      setNtVenue('')
+    }
+  }, [ntVenue, selectedVenueId, venues])
 
   useEffect(() => {
     const venueParam = searchParams.get('venue')
@@ -80,6 +90,7 @@ function RequestsContent() {
     try {
       const params = new URLSearchParams({ status: tab })
       if (search) params.set('q', search)
+      if (selectedVenueId && selectedVenueId !== 'all') params.set('venue', selectedVenueId)
       const res = await fetch(`/api/customer/tickets?${params}`)
       if (res.status === 401) { router.push('/customer/login'); return }
       const data = await res.json()
@@ -88,7 +99,7 @@ function RequestsContent() {
     } finally {
       setLoading(false)
     }
-  }, [tab, search, router])
+  }, [tab, search, router, selectedVenueId])
 
   useEffect(() => {
     const t = setTimeout(loadTickets, search ? 300 : 0)
@@ -200,7 +211,7 @@ function RequestsContent() {
               <label className="cp-label">Venue</label>
               <select value={ntVenue} onChange={e => setNtVenue(e.target.value)} required className="cp-input">
                 <option value="">Select venue…</option>
-                {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {availableVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </div>
             <div>

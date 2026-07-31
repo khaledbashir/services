@@ -7,6 +7,7 @@ import {
   normalizeCustomerPortalTabs,
   type CustomerPortalTabKey,
 } from './customer-portal-tabs'
+import { scopePortalVenueIds } from './customer-portal-scope'
 
 // Customer-portal sessions live in their own cookie with their own audience
 // claim so a customer token can never authenticate against staff routes
@@ -186,4 +187,18 @@ export async function getPortalUserVenueIds(session: PortalSession): Promise<str
     [session.clientId]
   )
   return legacyClientScope.rows.map((row: { venue_id: string }) => row.venue_id)
+}
+
+/**
+ * Resolve the venue scope selected in the customer-portal shell without ever
+ * widening beyond the customer's grants. `all`, an empty value, and a missing
+ * value retain the complete authorized scope; an unknown venue produces an
+ * empty scope so callers cannot probe another customer's records.
+ */
+export async function getScopedPortalVenueIds(
+  session: PortalSession,
+  requestedVenueId?: string | null
+): Promise<string[]> {
+  const venueIds = await getPortalUserVenueIds(session)
+  return scopePortalVenueIds(venueIds, requestedVenueId)
 }

@@ -225,10 +225,6 @@ export async function POST(
     }
     const share = shareResult.rows[0]
 
-    if (share.expires_at && new Date(share.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'This proof link has expired.' }, { status: 410 })
-    }
-
     if (share.client_response) {
       return NextResponse.json(
         {

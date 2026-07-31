@@ -3,7 +3,7 @@ export const revalidate = 0
 export const maxDuration = 120
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getPortalSession, getPortalUserVenueIds } from '@/lib/portal-auth'
+import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
 import { runCustomerCopilot } from '@/lib/ai/customer-copilot'
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,8 @@ export async function POST(request: NextRequest) {
     const session = await getPortalSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const venueIds = await getPortalUserVenueIds(session)
+    const body = await request.json()
+    const venueIds = await getScopedPortalVenueIds(session, body.venue_id)
     if (venueIds.length === 0) {
       return NextResponse.json({
         reply: 'Your account has no venues linked yet — contact your ANC account representative.',
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { messages } = await request.json()
+    const { messages } = body
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'messages required' }, { status: 400 })
     }

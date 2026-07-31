@@ -6,16 +6,23 @@ import PortalShell, { usePortal } from '../PortalShell'
 type Stats = { open: number; closed: number; total: number }
 
 function ReportsContent() {
-  const { venues } = usePortal()
+  const { venues, selectedVenueId } = usePortal()
   const [stats, setStats] = useState<Stats>({ open: 0, closed: 0, total: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/customer/tickets?status=all')
+    setLoading(true)
+    const params = new URLSearchParams({ status: 'all' })
+    if (selectedVenueId && selectedVenueId !== 'all') params.set('venue', selectedVenueId)
+    fetch(`/api/customer/tickets?${params}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => setStats(data?.stats || { open: 0, closed: 0, total: 0 }))
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedVenueId])
+
+  const visibleVenueCount = selectedVenueId && selectedVenueId !== 'all'
+    ? venues.filter((venue) => venue.id === selectedVenueId).length
+    : venues.length
 
   const resolvedRate = stats.total ? Math.round((stats.closed / stats.total) * 100) : 100
 
@@ -37,7 +44,7 @@ function ReportsContent() {
           <div className="cp-stat-label mt-2">Resolved</div>
         </div>
         <div className="cp-panel p-5">
-          <div className="cp-stat-value">{loading ? '...' : venues.length}</div>
+          <div className="cp-stat-value">{loading ? '...' : visibleVenueCount}</div>
           <div className="cp-stat-label mt-2">Venues</div>
         </div>
         <div className="cp-panel p-5">
