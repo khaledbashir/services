@@ -4,10 +4,13 @@ import { sendEmail } from '@/lib/email'
 import { query } from '@/lib/db'
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'anc-services-webhook-2026'
+// Jireh opted out on 2026-08-01: the per-deal email duplicates the
+// #revenue-new-win-alert Slack notification he already gets, so he reads the
+// win there and takes the weekly/monthly roll-up by email instead. Do not
+// re-add jbillings@anc.com without him asking for it.
 const WIN_NOTIFY_TO = [
   'krissy.carter@anc.com',
   'kirsten.savage@anc.com',
-  'jbillings@anc.com',
   'alexis.ventarola@anc.com',
 ]
 // A deal whose name contains this sentinel routes the alert to the test
