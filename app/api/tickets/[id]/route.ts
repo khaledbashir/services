@@ -11,6 +11,7 @@ import { sendTicketDistributionEmail } from '@/lib/email'
 import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 import { awardPointsOnce } from '@/lib/gamification'
 import { notifyCustomerStatus } from '@/lib/customer-notify'
+import { mergedTicketWriteError } from '@/lib/ticket-merge-guard'
 
 const statusLabels: Record<string, string> = {
   new: 'New', on_hold: 'On Hold', in_progress: 'In Progress',
@@ -153,6 +154,26 @@ export async function PATCH(
     const body = await request.json()
     const { status, priority, assigned_to, category, resolution_notes } = body
 
+    // Resolve the current state before applying any direct-field updates. A
+    // stale link to a merged source must not recreate a second active ticket.
+    const current = await query(
+      `SELECT t.ticket_number, t.status, t.priority, t.assigned_to, t.title,
+              t.venue_id, t.category, t.merged_into_ticket_id,
+              mt.ticket_number AS merged_into_ticket_number
+       FROM tickets t
+       LEFT JOIN tickets mt ON mt.id = t.merged_into_ticket_id
+       WHERE t.id = $1`,
+      [params.id]
+    )
+    if (current.rows.length === 0) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+    const oldTicket = current.rows[0]
+    const mergeWriteError = mergedTicketWriteError(oldTicket)
+    if (mergeWriteError) {
+      return NextResponse.json(mergeWriteError, { status: 409 })
+    }
+
     // Handle direct field updates (title, source, ticket_type, contact info, venue)
     const directFields: Record<string, string> = {
       title: 'title', source: 'source', ticket_type: 'ticket_type',
@@ -165,10 +186,6 @@ export async function PATCH(
       }
     }
 
-    // Get current ticket state for logging
-    const current = await query('SELECT ticket_number, status, priority, assigned_to, title, venue_id, category FROM tickets WHERE id = $1', [params.id])
-    const oldTicket = current.rows[0]
-    
     // Get venue name for activity log
     let venueName = ''
     if (oldTicket?.venue_id) {

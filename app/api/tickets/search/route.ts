@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
        FROM tickets t
        LEFT JOIN venues v ON t.venue_id = v.id
        WHERE t.status = 'closed'
+         AND t.merged_into_ticket_id IS NULL
          AND t.resolution_notes IS NOT NULL
          AND t.resolution_notes != ''
          AND (${conditions})

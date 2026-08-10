@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
     const conditions: string[] = []
     const params: any[] = [...vf.params]
 
+    // A merged source is historical context on its primary ticket, never a
+    // second standalone row — even if a stale client once changed its status.
+    conditions.push('t.merged_into_ticket_id IS NULL')
+
     if (vf.clause) {
       conditions.push(vf.clause.replace(/^AND /, ''))
     }

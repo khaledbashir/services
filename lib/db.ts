@@ -95,6 +95,27 @@ async function runMigrations() {
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS twenty_ticket_id TEXT`)
     await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subcategory TEXT`) // specific issue under category (client-side taxonomy)
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_twenty_ticket_id ON tickets(twenty_ticket_id) WHERE twenty_ticket_id IS NOT NULL`)
+    await client.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS merged_into_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL`)
+    // Merged sources are historical children of their canonical ticket. Repair
+    // any stale source reopened by an older browser, then enforce the invariant
+    // for every current and future write path.
+    await client.query(`UPDATE tickets
+      SET status = 'closed',
+          resolved_at = COALESCE(resolved_at, NOW()),
+          updated_at = NOW()
+      WHERE merged_into_ticket_id IS NOT NULL
+        AND status <> 'closed'`)
+    await client.query(`DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'tickets_merged_source_closed'
+        ) THEN
+          ALTER TABLE tickets
+            ADD CONSTRAINT tickets_merged_source_closed
+            CHECK (merged_into_ticket_id IS NULL OR status = 'closed');
+        END IF;
+      END
+    $$`)
     // Per-tech email signature, appended to ticket replies they send (which all
     // go out from the shared support@anc.com mailbox).
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email_signature TEXT`)

@@ -180,6 +180,10 @@ export function TicketDetail({
       const ticketData = await ticketRes.json()
       const staffData = await staffRes.json()
       const venuesData = await venuesRes.json().catch(() => ({ venues: [] }))
+      if (ticketData.ticket?.merged_into_ticket_id) {
+        router.replace(`/tickets/${ticketData.ticket.merged_into_ticket_id}`)
+        return
+      }
       setTicket(ticketData.ticket)
       setComments(ticketData.comments || [])
       setAttachments(ticketData.attachments || [])
