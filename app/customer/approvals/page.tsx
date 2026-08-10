@@ -21,20 +21,48 @@ function fmtDate(value: string | null) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/**
+ * One job can have several proof packages out at once, and they are often
+ * shared the same day — so the date alone does not tell them apart. Number
+ * them, oldest first, and only when there is more than one.
+ */
+function positionLabels(items: Approval[]): Map<string, string> {
+  const byTitle = new Map<string, Approval[]>()
+  for (const item of items) {
+    const list = byTitle.get(item.title) || []
+    list.push(item)
+    byTitle.set(item.title, list)
+  }
+  const labels = new Map<string, string>()
+  for (const list of byTitle.values()) {
+    if (list.length < 2) continue
+    const oldestFirst = [...list].sort((a, b) => String(a.shared_at).localeCompare(String(b.shared_at)))
+    oldestFirst.forEach((item, index) => {
+      labels.set(item.token, `Proof ${index + 1} of ${list.length}`)
+    })
+  }
+  return labels
+}
+
 function responseLabel(response: string | null) {
   if (response === 'approved') return 'Approved'
   if (response === 'changes_requested') return 'Changes requested'
   return response || ''
 }
 
-function ApprovalRow({ item, pending }: { item: Approval; pending: boolean }) {
+function ApprovalRow({ item, pending, position }: { item: Approval; pending: boolean; position?: string }) {
   const approved = item.response === 'approved'
   return (
     <div className="cp-row">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <span className={`cp-led ${pending ? 'is-work' : approved ? 'is-done' : 'is-wait'}`} />
         <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{item.title}</div>
+          <div className="font-medium truncate">
+            {item.title}
+            {position ? (
+              <span className="ml-2 text-xs font-normal" style={{ color: 'var(--anc-muted)' }}>{position}</span>
+            ) : null}
+          </div>
           <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>
             {item.venue_name}
             {/* The shared date always shows on pending rows: one job can have
@@ -87,6 +115,9 @@ function ApprovalsContent() {
     return () => { cancelled = true }
   }, [selectedVenueId, refreshSignal])
 
+  const pendingLabels = positionLabels(pending)
+  const decidedLabels = positionLabels(decided)
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
@@ -108,7 +139,7 @@ function ApprovalsContent() {
               <div className="p-4 text-sm" style={{ color: 'var(--anc-muted)' }}>
                 Nothing needs your review right now.
               </div>
-            ) : pending.map(item => <ApprovalRow key={item.token} item={item} pending />)}
+            ) : pending.map(item => <ApprovalRow key={item.token} item={item} pending position={pendingLabels.get(item.token)} />)}
           </div>
 
           <div className="cp-section-title mb-2">Already decided</div>
@@ -117,7 +148,7 @@ function ApprovalsContent() {
               <div className="p-4 text-sm" style={{ color: 'var(--anc-muted)' }}>
                 Nothing decided yet.
               </div>
-            ) : decided.map(item => <ApprovalRow key={item.token} item={item} pending={false} />)}
+            ) : decided.map(item => <ApprovalRow key={item.token} item={item} pending={false} position={decidedLabels.get(item.token)} />)}
           </div>
         </>
       )}
