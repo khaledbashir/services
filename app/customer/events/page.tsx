@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react'
 import PortalShell, { usePortal } from '../PortalShell'
 
+type ReadinessStep = {
+  key: string
+  label: string
+  complete: boolean
+  completed_at: string | null
+}
+
 type PortalEvent = {
   id: string
   summary: string
@@ -13,6 +20,12 @@ type PortalEvent = {
   status: string
   event_type: string | null
   venue_name: string
+  readiness: {
+    steps: ReadinessStep[]
+    completed: number
+    total: number
+    label: string
+  }
 }
 
 function fmtDay(value: string) {
@@ -25,7 +38,16 @@ function fmtTime(value: string) {
   return new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
+function fmtStepTime(value: string | null) {
+  if (!value) return ''
+  return new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 function EventRow({ event }: { event: PortalEvent }) {
+  const readiness = event.readiness
+  const done = readiness && readiness.completed === readiness.total
+  const started = readiness && readiness.completed > 0
+
   return (
     <div className="cp-row">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -37,7 +59,27 @@ function EventRow({ event }: { event: PortalEvent }) {
             {' · '}
             {fmtTime(event.start_time)}–{fmtTime(event.end_time)}
           </div>
+          {readiness ? (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {readiness.steps.map(step => (
+                <span
+                  key={step.key}
+                  className="inline-flex items-center gap-1 text-xs"
+                  style={{ color: step.complete ? 'var(--cp-green)' : 'var(--anc-muted)' }}
+                >
+                  <span className={`cp-led ${step.complete ? 'is-done' : 'is-wait'}`} />
+                  {step.label}
+                  {step.complete && step.completed_at ? ` ${fmtStepTime(step.completed_at)}` : ''}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
+        {readiness ? (
+          <span className={`cp-chip ${done ? 'p-low' : started ? 'p-medium' : ''}`}>
+            {readiness.label}
+          </span>
+        ) : null}
         <span className="cp-chip">{fmtDay(event.event_date)}</span>
       </div>
     </div>

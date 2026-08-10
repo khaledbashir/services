@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
+import { buildEventReadiness } from '@/lib/event-readiness'
 
 /**
  * The client's event schedule, scoped to the venues they are granted.
@@ -11,10 +12,15 @@ import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
  * Charlie 2026-08-10: "this way client can see if they have an event for that
  * day, and maybe see what they have lined up for the week."
  *
- * Returns today and the following seven days. Internal workflow state
- * (workflow_status, staffing flags, escalation timestamps) is deliberately not
- * exposed — the client sees what is happening at their building, not how ANC
- * is staffing it.
+ * Returns today and the following seven days, each with its game-day progress.
+ * Charlie attached the internal Workflow Progress panel and said "basically it
+ * will show this in the event tab", so the three milestones — checked in, game
+ * ready, post-game — travel with each event.
+ *
+ * What does NOT travel with them: which technician submitted each step, the
+ * submission payload (extra timesheets, auditor), staffing flags and
+ * escalation timestamps. The client sees that their building is ready, not how
+ * ANC staffed it.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +49,23 @@ export async function GET(request: NextRequest) {
       [venueIds, days]
     )
 
+    const eventIds = result.rows.map((row: any) => row.id)
+    const submissions = eventIds.length
+      ? (await query(
+          `SELECT event_id, type, submitted_at
+           FROM workflow_submissions
+           WHERE event_id = ANY($1::uuid[])`,
+          [eventIds]
+        )).rows
+      : []
+
+    const byEvent = new Map<string, any[]>()
+    for (const submission of submissions) {
+      const list = byEvent.get(submission.event_id) || []
+      list.push(submission)
+      byEvent.set(submission.event_id, list)
+    }
+
     const rows = result.rows.map((row: any) => ({
       id: row.id,
       summary: row.summary,
@@ -53,6 +76,7 @@ export async function GET(request: NextRequest) {
       status: row.status,
       event_type: row.event_type,
       venue_name: row.venue_name,
+      readiness: buildEventReadiness(byEvent.get(row.id) || []),
     }))
 
     // "Today" is computed from the same date column the query filtered on, so
