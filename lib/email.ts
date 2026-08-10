@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { getSupportMailboxHandle } from '@/lib/crm-support-email'
+import { ticketUpdateByline } from '@/lib/ticket-update-byline'
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
@@ -198,6 +199,10 @@ export async function sendTicketDistributionEmail(opts: {
   type: 'created' | 'updated' | 'comment'
   detail: string
   resolution?: string
+  /** Who wrote the comment/update. Rendered beside the heading (Charlie 2026-08-10). */
+  authorName?: string | null
+  /** When it was written. Defaults to send time. */
+  occurredAt?: Date | string | null
 }): Promise<{ sent: boolean; recipient_count: number; reason?: 'no_list' | 'send_failed' }> {
   const venueRes = await query(
     `SELECT name, distribution_emails FROM venues WHERE id = $1`,
@@ -217,15 +222,17 @@ export async function sendTicketDistributionEmail(opts: {
     comment: `Case ${caseNum} Comment — ${opts.ticketTitle}`,
   }
 
+  const byline = ticketUpdateByline(opts.authorName, opts.occurredAt)
+
   let bodyContent = ''
   if (opts.type === 'created') {
-    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>New Ticket Created</strong></p>
+    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>New Ticket Created</strong>${byline}</p>
       <p style="margin:0 0 12px;font-size:14px;color:#1e293b;background:#f8fafc;padding:12px;border-radius:6px">${opts.detail}</p>`
   } else if (opts.type === 'comment') {
-    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>New Comment:</strong></p>
+    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>New Comment:</strong>${byline}</p>
       <p style="margin:0 0 12px;font-size:14px;color:#1e293b;background:#f8fafc;padding:12px;border-radius:6px">${opts.detail}</p>`
   } else {
-    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Update:</strong> ${opts.detail}</p>
+    bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Update:</strong>${byline} ${opts.detail}</p>
       ${opts.resolution ? `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Resolution:</strong> ${opts.resolution}</p>` : ''}`
   }
 

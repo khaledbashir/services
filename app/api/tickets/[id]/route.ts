@@ -368,6 +368,7 @@ export async function PATCH(
         type: 'updated',
         detail: `Status updated: ${oldTicket.status} → ${status}`,
         resolution: status === 'closed' ? resolution_notes : undefined,
+        authorName: user?.fullName || user?.email || null,
       }).catch(err => console.error('[email] Ticket update email failed:', err))
     }
 

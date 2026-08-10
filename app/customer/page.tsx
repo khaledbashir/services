@@ -211,9 +211,11 @@ function OverviewContent() {
           </div>
 
           <div className="cp-assist-card mt-6">
-            <div className="text-sm font-semibold mb-1">Need a hand?</div>
+            <div className="text-sm font-semibold mb-1">Need Support</div>
             <p className="text-xs" style={{ color: 'var(--anc-muted)', lineHeight: 1.6 }}>
-              The assistant in the corner can file a request for you, check status, or walk you through quick fixes.
+              Tech Support: <a href="tel:+18888752125" className="font-medium">+1 (888) 875-2125</a>
+              <br />
+              Email: <a href="mailto:Support@anc.com" className="font-medium">Support@anc.com</a>
             </p>
           </div>
         </div>

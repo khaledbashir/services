@@ -226,16 +226,9 @@ export default function ProofSharePage() {
     data.attachments.some((a) => a.response !== undefined)
   const reviewedCount = data.attachments.filter((a) => a.response).length
 
-  const formatAttachmentMeta = (attachment: Attachment) => {
-    const uploaded = attachment.uploadedAt
-      ? new Date(attachment.uploadedAt).toLocaleDateString()
-      : ''
-    const viewed = attachment.lastViewedAt
-      ? `${Math.max(1, Math.floor((Date.now() - new Date(attachment.lastViewedAt).getTime()) / 3600000))}h ago`
-      : 'not viewed yet'
-    const viewCount = attachment.viewCount || 0
-    return `Uploaded ${uploaded} · ${viewCount} view${viewCount === 1 ? '' : 's'} · Last viewed ${viewed}`
-  }
+  // Upload date, view count, and last-viewed are internal review telemetry.
+  // The client-facing proof page never surfaces them (Charlie 2026-08-10) —
+  // the same fields stay visible to staff on the internal ticket view.
 
   return (
     <Shell>
@@ -362,7 +355,6 @@ export default function ProofSharePage() {
               </span>
               <span className="text-xs text-gray-500">{activeAtt.name}</span>
             </div>
-            <div className="mt-2 text-xs text-gray-400">{formatAttachmentMeta(activeAtt)}</div>
           </div>
         )}
 

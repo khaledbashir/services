@@ -199,6 +199,7 @@ export async function postTicketComment({
           ticketNumber: t.ticket_number,
           type: 'comment',
           detail: body,
+          authorName: actor.fullName || 'ANC Support',
         })
       } catch (err) {
         console.error('[email] Comment email failed:', err)
