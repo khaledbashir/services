@@ -51,10 +51,14 @@ function AccountContent() {
   }
 
   return (
-    <div className="cp-root">
-      <div className="cp-hero">
-        <h1 className="cp-hero-title">Account settings</h1>
-        <p className="cp-hero-sub">Update the name shown on your account and change your password.</p>
+    <div className="mx-auto max-w-5xl">
+      {/* Matches every other portal tab: cp-hero lays its subtitle out beside
+          the title, which pushed this description to the far right of the page. */}
+      <div className="mb-6">
+        <h1 className="cp-page-title">Account settings</h1>
+        <p className="mt-1 text-sm" style={{ color: 'var(--anc-muted)' }}>
+          Update the name shown on your account and change your password.
+        </p>
       </div>
 
       <div className="cp-panel" style={{ padding: 24, maxWidth: 560 }}>
