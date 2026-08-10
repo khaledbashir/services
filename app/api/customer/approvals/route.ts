@@ -35,6 +35,11 @@ export async function GET(request: NextRequest) {
        JOIN venues v ON v.id = d.venue_id
        WHERE d.venue_id = ANY($1::uuid[])
          AND d.deleted_at IS NULL
+         -- A finished job must not sit here asking to be reviewed. Without
+         -- this, a request showing "Complete" on Design Requests appeared as
+         -- "waiting on you" here, because its proof was never formally
+         -- answered. Decided proofs still show under Already decided.
+         AND (ps.client_response IS NOT NULL OR LOWER(d.status) NOT IN ('done', 'approved'))
        ORDER BY ps.created_at DESC
        LIMIT 200`,
       [venueIds]
