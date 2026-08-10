@@ -37,8 +37,11 @@ function ApprovalRow({ item, pending }: { item: Approval; pending: boolean }) {
           <div className="font-medium truncate">{item.title}</div>
           <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>
             {item.venue_name}
+            {/* The shared date always shows on pending rows: one job can have
+                more than one proof package out at once, and without it two
+                rows for the same job are indistinguishable. */}
             {pending
-              ? item.due_date ? ` · Due ${fmtDate(item.due_date)}` : ` · Shared ${fmtDate(item.shared_at)}`
+              ? `${item.due_date ? ` · Due ${fmtDate(item.due_date)}` : ''} · Shared ${fmtDate(item.shared_at)}`
               : ` · ${responseLabel(item.response)} ${fmtDate(item.responded_at)}`}
           </div>
           {!pending && item.note ? (
