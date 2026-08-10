@@ -56,6 +56,11 @@ const NAV = [
     icon: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6" /><path d="M9 17h6" /></>,
   },
   {
+    key: 'events' as const,
+    href: '/customer/events', label: 'Events', exact: false,
+    icon: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></>,
+  },
+  {
     key: 'displays' as const,
     href: '/customer/displays', label: 'Service Health', exact: false,
     icon: <><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>,
@@ -64,6 +69,11 @@ const NAV = [
     key: 'diagnosis' as const,
     href: '/customer/diagnosis', label: 'AI Diagnosis', exact: false,
     icon: <><path d="M12 2v4" /><path d="M12 18v4" /><path d="m4.93 4.93 2.83 2.83" /><path d="m16.24 16.24 2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="m4.93 19.07 2.83-2.83" /><path d="m16.24 7.76 2.83-2.83" /><circle cx="12" cy="12" r="3" /></>,
+  },
+  {
+    key: 'designs' as const,
+    href: '/customer/designs', label: 'Design Requests', exact: false,
+    icon: <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>,
   },
   {
     key: 'documents' as const,
@@ -84,6 +94,11 @@ const NAV = [
     key: 'orientation' as const,
     href: '/customer/orientation', label: 'Orientation', exact: false,
     icon: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></>,
+  },
+  {
+    key: 'assistant' as const,
+    href: '/customer/assistant', label: 'ANC Assistant', exact: false,
+    icon: <><path d="M12 8V4H8" /><rect x="4" y="8" width="16" height="12" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></>,
   },
 ]
 
