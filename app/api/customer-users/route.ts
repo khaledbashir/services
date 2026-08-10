@@ -11,6 +11,10 @@ import {
   DEFAULT_CUSTOMER_PORTAL_TABS,
   normalizeCustomerPortalTabs,
 } from '@/lib/customer-portal-tabs'
+import {
+  selectPortalAccessClient,
+  type PortalVenueClientLink,
+} from '@/lib/portal-user-access'
 
 interface PortalContactInput {
   full_name: string
@@ -86,23 +90,27 @@ async function validateActiveVenues(client: PoolClient, venueIds: string[]) {
   }
 }
 
-async function resolveExistingClientForVenues(client: PoolClient, venueIds: string[]) {
+async function resolveExistingClientForVenues(
+  client: PoolClient,
+  venueIds: string[],
+  preferredClientId?: string | null
+) {
   await validateActiveVenues(client, venueIds)
 
   const clientResult = await client.query(
-    `SELECT c.id, c.name
-     FROM clients c
-     JOIN client_venues cv ON cv.client_id = c.id
+    `SELECT cv.venue_id, c.id AS client_id, c.name AS client_name, cv.relation_type
+     FROM client_venues cv
+     JOIN clients c ON c.id = cv.client_id
      WHERE cv.venue_id = ANY($1::uuid[])
        AND COALESCE(c.is_active, true) = true
-     GROUP BY c.id, c.name
-     HAVING COUNT(DISTINCT cv.venue_id) = $2
-     ORDER BY c.name`,
-    [venueIds, venueIds.length]
+     ORDER BY cv.venue_id, c.name, c.id`,
+    [venueIds]
   )
-  if (clientResult.rows.length === 0) throw new Error('CLIENT_NOT_FOUND')
-  if (clientResult.rows.length > 1) throw new Error('CLIENT_AMBIGUOUS')
-  return clientResult.rows[0] as { id: string; name: string }
+  return selectPortalAccessClient(
+    venueIds,
+    clientResult.rows as PortalVenueClientLink[],
+    preferredClientId
+  )
 }
 
 async function replaceVenueGrants(client: PoolClient, portalUserId: string, venueIds: string[]) {
@@ -125,7 +133,6 @@ function requestError(error: unknown): NextResponse | null {
     VENUE_REQUIRED: ['Select at least one venue.', 400],
     VENUE_INVALID: ['One or more selected venues are missing or deactivated.', 400],
     CLIENT_NOT_FOUND: ['The selected venues are not attached to an existing active client.', 400],
-    CLIENT_AMBIGUOUS: ['The selected venues match more than one client. Correct the venue-to-client links before creating access.', 409],
   }
   const mapped = errors[error.message]
   return mapped ? NextResponse.json({ error: mapped[0] }, { status: mapped[1] }) : null
@@ -388,7 +395,7 @@ export async function PATCH(request: NextRequest) {
     try {
       await client.query('BEGIN')
       const currentUser = await client.query(
-        'SELECT id, email FROM portal_users WHERE id = $1 FOR UPDATE',
+        'SELECT id, email, client_id FROM portal_users WHERE id = $1 FOR UPDATE',
         [id]
       )
       if (currentUser.rows.length === 0) {
@@ -400,7 +407,13 @@ export async function PATCH(request: NextRequest) {
         await client.query('ROLLBACK')
         return NextResponse.json({ error: 'Each customer email may only be added once.' }, { status: 400 })
       }
-      if (venueIds) resolvedClient = await resolveExistingClientForVenues(client, venueIds)
+      if (venueIds) {
+        resolvedClient = await resolveExistingClientForVenues(
+          client,
+          venueIds,
+          currentUser.rows[0].client_id
+        )
+      }
 
       const sets = ['updated_at = NOW()']
       const params: any[] = [id]
