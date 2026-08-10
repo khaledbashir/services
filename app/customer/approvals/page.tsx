@@ -1,57 +1,123 @@
 'use client'
 
-import { useState } from 'react'
-import PortalShell from '../PortalShell'
+import { useEffect, useState } from 'react'
+import PortalShell, { usePortal } from '../PortalShell'
 
 type Approval = {
-  id: string
+  token: string
   title: string
-  venue: string
-  status: 'needs_review' | 'approved' | 'changes'
-  detail: string
+  venue_name: string
+  due_date: string | null
+  shared_at: string
+  message: string | null
+  response: string | null
+  responded_at: string | null
+  note: string | null
+  review_url: string
 }
 
-const INITIAL: Approval[] = [
-  { id: 'proof-main-concourse', title: 'Main concourse proof package', venue: 'Primary venue', status: 'needs_review', detail: 'Review the latest proof package and either approve it or request changes.' },
-  { id: 'ribbon-template', title: 'Ribbon board creative template', venue: 'Primary venue', status: 'approved', detail: 'Approved template currently available in documents.' },
-  { id: 'sponsor-rotation', title: 'Sponsor rotation scope', venue: 'Secondary venue', status: 'changes', detail: 'Client requested a revised rotation sequence before approval.' },
-]
+function fmtDate(value: string | null) {
+  if (!value) return null
+  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function responseLabel(response: string | null) {
+  if (response === 'approved') return 'Approved'
+  if (response === 'changes_requested') return 'Changes requested'
+  return response || ''
+}
+
+function ApprovalRow({ item, pending }: { item: Approval; pending: boolean }) {
+  const approved = item.response === 'approved'
+  return (
+    <div className="cp-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <span className={`cp-led ${pending ? 'is-work' : approved ? 'is-done' : 'is-wait'}`} />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{item.title}</div>
+          <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>
+            {item.venue_name}
+            {pending
+              ? item.due_date ? ` · Due ${fmtDate(item.due_date)}` : ` · Shared ${fmtDate(item.shared_at)}`
+              : ` · ${responseLabel(item.response)} ${fmtDate(item.responded_at)}`}
+          </div>
+          {!pending && item.note ? (
+            <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>“{item.note}”</div>
+          ) : null}
+        </div>
+        {pending ? <span className="cp-chip p-high">Needs your review</span> : (
+          <span className={`cp-chip ${approved ? 'p-low' : 'p-medium'}`}>{responseLabel(item.response)}</span>
+        )}
+        <a href={item.review_url} target="_blank" rel="noreferrer" className={pending ? 'cp-btn' : 'cp-btn-ghost'}>
+          {pending ? 'Review' : 'View'}
+        </a>
+      </div>
+    </div>
+  )
+}
 
 function ApprovalsContent() {
-  const [items, setItems] = useState(INITIAL)
+  const { selectedVenueId, refreshSignal } = usePortal()
+  const [pending, setPending] = useState<Approval[]>([])
+  const [decided, setDecided] = useState<Approval[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  function update(id: string, status: Approval['status']) {
-    setItems(current => current.map(item => item.id === id ? { ...item, status } : item))
-  }
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    const qs = selectedVenueId ? `?venue=${encodeURIComponent(selectedVenueId)}` : ''
+    fetch(`/api/customer/approvals${qs}`)
+      .then(async res => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data?.error || 'Could not load your approvals.')
+        return data
+      })
+      .then(data => {
+        if (cancelled) return
+        setPending(data.pending || [])
+        setDecided(data.decided || [])
+      })
+      .catch(err => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedVenueId, refreshSignal])
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <h1 className="cp-page-title">Approvals</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--anc-muted)' }}>
-          Client-facing review queue for proof files, scope decisions, and change requests.
+          Proofs shared with you for review.
+          {pending.length > 0 ? ` ${pending.length} waiting on you.` : ''}
         </p>
       </div>
-      <div className="cp-panel overflow-hidden">
-        {items.map(item => (
-          <div key={item.id} className="cp-row">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <span className={`cp-led ${item.status === 'approved' ? 'is-done' : item.status === 'changes' ? 'is-wait' : 'is-work'}`} />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{item.title}</div>
-                <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>{item.venue} · {item.detail}</div>
+
+      {error ? <div className="cp-error">{error}</div> : null}
+      {loading ? (
+        <div className="cp-panel p-6 text-sm" style={{ color: 'var(--anc-muted)' }}>Loading your approvals…</div>
+      ) : (
+        <>
+          <div className="cp-section-title mb-2">Waiting on you</div>
+          <div className="cp-panel overflow-hidden mb-6">
+            {pending.length === 0 ? (
+              <div className="p-4 text-sm" style={{ color: 'var(--anc-muted)' }}>
+                Nothing needs your review right now.
               </div>
-              <span className={`cp-chip ${item.status === 'approved' ? 'p-low' : item.status === 'changes' ? 'p-high' : 'p-medium'}`}>
-                {item.status.replace(/_/g, ' ')}
-              </span>
-              <div className="flex gap-2">
-                <button type="button" className="cp-btn-ghost" onClick={() => update(item.id, 'changes')}>Request changes</button>
-                <button type="button" className="cp-btn" onClick={() => update(item.id, 'approved')}>Approve</button>
-              </div>
-            </div>
+            ) : pending.map(item => <ApprovalRow key={item.token} item={item} pending />)}
           </div>
-        ))}
-      </div>
+
+          <div className="cp-section-title mb-2">Already decided</div>
+          <div className="cp-panel overflow-hidden">
+            {decided.length === 0 ? (
+              <div className="p-4 text-sm" style={{ color: 'var(--anc-muted)' }}>
+                Nothing decided yet.
+              </div>
+            ) : decided.map(item => <ApprovalRow key={item.token} item={item} pending={false} />)}
+          </div>
+        </>
+      )}
     </div>
   )
 }
