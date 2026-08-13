@@ -168,6 +168,131 @@ export function summariseReview(rows: DigestTicket[]): ReviewSummary {
   }
 }
 
+/**
+ * The shared SELECT. `latest_*` comes from the newest surviving note on the
+ * ticket; the roster line keeps the primary owner first so "assignee" means
+ * the same thing here as it does on the ticket itself.
+ */
+export const TICKET_DIGEST_SELECT = `
+  SELECT t.id,
+         t.ticket_number,
+         t.title,
+         t.status,
+         t.priority,
+         t.description,
+         t.created_at,
+         t.resolved_at,
+         t.updated_at,
+         v.name                                        AS venue_name,
+         s.full_name                                   AS primary_assignee,
+         roster.names                                  AS roster_names,
+         c.body                                        AS latest_body,
+         c.created_at                                  AS latest_at,
+         COALESCE(NULLIF(TRIM(c.author_name), ''), ca.full_name) AS latest_author,
+         TO_CHAR(t.created_at   AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') AS created_date_et,
+         TO_CHAR(t.resolved_at  AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') AS closed_date_et,
+         TO_CHAR(c.created_at   AT TIME ZONE 'America/New_York', 'Mon DD, YYYY') AS latest_date_et
+    FROM tickets t
+    LEFT JOIN venues v ON v.id = t.venue_id
+    LEFT JOIN staff  s ON s.id = t.assigned_to
+    LEFT JOIN LATERAL (
+      SELECT c2.body, c2.created_at, c2.author_name, c2.author_id
+        FROM ticket_comments c2
+       WHERE c2.ticket_id = t.id AND c2.deleted_at IS NULL
+       ORDER BY c2.created_at DESC
+       LIMIT 1
+    ) c ON true
+    LEFT JOIN staff ca ON ca.id = c.author_id
+    LEFT JOIN LATERAL (
+      SELECT ARRAY_AGG(s2.full_name ORDER BY (s2.id = t.assigned_to) DESC, s2.full_name) AS names
+        FROM ticket_assignees ta
+        JOIN staff s2 ON s2.id = ta.staff_id
+       WHERE ta.ticket_id = t.id
+    ) roster ON true
+`
+
+/** The raw shape the digest SELECT returns, before it becomes a DigestTicket. */
+export interface RawTicketRow {
+  id: string
+  ticket_number: number
+  title: string
+  status: string
+  priority: string
+  description: string | null
+  created_at: string
+  resolved_at: string | null
+  venue_name: string | null
+  primary_assignee: string | null
+  roster_names: string[] | null
+  latest_body: string | null
+  latest_at: string | null
+  latest_author: string | null
+  created_date_et: string | null
+  closed_date_et: string | null
+  latest_date_et: string | null
+}
+
+/**
+ * Who the ticket belongs to. The primary owner leads; extra techs on the roster
+ * are counted rather than listed so the column stays one line wide.
+ */
+export function assigneeLabel(row: RawTicketRow): string {
+  const roster = (row.roster_names || []).filter(Boolean)
+  const primary = row.primary_assignee || roster[0] || null
+  if (!primary) return UNASSIGNED_ASSIGNEE
+  const others = roster.filter((n) => n !== primary).length
+  return others > 0 ? `${primary} +${others}` : primary
+}
+
+/**
+ * Row → digest ticket. Lives here, beside the renderers and away from the
+ * database client, so the scheduled send, the in-app view and any one-off run
+ * are all reading the same mapping rather than three copies of it.
+ */
+export function mapTicketRow(row: RawTicketRow, now: Date, baseUrl: string): DigestTicket {
+  const hasNote = Boolean(row.latest_at)
+  // "Days since last update" counts from the newest note, because that is the
+  // same thing the "Latest update" column shows. Falling back to updated_at
+  // would let a silent status flip report a ticket as fresh while the note
+  // beside it is a month old.
+  const anchorIso = row.latest_at || row.created_at
+  const noteText = hasNote ? summariseUpdate(row.latest_body) : ''
+  const openingText = summariseUpdate(row.description)
+
+  let latestUpdate = noteText
+  let latestUpdateSource: DigestTicket['latestUpdateSource'] = 'note'
+  if (!noteText) {
+    if (openingText) {
+      latestUpdate = openingText
+      latestUpdateSource = 'opened'
+    } else {
+      latestUpdate = NO_UPDATE_TEXT
+      latestUpdateSource = 'none'
+    }
+  }
+
+  const anchorDate = anchorIso ? new Date(anchorIso) : null
+
+  return {
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    title: row.title || '(no title)',
+    status: row.status,
+    priority: row.priority,
+    venue: row.venue_name || UNKNOWN_VENUE,
+    assignee: assigneeLabel(row),
+    lastUpdateAt: anchorDate && !Number.isNaN(anchorDate.getTime()) ? anchorDate.toISOString() : null,
+    lastUpdateDate: (hasNote ? row.latest_date_et : row.created_date_et) || '',
+    daysSinceUpdate: daysSince(anchorIso, now),
+    latestUpdate,
+    latestUpdateAuthor: hasNote ? row.latest_author || '' : '',
+    latestUpdateSource,
+    createdDate: row.created_date_et || '',
+    closedDate: row.closed_date_et || undefined,
+    url: `${baseUrl.replace(/\/+$/, '')}/tickets/${row.id}`,
+  }
+}
+
 export function escapeHtml(v: unknown): string {
   return String(v ?? '')
     .replace(/&/g, '&amp;')
@@ -429,4 +554,12 @@ export function renderOpenReviewSlack(
     text: `Open Ticket Review — ${sorted.length} open tickets, ${s.stale7} quiet for 7+ days.`,
     blocks,
   }
+}
+
+/** Subject lines — the report names people actually recognise. */
+export const REPORT_SUBJECTS: Record<DigestReport, (count: number, dateLabel: string) => string> = {
+  'open-review': (count, d) => `Open Ticket Review — ${count} open ticket${count === 1 ? '' : 's'} — ${d}`,
+  'new-24h': (count, d) => `New Tickets (last 24 hours) — ${count} — ${d}`,
+  'closed-24h': (count, d) => `Tickets Closed (last 24 hours) — ${count} — ${d}`,
+  escalated: (count, d) => `Escalated Tickets — ${count} open — ${d}`,
 }
