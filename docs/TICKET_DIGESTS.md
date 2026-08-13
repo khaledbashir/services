@@ -60,9 +60,15 @@ The host cron hits the route **every hour** and the route itself checks whether
 it is 8:00 AM in New York:
 
 ```
-0 * * * * curl -sk -H "Authorization: Bearer $CRON_SECRET" \
+0 * * * * curl -sk -m 120 -H "Authorization: Bearer $CRON_SECRET" \
+  -o /var/log/anc-ticket-digests.log \
   https://services.ancsports.net/api/cron/ticket-digests >> /var/log/anc-ticket-digests.log 2>&1
 ```
+
+This route is the live mechanism. `scripts/ticket-digest-cron.sh` is the same
+schedule implemented on the host — it exists as a manual fallback for when the
+app is mid-deploy or the route is unavailable. Run exactly one of the two;
+they stamp different stores, so both active means both send.
 
 A fixed UTC crontab line would drift to 7 AM or 9 AM twice a year at the DST
 switches — a quiet failure nobody reports. Sends are stamped per report per
@@ -109,3 +115,18 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 Tests: `npm run test:ticket-digests` (18, covering staleness maths, email
 boilerplate stripping, ordering, the Slack chunking and cap disclosure).
+
+## Do not test against support@anc.com
+
+`support@anc.com` auto-opens a ticket for every message it receives. Sending
+the digest there to check delivery creates one junk ticket per report — which
+then appears in the next Open Ticket Review. Point `TICKET_DIGEST_TEST_TO` (or
+`?recipients=`) at a mailbox that does not feed the ticket intake.
+
+To verify a real delivery instead of a `202 accepted`, read the recipient's
+mailbox through the Microsoft Graph app credentials already on the service:
+
+```bash
+curl -H "Authorization: Bearer $GRAPH_TOKEN" \
+  "https://graph.microsoft.com/v1.0/users/joeo@anc.com/messages?\$top=3&\$select=subject,receivedDateTime"
+```
