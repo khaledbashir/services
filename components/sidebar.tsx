@@ -233,6 +233,7 @@ export function Sidebar() {
       role: 'manager',
       links: [
         { href: '/tickets', label: 'Tickets' },
+        { href: '/tickets/open-review', label: 'Open Ticket Review' },
         { href: '/kb', label: 'Knowledge Base' },
         { href: '/reports', label: 'Reports' },
       ],
@@ -284,6 +285,7 @@ export function Sidebar() {
       icon: <Icon>{IC.service}</Icon>,
       role: 'technician',
       links: [
+        { href: '/voice-assistant', label: 'Voice Assistant' },
         { href: '/operations', label: 'Operations Workspace' },
         { href: '/opening-checklists', label: 'Stadium Prep', role: 'manager' },
       ],
