@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
        LEFT JOIN venues v ON v.id = e.venue_id
        LEFT JOIN event_assignments ea ON ea.event_id = e.id
        LEFT JOIN staff s ON s.id = ea.staff_id AND s.is_active = true
-       WHERE DATE(e.event_date AT TIME ZONE 'America/New_York') = $1
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND DATE(e.event_date AT TIME ZONE 'America/New_York') = $1
        GROUP BY e.id, e.summary, e.event_date, v.name
        ORDER BY e.event_date ASC`,
       [today]

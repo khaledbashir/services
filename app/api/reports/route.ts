@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // Total events in period
     const totalResult = await query(
-      `SELECT COUNT(*) as total FROM events e WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+      `SELECT COUNT(*) as total FROM events e WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
       params
     )
 
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const coveredResult = await query(
       `SELECT COUNT(DISTINCT e.id) as covered FROM events e
        JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
       params
     )
 
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
         COUNT(*) as total,
         COUNT(CASE WHEN e.workflow_status = 'post_game_submitted' THEN 1 END) as completed
        FROM events e
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
          AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)`,
       params
     )
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       `SELECT COALESCE(SUM(ea.estimated_hours), 0) as total_hours, COUNT(DISTINCT ea.staff_id) as unique_staff
        FROM event_assignments ea
        JOIN events e ON ea.event_id = e.id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}`,
       params
     )
 
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
        JOIN venues v ON e.venue_id = v.id
        JOIN markets m ON v.market_id = m.id
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY m.name
        ORDER BY events DESC`,
       params
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
               COALESCE(SUM(ea.estimated_hours), 0) as hours
        FROM events e
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY e.league
        ORDER BY events DESC`,
       params
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
        FROM event_assignments ea
        JOIN staff s ON ea.staff_id = s.id
        JOIN events e ON ea.event_id = e.id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY s.id, s.full_name, s.role
        ORDER BY hours DESC
        LIMIT 10`,
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
        JOIN venues v ON e.venue_id = v.id
        JOIN markets m ON v.market_id = m.id
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
-       WHERE e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved' AND e.event_date >= ${p1} AND e.event_date <= ${p2} ${venueFilter}
        GROUP BY v.id, v.name, m.name
        ORDER BY events DESC
        LIMIT 10`,

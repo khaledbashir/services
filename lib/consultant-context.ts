@@ -83,7 +83,8 @@ export async function buildConsultantContext(_user: UserContext): Promise<string
      FROM events e
      LEFT JOIN venues v ON v.id = e.venue_id
      LEFT JOIN event_assignments ea ON ea.event_id = e.id
-     WHERE e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '7 days'
+     WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+       AND e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + INTERVAL '7 days'
      GROUP BY e.id, v.name
      ORDER BY e.event_date, e.start_time NULLS LAST
      LIMIT 25`
@@ -98,7 +99,8 @@ export async function buildConsultantContext(_user: UserContext): Promise<string
        END as horizon,
        COUNT(*)::int as cnt
      FROM events
-     WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + INTERVAL '90 days'
+     WHERE COALESCE(approval_status, 'approved') = 'approved'
+       AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + INTERVAL '90 days'
      GROUP BY 1`
   ))
 

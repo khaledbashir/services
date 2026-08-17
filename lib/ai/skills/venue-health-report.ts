@@ -124,7 +124,8 @@ const skill: Skill = {
                 (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id)::int AS assigned_count
          FROM events e
          LEFT JOIN venues v ON v.id = e.venue_id
-         WHERE e.venue_id = $1
+         WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+           AND e.venue_id = $1
            AND e.event_date >= CURRENT_DATE
            AND e.event_date < CURRENT_DATE + ($2::int * INTERVAL '1 day')
          ORDER BY e.start_time ASC

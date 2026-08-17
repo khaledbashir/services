@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
 import { importDiscoveryEvents, type DiscoveryCandidate } from '@/lib/event-discovery'
+import { notifyLeadOfSuggestions } from '@/lib/event-approval-actions'
 import { checkEventSanity } from '@/lib/event-sanity'
 import { parseVenueFeed, type FeedEvent, type FeedType } from '@/lib/feed-parsers'
 import { buildAutomationSelect, withComputedAutomation } from '@/lib/venue-automation'
@@ -336,7 +337,25 @@ export async function syncVenueFeed(
     const autoImportable = discovered.filter((event) => !event.duplicate && event.auto_importable)
     const imported = autoImportable.length > 0
       ? await importDiscoveryEvents({ events: autoImportable, status: 'imported' })
-      : { imported: 0, skipped: 0, eventIds: [], byVenue: {} as Record<string, number> }
+      : { imported: 0, skipped: 0, suggested: 0, eventIds: [], byVenue: {} as Record<string, number> }
+
+    // Joe 2026-08-17: a non-sporting event lands as a suggestion, and the
+    // venue lead is told once per sync rather than left to find it. Failing to
+    // notify must not fail the sync — the rows are already queued either way.
+    if (imported.suggested > 0 && imported.eventIds.length > 0) {
+      try {
+        const suggestedRows = await query(
+          `SELECT id, summary, TO_CHAR(event_date, 'YYYY-MM-DD') AS event_date
+           FROM events
+           WHERE id = ANY($1::uuid[]) AND approval_status = 'suggested'
+           ORDER BY event_date`,
+          [imported.eventIds],
+        )
+        await notifyLeadOfSuggestions(venue.id, suggestedRows.rows)
+      } catch (notifyErr) {
+        console.error('[feed-sync] failed to notify venue lead of suggestions:', notifyErr)
+      }
+    }
 
     const status = discovered.length === 0
       ? 'success'

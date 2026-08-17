@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
             FROM events e
             LEFT JOIN venues v ON v.id = e.venue_id
             LEFT JOIN clients c ON c.id = e.client_id
+            WHERE COALESCE(e.approval_status, 'approved') = 'approved'
             ORDER BY ts DESC NULLS LAST LIMIT 8)
            UNION ALL
            (SELECT c.id::text, 'client',
@@ -165,7 +166,8 @@ export async function GET(request: NextRequest) {
          FROM events e
          LEFT JOIN venues v ON v.id = e.venue_id
          LEFT JOIN clients c ON c.id = e.client_id
-         WHERE COALESCE(e.summary, '') ILIKE $1 ESCAPE '\\'
+         WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+           AND COALESCE(e.summary, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(v.name, '') ILIKE $1 ESCAPE '\\'
             OR COALESCE(c.name, '') ILIKE $1 ESCAPE '\\'
             OR ${normMatch(`COALESCE(e.summary, '')`)}

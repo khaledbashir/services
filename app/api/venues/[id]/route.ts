@@ -114,7 +114,8 @@ export async function GET(
       FROM events e
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
-      WHERE e.venue_id = $1 
+      WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+        AND e.venue_id = $1
         AND e.event_date >= $2
         AND e.event_date <= $3
         AND COALESCE(LOWER(e.status), 'scheduled') NOT IN ('cancelled', 'canceled')

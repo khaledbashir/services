@@ -58,9 +58,9 @@ export async function buildMorningCommandCenter(args: Record<string, unknown> = 
   const [stats, todaysEvents, staffingGaps, ticketRisks, venueRisks, walkthroughIssues, lowStock] = await Promise.all([
     query(
       `SELECT
-        (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE)::int AS events_today,
-        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day'))::int AS events_horizon,
-        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day')
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date = CURRENT_DATE)::int AS events_today,
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day'))::int AS events_horizon,
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day')
            AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id))::int AS unassigned_events_horizon,
         (SELECT COUNT(*) FROM tickets WHERE COALESCE(LOWER(status),'open') NOT IN ('closed','resolved','done','cancelled'))::int AS open_tickets,
         (SELECT COUNT(*) FROM tickets WHERE COALESCE(LOWER(status),'open') NOT IN ('closed','resolved','done','cancelled')
@@ -84,7 +84,8 @@ export async function buildMorningCommandCenter(args: Record<string, unknown> = 
               (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id)::int AS assigned_count
        FROM events e
        LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.event_date = CURRENT_DATE
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = CURRENT_DATE
        ORDER BY e.start_time ASC
        LIMIT $1`,
       [maxItems]
@@ -96,7 +97,8 @@ export async function buildMorningCommandCenter(args: Record<string, unknown> = 
               (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id)::int AS assigned_count
        FROM events e
        LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.event_date >= CURRENT_DATE
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date >= CURRENT_DATE
          AND e.event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day')
          AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)
        ORDER BY e.start_time ASC
@@ -134,7 +136,8 @@ export async function buildMorningCommandCenter(args: Record<string, unknown> = 
          SELECT e.venue_id,
                 COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id))::int AS unassigned_event_count
          FROM events e
-         WHERE e.event_date >= CURRENT_DATE
+         WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date >= CURRENT_DATE
            AND e.event_date < CURRENT_DATE + ($1::int * INTERVAL '1 day')
          GROUP BY e.venue_id
        ),

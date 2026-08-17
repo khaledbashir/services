@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { sendSlackMessage } from '@/lib/slack'
 
 // Joe's 2026-04-22 ask: daily event digest into a private channel — 9am ET
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN staff s ON s.id = ea.staff_id
        LEFT JOIN workflow_submissions ws ON ws.event_id = e.id
        WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
+         AND ${approvedOnly('e')}
        GROUP BY e.id, v.name, v.requires_assignment
        ORDER BY e.start_time ASC`
     )

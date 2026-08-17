@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { sendSlackMessage } from '@/lib/slack'
 
 // Scheduler: run hourly. Finds events crossing the ~24h-out mark
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN venues v ON e.venue_id = v.id
        LEFT JOIN event_assignments ea ON ea.event_id = e.id
        WHERE e.start_time ${windowSql}
+         AND ${approvedOnly('e')}
        GROUP BY e.id, v.name, v.timezone, v.requires_assignment
        HAVING COUNT(ea.id) = 0
        ORDER BY e.start_time ASC

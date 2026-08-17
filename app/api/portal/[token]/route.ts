@@ -32,9 +32,17 @@ export async function GET(
               TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
               TO_CHAR(e.start_time AT TIME ZONE 'America/New_York', 'HH12:MI AM') as start_time,
               e.workflow_status,
-              (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id) as staff_count
+              (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id) as staff_count,
+              -- Joe 2026-08-17: the client should see WHO is on their event,
+              -- not just how many. Names only — no internal ids or contact
+              -- details cross the portal boundary.
+              (SELECT STRING_AGG(s.full_name, ', ' ORDER BY s.full_name)
+                 FROM event_assignments ea
+                 JOIN staff s ON s.id = ea.staff_id
+                WHERE ea.event_id = e.id) as assigned_staff
        FROM events e
        WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= $3
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY e.event_date, e.start_time`,
       [venue.id, today, thirtyDays]
     )
@@ -47,6 +55,7 @@ export async function GET(
               e.workflow_status
        FROM events e
        WHERE e.venue_id = $1 AND e.event_date < $2 AND e.event_date >= $2::date - 30
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY e.event_date DESC, e.start_time DESC
        LIMIT 30`,
       [venue.id, today]
@@ -59,6 +68,7 @@ export async function GET(
        FROM workflow_submissions ws
        JOIN events e ON ws.event_id = e.id
        WHERE e.venue_id = $1 AND e.event_date >= $2::date - 30
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY ws.submitted_at`,
       [venue.id, today]
     )
@@ -108,7 +118,8 @@ export async function GET(
         COUNT(CASE WHEN e.event_date < $2 AND e.event_date >= $2::date - 30 THEN 1 END) as past_month_events,
         COUNT(CASE WHEN e.event_date < $2 AND e.event_date >= $2::date - 30 AND e.workflow_status = 'post_game_submitted' THEN 1 END) as completed_events
        FROM events e
-       WHERE e.venue_id = $1`,
+       WHERE e.venue_id = $1
+         AND COALESCE(e.approval_status, 'approved') = 'approved'`,
       [venue.id, today, thirtyDays]
     )
 
@@ -133,6 +144,7 @@ export async function GET(
               e.workflow_status
        FROM events e
        WHERE e.venue_id = $1 AND e.event_date = $2
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY e.start_time`,
       [venue.id, todayStr]
     )
@@ -144,6 +156,7 @@ export async function GET(
        JOIN event_assignments ea ON s.id = ea.staff_id
        JOIN events e ON ea.event_id = e.id
        WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= $3
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY s.full_name`,
       [venue.id, todayStr, thirtyDays]
     )
@@ -156,6 +169,7 @@ export async function GET(
        JOIN events e ON ws.event_id = e.id
        LEFT JOIN staff s ON ws.staff_id = s.id
        WHERE e.venue_id = $1 AND e.event_date = $2
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
        ORDER BY ws.submitted_at`,
       [venue.id, todayStr]
     )

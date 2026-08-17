@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
     const today = todayInOperationsTimeZone()
 
     const todaysEventsResult = await query(
-      `SELECT COUNT(*) as count FROM events e WHERE e.event_date = $1 ${vf.clause} ${af.clause}`,
+      `SELECT COUNT(*) as count FROM events e
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1 ${vf.clause} ${af.clause}`,
       [today, ...vf.params, ...af.params]
     )
 
@@ -39,7 +41,8 @@ export async function GET(request: NextRequest) {
 
     const pendingWorkflowsResult = await query(
       `SELECT COUNT(*) as count FROM events e
-       WHERE e.event_date = $1 AND e.workflow_status = 'pending' ${vf.clause} ${af.clause}`,
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1 AND e.workflow_status = 'pending' ${vf.clause} ${af.clause}`,
       [today, ...vf.params, ...af.params]
     )
 

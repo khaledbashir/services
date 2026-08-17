@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { sendSlackMessage } from '@/lib/slack'
 
 function formatDateLabel(date: Date) {
@@ -86,6 +87,7 @@ export async function GET() {
       LEFT JOIN event_assignments ea ON ea.event_id = e.id
       LEFT JOIN staff s ON s.id = ea.staff_id
       WHERE e.event_date = $1
+        AND ${approvedOnly('e')}
       GROUP BY
         e.id,
         v.name,

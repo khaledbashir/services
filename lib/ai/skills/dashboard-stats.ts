@@ -17,10 +17,10 @@ const skill: Skill = {
         (SELECT COUNT(*) FROM clients WHERE COALESCE(is_active,true)=true) AS active_clients,
         (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true) AS active_staff,
         (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true AND role='technician') AS active_technicians,
-        (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE) AS events_today,
-        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7) AS events_this_week,
-        (SELECT COUNT(*) FROM events WHERE event_date >= DATE_TRUNC('month', CURRENT_DATE) AND event_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month') AS events_this_month,
-        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date = CURRENT_DATE) AS events_today,
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7) AS events_this_week,
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= DATE_TRUNC('month', CURRENT_DATE) AND event_date < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month') AS events_this_month,
+        (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
             AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id=events.id)) AS unassigned_events_this_week,
         (SELECT COUNT(*) FROM event_assignments) AS total_event_assignments,
         (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved')) AS open_tickets,

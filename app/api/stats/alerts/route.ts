@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
     const unassignedResult = await query(
       `SELECT COUNT(*) as count FROM events e
        JOIN venues v ON e.venue_id = v.id
-       WHERE e.event_date = $1
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1
          AND v.requires_assignment = true
          AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf.clause} ${af.clause}`,
       [today, ...vf.params, ...af.params]
@@ -48,7 +49,8 @@ export async function GET(request: NextRequest) {
     const af2 = buildAssignmentFilterClause(userRole, userId, 'e.id', vf2.nextIdx)
     const noCheckinResult = await query(
       `SELECT COUNT(*) as count FROM events e
-       WHERE e.event_date = $1
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1
          AND e.start_time <= $2
          AND e.workflow_status = 'pending'
          AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf2.clause} ${af2.clause}`,
@@ -71,7 +73,8 @@ export async function GET(request: NextRequest) {
     const af3 = buildAssignmentFilterClause(userRole, userId, 'e.id', vf3.nextIdx)
     const notReadyResult = await query(
       `SELECT COUNT(*) as count FROM events e
-       WHERE e.event_date = $1
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1
          AND e.start_time <= $2
          AND e.workflow_status = 'checked_in' ${vf3.clause} ${af3.clause}`,
       [today, oneHourFromNow.toISOString(), ...vf3.params, ...af3.params]
@@ -93,7 +96,8 @@ export async function GET(request: NextRequest) {
     const af4 = buildAssignmentFilterClause(userRole, userId, 'e.id', vf4.nextIdx)
     const overdueResult = await query(
       `SELECT COUNT(*) as count FROM events e
-       WHERE e.event_date = $1
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = $1
          AND e.workflow_status != 'post_game_submitted'
          AND EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf4.clause} ${af4.clause}`,
       [yesterdayStr, ...vf4.params, ...af4.params]
@@ -116,7 +120,8 @@ export async function GET(request: NextRequest) {
     const partialResult = await query(
       `SELECT COUNT(*) as count FROM events e
        JOIN venues v ON e.venue_id = v.id
-       WHERE e.event_date > $1 AND e.event_date <= $2
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date > $1 AND e.event_date <= $2
          AND v.requires_assignment = true
          AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id) ${vf5.clause} ${af5.clause}`,
       [today, weekEndStr, ...vf5.params, ...af5.params]

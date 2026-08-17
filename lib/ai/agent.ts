@@ -284,9 +284,9 @@ async function loadUserContext(): Promise<string> {
          (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved') AND priority IN ('high','critical'))::int AS urgent_tickets,
          (SELECT COUNT(*) FROM design_requests WHERE status NOT IN ('approved','done'))::int AS open_designs,
          (SELECT COUNT(*) FROM maintenance_logs WHERE status NOT IN ('completed','cancelled'))::int AS open_maintenance,
-         (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE)::int AS events_today,
-         (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7)::int AS events_this_week,
-         (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
+         (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date = CURRENT_DATE)::int AS events_today,
+         (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7)::int AS events_this_week,
+         (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
            AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id=events.id))::int AS unassigned_this_week`
     )),
     timeout(query(
@@ -302,7 +302,8 @@ async function loadUserContext(): Promise<string> {
     timeout(query(
       `SELECT e.summary, TO_CHAR(e.event_date,'Dy Mon DD') AS event_date, v.name AS venue
        FROM events e LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + 7
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date >= CURRENT_DATE AND e.event_date < CURRENT_DATE + 7
        ORDER BY e.event_date ASC LIMIT 3`
     )),
   ])

@@ -35,6 +35,7 @@ export async function GET(request: Request) {
         LEFT JOIN venues v ON v.id = e.venue_id
         LEFT JOIN event_assignments ea ON ea.event_id = e.id
         LEFT JOIN staff s ON s.id = ea.staff_id
+        WHERE COALESCE(e.approval_status, 'approved') = 'approved'
         GROUP BY e.id, e.name, e.start_time, v.name, e.venue_id, e.league, e.workflow_status
         ORDER BY e.start_time DESC
       `)

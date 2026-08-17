@@ -279,7 +279,7 @@ function ResourcesTab({ token, venueName }: { token: string; venueName: string }
 }
 
 interface Venue { id: string; name: string; address: string; market: string; primary_contact_name: string | null; primary_contact_email: string | null }
-interface Event { id: string; summary: string; league: string; event_date: string; start_time: string; workflow_status: string; staff_count?: number }
+interface Event { id: string; summary: string; league: string; event_date: string; start_time: string; workflow_status: string; staff_count?: number; assigned_staff?: string | null }
 interface Ticket { id: string; ticket_number: number; title: string; description: string; category: string; priority: string; status: string; resolution_notes: string | null; image_url?: string | null; created_at: string; resolved_at: string | null }
 interface TicketAttachment { id: string; comment_id: string | null; filename: string | null; mime_type: string; image_url: string; caption: string | null; created_at: string }
 interface Service { name: string; description: string | null; enabled: boolean }
@@ -625,7 +625,10 @@ export default function PortalPage() {
                               <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: leagueColors[event.league] || '#94a3b8' }}></div>
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-zinc-900 truncate">{event.summary}</p>
-                                <p className="text-xs text-zinc-500">{formatDate(event.event_date)} • {event.start_time}</p>
+                                <p className="text-xs text-zinc-500">
+                                  {formatDate(event.event_date)} • {event.start_time}
+                                  {event.assigned_staff ? ` • ${event.assigned_staff}` : ''}
+                                </p>
                               </div>
                             </div>
                             <span className="text-xs font-medium px-2 py-1 rounded flex-shrink-0 ml-3" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
@@ -779,6 +782,10 @@ export default function PortalPage() {
                           <div>
                             <p className="text-sm font-medium text-zinc-900">{event.summary}</p>
                             <p className="text-xs text-zinc-500 mt-0.5">{formatDate(event.event_date)} • {event.start_time} • {event.league}</p>
+                            {/* Joe 2026-08-17: clients see the crew by name, not a headcount. */}
+                            {event.assigned_staff && (
+                              <p className="text-xs text-zinc-600 mt-1">{event.assigned_staff}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">

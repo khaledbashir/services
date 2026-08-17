@@ -142,6 +142,27 @@ function isLeagueScheduleOnlyVenue(venue: Pick<DiscoveryVenue, 'feed_type' | 'li
   return venue.feed_type === 'mlb-schedule'
 }
 
+/**
+ * Joe 2026-08-17: only home sporting events land on the master schedule by
+ * themselves. Anything else a feed turns up is still worth knowing about, so
+ * it is imported as a suggestion for the venue lead rather than dropped —
+ * dropping it would mean re-discovering the same concert every sync and giving
+ * the lead nothing to approve.
+ *
+ * The home-vs-away decision already happened upstream (classifyHomeAway plus
+ * the per-parser guards), so by the time a candidate reaches here a `game` is
+ * a home game.
+ */
+export function approvalStatusForImport(eventType: string | null | undefined): 'approved' | 'suggested' {
+  return eventType === 'game' ? 'approved' : 'suggested'
+}
+
+export function suggestionReasonFor(eventType: string | null | undefined): string | null {
+  if (approvalStatusForImport(eventType) === 'approved') return null
+  const label = (eventType || 'event').replace(/_/g, ' ')
+  return `Not a home sporting event (${label}) — needs venue lead approval before it joins the master schedule`
+}
+
 function candidateFitsVenueSchedule(
   candidate: Pick<DiscoveryCandidate, 'event_type' | 'league' | 'source_kind'>,
   venue: Pick<DiscoveryVenue, 'feed_type' | 'likely_leagues'>
@@ -1131,7 +1152,7 @@ export async function importDiscoveryEvents(
     events: DiscoveryCandidate[]
     status: Exclude<DiscoveryStatus, 'discovered'>
   }
-): Promise<{ imported: number; skipped: number; eventIds: string[]; byVenue: Record<string, number> }> {
+): Promise<{ imported: number; skipped: number; suggested: number; eventIds: string[]; byVenue: Record<string, number> }> {
   const eventIds: string[] = []
   const byVenue: Record<string, number> = {}
   const automationByVenue = new Map<string, Awaited<ReturnType<typeof getVenueAutomationInfo>>>()
@@ -1139,6 +1160,8 @@ export async function importDiscoveryEvents(
   const venueTimezoneCache = new Map<string, string>()
   let imported = 0
   let skipped = 0
+  // Imported, but parked in the venue lead's queue rather than on the schedule.
+  let suggested = 0
 
   for (const event of payload.events) {
     const venueId = event.venue_id || payload.defaultVenueId
@@ -1255,12 +1278,14 @@ export async function importDiscoveryEvents(
     // Joe 2026-05-04: do NOT bake requires_staffing on import. Venue-level
     // `requires_assignment` is the single source of truth; `events.requires_staffing`
     // stays NULL unless an admin sets a per-event override via the UI.
+    const approvalStatus = approvalStatusForImport(event.event_type)
+
     const result = await query(
       `INSERT INTO events (
          summary, event_date, start_time, end_time, venue_id, client_id, league,
-         workflow_status, event_type, source
+         workflow_status, event_type, source, approval_status, suggestion_reason
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11)
        RETURNING id`,
       [
         event.summary,
@@ -1272,13 +1297,16 @@ export async function importDiscoveryEvents(
         event.league || null,
         event.event_type,
         event.source || 'ai_discovery',
+        approvalStatus,
+        suggestionReasonFor(event.event_type),
       ]
     )
 
     eventIds.push(result.rows[0].id)
     imported++
+    if (approvalStatus === 'suggested') suggested++
     byVenue[venueId] = (byVenue[venueId] || 0) + 1
   }
 
-  return { imported, skipped, eventIds, byVenue }
+  return { imported, skipped, suggested, eventIds, byVenue }
 }

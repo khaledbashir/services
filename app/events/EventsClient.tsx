@@ -26,6 +26,11 @@ interface Event {
   event_requires_staffing?: boolean | null
   venue_requires_assignment?: boolean
   assigned_count?: number
+  event_type?: string | null
+  // Joe 2026-08-17: 'suggested' rows are NOT on the master schedule — they are
+  // waiting on the venue lead. Only the Suggested tab ever returns them.
+  approval_status?: 'approved' | 'suggested' | 'rejected'
+  suggestion_reason?: string | null
 }
 
 const leagueColors: Record<string, { bg: string; text: string; hex: string }> = {
@@ -106,10 +111,14 @@ function EventsPageInner() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
   const searchParams = useSearchParams()
-  const initialFilter = (['today', 'week', 'month', 'all', 'pending_workflow'] as const).includes(searchParams.get('filter') as any)
-    ? (searchParams.get('filter') as 'today' | 'week' | 'month' | 'all' | 'pending_workflow')
-    : 'week'
-  const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all' | 'pending_workflow'>(initialFilter)
+  // `?approval=suggested` (the link in the venue lead's Slack ping) opens the
+  // queue directly, so the notification lands on the list it talks about.
+  const initialFilter = searchParams.get('approval') === 'suggested'
+    ? 'suggested' as const
+    : (['today', 'week', 'month', 'all', 'pending_workflow'] as const).includes(searchParams.get('filter') as any)
+      ? (searchParams.get('filter') as 'today' | 'week' | 'month' | 'all' | 'pending_workflow')
+      : 'week'
+  const [filter, setFilter] = useState<'today' | 'week' | 'month' | 'all' | 'pending_workflow' | 'suggested'>(initialFilter)
   const [search, setSearch] = useState('')
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getWeekStart(dateKeyToDate(todayInOperationsTimeZone())))
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([])
@@ -221,8 +230,35 @@ function EventsPageInner() {
       return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
     })
 
+  // Joe 2026-08-17: the venue lead's call on a suggested event. The row leaves
+  // the queue on success — approved joins the master schedule, rejected never
+  // comes back. A 403 means the signed-in user does not lead this venue.
+  const [decidingId, setDecidingId] = useState<string | null>(null)
+  const decideApproval = async (eventId: string, action: 'approve' | 'reject') => {
+    setDecidingId(eventId)
+    try {
+      const res = await fetch(`/api/events/${eventId}/approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        alert(body?.error || 'Could not update this event')
+        return
+      }
+      setEvents((prev) => prev.filter((e) => e.id !== eventId))
+    } finally {
+      setDecidingId(null)
+    }
+  }
+
   const refreshEvents = async () => {
-    const res = await fetch(`/api/events?filter=${filter}`)
+    const res = await fetch(
+      filter === 'suggested'
+        ? '/api/events?filter=all&approval=suggested'
+        : `/api/events?filter=${filter}`
+    )
     if (res.ok) {
       const data = await res.json()
       setEvents(sortByStaffingThenTime(data.events || []))
@@ -921,6 +957,29 @@ function EventsPageInner() {
                       {event.client_name && (
                         <div className="text-xs text-zinc-500 mt-0.5">{event.client_name}</div>
                       )}
+                      {event.approval_status === 'suggested' && (
+                        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                          {event.suggestion_reason && (
+                            <div className="text-[11px] text-amber-700 mb-1.5">{event.suggestion_reason}</div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={decidingId === event.id}
+                              onClick={() => decideApproval(event.id, 'approve')}
+                              className="h-7 rounded-md bg-[#0A52EF] px-3 text-xs font-medium text-white transition-colors hover:bg-[#0846cc] disabled:opacity-50"
+                            >
+                              Add to schedule
+                            </button>
+                            <button
+                              disabled={decidingId === event.id}
+                              onClick={() => decideApproval(event.id, 'reject')}
+                              className="h-7 rounded-md border border-[#E8E8E8] bg-white px-3 text-xs font-medium text-zinc-600 transition-colors hover:border-zinc-300 disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-6 text-zinc-600">{event.venue_name}</td>
                     <td className="py-3 px-6">
@@ -1003,7 +1062,7 @@ function EventsPageInner() {
               </button>
             </div>
             <div className="flex flex-wrap gap-1">
-              {(['today', 'week', 'month', 'all', 'pending_workflow'] as const).map((f) => (
+              {(['today', 'week', 'month', 'all', 'pending_workflow', 'suggested'] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
@@ -1016,6 +1075,7 @@ function EventsPageInner() {
                   {f === 'month' && 'Month'}
                   {f === 'all' && 'All'}
                   {f === 'pending_workflow' && 'Pending Workflow'}
+                  {f === 'suggested' && 'Suggested'}
                 </button>
               ))}
             </div>

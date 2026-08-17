@@ -36,7 +36,8 @@ export async function GET() {
          COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 30)                AS last30_events,
          COUNT(*) FILTER (WHERE event_date >= CURRENT_DATE - 7)                 AS last7_events,
          COUNT(DISTINCT venue_id)                            AS venues_with_events
-       FROM events`
+       FROM events
+       WHERE COALESCE(approval_status, 'approved') = 'approved'`
     )
 
     const venueTotals = await query(
@@ -72,7 +73,8 @@ export async function GET() {
               EXTRACT(MONTH FROM event_date)::int AS mnum,
               COUNT(*) AS events
        FROM events
-       WHERE event_date >= date_trunc('year', CURRENT_DATE)
+       WHERE COALESCE(approval_status, 'approved') = 'approved'
+         AND event_date >= date_trunc('year', CURRENT_DATE)
          AND event_date < date_trunc('year', CURRENT_DATE) + interval '1 year'
        GROUP BY date_trunc('month', event_date), to_char(date_trunc('month', event_date), 'Mon'), EXTRACT(MONTH FROM event_date)
        ORDER BY mnum`
@@ -103,7 +105,8 @@ export async function GET() {
        FROM events e
        LEFT JOIN venues v ON v.id = e.venue_id
        LEFT JOIN event_assignments ea ON ea.event_id = e.id
-       WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
        GROUP BY e.id, v.name, v.latitude, v.longitude, v.requires_assignment
        ORDER BY e.start_time ASC NULLS LAST`
     )
@@ -131,7 +134,8 @@ export async function GET() {
       `SELECT COUNT(DISTINCT m[1]) AS states
        FROM events e
        JOIN venues v ON v.id = e.venue_id, LATERAL regexp_matches(v.address, '([A-Z]{2})[ ,]+[0-9]{5}') AS m
-       WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
     )
 
     const tonightVenueCount = new Set(
@@ -144,6 +148,7 @@ export async function GET() {
               EXISTS (
                 SELECT 1 FROM events e
                 WHERE e.venue_id = v.id
+                  AND COALESCE(e.approval_status, 'approved') = 'approved'
                   AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
               ) AS live_tonight
        FROM venues v

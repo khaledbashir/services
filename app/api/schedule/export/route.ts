@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { sendEmail } from '@/lib/email'
 import { brandedEmail } from '@/lib/email-templates'
 
@@ -204,6 +205,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN event_assignments ea ON e.id = ea.event_id
       LEFT JOIN staff s ON ea.staff_id = s.id
       WHERE e.venue_id = $1 AND e.event_date >= $2 AND e.event_date <= $3
+        AND ${approvedOnly('e')}
       GROUP BY e.id, e.summary, e.event_date, e.start_time, e.end_time, e.league, e.workflow_status
       ORDER BY e.start_time`,
       [venueId, today, endDate]

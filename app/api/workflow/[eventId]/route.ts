@@ -10,6 +10,7 @@ import { getAuthUser } from '@/lib/rbac'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
 import { awardPointsOnce } from '@/lib/gamification'
 import { clearPostGameReminderMessages } from '@/lib/workflow-reminder-cleanup'
+import { notifyLeadsOfWorkflowStep, type WorkflowStepType } from '@/lib/workflow-lead-notifications'
 
 const workflowLabels: Record<string, { label: string; emoji: string }> = {
   check_in: { label: 'Check-in', emoji: ':white_check_mark:' },
@@ -368,6 +369,21 @@ export async function POST(
       game_ready: true,
       post_game_report: true,
     }
+
+    // Joe 2026-08-17: the venue's manager and lead rep hear about every
+    // completed step directly, independent of the channel-level toggle above.
+    // Fire-and-forget — a Slack outage must never fail a technician's submit.
+    notifyLeadsOfWorkflowStep({
+      eventId,
+      venueId: eventResult.rows[0]?.venue_id || null,
+      step: dbType as WorkflowStepType,
+      staffName,
+      eventName,
+      venueName,
+      incidentText: dbType === 'post_game_report' ? String(data?.incidents ?? '') : undefined,
+    }).catch((notifyErr) => {
+      console.error('[workflow] failed to notify venue leads:', notifyErr)
+    })
 
     const wf = workflowLabels[dbType] || { label: dbType, emoji: ':gear:' }
     const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted

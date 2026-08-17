@@ -201,6 +201,9 @@ export function Sidebar() {
         { href: '/noco', label: 'All Tables' },
         { href: '/walkthroughs', label: 'Walkthroughs' },
         { href: '/walkthroughs/new', label: 'New Walkthrough' },
+        // Joe 2026-08-17: the structured per-venue checklist, distinct from the
+        // free-text log above it.
+        { href: '/venue-walkthroughs', label: 'Walk-Thru Checklists' },
         { href: '/issues', label: 'Issues' },
         { href: '/displays', label: 'Displays' },
         { href: '/display-locations', label: 'Display Locations' },

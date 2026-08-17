@@ -7,11 +7,14 @@ import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause, buildAssignmentFilterClause } from '@/lib/venue-filter'
 import { formatVenueEventSummary } from '@/lib/event-display'
 import { addDaysToDateKey, addMonthsToDateKey, todayInOperationsTimeZone } from '@/lib/ops-date'
+import { approvedOnly, parseApprovalParam } from '@/lib/event-approval'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const filter = searchParams.get('filter') || 'all'
+    // Master schedule by default. The approval queue passes ?approval=suggested.
+    const approval = parseApprovalParam(searchParams.get('approval'))
     // Discovery/feed sync keeps thousands of upcoming events live (a single
     // month window holds 1,200+ rows). A 100-row cap silently dropped
     // everything more than a few days out — Stevie's "Rocket Arena events
@@ -104,6 +107,9 @@ export async function GET(request: NextRequest) {
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,
         TO_CHAR(e.event_date, 'YYYY-MM-DD') as event_date,
         COALESCE(e.workflow_status, 'pending') as workflow_status,
+        COALESCE(e.approval_status, 'approved') as approval_status,
+        e.suggestion_reason,
+        e.approved_at,
         e.requires_staffing as event_requires_staffing,
         COALESCE(client_automation.active_service_names, '{}') as client_service_names,
         COALESCE(client_automation.active_service_descriptions, '{}') as client_service_descriptions,
@@ -146,6 +152,7 @@ export async function GET(request: NextRequest) {
         AND e.source IS NOT NULL
       )
       AND e.status <> 'cancelled'
+      ${approval === 'all' ? '' : approval === 'approved' ? `AND ${approvedOnly('e')}` : `AND e.approval_status = '${approval}'`}
       GROUP BY
         e.id,
         v.name,

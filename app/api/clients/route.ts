@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
          WHERE (e.client_id = c.id OR e.venue_id IN (
            SELECT cv3.venue_id FROM client_venues cv3 WHERE cv3.client_id = c.id
          ))
+           AND COALESCE(e.approval_status, 'approved') = 'approved'
            AND e.event_date >= CURRENT_DATE
        ) event_stats ON TRUE
        ${whereClause}

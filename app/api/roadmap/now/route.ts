@@ -25,7 +25,7 @@ export async function GET() {
       `SELECT
         (SELECT COUNT(*)::int FROM venues WHERE COALESCE(is_active, true)) as active_venues,
         (SELECT COUNT(*)::int FROM staff WHERE COALESCE(is_active, true)) as field_staff,
-        (SELECT COUNT(*)::int FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + INTERVAL '7 days') as events_next_7d,
+        (SELECT COUNT(*)::int FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + INTERVAL '7 days') as events_next_7d,
         (SELECT COUNT(*)::int FROM tickets WHERE status NOT IN ('closed','resolved')) as open_tickets,
         (SELECT COUNT(*)::int FROM design_requests WHERE status NOT IN ('done','cancelled')) as open_design_requests,
         (SELECT COUNT(*)::int FROM clients WHERE COALESCE(is_active, true)) as active_clients`

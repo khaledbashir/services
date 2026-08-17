@@ -17,7 +17,8 @@ const skill: Skill = {
     },
   },
   async handler(args) {
-    const conditions: string[] = ['1=1']
+    // Suggestions are not on the schedule, so the assistant must not report them.
+    const conditions: string[] = ["COALESCE(e.approval_status, 'approved') = 'approved'"]
     const params: unknown[] = []
     if (args.venue_name) {
       params.push(`%${args.venue_name}%`)

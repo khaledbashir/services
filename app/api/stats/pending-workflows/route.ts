@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
         e.start_time
       FROM events e
       JOIN venues v ON e.venue_id = v.id
-      WHERE e.event_date = $1 AND e.workflow_status = 'pending'
+      WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+        AND e.event_date = $1 AND e.workflow_status = 'pending'
       ORDER BY e.start_time`,
       [today]
     )

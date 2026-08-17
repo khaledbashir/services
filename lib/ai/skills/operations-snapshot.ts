@@ -50,9 +50,9 @@ const skill: Skill = {
           (SELECT COUNT(*) FROM venues WHERE COALESCE(is_active,true)=true) AS active_venues,
           (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true) AS active_staff,
           (SELECT COUNT(*) FROM staff WHERE COALESCE(is_active,true)=true AND role='technician') AS active_technicians,
-          (SELECT COUNT(*) FROM events WHERE event_date = CURRENT_DATE) AS events_today,
-          (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7) AS events_this_week,
-          (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
+          (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date = CURRENT_DATE) AS events_today,
+          (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7) AS events_this_week,
+          (SELECT COUNT(*) FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND event_date >= CURRENT_DATE AND event_date < CURRENT_DATE + 7
              AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = events.id)) AS unassigned_events_this_week,
           (SELECT COUNT(*) FROM tickets WHERE status NOT IN ('closed','resolved')) AS open_tickets,
           (SELECT COUNT(*) FROM tickets WHERE priority IN ('high','critical') AND status NOT IN ('closed','resolved')) AS urgent_open_tickets,
@@ -80,7 +80,8 @@ const skill: Skill = {
                 TO_CHAR(e.start_time AT TIME ZONE COALESCE(v.timezone,'America/New_York'),'HH12:MI AM') AS local_time
          FROM events e
          LEFT JOIN venues v ON v.id = e.venue_id
-         WHERE e.event_date >= CURRENT_DATE
+         WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+           AND e.event_date >= CURRENT_DATE
            AND e.event_date < CURRENT_DATE + 7
            AND NOT EXISTS (SELECT 1 FROM event_assignments ea WHERE ea.event_id = e.id)
          ORDER BY e.start_time ASC

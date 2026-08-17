@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
       LEFT JOIN markets m ON v.market_id = m.id
-      WHERE e.event_date >= CURRENT_DATE AND e.event_date <= $1 ${vf2.clause} ${af2.clause}
+      WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+        AND e.event_date >= CURRENT_DATE AND e.event_date <= $1 ${vf2.clause} ${af2.clause}
       GROUP BY m.name
       ORDER BY count DESC`,
       [nextSevenStr, ...vf2.params, ...af2.params]

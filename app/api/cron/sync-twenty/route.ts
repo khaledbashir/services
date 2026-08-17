@@ -34,8 +34,11 @@ export async function GET() {
       LEFT JOIN venues v ON v.id = e.venue_id
       LEFT JOIN event_assignments ea ON ea.event_id = e.id
       LEFT JOIN staff s ON s.id = ea.staff_id
-      WHERE e.updated_at >= NOW() - INTERVAL '30 minutes'
-         OR e.created_at >= NOW() - INTERVAL '30 minutes'
+      WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+        AND (
+          e.updated_at >= NOW() - INTERVAL '30 minutes'
+          OR e.created_at >= NOW() - INTERVAL '30 minutes'
+        )
       GROUP BY e.id, e.name, e.start_time, v.name, e.venue_id, e.league, e.workflow_status
       ORDER BY e.start_time DESC
       LIMIT 200

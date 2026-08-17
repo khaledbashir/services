@@ -66,6 +66,7 @@ export async function POST(
     const existingResult = await query(
       `SELECT event_date, start_time::time as st FROM events
        WHERE venue_id = $1 AND event_type = 'shift'
+         AND COALESCE(approval_status, 'approved') = 'approved'
          AND event_date >= $2 AND event_date <= $3
          AND summary = $4`,
       [template.venue_id, start_date, end_date, template.name]

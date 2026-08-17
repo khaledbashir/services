@@ -45,7 +45,7 @@ const skill: Skill = {
     const dateTo = asText(args.date_to)
     const limit = Math.max(1, Math.min(Number(args.limit) || 5, 10))
 
-    const conditions: string[] = ['e.event_date >= COALESCE($1::date, CURRENT_DATE)', "e.event_date <= COALESCE($2::date, CURRENT_DATE + INTERVAL '7 days')"]
+    const conditions: string[] = ["COALESCE(e.approval_status, 'approved') = 'approved'", 'e.event_date >= COALESCE($1::date, CURRENT_DATE)', "e.event_date <= COALESCE($2::date, CURRENT_DATE + INTERVAL '7 days')"]
     const params: unknown[] = [dateFrom || null, dateTo || null]
 
     if (eventId) {

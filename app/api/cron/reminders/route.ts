@@ -52,6 +52,7 @@ export async function GET() {
          AND e.workflow_status = 'pending'
          AND e.start_time > $2
          AND e.start_time <= $3
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
@@ -123,6 +124,7 @@ export async function GET() {
          AND e.workflow_status = 'pending'
          AND e.start_time > NOW()
          AND e.start_time <= $2
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
@@ -181,6 +183,7 @@ export async function GET() {
          AND e.workflow_status = 'pending'
          AND e.start_time <= NOW()
          AND e.start_time > NOW() - INTERVAL '2 hours'
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
@@ -240,6 +243,7 @@ export async function GET() {
        WHERE e.event_date = $1
          AND e.start_time > NOW()
          AND e.start_time <= $2
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND EXISTS (
            SELECT 1 FROM workflow_submissions ws
            WHERE ws.event_id = e.id AND ws.staff_id = s.id AND ws.type = 'check_in'
@@ -308,6 +312,7 @@ export async function GET() {
        JOIN staff s ON ea.staff_id = s.id
        WHERE e.end_time <= $1
          AND e.end_time >= $2
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND COALESCE(e.workflow_status, 'pending') <> 'post_game_submitted'
          AND EXISTS (
            SELECT 1 FROM workflow_submissions ws

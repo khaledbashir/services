@@ -225,7 +225,7 @@ export async function getPlatformHealth(): Promise<Health[]> {
 export async function getHubKpis() {
   const [tickets, events, contacts, delivered] = await Promise.all([
     query(`SELECT count(*)::int AS n FROM tickets WHERE status NOT IN ('closed')`),
-    query(`SELECT count(*)::int AS n FROM events WHERE start_time BETWEEN NOW() AND NOW() + interval '7 days'`).catch(
+    query(`SELECT count(*)::int AS n FROM events WHERE COALESCE(approval_status, 'approved') = 'approved' AND start_time BETWEEN NOW() AND NOW() + interval '7 days'`).catch(
       () => ({ rows: [{ n: null }] }),
     ),
     query(`SELECT count(*)::int AS n FROM marketing_contacts`),

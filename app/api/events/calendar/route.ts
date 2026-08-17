@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { formatVenueEventSummary } from '@/lib/event-display'
 
 export async function GET(request: NextRequest) {
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
       ) venue_automation ON TRUE
       WHERE e.event_date BETWEEN $1 AND $2
         AND e.status <> 'cancelled'
+        AND ${approvedOnly('e')}
         AND NOT (
           COALESCE(v.venue_type, 'sports') <> 'sports'
           AND e.source IS NOT NULL

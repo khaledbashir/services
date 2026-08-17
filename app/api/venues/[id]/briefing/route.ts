@@ -109,6 +109,7 @@ async function fetchAndGenerate(venueId: string) {
        FROM events e
        LEFT JOIN event_assignments ea ON e.id = ea.event_id
        WHERE e.venue_id = $1
+         AND COALESCE(e.approval_status, 'approved') = 'approved'
          AND e.event_date >= $2
          AND e.event_date <= ($2::date + 14)
          AND COALESCE(LOWER(e.status), 'scheduled') NOT IN ('cancelled', 'canceled')
@@ -127,6 +128,7 @@ async function fetchAndGenerate(venueId: string) {
               COUNT(CASE WHEN workflow_status = 'post_game_submitted' THEN 1 END) as completed
        FROM events
        WHERE venue_id = $1
+         AND COALESCE(approval_status, 'approved') = 'approved'
          AND event_date >= ($2::date - 30)
          AND event_date < $2
          AND COALESCE(LOWER(status), 'scheduled') NOT IN ('cancelled', 'canceled')`,

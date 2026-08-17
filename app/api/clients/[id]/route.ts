@@ -46,6 +46,7 @@ export async function GET(
            SELECT COUNT(*)::int as upcoming_event_count
            FROM events e
            WHERE e.venue_id = v.id
+             AND COALESCE(e.approval_status, 'approved') = 'approved'
              AND e.event_date >= CURRENT_DATE
          ) event_stats ON TRUE
          WHERE cv.client_id = $1
@@ -105,6 +106,7 @@ export async function GET(
          WHERE (e.client_id = $1 OR e.venue_id IN (
            SELECT venue_id FROM client_venues WHERE client_id = $1
          ))
+           AND COALESCE(e.approval_status, 'approved') = 'approved'
            AND e.event_date >= CURRENT_DATE
          GROUP BY e.id, v.name, v.timezone
          ORDER BY e.event_date ASC, e.start_time ASC NULLS LAST
@@ -161,8 +163,11 @@ export async function GET(
              e.event_date::timestamp as occurred_at
            FROM events e
            LEFT JOIN venues v ON v.id = e.venue_id
-           WHERE e.client_id = $1
-              OR e.venue_id IN (SELECT venue_id FROM client_venues WHERE client_id = $1)
+           WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+             AND (
+               e.client_id = $1
+               OR e.venue_id IN (SELECT venue_id FROM client_venues WHERE client_id = $1)
+             )
          ) activity
          ORDER BY occurred_at DESC
          LIMIT 10`,

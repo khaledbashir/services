@@ -3,6 +3,7 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { approvedOnly } from '@/lib/event-approval'
 import { getPortalSession, getScopedPortalVenueIds } from '@/lib/portal-auth'
 import { buildEventReadiness } from '@/lib/event-readiness'
 
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
          AND e.event_date >= CURRENT_DATE
          AND e.event_date <= CURRENT_DATE + ($2::int * INTERVAL '1 day')
          AND LOWER(COALESCE(e.status, '')) <> 'cancelled'
+         AND ${approvedOnly('e')}
        ORDER BY e.event_date, e.start_time`,
       [venueIds, days]
     )

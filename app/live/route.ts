@@ -14,7 +14,8 @@ export async function GET() {
       `SELECT COUNT(*) AS all_events,
               COUNT(*) FILTER (WHERE event_date >= date_trunc('year', CURRENT_DATE)) AS ytd_events,
               COUNT(DISTINCT venue_id) AS venues_with_events
-       FROM events`
+       FROM events
+       WHERE COALESCE(approval_status, 'approved') = 'approved'`
     )
     const venueTotals = await query(`SELECT COUNT(*) AS active_venues FROM venues WHERE is_active IS NOT FALSE`)
     const marketTotals = await query(`SELECT COUNT(*) AS markets FROM markets`)
@@ -28,17 +29,21 @@ export async function GET() {
     )
     const tonight = await query(
       `SELECT COUNT(*) AS events, COUNT(DISTINCT venue_id) AS venues
-       FROM events WHERE event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
+       FROM events
+       WHERE COALESCE(approval_status, 'approved') = 'approved'
+         AND event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
     )
     const tonightStates = await query(
       `SELECT COUNT(DISTINCT m[1]) AS states
        FROM events e JOIN venues v ON v.id = e.venue_id,
             LATERAL regexp_matches(v.address, '([A-Z]{2})[ ,]+[0-9]{5}') AS m
-       WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date`
     )
     const venuePoints = await query(
       `SELECT v.name, v.latitude AS lat, v.longitude AS lng,
               EXISTS (SELECT 1 FROM events e WHERE e.venue_id = v.id
+                      AND COALESCE(e.approval_status, 'approved') = 'approved'
                       AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date) AS live
        FROM venues v
        WHERE v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.is_active IS NOT FALSE`
@@ -47,7 +52,8 @@ export async function GET() {
       `SELECT to_char(date_trunc('month', event_date), 'Mon') AS mon,
               EXTRACT(MONTH FROM event_date)::int AS mnum, COUNT(*) AS events
        FROM events
-       WHERE event_date >= date_trunc('year', CURRENT_DATE)
+       WHERE COALESCE(approval_status, 'approved') = 'approved'
+         AND event_date >= date_trunc('year', CURRENT_DATE)
          AND event_date < date_trunc('year', CURRENT_DATE) + interval '1 year'
        GROUP BY date_trunc('month', event_date), to_char(date_trunc('month', event_date), 'Mon'), EXTRACT(MONTH FROM event_date)
        ORDER BY mnum`
@@ -64,7 +70,8 @@ export async function GET() {
               CASE WHEN TO_CHAR(e.start_time AT TIME ZONE 'America/New_York','HH24:MI')='00:00' THEN 'TBD'
                    ELSE TO_CHAR(e.start_time AT TIME ZONE 'America/New_York','HH12:MI AM') END AS start_et
        FROM events e LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
+       WHERE COALESCE(e.approval_status, 'approved') = 'approved'
+         AND e.event_date = (NOW() AT TIME ZONE 'America/New_York')::date
        ORDER BY e.start_time ASC NULLS LAST`
     )
 
