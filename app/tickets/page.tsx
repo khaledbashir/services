@@ -141,8 +141,12 @@ export default function TicketsPage() {
     fetch(`/api/preferences?key=${PANEL_WIDTH_PREF_KEY}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        const stored = Number(data?.value)
-        if (Number.isFinite(stored)) setPanelWidth(clampPanelWidth(stored))
+        // No saved width comes back as null, and Number(null) is 0 — which is
+        // finite, and would clamp every first-time user to the minimum width
+        // instead of leaving them on the default. Require real digits.
+        const raw = typeof data?.value === 'string' ? data.value.trim() : ''
+        if (!/^\d+$/.test(raw)) return
+        setPanelWidth(clampPanelWidth(Number(raw)))
       })
       .catch((error) => console.error('Failed to load ticket panel width:', error))
   }, [])
