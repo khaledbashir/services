@@ -214,26 +214,21 @@ export async function notifyLeadsOfWorkflowStep(
       continue
     }
 
-    const html = brandedEmail({
-      title: step.label,
-      subtitle: `${input.eventName} · ${input.venueName}`,
-      bodyHtml: `
-        <p style="margin:0 0 8px"><strong>${input.staffName}</strong> — ${step.label.toLowerCase()}.</p>
-        ${input.step === 'post_game_report'
-          ? (hasIncident
-              ? `<p style="margin:12px 0 0;color:#b91c1c"><strong>Incident reported</strong></p>
-                 <p style="margin:6px 0 0">${incident.slice(0, 600).replace(/</g, '&lt;')}</p>`
-              : '<p style="margin:12px 0 0;color:#047857"><strong>No incident reported</strong></p>')
-          : ''}
-        <p style="margin:16px 0 0"><a href="${url}">Open the workflow</a></p>
-      `,
-      footerNote: 'ANC Sports · venue workflow',
-    })
-
-    const ok = await sendEmail([lead.email], subject, html)
+    const ok = await sendEmail([lead.email], subject, emailHtml)
     if (ok) sent += 1
     else skipped += 1
   }
 
-  return { target_count: leads.length, sent_count: sent, skipped_count: skipped }
+  // Ops leadership, in one send rather than one per person.
+  if (extraEmails.length > 0) {
+    const ok = await sendEmail(extraEmails, subject, emailHtml)
+    if (ok) sent += extraEmails.length
+    else skipped += extraEmails.length
+  }
+
+  return {
+    target_count: leads.length + extraEmails.length,
+    sent_count: sent,
+    skipped_count: skipped,
+  }
 }
