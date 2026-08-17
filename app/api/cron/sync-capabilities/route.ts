@@ -4,12 +4,13 @@ export const revalidate = 0
 import { NextResponse } from 'next/server'
 import { readdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
+import { DASHBOARD_URL } from '@/lib/app-url'
 
 // Called daily (or on deploy) to scan the codebase and generate a capabilities
 // manifest that ANC bot reads from its workspace. This way ANC always knows
 // what the dashboard can do — no manual updates needed.
 //
-// Scheduler: 0 6 * * * curl -s https://abc-anc-services.izcgmb.easypanel.host/api/cron/sync-capabilities
+// Scheduler: 0 6 * * * curl -s https://services.ancsports.net/api/cron/sync-capabilities
 
 const WORKSPACE_PATH = '/root/.openclaw/workspace-anc-agent'
 const OUTPUT_FILE = join(WORKSPACE_PATH, 'DASHBOARD_CAPABILITIES.md')
@@ -144,7 +145,7 @@ export async function GET() {
     }
 
     md += `\n---\n\n`
-    md += `Dashboard URL: https://abc-anc-services.izcgmb.easypanel.host\n`
+    md += `Dashboard URL: ${DASHBOARD_URL}\n`
     md += `Total: ${uiPages.length} pages, ${apiRoutes.length} API endpoints\n`
 
     await writeFile(OUTPUT_FILE, md, 'utf-8')

@@ -36,7 +36,7 @@ Do not move day-of service operations into CRM by default. CRM should expose lin
 
 - App path: [anc-services](file:///root/anc-services)
 - Stack: Next.js 14, React 18, TypeScript, Tailwind, PostgreSQL, JWT/bcrypt auth.
-- Main live URL in current docs/memory: `https://abc-anc-services.izcgmb.easypanel.host`.
+- Main live URL in current docs/memory: `https://services.ancsports.net`.
 - Public-facing product language may say `services.ancsports.net` or `services.anc.com`; verify the active deployment before giving a link.
 - Key code:
   - `app/` for pages and API routes.

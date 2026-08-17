@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import { geocodeAddress } from '@/lib/geocode'
 
 export async function POST(request: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       }).catch(err => console.warn('Geocoding failed for new venue:', err))
     }
 
-    notifyOps(':stadium:', `*New venue created:* ${v.name}`, { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${v.id}` })
+    notifyOps(':stadium:', `*New venue created:* ${v.name}`, { label: 'View Venue', url: dashboardUrl(`/venues/${v.id}`) })
     return NextResponse.json({ venue: v })
   } catch (err) {
     console.error('Error creating venue:', err)

@@ -229,6 +229,12 @@ async function runMigrations() {
     await client.query(`ALTER TABLE event_assignments ADD COLUMN IF NOT EXISTS last_post_game_reminder_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS last_escalation_sent_at TIMESTAMP`)
     await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS requires_staffing BOOLEAN`)
+    // Charlie 2026-08-17: some venues want a post-game report from every
+    // assigned tech, others want one report covering the whole crew. Venue sets
+    // the default, the event may override it. 'one' preserves the behaviour
+    // every existing event has had, so no backfill is needed.
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS post_game_report_mode TEXT NOT NULL DEFAULT 'one'`)
+    await client.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS post_game_report_mode TEXT`)
     await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`)
     // Joe 2026-05-04: team aliases for venue search. Tech support gets calls
     // like "Philadelphia Flyers" — typing "Flyers" should resolve to Xfinity
@@ -781,6 +787,14 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_portal_users_client ON portal_users(client_id)`)
     await client.query(`ALTER TABLE portal_users
       ADD COLUMN IF NOT EXISTS visible_tabs TEXT[] NOT NULL DEFAULT ARRAY['overview', 'requests']::TEXT[]`)
+    // Charlie 2026-08-17: self-serve password reset. The same token column
+    // carries it, so this records WHY a token was issued and the page can say
+    // "reset your password" instead of "accept your invitation".
+    await client.query(`ALTER TABLE portal_users
+      ADD COLUMN IF NOT EXISTS invite_purpose TEXT NOT NULL DEFAULT 'invite'`)
+    // Throttles reset emails per account without a separate table.
+    await client.query(`ALTER TABLE portal_users
+      ADD COLUMN IF NOT EXISTS last_password_reset_requested_at TIMESTAMPTZ`)
     // Customer-authored comments carry a display name; author_id stays the
     // service-account staff row so existing joins keep working.
     await client.query(`ALTER TABLE ticket_comments ADD COLUMN IF NOT EXISTS author_name TEXT`)

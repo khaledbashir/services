@@ -15,8 +15,7 @@ import { applyTicketClose, applyTicketInProgress } from '@/lib/ticket-close'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { notifyCustomerReply } from '@/lib/customer-notify'
 import { normalizeAttachment } from '@/lib/ticket-attachments'
-
-const DASHBOARD_URL = 'https://abc-anc-services.izcgmb.easypanel.host'
+import { DASHBOARD_URL } from '@/lib/app-url'
 
 export type PostTicketCommentResult = {
   comment: any

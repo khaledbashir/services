@@ -11,6 +11,7 @@
  */
 import fs from 'node:fs'
 import { Client } from 'pg'
+import { DASHBOARD_URL } from '../lib/app-url'
 
 const EXPORT_DIR = process.env.EXPORT_DIR || '/work/airtable-export/records'
 const WS = 'workspace_cjspnkm8glh7iooo1gep8c1qo'
@@ -81,7 +82,7 @@ async function main() {
   // Also backfill the timelineUrl for the renamed displays (in case the URL was set after name update)
   await client.query(
     `UPDATE ${WS}."_inventoryAsset"
-     SET "timelineUrlPrimaryLinkUrl" = 'https://abc-anc-services.izcgmb.easypanel.host/asset/' || id,
+     SET "timelineUrlPrimaryLinkUrl" = '${DASHBOARD_URL}/asset/' || id,
          "timelineUrlPrimaryLinkLabel" = 'View History Timeline'
      WHERE "deletedAt" IS NULL`
   )

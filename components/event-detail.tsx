@@ -6,6 +6,14 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { useToast } from '@/components/toast'
 import Link from 'next/link'
 import { useAuth } from '@/lib/useAuth'
+import {
+  POST_GAME_REPORT_MODES,
+  POST_GAME_REPORT_MODE_LABELS,
+  isPostGameReportMode,
+  normalizePostGameReportMode,
+  resolvePostGameReportMode,
+  type PostGameReportMode,
+} from '@/lib/post-game-report-mode'
 
 interface EventDetail {
   id: string
@@ -20,6 +28,9 @@ interface EventDetail {
   venue_timezone?: string
   requires_staffing: boolean | null
   venue_requires_assignment: boolean
+  /** null = follow the venue default. */
+  post_game_report_mode: PostGameReportMode | null
+  venue_post_game_report_mode: PostGameReportMode
   client_name?: string | null
   source: string | null
 }
@@ -890,6 +901,60 @@ export function EventDetailBody({
                 )
               })()}
             </div>
+
+            {/* Post-Game Report — Charlie 2026-08-17: some crews file one
+                report between them, others file one each. */}
+            {isManager && (
+              <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6">
+                <h2 className="text-sm font-semibold text-zinc-900 mb-2">Post-Game Report</h2>
+                <p className="text-xs text-zinc-500 mb-3">
+                  Venue default: <span className="font-medium text-zinc-700">{POST_GAME_REPORT_MODE_LABELS[normalizePostGameReportMode(event.venue_post_game_report_mode)]}</span>
+                </p>
+                {(() => {
+                  const effective = resolvePostGameReportMode(
+                    event.post_game_report_mode,
+                    event.venue_post_game_report_mode
+                  )
+                  const isOverridden = isPostGameReportMode(event.post_game_report_mode)
+                  const setMode = async (mode: PostGameReportMode | null) => {
+                    const res = await fetch(`/api/events/${eventId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ post_game_report_mode: mode }),
+                    })
+                    if (res.ok) {
+                      setEvent(prev => prev ? { ...prev, post_game_report_mode: mode } : prev)
+                    }
+                  }
+                  return (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        {POST_GAME_REPORT_MODES.map((mode) => (
+                          <label key={mode} className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-700">
+                            <input
+                              type="radio"
+                              name="post-game-report-mode"
+                              checked={effective === mode}
+                              onChange={() => setMode(mode)}
+                              className="mt-0.5 h-4 w-4 border-zinc-300 text-[#0A52EF] focus:ring-[#0A52EF]"
+                            />
+                            <span>{POST_GAME_REPORT_MODE_LABELS[mode]}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {isOverridden && (
+                        <button
+                          onClick={() => setMode(null)}
+                          className="text-xs text-[#0A52EF] hover:underline font-medium"
+                        >
+                          Reset to venue default
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="bg-white rounded border border-[#E8E8E8] shadow-sm p-6 space-y-3">

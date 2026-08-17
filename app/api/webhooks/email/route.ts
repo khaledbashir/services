@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { parseTicketReplyAddress } from '@/lib/email'
 import { cleanEmailReply, scheduleEmailTicketRepair } from '@/lib/email-ticket-repair'
+import { dashboardUrl } from '@/lib/app-url'
 
 const RESEND_RECEIVING_API_KEY = process.env.RESEND_RECEIVING_API_KEY || ''
 const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
@@ -79,6 +80,37 @@ function pickEmailBody(data: Record<string, any>): string {
 
 // Resend inbound email webhook
 // Webhook sends metadata only — we call Resend API to get the full email body
+
+/**
+ * Announce a newly auto-created email ticket.
+ *
+ * It goes to the venue's own channel (or the services channel when the venue
+ * has none) AND to the tech support channel, which is where the team watches
+ * for inbound work — the same place voicemail alerts land. Before this, a
+ * matched email only reached the venue channel, so support@anc.com tickets
+ * never showed up alongside the voicemails and were being missed entirely
+ * (Charlie 2026-08-17). Channels are deduped so a venue whose channel already
+ * IS tech support hears about it once, not twice.
+ */
+async function alertNewEmailTicket(
+  venueChannelId: string | null,
+  message: { text: string; blocks: any[] }
+) {
+  const channels = [...new Set([
+    venueChannelId || process.env.SLACK_DEFAULT_CHANNEL || '',
+    process.env.SLACK_SUPPORT_CHANNEL || '',
+  ].filter(Boolean))]
+
+  for (const channel of channels) {
+    try {
+      await sendSlackMessage({ channel, ...message })
+    } catch (error) {
+      // One unreachable channel must not stop the others, and must never fail
+      // the webhook — the ticket itself is already saved.
+      console.error(`[email-webhook] Slack alert failed for channel ${channel}:`, error)
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -344,34 +376,27 @@ export async function POST(request: NextRequest) {
 
     // 5. Unmatched — Slack warning with email body + ticket link (ticket was still created)
     if (!venueId) {
-      const slackChannel = process.env.SLACK_DEFAULT_CHANNEL || ''
-      if (slackChannel) {
-        const bodyPreview = emailBody ? `\n\n> ${emailBody.substring(0, 300).replace(/\n/g, '\n> ')}${emailBody.length > 300 ? '...' : ''}` : ''
-        const ticketUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/tickets/${ticket.id}`
-        await sendSlackMessage({
-          channel: slackChannel,
-          text: `⚠️ Inbound email from unknown sender: ${senderEmail} — ticket #${caseNum} created`,
-          blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `⚠️ *Inbound email — no venue match* (ticket created anyway)` } },
-            { type: 'section', fields: [
-              { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
-              { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
-            ]},
-            ...(emailBody ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Message:*${bodyPreview}` } }] : []),
-            { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket #${caseNum}>` } },
-            { type: 'context', elements: [{ type: 'mrkdwn', text: `Domain: \`${senderDomain}\` — assign this ticket to a venue to auto-route future emails from this domain.` }] },
-          ],
-        })
-      }
+      const bodyPreview = emailBody ? `\n\n> ${emailBody.substring(0, 300).replace(/\n/g, '\n> ')}${emailBody.length > 300 ? '...' : ''}` : ''
+      const ticketUrl = dashboardUrl(`/tickets/${ticket.id}`)
+      await alertNewEmailTicket(null, {
+        text: `⚠️ Inbound email from unknown sender: ${senderEmail} — ticket #${caseNum} created`,
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: `⚠️ *Inbound email — no venue match* (ticket created anyway)` } },
+          { type: 'section', fields: [
+            { type: 'mrkdwn', text: `*From:*\n${senderName} (${senderEmail})` },
+            { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
+          ]},
+          ...(emailBody ? [{ type: 'section', text: { type: 'mrkdwn', text: `*Message:*${bodyPreview}` } }] : []),
+          { type: 'section', text: { type: 'mrkdwn', text: `<${ticketUrl}|:link: View Ticket #${caseNum}>` } },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `Domain: \`${senderDomain}\` — assign this ticket to a venue to auto-route future emails from this domain.` }] },
+        ],
+      })
       console.warn(`[email-webhook] No venue match for ${senderEmail} — ticket #${caseNum} created without venue`)
       return NextResponse.json({ ok: true, ticket_number: ticket.ticket_number, venue: null, message: 'Ticket created without venue match' })
     }
 
     // Slack notification for matched venue
-    const slackChannel = channelId || process.env.SLACK_DEFAULT_CHANNEL || ''
-    if (slackChannel) {
-      await sendSlackMessage({
-        channel: slackChannel,
+    await alertNewEmailTicket(channelId, {
         text: `📧 Email ticket #${ticket.ticket_number}: ${subject}`,
         blocks: [
           {
@@ -393,15 +418,14 @@ export async function POST(request: NextRequest) {
           ] : []),
           {
             type: 'section',
-            text: { type: 'mrkdwn', text: `<${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/tickets/${ticket.id}|:link: View Ticket #${caseNum}>` },
+            text: { type: 'mrkdwn', text: `<${dashboardUrl(`/tickets/${ticket.id}`)}|:link: View Ticket #${caseNum}>` },
           },
           {
             type: 'context',
             elements: [{ type: 'mrkdwn', text: `⏱️ *SLA Response due in ${sla?.response_hours || 4}h* | _Auto-created from inbound email (matched via ${matchMethod})_` }],
           },
         ],
-      })
-    }
+    })
 
     return NextResponse.json({
       ok: true,
@@ -476,7 +500,7 @@ async function handleTicketReply(ticketNumber: number, senderEmail: string, send
     const caseNum = String(ticket.ticket_number).padStart(8, '0')
     const channelId = ticket.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
     if (channelId) {
-      const ticketUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${ticket.id}`
+      const ticketUrl = dashboardUrl(`/tickets/${ticket.id}`)
       await sendSlackMessage({
         channel: channelId,
         text: `📧 Email reply on Case #${caseNum} from ${senderName}`,

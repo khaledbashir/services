@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import { buildAssignableStaffWhere } from '@/lib/assignable-staff'
 import bcrypt from 'bcryptjs'
 
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     )
 
     const s = result.rows[0]
-    notifyOps(':bust_in_silhouette:', `*New staff added:* ${s.full_name} (${s.role})`, { label: 'View Staff', url: `https://abc-anc-services.izcgmb.easypanel.host/staff/${s.id}` })
+    notifyOps(':bust_in_silhouette:', `*New staff added:* ${s.full_name} (${s.role})`, { label: 'View Staff', url: dashboardUrl(`/staff/${s.id}`) })
     return NextResponse.json({ staff: s })
   } catch (err) {
     console.error('Error creating staff:', err)

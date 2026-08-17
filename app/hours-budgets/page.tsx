@@ -29,6 +29,21 @@ interface Budget {
 
 interface Venue { id: string; name: string; aliases?: string[] | null }
 
+const DEFAULT_ALERT_THRESHOLDS = [25, 50, 75, 85, 90, 95, 100]
+
+/**
+ * "25, 50, 75" -> [25, 50, 75]. Blank input means "leave what's saved alone",
+ * so it returns undefined and the field is omitted from the PATCH body rather
+ * than silently resetting the client's thresholds to the defaults.
+ */
+function parseAlertThresholds(input: string): number[] | undefined {
+  if (!input.trim()) return undefined
+  const parsed = [...new Set(
+    input.split(',').map((v) => Number(v.trim())).filter((n) => Number.isInteger(n) && n > 0 && n <= 100)
+  )].sort((a, b) => a - b)
+  return parsed.length ? parsed : undefined
+}
+
 // The Wrike import created one budget per client × YEAR, with the tri-code
 // buried in the client name — e.g. "Indiana Pacers (IND-PAC)". That's why the
 // list looked like it had missing tri-codes (no badge) and duplicates (the same
@@ -90,6 +105,10 @@ export default function HoursBudgetsPage() {
     notes: '',
     contract_start: '',
     contract_end: '',
+    // Charlie 2026-08-17: alert settings were only settable at create time, so
+    // a client asking for different thresholds later could not be accommodated.
+    alert_thresholds: '',
+    alert_recipient_email: '',
   })
 
   const fetchData = async () => {
@@ -169,6 +188,8 @@ export default function HoursBudgetsPage() {
       notes: b.notes || '',
       contract_start: b.contract_start || '',
       contract_end: b.contract_end || '',
+      alert_thresholds: (b.alert_thresholds?.length ? b.alert_thresholds : DEFAULT_ALERT_THRESHOLDS).join(', '),
+      alert_recipient_email: b.alert_recipient_email || '',
     })
   }
 
@@ -190,6 +211,10 @@ export default function HoursBudgetsPage() {
           notes: editForm.notes || null,
           contract_start: editForm.contract_start || null,
           contract_end: editForm.contract_end || null,
+          ...(parseAlertThresholds(editForm.alert_thresholds)
+            ? { alert_thresholds: parseAlertThresholds(editForm.alert_thresholds) }
+            : {}),
+          alert_recipient_email: editForm.alert_recipient_email.trim() || null,
         }),
       })
       if (res.ok) {
@@ -665,6 +690,26 @@ export default function HoursBudgetsPage() {
                     type="date"
                     value={editForm.contract_end}
                     onChange={(e) => setEditForm((p) => ({ ...p, contract_end: e.target.value }))}
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Alert Thresholds (%)</label>
+                  <input
+                    type="text"
+                    value={editForm.alert_thresholds}
+                    onChange={(e) => setEditForm((p) => ({ ...p, alert_thresholds: e.target.value }))}
+                    placeholder="25, 50, 75, 85, 90, 95, 100"
+                    className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-600">Client Alert Email</label>
+                  <input
+                    type="email"
+                    value={editForm.alert_recipient_email}
+                    onChange={(e) => setEditForm((p) => ({ ...p, alert_recipient_email: e.target.value }))}
+                    placeholder="client@example.com"
                     className="w-full border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
                   />
                 </div>

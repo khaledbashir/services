@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 
 const MAX_DATA_URL_LENGTH = 8_000_000
 function normalizeImage(input: any): { imageUrl: string; mimeType: string; filename: string | null } | null {
@@ -18,7 +19,7 @@ export async function POST(
   try {
     // Validate token
     const venueResult = await query(
-      `SELECT id FROM venues WHERE portal_token = $1`,
+      `SELECT id, name FROM venues WHERE portal_token = $1`,
       [params.token]
     )
     if (venueResult.rows.length === 0) {
@@ -40,13 +41,18 @@ export async function POST(
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     }
 
-    // Add as external comment (visible to both sides) from Claw
+    // Add as external comment (visible to both sides). The row is owned by the
+    // shared portal service account, but author_name carries who it came from
+    // so the dashboard credits the client, not the service account. This portal
+    // is opened with a shared venue link and has no signed-in person, so the
+    // venue itself is the most specific attribution available.
     const CLAW_STAFF_ID = '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
+    const portalAuthorName = `${venueResult.rows[0].name} (Portal)`
     const comment = await query(
-      `INSERT INTO ticket_comments (ticket_id, author_id, body, is_internal, created_at)
-       VALUES ($1, $2, $3, false, NOW())
+      `INSERT INTO ticket_comments (ticket_id, author_id, author_name, body, is_internal, created_at)
+       VALUES ($1, $2, $3, $4, false, NOW())
        RETURNING id`,
-      [ticket_id, CLAW_STAFF_ID, body || (caption ? `Photo: ${caption}` : 'Photo attached')]
+      [ticket_id, CLAW_STAFF_ID, portalAuthorName, body || (caption ? `Photo: ${caption}` : 'Photo attached')]
     )
     if (normalizedImage) {
       await query(
@@ -61,7 +67,7 @@ export async function POST(
       const t = ticketInfo.rows[0]
       const caseNum = String(t.ticket_number).padStart(8, '0')
       const preview = body || (normalizedImage ? 'Photo attached' : '')
-      notifyOps(':speech_balloon:', `*Portal comment* on Case #${caseNum} (${t.venue_name}):\n> ${preview.substring(0, 200)}${preview.length > 200 ? '...' : ''}`, { label: 'View Ticket', url: `https://abc-anc-services.izcgmb.easypanel.host/tickets/${ticket_id}` }, t.slack_channel_id)
+      notifyOps(':speech_balloon:', `*Portal comment* on Case #${caseNum} (${t.venue_name}):\n> ${preview.substring(0, 200)}${preview.length > 200 ? '...' : ''}`, { label: 'View Ticket', url: dashboardUrl(`/tickets/${ticket_id}`) }, t.slack_channel_id)
     }
 
     return NextResponse.json({ ok: true })

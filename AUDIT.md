@@ -3,7 +3,7 @@
 **Date:** March 27, 2026 (updated)
 **Auditor:** Ahmad Basheer
 **Codebase:** github.com/khaledbashir/services
-**Live URL:** https://abc-anc-services.izcgmb.easypanel.host
+**Live URL:** https://services.ancsports.net
 
 ---
 

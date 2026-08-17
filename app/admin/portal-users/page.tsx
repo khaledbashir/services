@@ -151,16 +151,18 @@ export default function PortalUsersAdminPage() {
     [editVenueSearch, venues]
   )
 
+  // Every venue is listed. This used to stop at the first 100, which cut the
+  // alphabet off around M and made the venues past it reachable only by typing
+  // a search — Charlie 2026-08-17. A few hundred checkbox rows inside the
+  // scroll container cost nothing, and a silently short list costs access.
   function filterVenues(source: VenueOption[], search: string) {
     const q = search.trim().toLowerCase()
-    return (q
-      ? source.filter((venue) =>
-          [venue.name, venue.market, venue.primary_contact_email]
-            .filter(Boolean)
-            .some((value) => String(value).toLowerCase().includes(q))
-        )
-      : source
-    ).slice(0, 100)
+    if (!q) return source
+    return source.filter((venue) =>
+      [venue.name, venue.market, venue.primary_contact_email]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q))
+    )
   }
 
   function resetCreate() {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { dashboardUrl } from '@/lib/app-url'
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'anc-internal-2026'
 
@@ -73,7 +74,7 @@ export async function PATCH(
     const ticket = result.rows[0]
     const caseNum = String(oldTicket.ticket_number).padStart(8, '0')
     const channelId = oldTicket.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
-    const ticketUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
+    const ticketUrl = dashboardUrl(`/tickets/${params.id}`)
 
     // Slack + email for status changes
     if (status && status !== oldTicket.status && channelId) {

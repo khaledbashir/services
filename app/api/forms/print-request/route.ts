@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { twentyCreate, requireFields, str } from '../_helpers'
 import { notifyMarketingFormSubmission } from '@/lib/marketing-form-notifications'
+import { DASHBOARD_URL } from '@/lib/app-url'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
+const APP_URL = DASHBOARD_URL
 
 export async function POST(request: NextRequest) {
   try {

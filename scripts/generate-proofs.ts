@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { query } from '../lib/db'
 import { patchTwentyRecord, fetchAttachmentsForRecord } from '../lib/proof-share'
+import { dashboardUrl } from '../lib/app-url'
 
 const TWENTY_BASE = 'https://abc-twenty.izcgmb.easypanel.host'
 const TWENTY_API_KEY = process.env.TWENTY_API_KEY!
@@ -10,8 +11,7 @@ function generateToken(length = 24): string {
 }
 
 function buildPublicUrl(token: string): string {
-  const base = 'https://abc-anc-services.izcgmb.easypanel.host'
-  return `${base}/proof/${token}`
+  return dashboardUrl(`/proof/${token}`)
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))

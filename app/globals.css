@@ -136,8 +136,29 @@ body {
 }
 
 .dark .bg-zinc-50,
-.dark .bg-gray-50 {
+.dark .bg-gray-50,
+/* Inset panels and table headers written as raw hex rather than a zinc/gray
+   utility. #FAFAFA IS zinc-50, so it belongs in exactly this group; it was
+   missing, which left white boxes on the event, venue, checklist, live-command
+   and marketing pages in dark mode — Charlie 2026-08-17. */
+.dark [class~="bg-[#FAFAFA]"],
+.dark [class~="bg-[#F8FAFC]"],
+.dark [class~="bg-[#F7F8FC]"],
+.dark [class~="bg-[#F5F9FF]"],
+.dark [class~="bg-[#F3F6FA]"],
+.dark [class~="bg-[#fafbfc]"],
+.dark [class~="bg-[#f7f9fc]"],
+.dark [class~="bg-[#f6f8fb]"],
+.dark [class~="bg-[#f3f5f8]"],
+.dark [class~="bg-[#f0f2f5]"] {
   background-color: var(--anc-surface-muted) !important;
+}
+
+/* Row hover on those same tables — the hover variant is its own class token,
+   so it needs its own selector or rows flash white under the cursor. */
+.dark [class~="hover:bg-[#FAFAFA]"]:hover,
+.dark [class~="hover:bg-[#F8FAFC]"]:hover {
+  background-color: var(--anc-surface-raised) !important;
 }
 
 .dark .bg-zinc-100,
@@ -155,7 +176,11 @@ body {
 
 .dark [class*="from-[#F8FBFF]"],
 .dark [class*="to-[#EEF4FF]"],
-.dark [class*="from-zinc-50"][class*="to-white"] {
+.dark [class*="from-zinc-50"][class*="to-white"],
+/* Card headers on the Events screens are written as an inline linear-gradient
+   arbitrary value rather than from-/to- utilities, so they need matching here
+   or the header band stays white while the card below it goes dark. */
+.dark [class*="linear-gradient(180deg,#FFFFFF,#F8FAFC)"] {
   background-image: linear-gradient(135deg, #172033 0%, #111827 58%, #0b1220 100%) !important;
 }
 

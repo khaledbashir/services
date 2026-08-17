@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage, sendSlackMessageDetailed } from '@/lib/slack'
 import { ensureWorkflowReminderTracking, recordPostGameReminder } from '@/lib/workflow-reminder-cleanup'
+import { dashboardUrl as buildDashboardUrl } from '@/lib/app-url'
 
 // Called every 15 min by EasyPanel cron or external scheduler
 // Sends reminders to techs who haven't checked in before their events
 //
 // Scheduler setup (EasyPanel or system cron):
-//   */15 * * * * curl -s https://abc-anc-services.izcgmb.easypanel.host/api/cron/reminders
+//   */15 * * * * curl -s https://services.ancsports.net/api/cron/reminders
 
 const DEDUP_WINDOW_MS = 2 * 3600000 // 2 hours — don't re-remind within this window
 
@@ -72,7 +73,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
+      const workflowUrl = buildDashboardUrl(`/workflow/${row.event_id}`)
       const sent = await sendSlackMessage({
         channel,
         text: `Reminder: ${row.full_name} — ${row.summary} at ${row.venue_name}`,
@@ -265,7 +266,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
+      const workflowUrl = buildDashboardUrl(`/workflow/${row.event_id}`)
       const sent = await sendSlackMessage({
         channel,
         text: `⏰ Game Ready check — ${row.full_name} at ${row.venue_name}`,
@@ -319,9 +320,16 @@ export async function GET() {
            WHERE ws.event_id = e.id AND ws.staff_id = s.id
              AND ws.type IN ('check_in', 'game_ready')
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM workflow_submissions ws
-           WHERE ws.event_id = e.id AND ws.type = 'post_game_report'
+         -- On an event set to "one report", the first submission closes it out
+         -- for the whole crew and nobody else is chased. On "everyone", each
+         -- assigned tech is chased until they have submitted their own
+         -- (Charlie 2026-08-17).
+         AND (
+           COALESCE(e.post_game_report_mode, v.post_game_report_mode, 'one') = 'everyone'
+           OR NOT EXISTS (
+             SELECT 1 FROM workflow_submissions ws
+             WHERE ws.event_id = e.id AND ws.type = 'post_game_report'
+           )
          )
          AND NOT EXISTS (
            SELECT 1 FROM workflow_submissions ws
@@ -340,7 +348,7 @@ export async function GET() {
       const channel = row.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (!channel) continue
 
-      const workflowUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/workflow/${row.event_id}`
+      const workflowUrl = buildDashboardUrl(`/workflow/${row.event_id}`)
       const sent = await sendSlackMessageDetailed({
         channel,
         text: `📝 Post-Game report pending — ${row.full_name} at ${row.venue_name}`,

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { approvedOnly } from '@/lib/event-approval'
 import { sendSlackMessage } from '@/lib/slack'
+import { DASHBOARD_URL } from '@/lib/app-url'
 
 // Scheduler: run hourly. Finds events crossing the ~24h-out mark
 // (start_time within next 23–25h) that still need staffing and have
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'SLACK_DEFAULT_CHANNEL not configured' }, { status: 500 })
     }
 
-    const dashboardBase = process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
+    const dashboardBase = DASHBOARD_URL
 
     const lines = unassigned.map((e: any) => {
       const when = new Date(e.start_time).toLocaleString('en-US', {

@@ -27,16 +27,36 @@ export async function recordPostGameReminder(
   )
 }
 
-export async function clearPostGameReminderMessages(eventId: string) {
+/**
+ * Take down the Slack reminders a post-game submission has answered.
+ *
+ * On an event set to "one report", the submission answers for the whole crew,
+ * so every reminder on the event comes down. On "everyone submits", it only
+ * answers for the person who submitted — the rest still owe a report and must
+ * keep their reminder (Charlie 2026-08-17). Pass the submitting staff id so the
+ * right rows are chosen.
+ */
+export async function clearPostGameReminderMessages(eventId: string, submittedByStaffId?: string) {
   await ensureWorkflowReminderTracking()
+
+  const modeResult = await query(
+    `SELECT COALESCE(e.post_game_report_mode, v.post_game_report_mode, 'one') AS mode
+     FROM events e LEFT JOIN venues v ON v.id = e.venue_id
+     WHERE e.id = $1`,
+    [eventId],
+  )
+  const perPerson = modeResult.rows[0]?.mode === 'everyone' && Boolean(submittedByStaffId)
+
+  const scope = perPerson ? ' AND staff_id = $2' : ''
+  const params = perPerson ? [eventId, submittedByStaffId] : [eventId]
 
   const reminders = await query(
     `SELECT DISTINCT post_game_reminder_channel, post_game_reminder_ts
      FROM event_assignments
      WHERE event_id = $1
        AND post_game_reminder_channel IS NOT NULL
-       AND post_game_reminder_ts IS NOT NULL`,
-    [eventId],
+       AND post_game_reminder_ts IS NOT NULL${scope}`,
+    params,
   )
 
   await Promise.all(
@@ -49,7 +69,7 @@ export async function clearPostGameReminderMessages(eventId: string) {
     `UPDATE event_assignments
      SET post_game_reminder_channel = NULL,
          post_game_reminder_ts = NULL
-     WHERE event_id = $1`,
-    [eventId],
+     WHERE event_id = $1${scope}`,
+    params,
   )
 }

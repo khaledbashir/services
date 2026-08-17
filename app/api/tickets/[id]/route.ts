@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage, ticketActionBlock } from '@/lib/slack'
 import { venueHasClientAudience } from '@/lib/venue-client-audience'
+import { dashboardUrl } from '@/lib/app-url'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
@@ -77,8 +78,17 @@ export async function GET(
     }
 
     const commentsResult = await query(
+      // Portal replies are written by the shared portal service account, with
+      // the person who actually typed them in author_name/author_email
+      // (see /api/customer/tickets/[id]). Reading only the staff join showed
+      // every portal reply as the service account and tripped the "email"
+      // heuristic in the UI — Charlie 2026-08-17. Resolve the real author and
+      // hand the client an explicit origin instead of a name guess.
       `SELECT tc.id, tc.body, tc.is_internal, tc.author_id,
-              s.full_name as author_name,
+              COALESCE(NULLIF(TRIM(tc.author_name), ''), s.full_name) as author_name,
+              NULLIF(TRIM(tc.author_email), '') as author_email,
+              tc.source_channel,
+              (NULLIF(TRIM(tc.author_name), '') IS NOT NULL) as is_portal,
               TO_CHAR(tc.created_at AT TIME ZONE 'America/New_York', 'Mon DD, YYYY HH12:MI AM') as created_date
        FROM ticket_comments tc
        LEFT JOIN staff s ON tc.author_id = s.id
@@ -333,7 +343,7 @@ export async function PATCH(
       const priChannelId = priChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (priChannelId) {
         const priEmoji = priority === 'critical' ? ':red_circle:' : priority === 'high' ? ':large_orange_circle:' : ':large_yellow_circle:'
-        const priUrl = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
+        const priUrl = dashboardUrl(`/tickets/${params.id}`)
         sendSlackMessage({
           channel: priChannelId,
           text: `${priEmoji} Case #${priCaseNum} priority changed to ${priority}`,

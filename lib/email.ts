@@ -149,6 +149,41 @@ export async function sendPortalInviteEmail(opts: {
   return sendEmail([opts.to], 'Your ANC Customer Portal invitation', html)
 }
 
+/**
+ * Password reset for someone who already has portal access (Charlie
+ * 2026-08-17). Deliberately worded as a reset, not an invitation — a customer
+ * who asked to get back in and receives "you've been given access" reads it as
+ * a mistake and calls support, which is the call this is meant to remove.
+ */
+export async function sendPortalPasswordResetEmail(opts: {
+  to: string
+  fullName: string
+  clientName?: string | null
+  resetUrl: string
+  expiresInHours: number
+}): Promise<boolean> {
+  const firstName = opts.fullName.trim().split(/\s+/)[0] || opts.fullName
+  const orgLine = opts.clientName
+    ? `<p style="margin:4px 0 0;opacity:0.7;font-size:13px">${escapeHtml(opts.clientName)}</p>`
+    : ''
+  const html = `<div style="font-family:sans-serif;max-width:600px">
+    <div style="background:#002C73;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+      <h2 style="margin:0;font-size:16px">Reset your ANC Customer Portal password</h2>
+      ${orgLine}
+    </div>
+    <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+      <p style="margin:0 0 12px;font-size:14px;color:#1e293b;line-height:1.5">Hi ${escapeHtml(firstName)},</p>
+      <p style="margin:0 0 16px;font-size:14px;color:#1e293b;line-height:1.5">We received a request to reset the password on your ANC Customer Portal account. Use the button below to choose a new one. This link is valid for ${opts.expiresInHours} hours.</p>
+      <p style="margin:0 0 16px"><a href="${opts.resetUrl}" style="display:inline-block;background:#0A52EF;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 22px;border-radius:8px">Reset your password</a></p>
+      <p style="margin:0 0 12px;font-size:12px;color:#64748b;line-height:1.5">If the button doesn't work, copy and paste this link into your browser:<br><a href="${opts.resetUrl}" style="color:#0A52EF;word-break:break-all">${opts.resetUrl}</a></p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+      <p style="margin:0;font-size:12px;color:#94a3b8">If you didn't request this, you can ignore this email — your current password still works.</p>
+      <p style="margin:0;font-size:12px;color:#94a3b8">ANC Sports + Entertainment</p>
+    </div>
+  </div>`
+  return sendEmail([opts.to], 'Reset your ANC Customer Portal password', html)
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     if (char === '&') return '&amp;'

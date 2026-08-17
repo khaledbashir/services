@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import bcrypt from 'bcryptjs'
 
 export async function GET(
@@ -77,7 +78,7 @@ export async function PATCH(
 
     const s = result.rows[0]
     const changes = Object.keys(body).filter(k => k !== 'password').join(', ')
-    notifyOps(':pencil2:', `*Staff updated:* ${s.full_name} — changed: ${changes}`, { label: 'View Staff', url: `https://abc-anc-services.izcgmb.easypanel.host/staff/${s.id}` })
+    notifyOps(':pencil2:', `*Staff updated:* ${s.full_name} — changed: ${changes}`, { label: 'View Staff', url: dashboardUrl(`/staff/${s.id}`) })
     return NextResponse.json({ staff: s })
   } catch (err) {
     console.error('Error updating staff:', err)

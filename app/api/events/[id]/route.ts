@@ -7,6 +7,7 @@ import { getAuthUser, isAuthError, requireRole } from '@/lib/rbac'
 import { combineLocalToUtc } from '@/lib/timezone'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
 import { formatVenueEventSummary } from '@/lib/event-display'
+import { isPostGameReportMode, resolvePostGameReportMode } from '@/lib/post-game-report-mode'
 
 export async function GET(
   request: NextRequest,
@@ -29,7 +30,9 @@ export async function GET(
         COALESCE(v.venue_type, 'sports') as venue_type,
         c.name as client_name,
         COALESCE(v.timezone, 'America/New_York') as venue_timezone,
-        COALESCE(v.requires_assignment, true) as venue_requires_assignment_legacy
+        COALESCE(v.requires_assignment, true) as venue_requires_assignment_legacy,
+        e.post_game_report_mode,
+        COALESCE(v.post_game_report_mode, 'one') as venue_post_game_report_mode
       FROM events e
       LEFT JOIN venues v ON e.venue_id = v.id
       LEFT JOIN clients c ON e.client_id = c.id
@@ -77,6 +80,11 @@ export async function GET(
     // Joe 2026-04-29: venue.requires_assignment is the single staffing-default
     // signal; per-event override via events.requires_staffing.
     event.venue_requires_assignment = event.venue_requires_assignment_legacy !== false
+    // Charlie 2026-08-17: the event may override the venue's post-game default.
+    event.effective_post_game_report_mode = resolvePostGameReportMode(
+      event.post_game_report_mode,
+      event.venue_post_game_report_mode
+    )
 
     if (user.role === 'technician') {
       const accessResult = await query(
@@ -177,6 +185,16 @@ export async function PATCH(
       const val = body.requires_staffing === null ? null : Boolean(body.requires_staffing)
       updates.push(`requires_staffing = $${paramIndex++}`)
       values.push(val)
+    }
+
+    // null clears the override and hands the event back to the venue default.
+    if ('post_game_report_mode' in body) {
+      const raw = body.post_game_report_mode
+      if (raw !== null && !isPostGameReportMode(raw)) {
+        return NextResponse.json({ error: 'post_game_report_mode must be "one", "everyone", or null' }, { status: 400 })
+      }
+      updates.push(`post_game_report_mode = $${paramIndex++}`)
+      values.push(raw)
     }
 
     if ('summary' in body && typeof body.summary === 'string' && body.summary.trim()) {

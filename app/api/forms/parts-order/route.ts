@@ -3,9 +3,10 @@ import { twentyCreate, requireFields, str } from '../_helpers'
 import { notifyOps } from '@/lib/slack'
 import { sendEmail } from '@/lib/email'
 import { notifyMarketingFormSubmission } from '@/lib/marketing-form-notifications'
+import { DASHBOARD_URL, dashboardUrl } from '@/lib/app-url'
 
 const SLACK_PARTS_CHANNEL = process.env.SLACK_PARTS_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || '#ops-parts'
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'
+const APP_URL = DASHBOARD_URL
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     const created = result.data.data.createPartsOrder
 
     // Async slack and email notifications
-    const dashboardLink = { label: 'View Order', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/parts-orders/${created.id}` }
+    const dashboardLink = { label: 'View Order', url: dashboardUrl(`/parts-orders/${created.id}`) }
     notifyOps(
       ':package:',
       `New Parts Order: *${created.name}*\nRequestor: ${payload.requestorName} (${payload.requestorEmail})\nUrgency: ${urgency || 'Normal'}\nParts: ${payload.partsNeeded}`,

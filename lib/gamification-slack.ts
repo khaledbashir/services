@@ -1,8 +1,9 @@
 import { sendSlackMessage } from './slack'
 import { getLeaderboard, getTeamStandings, type Badge, type StreakInfo } from './gamification'
+import { dashboardUrl } from './app-url'
 
 const CHANNEL = () => process.env.SLACK_GAMIFICATION_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || ''
-const DASHBOARD_URL = 'https://services.ancsports.net/gamification'
+const DASHBOARD_URL = dashboardUrl('/gamification')
 
 const TIER_EMOJI: Record<string, string> = {
   bronze: '🥉',

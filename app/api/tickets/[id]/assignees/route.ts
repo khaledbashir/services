@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 
@@ -87,7 +88,7 @@ export async function POST(
       const channelId = t.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
       if (channelId) {
         const caseNum = String(t.ticket_number).padStart(8, '0')
-        const url = `https://abc-anc-services.izcgmb.easypanel.host/tickets/${params.id}`
+        const url = dashboardUrl(`/tickets/${params.id}`)
         sendSlackMessage({
           channel: channelId,
           text: `:bust_in_silhouette: Case #${caseNum} — ${assignedName} added as assignee`,

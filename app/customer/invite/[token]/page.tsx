@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 export default function CustomerInvitePage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
-  const [invite, setInvite] = useState<{ email: string; full_name: string; client_name: string | null } | null>(null)
+  const [invite, setInvite] = useState<{ email: string; full_name: string; client_name: string | null; purpose?: string } | null>(null)
   const [invalid, setInvalid] = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -43,21 +43,26 @@ export default function CustomerInvitePage() {
     }
   }
 
+  // A reset token and an invite token are the same kind of credential; only
+  // the wording differs, so a customer who asked to reset is not told they have
+  // "been given access" (Charlie 2026-08-17).
+  const isReset = invite?.purpose === 'reset'
+
   return (
     <div className="cp-auth-shell">
       <div className="cp-auth-card">
         <div className="text-center mb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/ANC_Logo_2023_white.png" alt="ANC" className="h-10 mx-auto mb-6" />
-          <div className="cp-header-tag mb-3">Account Activation</div>
-          <h1 className="cp-display text-3xl font-bold">Welcome aboard</h1>
+          <div className="cp-header-tag mb-3">{isReset ? 'Password Reset' : 'Account Activation'}</div>
+          <h1 className="cp-display text-3xl font-bold">{isReset ? 'Choose a new password' : 'Welcome aboard'}</h1>
         </div>
 
         {invalid ? (
           <div className="cp-panel p-8 text-center">
-            <p className="font-medium">This invite link is invalid or has expired.</p>
+            <p className="font-medium">This link is invalid or has expired.</p>
             <p className="text-sm mt-2" style={{ color: 'var(--cp-muted)' }}>
-              Contact your ANC account representative for a new invite.
+              Request a new one from the sign-in page, or contact your ANC account representative.
             </p>
           </div>
         ) : !invite ? (
@@ -65,7 +70,7 @@ export default function CustomerInvitePage() {
         ) : (
           <form onSubmit={handleSubmit} className="cp-panel p-8 space-y-6">
             <div>
-              <div className="cp-label mb-1">Activating account for</div>
+              <div className="cp-label mb-1">{isReset ? 'Resetting password for' : 'Activating account for'}</div>
               <div className="font-medium">{invite.full_name}</div>
               <div className="cp-mono text-xs mt-0.5" style={{ color: 'var(--cp-muted)' }}>
                 {invite.email}{invite.client_name && ` · ${invite.client_name}`}
@@ -98,7 +103,7 @@ export default function CustomerInvitePage() {
             </div>
             {error && <div className="cp-error">{error}</div>}
             <button type="submit" disabled={loading} className="cp-btn w-full">
-              {loading ? 'Activating…' : 'Activate & sign in'}
+              {loading ? (isReset ? 'Saving…' : 'Activating…') : (isReset ? 'Save & sign in' : 'Activate & sign in')}
             </button>
           </form>
         )}

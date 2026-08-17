@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import { buildEventTimestamps } from '@/lib/timezone'
 import { syncEventsToTwenty } from '@/lib/twenty-sync'
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       ? await notifyOps(
           ':calendar:',
           `*New event created:* ${summary} — ${event_date} at ${venueName}${staffCount > 0 ? ` (${staffCount} staff assigned)` : ''}`,
-          { label: 'View Event', url: `https://abc-anc-services.izcgmb.easypanel.host/events/${eventId}` },
+          { label: 'View Event', url: dashboardUrl(`/events/${eventId}`) },
           venueChannel
         )
       : false

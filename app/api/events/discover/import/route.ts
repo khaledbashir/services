@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { notifyOps } from '@/lib/slack'
+import { dashboardUrl } from '@/lib/app-url'
 import { DiscoveryCandidate, getDiscoveryVenue, importDiscoveryEvents } from '@/lib/event-discovery'
 
 export async function POST(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
           notifyOps(
             ':mag:',
             `*AI Event Discovery:* ${result.imported} events imported for *${venue.name}*`,
-            { label: 'View Venue', url: `https://abc-anc-services.izcgmb.easypanel.host/venues/${defaultVenueId}` },
+            { label: 'View Venue', url: dashboardUrl(`/venues/${defaultVenueId}`) },
             venue.slack_channel_id || undefined
           )
         }
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
         notifyOps(
           ':mag:',
           `*AI Event Discovery:* ${result.imported} events imported across ${Object.keys(result.byVenue).length} venues`,
-          { label: 'View Events', url: 'https://abc-anc-services.izcgmb.easypanel.host/events' }
+          { label: 'View Events', url: dashboardUrl('/events') }
         )
       }
     }

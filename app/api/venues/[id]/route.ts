@@ -8,6 +8,7 @@ import { geocodeAddress } from '@/lib/geocode'
 import { twentyClient } from '@/lib/twenty-client'
 import { formatVenueEventSummary } from '@/lib/event-display'
 import { SPEC_SHEET_PRINT_SQL_WITH_ALIAS } from '@/lib/spec-sheet-work'
+import { isPostGameReportMode } from '@/lib/post-game-report-mode'
 
 async function getVenuePrimaryClientId(venueId: string): Promise<string | null> {
   const result = await query(
@@ -40,6 +41,7 @@ export async function GET(
         v.primary_contact_name,
         v.primary_contact_email,
         v.requires_assignment,
+        COALESCE(v.post_game_report_mode, 'one') as post_game_report_mode,
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.distribution_emails, '{}') as distribution_emails,
@@ -403,6 +405,28 @@ export async function PATCH(
       )
     }
 
+    // Post-game report default for the venue (Charlie 2026-08-17). Mirrors
+    // requires_assignment: setting the venue default clears per-event overrides
+    // on future events so the venue setting is the one source of truth, and any
+    // override set after this still wins.
+    if (body.post_game_report_mode !== undefined) {
+      if (!isPostGameReportMode(body.post_game_report_mode)) {
+        return NextResponse.json({ error: 'post_game_report_mode must be "one" or "everyone"' }, { status: 400 })
+      }
+      await query(
+        `UPDATE venues SET post_game_report_mode = $1 WHERE id = $2`,
+        [body.post_game_report_mode, venueId]
+      )
+      await query(
+        `UPDATE events
+         SET post_game_report_mode = NULL
+         WHERE venue_id = $1
+           AND event_date >= CURRENT_DATE
+           AND post_game_report_mode IS NOT NULL`,
+        [venueId]
+      )
+    }
+
     // Handle slack_channel_id
     if (body.slack_channel_id !== undefined) {
       await query(
@@ -481,6 +505,7 @@ export async function PATCH(
         v.primary_contact_name,
         v.primary_contact_email,
         v.requires_assignment,
+        COALESCE(v.post_game_report_mode, 'one') as post_game_report_mode,
         v.portal_token,
         COALESCE(v.venue_type, 'sports') as venue_type,
         COALESCE(v.distribution_emails, '{}') as distribution_emails,

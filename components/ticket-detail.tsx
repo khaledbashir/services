@@ -33,7 +33,17 @@ interface TicketDetail {
   sf_case_number: string | null
   image_url: string | null
 }
-interface Comment { id: string; body: string; is_internal: boolean; author_id?: string | null; author_name: string; created_date: string }
+interface Comment {
+  id: string
+  body: string
+  is_internal: boolean
+  author_id?: string | null
+  author_name: string
+  /** Set when the reply came through a client portal — carries who typed it. */
+  author_email?: string | null
+  is_portal?: boolean
+  created_date: string
+}
 interface Activity { action: string; staff_id: string | null; details: any; created_at: string }
 interface Staff { id: string; full_name: string }
 interface TicketAttachment {
@@ -50,8 +60,16 @@ interface TicketAttachment {
   created_date: string
 }
 
+/** A client reply typed into a portal, not an email and not an ANC note. */
+function isPortalComment(comment: Comment) {
+  return !comment.is_internal && comment.is_portal === true
+}
+
 function isTicketEmailComment(comment: Comment) {
   if (comment.is_internal) return false
+  // A portal reply is attributed to the portal service account too, so it must
+  // be ruled out before the service-account name is read as "this is an email".
+  if (isPortalComment(comment)) return false
   return comment.author_name === 'ANC Bot'
     || /^Email (from|sent to)/i.test(comment.body || '')
     || /^Outbound email/i.test(comment.body || '')
@@ -1147,6 +1165,7 @@ export function TicketDetail({
                                     <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
                                     {comment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Internal</span>}
                                     {isEmail && <span className="text-[9px] font-semibold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-wider">{isVoicemailTicket ? 'Voicemail' : 'Email'}</span>}
+                                    {isPortalComment(comment) && <span className="text-[9px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase tracking-wider">Portal comment</span>}
                                     <span className="text-[10px] text-zinc-300 tabular-nums">{timeStr}</span>
                                     {!isEmail && canDeleteComment(comment) && (
                                       <button type="button" onClick={() => deleteComment(comment.id)} title="Delete note"
@@ -1771,6 +1790,7 @@ export function TicketDetail({
                                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${comment.is_internal ? 'bg-indigo-100 text-indigo-700' : 'bg-zinc-100 text-zinc-600'}`}>{getInitials(comment.author_name)}</div>
                                   <span className="text-xs font-semibold text-zinc-900">{comment.author_name}</span>
                                   {comment.is_internal && <span className="text-[9px] font-semibold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase">Internal</span>}
+                                  {isPortalComment(comment) && <span className="text-[9px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase">Portal comment</span>}
                                   <span className="text-[10px] text-zinc-300 tabular-nums ml-auto">{timeStr}</span>
                                   {canDeleteComment(comment) && (
                                     <button type="button" onClick={() => deleteComment(comment.id)} title="Delete note"

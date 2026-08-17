@@ -4,6 +4,7 @@ export const revalidate = 0
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import { dashboardUrl as buildDashboardUrl } from '@/lib/app-url'
 import { appendFile } from 'fs/promises'
 import { resolve } from 'path'
 import { getAuthUser } from '@/lib/rbac'
@@ -255,9 +256,30 @@ export async function POST(
       else if (row.type === 'post_game_report') workflow.post_game_submitted = row.submitted_at
     }
 
+    // On an event set to "everyone submits", one report does not finish the
+    // event — it is only complete once every assigned technician has filed one
+    // (Charlie 2026-08-17). On "one", the first report closes it, as before.
+    const postGameCoverage = await query(
+      `SELECT COALESCE(e.post_game_report_mode, v.post_game_report_mode, 'one') AS mode,
+              (SELECT COUNT(*) FROM event_assignments ea WHERE ea.event_id = e.id) AS assigned_count,
+              (SELECT COUNT(DISTINCT ws.staff_id) FROM workflow_submissions ws
+                JOIN event_assignments ea2 ON ea2.event_id = ws.event_id AND ea2.staff_id = ws.staff_id
+                WHERE ws.event_id = e.id AND ws.type = 'post_game_report') AS submitted_count
+       FROM events e
+       LEFT JOIN venues v ON v.id = e.venue_id
+       WHERE e.id = $1`,
+      [eventId]
+    )
+    const coverage = postGameCoverage.rows[0]
+    const postGameComplete = Boolean(workflow.post_game_submitted) && (
+      coverage?.mode !== 'everyone'
+      || Number(coverage.assigned_count) === 0
+      || Number(coverage.submitted_count) >= Number(coverage.assigned_count)
+    )
+
     // Determine new event status (using frontend type names)
     let eventStatus = 'pending'
-    if (workflow.post_game_submitted) eventStatus = 'post_game_submitted'
+    if (postGameComplete) eventStatus = 'post_game_submitted'
     else if (workflow.game_ready) eventStatus = 'game_ready'
     else if (workflow.checked_in) eventStatus = 'checked_in'
 
@@ -268,7 +290,7 @@ export async function POST(
     )
 
     if (submissionType === 'post_game_report') {
-      clearPostGameReminderMessages(eventId).catch((cleanupErr) => {
+      clearPostGameReminderMessages(eventId, effectiveStaffId).catch((cleanupErr) => {
         console.error('[workflow] failed to clear post-game Slack reminders:', cleanupErr)
       })
     }
@@ -387,7 +409,7 @@ export async function POST(
 
     const wf = workflowLabels[dbType] || { label: dbType, emoji: ':gear:' }
     const allDone = workflow.checked_in && workflow.game_ready && workflow.post_game_submitted
-    const dashboardUrl = `https://abc-anc-services.izcgmb.easypanel.host/workflow/${eventId}`
+    const dashboardUrl = buildDashboardUrl(`/workflow/${eventId}`)
 
     // Post-game submissions: surface whether an incident was flagged so ops
     // can glance at the Slack feed and know if anything needs a follow-up.

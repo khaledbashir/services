@@ -302,9 +302,15 @@ export async function POST(request: NextRequest) {
 
     const invitations = await deliverPortalInvitations(request, createdUsers, existingClient.name)
 
+    // `origin` used to be read here with no local binding. It typechecks — the
+    // DOM lib declares a global of that name — but the server runtime has no
+    // such global, so this line threw ReferenceError every time, after the
+    // accounts had already been committed and the invites sent. That is the
+    // "it errors but still creates all the accounts" Charlie reported
+    // 2026-08-17.
     return NextResponse.json({
       invitations,
-      customer_url: `${origin}/customer`,
+      customer_url: `${originFor(request)}/customer`,
       created_count: invitations.length,
       // Single-contact compatibility for existing internal callers.
       user: invitations[0]?.user,

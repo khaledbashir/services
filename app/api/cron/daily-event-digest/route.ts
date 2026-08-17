@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { approvedOnly } from '@/lib/event-approval'
 import { sendSlackMessage } from '@/lib/slack'
+import { dashboardUrl as buildDashboardUrl } from '@/lib/app-url'
 
 function formatDateLabel(date: Date) {
   return new Intl.DateTimeFormat('en-US', {
@@ -141,7 +142,7 @@ export async function GET() {
       ? `No events on the ANC dashboard for ${dateLabel}.`
       : `*${total} event${total === 1 ? '' : 's'}* on the ANC dashboard for *${dateLabel}*.${unassigned.length > 0 ? `\n:warning: *${unassigned.length} unassigned* and need staffing attention.` : ''}`
 
-    const dashboardUrl = `${process.env.NEXT_PUBLIC_URL || 'https://abc-anc-services.izcgmb.easypanel.host'}/events?filter=today`
+    const dashboardUrl = buildDashboardUrl('/events?filter=today')
 
     const sent = await sendSlackMessage({
       channel: defaultChannel,

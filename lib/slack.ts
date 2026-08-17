@@ -1,4 +1,5 @@
 import { ticketCategoryLabel } from '@/lib/ticket-categories'
+import { DASHBOARD_URL } from '@/lib/app-url'
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || ''
 
@@ -84,7 +85,6 @@ export async function deleteSlackMessage(channel: string, ts: string): Promise<b
   }
 }
 
-const DASHBOARD_URL_BASE = 'https://abc-anc-services.izcgmb.easypanel.host'
 const DEFAULT_CHANNEL = process.env.SLACK_DEFAULT_CHANNEL || ''
 
 /** Operational notification for any dashboard action. Safe to await or fire-and-forget. */
@@ -159,7 +159,9 @@ export const statusLabels: Record<string, string> = {
   escalated: 'Escalated', closed: 'Closed',
 }
 
-export const DASHBOARD_URL = DASHBOARD_URL_BASE
+// Re-exported so the many call sites that already import it from here keep
+// working; the single source of truth is lib/app-url.
+export { DASHBOARD_URL }
 
 /**
  * Action buttons for a ticket card (Chris D 7/15): handle routine tickets

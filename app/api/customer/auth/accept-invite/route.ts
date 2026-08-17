@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 })
 
     const result = await query(
-      `SELECT pu.email, pu.full_name, c.name AS client_name
+      `SELECT pu.email, pu.full_name, COALESCE(pu.invite_purpose, 'invite') AS purpose, c.name AS client_name
        FROM portal_users pu
        LEFT JOIN clients c ON c.id = pu.client_id
        WHERE pu.invite_token = $1
@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password)
     const result = await query(
       `UPDATE portal_users
-       SET password_hash = $1, invite_token = NULL, invite_expires_at = NULL, updated_at = NOW()
+       SET password_hash = $1, invite_token = NULL, invite_expires_at = NULL,
+           invite_purpose = 'invite', updated_at = NOW()
        WHERE invite_token = $2
          AND is_active = true
          AND (invite_expires_at IS NULL OR invite_expires_at > NOW())

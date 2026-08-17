@@ -8,6 +8,18 @@ import { useDictation, MicChip } from '@/components/dictation'
 import { TicketDetail } from '@/components/ticket-detail'
 import { TICKET_CATEGORY_LABELS } from '@/lib/ticket-categories'
 
+const PANEL_WIDTH_PREF_KEY = 'tickets.panelWidth'
+const DEFAULT_PANEL_WIDTH = 960
+const MIN_PANEL_WIDTH = 420
+/** Never let the panel swallow the list it is opened from. */
+const MAX_PANEL_VIEWPORT_FRACTION = 0.95
+
+function clampPanelWidth(width: number): number {
+  const viewport = typeof window === 'undefined' ? DEFAULT_PANEL_WIDTH : window.innerWidth
+  const max = Math.max(MIN_PANEL_WIDTH, Math.round(viewport * MAX_PANEL_VIEWPORT_FRACTION))
+  return Math.min(Math.max(Math.round(width), MIN_PANEL_WIDTH), max)
+}
+
 interface Ticket {
   id: string
   ticket_number: number
@@ -115,10 +127,58 @@ export default function TicketsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
   const [panelId, setPanelId] = useState<string | null>(null)
+  // Detail panel width is draggable and remembered per user (Charlie
+  // 2026-08-17). It lives in user_preferences, not localStorage, so the width
+  // a person sets follows them to any machine they sign in from.
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
+  const [resizingPanel, setResizingPanel] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     try { setIsAdmin(localStorage.getItem('userRole') === 'admin') } catch {}
   }, [])
+
+  useEffect(() => {
+    fetch(`/api/preferences?key=${PANEL_WIDTH_PREF_KEY}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const stored = Number(data?.value)
+        if (Number.isFinite(stored)) setPanelWidth(clampPanelWidth(stored))
+      })
+      .catch((error) => console.error('Failed to load ticket panel width:', error))
+  }, [])
+
+  // Drag is tracked on the window so the pointer can leave the 6px handle —
+  // and the ticket body — without the resize sticking or jumping.
+  useEffect(() => {
+    if (!resizingPanel) return
+    const onMove = (event: MouseEvent) => {
+      event.preventDefault()
+      setPanelWidth(clampPanelWidth(window.innerWidth - event.clientX))
+    }
+    const onUp = () => setResizingPanel(false)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = previousUserSelect
+      document.body.style.cursor = ''
+    }
+  }, [resizingPanel])
+
+  // Saved on release rather than on every mousemove, so one drag is one write.
+  useEffect(() => {
+    if (resizingPanel) return
+    if (panelWidth === DEFAULT_PANEL_WIDTH) return
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: PANEL_WIDTH_PREF_KEY, value: String(Math.round(panelWidth)) }),
+    }).catch((error) => console.error('Failed to save ticket panel width:', error))
+  }, [resizingPanel, panelWidth])
   const [bulkBusy, setBulkBusy] = useState(false)
   // URL drill-down params (assigned_to, venue_id, status, from, to) hydrate
   // on mount from window.location so the report → tickets-list jump works.
@@ -991,9 +1051,38 @@ export default function TicketsPage() {
             onClick={() => setPanelId(null)}
             aria-hidden="true"
           />
-          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-[960px] overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200" role="dialog" aria-label="Support ticket detail">
+          <aside
+            className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-zinc-50 shadow-2xl ring-1 ring-zinc-200"
+            style={{ maxWidth: `${panelWidth}px` }}
+            role="dialog"
+            aria-label="Support ticket detail"
+          >
             <TicketDetail key={panelId} params={{ id: panelId }} embedded onClose={() => { setPanelId(null); refreshTickets() }} />
           </aside>
+          {/* Drag handle for the panel's left edge. Fixed rather than absolute
+              inside the aside — the aside scrolls, and an absolute child would
+              scroll away from the edge it is supposed to sit on. Hidden below
+              lg, where the panel is full-width and has nothing to resize
+              against. */}
+          <div
+            role="separator"
+            aria-label="Resize ticket panel"
+            aria-orientation="vertical"
+            aria-valuenow={Math.round(panelWidth)}
+            aria-valuemin={MIN_PANEL_WIDTH}
+            tabIndex={0}
+            onMouseDown={(event) => { event.preventDefault(); setResizingPanel(true) }}
+            onDoubleClick={() => setPanelWidth(DEFAULT_PANEL_WIDTH)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') { event.preventDefault(); setPanelWidth((w) => clampPanelWidth(w + 32)) }
+              if (event.key === 'ArrowRight') { event.preventDefault(); setPanelWidth((w) => clampPanelWidth(w - 32)) }
+            }}
+            style={{ right: `${panelWidth}px` }}
+            className={`fixed inset-y-0 z-[60] hidden w-1.5 cursor-col-resize transition-colors lg:block ${
+              resizingPanel ? 'bg-[#0A52EF]' : 'bg-transparent hover:bg-[#0A52EF]/40'
+            }`}
+            title="Drag to resize · double-click to reset"
+          />
         </>
       )}
     </DashboardLayout>
