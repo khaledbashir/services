@@ -21,6 +21,7 @@ import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
 import { sendEmail } from '@/lib/email'
 import { brandedEmail } from '@/lib/email-templates'
+import { getRecipients } from '@/lib/ticket-digests'
 
 export type WorkflowStepType = 'check_in' | 'game_ready' | 'post_game_report'
 
@@ -75,6 +76,29 @@ async function loadVenueLeads(
 }
 
 /**
+ * Ops leadership, who get every step regardless of which venue it happened at.
+ *
+ * Joe's words were "can we have the check in and post game report come to US" —
+ * and he leads no venue, so per-venue routing alone would have sent him
+ * nothing. The default is the same list the ticket reports already go to, so
+ * "us" resolves to the people who already receive operational mail, and it can
+ * be changed later with one app_settings row instead of a deploy.
+ */
+async function alwaysNotifyEmails(): Promise<string[]> {
+  const row = await query(
+    `SELECT value FROM app_settings WHERE key = 'workflow_lead_notify_always'`,
+  )
+  if (row.rows[0]) {
+    const stored = String(row.rows[0].value ?? '')
+    // An explicit empty string is a deliberate "leadership opted out".
+    if (stored.trim() === '') return []
+    const parsed = stored.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s.includes('@'))
+    if (parsed.length > 0) return parsed
+  }
+  return getRecipients('open-review')
+}
+
+/**
  * Which steps notify the leads. Defaults to all three because Joe named
  * check-in and post-game explicitly and complained about game-ready too. It
  * reads from app_settings so the volume can be dialled back to post-game only
@@ -99,7 +123,18 @@ export async function notifyLeadsOfWorkflowStep(
   if (!steps.has(input.step)) return { target_count: 0, sent_count: 0, skipped_count: 0 }
 
   const leads = await loadVenueLeads(input.venueId)
-  if (leads.length === 0) return { target_count: 0, sent_count: 0, skipped_count: 0 }
+  const alwaysEmails = await alwaysNotifyEmails()
+
+  // A venue with nobody recorded as its lead must still report upward — that
+  // is precisely the venue leadership most needs to hear about.
+  const leadEmails = new Set(
+    leads.map((lead) => (lead.email || '').toLowerCase()).filter(Boolean),
+  )
+  const extraEmails = alwaysEmails.filter((email) => !leadEmails.has(email.toLowerCase()))
+
+  if (leads.length === 0 && extraEmails.length === 0) {
+    return { target_count: 0, sent_count: 0, skipped_count: 0 }
+  }
 
   const step = STEP_LABELS[input.step]
   const url = `${appBaseUrl()}/workflow/${input.eventId}`
@@ -140,6 +175,22 @@ export async function notifyLeadsOfWorkflowStep(
   })
 
   const subject = `${step.label} — ${input.eventName} @ ${input.venueName}`
+
+  const emailHtml = brandedEmail({
+    title: step.label,
+    subtitle: `${input.eventName} · ${input.venueName}`,
+    bodyHtml: `
+      <p style="margin:0 0 8px"><strong>${input.staffName}</strong> — ${step.label.toLowerCase()}.</p>
+      ${input.step === 'post_game_report'
+        ? (hasIncident
+            ? `<p style="margin:12px 0 0;color:#b91c1c"><strong>Incident reported</strong></p>
+               <p style="margin:6px 0 0">${incident.slice(0, 600).replace(/</g, '&lt;')}</p>`
+            : '<p style="margin:12px 0 0;color:#047857"><strong>No incident reported</strong></p>')
+        : ''}
+      <p style="margin:16px 0 0"><a href="${url}">Open the workflow</a></p>
+    `,
+    footerNote: 'ANC Sports · venue workflow',
+  })
 
   let sent = 0
   let skipped = 0

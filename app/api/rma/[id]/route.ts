@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { Rma, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
+import { returnRmaToStock, isReturnedToStockStatus } from '@/lib/inventory-alerts'
 
 const EDITABLE = ['venue_id','company_name','client_name','submission_contact','date_received',
   'project_code','part_number','part_name','model_number','led_manufacturer','description',
@@ -56,6 +57,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   values.push(params.id)
   const r = await query(`UPDATE rma_trackers SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`, values)
 
+  // Joe 2026-08-17: "Can these be connected to RMA tracking?" — a repaired
+  // part marked remit-to-stock credits the venue's inventory the moment the
+  // RMA reaches a returned state. Stamped on the RMA, so re-saving the record
+  // cannot credit the same part twice.
+  const updatedRma = r.rows[0]
+  let stockReturn: Awaited<ReturnType<typeof returnRmaToStock>> | null = null
+  if (updatedRma?.remit_to_stock && isReturnedToStockStatus(updatedRma.status) && !updatedRma.stock_returned_at) {
+    try {
+      stockReturn = await returnRmaToStock(params.id)
+    } catch (stockErr) {
+      console.error('[rma] failed to return part to stock:', stockErr)
+    }
+  }
+
   // Gamification: award points once when RMA is closed
   if ((body.status === 'closed' || body.status === 'completed') && previousStatus !== body.status) {
     const submitter = r.rows[0]?.submission_contact
@@ -67,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
   }
 
-  return NextResponse.json({ rma: r.rows[0] })
+  return NextResponse.json({ rma: r.rows[0], stock_return: stockReturn })
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
