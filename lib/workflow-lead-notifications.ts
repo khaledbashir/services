@@ -19,6 +19,8 @@
  */
 import { query } from '@/lib/db'
 import { sendSlackMessage } from '@/lib/slack'
+import { sendEmail } from '@/lib/email'
+import { brandedEmail } from '@/lib/email-templates'
 
 export type WorkflowStepType = 'check_in' | 'game_ready' | 'post_game_report'
 
@@ -53,9 +55,11 @@ function appBaseUrl(): string {
  * The venue's manager and lead field rep, de-duplicated — one person often
  * holds both roles and must not be messaged twice for one event.
  */
-async function loadVenueLeads(venueId: string): Promise<Array<{ id: string; full_name: string; slack_user_ids: string[] }>> {
+async function loadVenueLeads(
+  venueId: string,
+): Promise<Array<{ id: string; full_name: string; email: string | null; slack_user_ids: string[] }>> {
   const result = await query(
-    `SELECT DISTINCT s.id, s.full_name, s.slack_user_ids
+    `SELECT DISTINCT s.id, s.full_name, s.email, s.slack_user_ids
      FROM venues v
      JOIN staff s ON s.id IN (v.venue_manager_id, v.lead_field_rep_id)
      WHERE v.id = $1
@@ -65,14 +69,34 @@ async function loadVenueLeads(venueId: string): Promise<Array<{ id: string; full
   return result.rows.map((row) => ({
     id: row.id,
     full_name: row.full_name,
+    email: row.email || null,
     slack_user_ids: Array.isArray(row.slack_user_ids) ? row.slack_user_ids.filter(Boolean) : [],
   }))
+}
+
+/**
+ * Which steps notify the leads. Defaults to all three because Joe named
+ * check-in and post-game explicitly and complained about game-ready too. It
+ * reads from app_settings so the volume can be dialled back to post-game only
+ * with a one-row change rather than a deploy.
+ */
+async function enabledSteps(): Promise<Set<WorkflowStepType>> {
+  const row = await query(
+    `SELECT value FROM app_settings WHERE key = 'workflow_lead_notify_steps'`,
+  )
+  const raw = row.rows[0] ? String(row.rows[0].value ?? '') : ''
+  if (!raw.trim()) return new Set<WorkflowStepType>(['check_in', 'game_ready', 'post_game_report'])
+  const parsed = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean)
+  return new Set(parsed.filter((s): s is WorkflowStepType => s in STEP_LABELS))
 }
 
 export async function notifyLeadsOfWorkflowStep(
   input: WorkflowLeadNotification,
 ): Promise<WorkflowLeadNotifyResult> {
   if (!input.venueId) return { target_count: 0, sent_count: 0, skipped_count: 0 }
+
+  const steps = await enabledSteps()
+  if (!steps.has(input.step)) return { target_count: 0, sent_count: 0, skipped_count: 0 }
 
   const leads = await loadVenueLeads(input.venueId)
   if (leads.length === 0) return { target_count: 0, sent_count: 0, skipped_count: 0 }
@@ -115,19 +139,47 @@ export async function notifyLeadsOfWorkflowStep(
     ],
   })
 
+  const subject = `${step.label} — ${input.eventName} @ ${input.venueName}`
+
   let sent = 0
   let skipped = 0
   for (const lead of leads) {
+    // Slack DM is the better channel and upgrades automatically as staff Slack
+    // IDs get filled in. Today only one active staff record has one, so email
+    // is what actually reaches the 17 venue leads — without this fallback the
+    // whole feature would resolve the right people and message nobody.
     const slackUserId = lead.slack_user_ids[0]
-    if (!slackUserId) {
+    if (slackUserId) {
+      const ok = await sendSlackMessage({
+        channel: slackUserId,
+        text: `${step.label}: ${input.eventName} @ ${input.venueName} by ${input.staffName}`,
+        blocks,
+      })
+      if (ok) { sent += 1; continue }
+    }
+
+    if (!lead.email) {
       skipped += 1
       continue
     }
-    const ok = await sendSlackMessage({
-      channel: slackUserId,
-      text: `${step.label}: ${input.eventName} @ ${input.venueName} by ${input.staffName}`,
-      blocks,
+
+    const html = brandedEmail({
+      title: step.label,
+      subtitle: `${input.eventName} · ${input.venueName}`,
+      bodyHtml: `
+        <p style="margin:0 0 8px"><strong>${input.staffName}</strong> — ${step.label.toLowerCase()}.</p>
+        ${input.step === 'post_game_report'
+          ? (hasIncident
+              ? `<p style="margin:12px 0 0;color:#b91c1c"><strong>Incident reported</strong></p>
+                 <p style="margin:6px 0 0">${incident.slice(0, 600).replace(/</g, '&lt;')}</p>`
+              : '<p style="margin:12px 0 0;color:#047857"><strong>No incident reported</strong></p>')
+          : ''}
+        <p style="margin:16px 0 0"><a href="${url}">Open the workflow</a></p>
+      `,
+      footerNote: 'ANC Sports · venue workflow',
     })
+
+    const ok = await sendEmail([lead.email], subject, html)
     if (ok) sent += 1
     else skipped += 1
   }
