@@ -84,9 +84,17 @@ export async function decideEventApproval(input: {
 }
 
 /**
- * Tell the venue lead a suggestion is waiting. Sent to the venue's own channel
- * so the decision happens where that venue's people already talk, with a
- * fallback to the ops default channel when a venue has no channel configured.
+ * Tell the venue lead a suggestion is waiting.
+ *
+ * Joe, 2026-08-18: "for the suggested events can these go to the assigned leads
+ * personal slack or does it have to be in the channel?" — so the notice is a
+ * direct message to the people who can actually decide: the venue manager and
+ * the lead field rep. A pending decision belongs to a person, not to a room.
+ *
+ * The venue channel is the fallback, used only when neither of them has a Slack
+ * account linked to their staff record. Nothing is ever posted to both, so a
+ * lead is not pinged twice for the same suggestions, and a venue with no lead
+ * and no channel still falls back to the ops default rather than going quiet.
  */
 export async function notifyLeadOfSuggestions(
   venueId: string,
@@ -107,34 +115,27 @@ export async function notifyLeadOfSuggestions(
   const venue = venueResult.rows[0]
   if (!venue) return false
 
-  const channel = venue.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
-  if (!channel) return false
-
   const baseUrl = (process.env.NEXT_PUBLIC_URL || 'https://services.ancsports.net').replace(/\/+$/, '')
   const queueUrl = `${baseUrl}/events?approval=suggested`
-
-  const mentionIds = [
-    ...(Array.isArray(venue.manager_slack_ids) ? venue.manager_slack_ids : []),
-    ...(Array.isArray(venue.lead_slack_ids) ? venue.lead_slack_ids : []),
-  ].filter(Boolean)
-  const mentions = mentionIds.map((id: string) => `<@${id}>`).join(' ')
 
   const shown = suggestions.slice(0, 10)
   const lines = shown.map((s) => `• *${s.summary}* — ${s.event_date}`)
   if (suggestions.length > shown.length) {
     lines.push(`• …and ${suggestions.length - shown.length} more`)
   }
+  const count = `${suggestions.length} event${suggestions.length === 1 ? '' : 's'}`
 
-  return sendSlackMessage({
-    channel,
-    text: `${suggestions.length} event${suggestions.length === 1 ? '' : 's'} suggested for ${venue.name}`,
+  const message = (lead: boolean) => ({
+    text: `${count} suggested for ${venue.name}`,
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `:inbox_tray: *${suggestions.length} event${suggestions.length === 1 ? '' : 's'} suggested for ${venue.name}*\n`
-            + `These are not on the master schedule. Approve the ones ANC is covering.${mentions ? `\n${mentions}` : ''}`,
+          text: `:inbox_tray: *${count} suggested for ${venue.name}*\n`
+            + (lead
+              ? 'These are not on the master schedule. You lead this venue — approve the ones ANC is covering.'
+              : 'These are not on the master schedule. Approve the ones ANC is covering.'),
         },
       },
       { type: 'section', text: { type: 'mrkdwn', text: lines.join('\n').slice(0, 2900) } },
@@ -151,4 +152,24 @@ export async function notifyLeadOfSuggestions(
       },
     ],
   })
+
+  const recipients = uniqueSlackIds([venue.manager_slack_ids, venue.lead_slack_ids])
+  if (recipients.length) {
+    const sent = await Promise.all(
+      recipients.map((id) => sendSlackMessage({ channel: id, ...message(true) })),
+    )
+    // A DM that Slack refuses falls through to the channel rather than being
+    // lost — the suggestion still has to reach someone who can decide.
+    if (sent.some(Boolean)) return true
+  }
+
+  const channel = venue.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
+  if (!channel) return false
+  return sendSlackMessage({ channel, ...message(false) })
+}
+
+/** The distinct Slack accounts behind a venue's manager and lead field rep. */
+function uniqueSlackIds(lists: Array<unknown>): string[] {
+  const ids = lists.flatMap((list) => (Array.isArray(list) ? list : []))
+  return Array.from(new Set(ids.filter((id): id is string => typeof id === 'string' && !!id.trim())))
 }
