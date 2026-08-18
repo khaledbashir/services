@@ -222,6 +222,35 @@ export async function getWalkthrough(walkthroughId: string) {
  * resolution without a deploy, and an explicit empty string turns the summary
  * off, matching how the ticket digests already behave.
  */
+/** Split a stored recipient string on commas, semicolons or whitespace. */
+export function parseRecipientList(raw: string | null | undefined): string[] {
+  return (raw || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes('@'))
+}
+
+/**
+ * Venue list first, ops list after, each address only once.
+ *
+ * Case-insensitive: one person written `Joe.O@anc.com` on a venue list and
+ * `joeo@anc.com` on the ops list is still one person and gets one email. The
+ * first spelling seen is the one used.
+ */
+export function mergeSummaryRecipients(venueList: string[], opsList: string[]): string[] {
+  const seen = new Set<string>()
+  const merged: string[] = []
+  for (const email of [...venueList, ...opsList]) {
+    const trimmed = String(email || '').trim()
+    if (!trimmed.includes('@')) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(trimmed)
+  }
+  return merged
+}
+
 export async function getSummaryRecipients(venueId?: string | null): Promise<string[]> {
   const override = await query(
     `SELECT value FROM app_settings WHERE key = 'walkthrough_summary_recipients'`,
@@ -229,33 +258,21 @@ export async function getSummaryRecipients(venueId?: string | null): Promise<str
   if (override.rows[0]) {
     const stored = String(override.rows[0].value ?? '')
     if (stored.trim() === '') return []
-    const parsed = stored.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s.includes('@'))
+    const parsed = parseRecipientList(stored)
     if (parsed.length > 0) return parsed
   }
 
-  const venueList: string[] = []
+  let venueList: string[] = []
   if (venueId) {
     const venueRow = await query(
       `SELECT distribution_emails FROM venues WHERE id = $1`,
       [venueId],
     )
     const stored = venueRow.rows[0]?.distribution_emails
-    if (Array.isArray(stored)) {
-      venueList.push(...stored.map((e: string) => String(e).trim()).filter((e) => e.includes('@')))
-    }
+    if (Array.isArray(stored)) venueList = stored.map((e: string) => String(e))
   }
 
-  const opsList = await getRecipients('open-review')
-
-  const seen = new Set<string>()
-  const merged: string[] = []
-  for (const email of [...venueList, ...opsList]) {
-    const key = email.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    merged.push(email)
-  }
-  return merged
+  return mergeSummaryRecipients(venueList, await getRecipients('open-review'))
 }
 
 export interface SubmitWalkthroughResult {
