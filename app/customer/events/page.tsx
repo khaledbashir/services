@@ -20,6 +20,8 @@ type PortalEvent = {
   status: string
   event_type: string | null
   venue_name: string
+  /** Comma-joined names of the ANC staff covering this event, if any yet. */
+  assigned_staff: string | null
   readiness: {
     steps: ReadinessStep[]
     completed: number
@@ -59,6 +61,11 @@ function EventRow({ event }: { event: PortalEvent }) {
             {' · '}
             {fmtTime(event.start_time)}–{fmtTime(event.end_time)}
           </div>
+          {event.assigned_staff ? (
+            <div className="mt-1 text-xs" style={{ color: 'var(--anc-muted)' }}>
+              ANC crew: {event.assigned_staff}
+            </div>
+          ) : null}
           {readiness ? (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
               {readiness.steps.map(step => (

@@ -3,14 +3,12 @@ export const revalidate = 0
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { sendSlackMessage, formatTicketNotification, sendTicketNotification } from '@/lib/slack'
-import { syncTicketsToTwenty } from '@/lib/twenty-sync'
+// Routing, recording and delivery all live in lib/ticket-create so the walk-thru
+// checklist's automatic ticket behaves exactly like one raised by hand.
+import { resolveTicketRouting, recordTicketCreated, deliverTicketCreated } from '@/lib/ticket-create'
 import { jwtVerify } from 'jose'
-import * as fs from 'fs'
-import * as path from 'path'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
-import { sendTicketDistributionEmail } from '@/lib/email'
 import { normalizeAttachment } from '@/lib/ticket-attachments'
 
 async function getUserFromToken(request: NextRequest) {
@@ -97,38 +95,18 @@ export async function POST(request: NextRequest) {
     const allowedStatuses = ['new', 'on_hold', 'in_progress', 'escalated', 'closed'] as const
     const initialStatus = (allowedStatuses as readonly string[]).includes(status) ? status : 'new'
 
-    // Auto-assignment: find matching rule if no assignee specified
-    let effectiveAssignee = assigned_to || null
-    if (!effectiveAssignee) {
-      const ruleResult = await query(
-        `SELECT assign_to FROM assignment_rules
-         WHERE is_active = true
-           AND (category IS NULL OR category = $1)
-           AND (venue_id IS NULL OR venue_id = $2)
-         ORDER BY
-           CASE WHEN venue_id IS NOT NULL AND category IS NOT NULL THEN 1
-                WHEN venue_id IS NOT NULL THEN 2
-                WHEN category IS NOT NULL THEN 3
-                ELSE 4 END,
-           priority DESC
-         LIMIT 1`,
-        [category || 'general', venue_id]
-      )
-      if (ruleResult.rows.length > 0) {
-        effectiveAssignee = ruleResult.rows[0].assign_to
-      }
-    }
-
-    // SLA: calculate response and resolution deadlines
+    // Auto-assignment rule + SLA deadlines. Shared with the walk-thru's
+    // automatic ticket so both are routed by the same rules.
     const ticketPriority = priority || 'medium'
-    const slaResult = await query(
-      `SELECT response_hours, resolution_hours FROM sla_policies WHERE priority = $1 LIMIT 1`,
-      [ticketPriority]
-    )
-    const sla = slaResult.rows[0]
-    const now = new Date()
-    const slaResponseDue = sla ? new Date(now.getTime() + sla.response_hours * 3600000) : null
-    const slaResolutionDue = sla ? new Date(now.getTime() + sla.resolution_hours * 3600000) : null
+    const routing = await resolveTicketRouting({
+      venueId: venue_id,
+      category,
+      priority: ticketPriority,
+      assignedTo: assigned_to || null,
+    })
+    const effectiveAssignee = routing.assignedTo
+    const slaResponseDue = routing.slaResponseDue
+    const slaResolutionDue = routing.slaResolutionDue
 
     const result = await query(
       `INSERT INTO tickets (venue_id, event_id, created_by, assigned_to, title, description, priority, status, category, resolution_notes, sla_response_due, sla_resolution_due, source, ticket_type, contact_name, contact_email, contact_phone, parent_ticket_id, resolved_at)
@@ -168,63 +146,27 @@ export async function POST(request: NextRequest) {
     const venueRes = await query('SELECT name FROM venues WHERE id = $1', [venue_id])
     const venueName = venueRes.rows[0]?.name || 'Unknown Venue'
     
-    // Log creation to activity_log
-    const ticket0 = result.rows[0]
-    await query(
-      `INSERT INTO activity_log (action, entity_type, entity_id, staff_id, details)
-       VALUES ('ticket_created', 'ticket', $1, $2, $3)`,
-      [ticket0.id, user.userId, JSON.stringify({
-        entity_name: title,
-        venue_name: venueName,
-        priority: priority || 'medium',
-        category: category || 'general',
-      })]
-    )
-
-    // Write notification log for Claw
-    const logEntry = `TICKET|created|${user.fullName || 'User'}|${title}|${venueName}|${new Date().toISOString()}\n`
-    fs.appendFileSync('/tmp/anc-ticket-notifications.log', logEntry)
-
-    // Notify venue's Slack channel (fallback to default channel)
-    const slackChRes = await query('SELECT slack_channel_id FROM venues WHERE id = $1', [venue_id])
-    const channelId = slackChRes.rows[0]?.slack_channel_id || process.env.SLACK_DEFAULT_CHANNEL || ''
-    if (channelId) {
-      const ticket = result.rows[0]
-      sendTicketNotification({
-        id: ticket.id,
-        ticket_number: ticket.ticket_number,
-        title: ticket.title,
-        category: ticket.category,
-        priority: ticket.priority,
-        venue_name: venueName,
-        description: description || undefined,
-        image_url: imageUrl || undefined,
-      }, 'created', channelId)
-    }
-
-    // Email distribution list
+    // Activity feed + the log the Slack assistant tails. Awaited, as before,
+    // so neither can be lost between the insert and the response.
     const ticket = result.rows[0]
-    sendTicketDistributionEmail({
-      venueId: venue_id,
-      ticketTitle: title,
-      ticketNumber: ticket.ticket_number,
-      type: 'created',
-      detail: description || title,
-    }).catch(err => console.error('[email] Ticket creation email failed:', err))
+    await recordTicketCreated({
+      ticket,
+      venueName,
+      createdBy: user.userId,
+      createdByName: user.fullName || 'User',
+    })
 
-    syncTicketsToTwenty([{
-      id: ticket.id,
-      title: ticket.title,
-      ticket_number: ticket.ticket_number,
-      status: ticket.status,
-      priority: ticket.priority,
-      category: ticket.category,
-      venue_name: venueName,
-      venue_id: venue_id,
-      assigned_to: effectiveAssignee || '',
+    // Venue Slack channel, venue distribution list, CRM mirror. Left running in
+    // the background so creating a ticket stays as quick as it is today.
+    deliverTicketCreated({
+      ticket,
+      venueId: venue_id,
+      venueName,
       description: description || '',
-      resolution_notes: resolution_notes || '',
-    }]).catch(err => console.error('[twenty] real-time ticket sync failed:', err))
+      assignedTo: effectiveAssignee,
+      resolutionNotes: resolution_notes || '',
+      imageUrl,
+    }).catch(err => console.error('[tickets] delivery failed:', err))
 
     return NextResponse.json({ ticket: result.rows[0] })
   } catch (err) {

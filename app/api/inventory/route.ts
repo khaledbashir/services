@@ -126,14 +126,17 @@ export async function GET(request: NextRequest) {
               i.timeline_url, i.three_letter_code, i.resolution, i.connected_devices,
               i.project_code, i.notes
        FROM inventory i
-       JOIN venues v ON i.venue_id = v.id
+       LEFT JOIN venues v ON i.venue_id = v.id
        LEFT JOIN staff s ON i.updated_by = s.id
        ${whereClause}
-       ORDER BY v.name, i.item_name`,
+       ORDER BY v.name NULLS LAST, i.item_name`,
       params
     )
+    // Counted exactly the way the daily sweep counts it, so the badge on the
+    // page and the number in the 8am email can never disagree.
     const lowStockResult = await query(
-      `SELECT COUNT(*) as count FROM inventory WHERE quantity <= threshold_low`
+      `SELECT COUNT(*) as count FROM inventory
+       WHERE COALESCE(quantity, 0) <= COALESCE(threshold_low, 5)`
     )
     return NextResponse.json({
       items: result.rows,
@@ -256,16 +259,69 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Legacy local-DB path (only supports quantity updates)
+  // Local-DB path — the venue shelf the low-stock sweep and the RMA return both
+  // read. Joe 2026-08-17: the reorder level has to be editable here, otherwise
+  // "prompt us when we start to run low" is a number nobody can set.
   try {
-    const itemRes = await query('SELECT i.item_name, v.name as venue_name, v.slack_channel_id, i.quantity as old_qty FROM inventory i JOIN venues v ON i.venue_id = v.id WHERE i.id = $1', [id])
-    await query(
-      `UPDATE inventory SET quantity = $1, last_updated = NOW(), updated_by = $2 WHERE id = $3`,
-      [quantity, auth.userId, id]
+    const itemRes = await query(
+      `SELECT i.item_name, i.quantity AS old_qty, v.name as venue_name, v.slack_channel_id
+       FROM inventory i LEFT JOIN venues v ON i.venue_id = v.id WHERE i.id = $1`,
+      [id],
     )
-    if (itemRes.rows[0]) {
+
+    // Only columns named here can be written, and each is applied only when the
+    // caller actually sent it — so editing one cell never blanks another.
+    const EDITABLE: Record<string, string> = {
+      item_name: 'item_name',
+      sku: 'sku',
+      part_number: 'part_number',
+      part_name: 'part_name',
+      manufacturer: 'manufacturer',
+      model_number: 'model_number',
+      location_code: 'location_code',
+      location_room: 'location_room',
+      asset_number: 'asset_number',
+    }
+
+    const sets: string[] = []
+    const params: unknown[] = []
+
+    if (quantity !== undefined) {
+      params.push(Number(quantity) || 0)
+      sets.push(`quantity = $${params.length}`)
+    }
+    if (rest.threshold_low !== undefined) {
+      const level = Number(rest.threshold_low)
+      params.push(Number.isFinite(level) && level >= 0 ? Math.floor(level) : 0)
+      sets.push(`threshold_low = $${params.length}`)
+    }
+    if (rest.venue_id !== undefined) {
+      params.push(rest.venue_id || null)
+      sets.push(`venue_id = $${params.length}`)
+    }
+    for (const [key, column] of Object.entries(EDITABLE)) {
+      if (rest[key] === undefined) continue
+      params.push(rest[key] === '' ? null : rest[key])
+      sets.push(`${column} = $${params.length}`)
+    }
+
+    if (sets.length === 0) {
+      return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+    }
+
+    params.push(auth.userId)
+    sets.push(`updated_by = $${params.length}`)
+    params.push(id)
+
+    await query(
+      `UPDATE inventory SET ${sets.join(', ')}, last_updated = NOW() WHERE id = $${params.length}`,
+      params,
+    )
+
+    // Only a quantity move is worth a channel ping; renaming a shelf label is not.
+    if (itemRes.rows[0] && quantity !== undefined) {
       const item = itemRes.rows[0]
-      notifyOps(':pencil2:', `*Inventory updated:* ${item.item_name} at ${item.venue_name} — qty: ${item.old_qty} → ${quantity}`, undefined, item.slack_channel_id)
+      notifyOps(':pencil2:', `*Inventory updated:* ${item.item_name} at ${item.venue_name || 'Unassigned'} — qty: ${item.old_qty} → ${quantity}`, undefined, item.slack_channel_id)
     }
     return NextResponse.json({ ok: true })
   } catch (err) {

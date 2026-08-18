@@ -18,9 +18,13 @@ import { buildEventReadiness } from '@/lib/event-readiness'
  * will show this in the event tab", so the three milestones — checked in, game
  * ready, post-game — travel with each event.
  *
- * What does NOT travel with them: which technician submitted each step, the
- * submission payload (extra timesheets, auditor), staffing flags and
- * escalation timestamps. The client sees that their building is ready, not how
+ * Joe 2026-08-17 added the crew: each event carries the names of the staff
+ * assigned to it, so the client knows who is coming.
+ *
+ * What still does NOT travel with them: which technician submitted each step,
+ * the submission payload (extra timesheets, auditor), staffing flags,
+ * escalation timestamps, and any contact detail or hours behind a name. The
+ * client sees who is covering the event and that the building is ready, not how
  * ANC staffed it.
  */
 export async function GET(request: NextRequest) {
@@ -39,7 +43,14 @@ export async function GET(request: NextRequest) {
 
     const result = await query(
       `SELECT e.id, e.summary, e.league, e.event_date, e.start_time, e.end_time,
-              e.status, e.event_type, v.name AS venue_name
+              e.status, e.event_type, v.name AS venue_name,
+              -- Joe 2026-08-17: the client should see WHO is covering their
+              -- event, not only that someone is. Names only — no ids, emails,
+              -- phone numbers or hours cross the portal boundary.
+              (SELECT STRING_AGG(s.full_name, ', ' ORDER BY s.full_name)
+                 FROM event_assignments ea
+                 JOIN staff s ON s.id = ea.staff_id
+                WHERE ea.event_id = e.id) AS assigned_staff
        FROM events e
        JOIN venues v ON v.id = e.venue_id
        WHERE e.venue_id = ANY($1::uuid[])
@@ -78,6 +89,7 @@ export async function GET(request: NextRequest) {
       status: row.status,
       event_type: row.event_type,
       venue_name: row.venue_name,
+      assigned_staff: row.assigned_staff || null,
       readiness: buildEventReadiness(byEvent.get(row.id) || []),
     }))
 

@@ -35,6 +35,16 @@ export interface LowStockRow {
   slack_channel_id: string | null
 }
 
+/** A parts-catalog line running low. Central stock, so no venue. */
+export interface LowStockPartRow {
+  id: string
+  part_name: string
+  part_number: string | null
+  manufacturer: string | null
+  quantity: number
+  threshold_low: number
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -57,55 +67,115 @@ export async function getLowStockRecipients(): Promise<string[]> {
   return getRecipients('open-review')
 }
 
-/** Items now at or below threshold that have no open alert yet. */
+/**
+ * Venue stock now at or below its threshold with no open alert yet.
+ *
+ * A row whose venue has been deleted would vanish from an inner join, so the
+ * venue is joined LEFT and reported as unassigned rather than silently dropped.
+ */
 export async function findNewlyLowItems(): Promise<LowStockRow[]> {
   const result = await query(
-    `SELECT i.id, i.item_name, i.sku, i.part_number, i.quantity,
+    `SELECT i.id, i.item_name, i.sku, i.part_number, COALESCE(i.quantity, 0) AS quantity,
             COALESCE(i.threshold_low, 5) AS threshold_low,
-            i.venue_id, v.name AS venue_name, v.slack_channel_id
+            i.venue_id, COALESCE(v.name, 'Unassigned') AS venue_name, v.slack_channel_id
      FROM inventory i
-     JOIN venues v ON v.id = i.venue_id
-     WHERE i.quantity <= COALESCE(i.threshold_low, 5)
+     LEFT JOIN venues v ON v.id = i.venue_id
+     WHERE COALESCE(i.quantity, 0) <= COALESCE(i.threshold_low, 5)
        AND NOT EXISTS (
          SELECT 1 FROM inventory_low_stock_alerts a
          WHERE a.inventory_id = i.id AND a.cleared_at IS NULL
        )
-     ORDER BY v.name, i.item_name`,
+     ORDER BY COALESCE(v.name, 'Unassigned'), i.item_name`,
   )
   return result.rows
 }
 
-/** Close alerts for anything that has climbed back above its threshold. */
-export async function clearRecoveredAlerts(): Promise<number> {
+/**
+ * Parts-catalog lines now at or below their reorder threshold with no open
+ * alert yet. The catalog is not tied to a building, so these carry no venue and
+ * are reported under one heading rather than pinged into a venue channel.
+ */
+export async function findNewlyLowParts(): Promise<LowStockPartRow[]> {
   const result = await query(
+    `SELECT p.id, p.part_name, p.part_number, p.manufacturer,
+            COALESCE(p.quantity_on_hand, 0) AS quantity,
+            COALESCE(p.reorder_threshold, 5) AS threshold_low
+     FROM parts p
+     WHERE COALESCE(p.quantity_on_hand, 0) <= COALESCE(p.reorder_threshold, 5)
+       AND NOT EXISTS (
+         SELECT 1 FROM inventory_low_stock_alerts a
+         WHERE a.part_id = p.id AND a.cleared_at IS NULL
+       )
+     ORDER BY p.part_name`,
+  )
+  return result.rows
+}
+
+/** Close alerts for anything, on either shelf, that has climbed back above its threshold. */
+export async function clearRecoveredAlerts(): Promise<number> {
+  const venueStock = await query(
     `UPDATE inventory_low_stock_alerts a
      SET cleared_at = NOW()
      FROM inventory i
      WHERE a.inventory_id = i.id
        AND a.cleared_at IS NULL
-       AND i.quantity > COALESCE(i.threshold_low, 5)`,
+       AND COALESCE(i.quantity, 0) > COALESCE(i.threshold_low, 5)`,
   )
-  return result.rowCount || 0
+  const catalog = await query(
+    `UPDATE inventory_low_stock_alerts a
+     SET cleared_at = NOW()
+     FROM parts p
+     WHERE a.part_id = p.id
+       AND a.cleared_at IS NULL
+       AND COALESCE(p.quantity_on_hand, 0) > COALESCE(p.reorder_threshold, 5)`,
+  )
+  return (venueStock.rowCount || 0) + (catalog.rowCount || 0)
 }
 
 export interface LowStockRunResult {
   newly_low: number
+  /** Of `newly_low`, how many came from the venue shelf vs the parts catalog. */
+  newly_low_venue_stock: number
+  newly_low_parts: number
   cleared: number
   emailed: boolean
   recipients: string[]
   slack_venue_pings: number
 }
 
+function stockRow(name: string, sub: string | null, where: string, qty: number, level: number): string {
+  return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${escapeHtml(name)}${sub ? ` <span style="color:#94a3b8">${escapeHtml(sub)}</span>` : ''}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${escapeHtml(where)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right"><strong style="color:#b91c1c">${qty}</strong> <span style="color:#94a3b8">/ ${level}</span></td>
+    </tr>`
+}
+
 export async function runLowStockSweep(options: { dryRun?: boolean } = {}): Promise<LowStockRunResult> {
   const cleared = options.dryRun ? 0 : await clearRecoveredAlerts()
   const items = await findNewlyLowItems()
+  const parts = await findNewlyLowParts()
+  const total = items.length + parts.length
 
-  if (items.length === 0) {
-    return { newly_low: 0, cleared, emailed: false, recipients: [], slack_venue_pings: 0 }
+  const empty: LowStockRunResult = {
+    newly_low: 0,
+    newly_low_venue_stock: 0,
+    newly_low_parts: 0,
+    cleared,
+    emailed: false,
+    recipients: [],
+    slack_venue_pings: 0,
   }
+  if (total === 0) return empty
 
   if (options.dryRun) {
-    return { newly_low: items.length, cleared, emailed: false, recipients: await getLowStockRecipients(), slack_venue_pings: 0 }
+    return {
+      ...empty,
+      newly_low: total,
+      newly_low_venue_stock: items.length,
+      newly_low_parts: parts.length,
+      recipients: await getLowStockRecipients(),
+    }
   }
 
   // Record the alerts BEFORE sending. If the mail fails we would rather miss
@@ -118,37 +188,45 @@ export async function runLowStockSweep(options: { dryRun?: boolean } = {}): Prom
       [item.id, item.quantity, item.threshold_low],
     )
   }
+  for (const part of parts) {
+    await query(
+      `INSERT INTO inventory_low_stock_alerts (part_id, quantity_at_alert, threshold_at_alert)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [part.id, part.quantity, part.threshold_low],
+    )
+  }
 
   const byVenue = new Map<string, LowStockRow[]>()
   for (const item of items) {
+    if (!item.venue_id) continue
     const list = byVenue.get(item.venue_id) || []
     list.push(item)
     byVenue.set(item.venue_id, list)
   }
 
-  const rows = items
-    .map((item) => `<tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${escapeHtml(item.item_name)}${item.part_number ? ` <span style="color:#94a3b8">${escapeHtml(item.part_number)}</span>` : ''}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9">${escapeHtml(item.venue_name)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right"><strong style="color:#b91c1c">${item.quantity}</strong> <span style="color:#94a3b8">/ ${item.threshold_low}</span></td>
-      </tr>`)
-    .join('')
+  const rows = [
+    ...items.map((item) =>
+      stockRow(item.item_name, item.part_number, item.venue_name, item.quantity, item.threshold_low)),
+    ...parts.map((part) =>
+      stockRow(part.part_name, part.part_number, 'Parts catalog', part.quantity, part.threshold_low)),
+  ].join('')
 
   const recipients = await getLowStockRecipients()
   let emailed = false
   if (recipients.length > 0) {
     emailed = await sendEmail(
       recipients,
-      `Inventory running low — ${items.length} item${items.length === 1 ? '' : 's'}`,
+      `Inventory running low — ${total} item${total === 1 ? '' : 's'}`,
       brandedEmail({
         title: 'Inventory running low',
-        subtitle: `${items.length} item${items.length === 1 ? '' : 's'} at or below their reorder level`,
+        subtitle: `${total} item${total === 1 ? '' : 's'} at or below their reorder level`,
         bodyHtml: `
           <p style="margin:0 0 12px">These have just dropped to their reorder level. Each one is reported once — you will not be told again until it is restocked and drops a second time.</p>
           <table style="width:100%;border-collapse:collapse;font-size:13px">
             <tr>
               <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b">ITEM</th>
-              <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b">VENUE</th>
+              <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b">WHERE</th>
               <th style="text-align:right;padding:8px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;color:#64748b">ON HAND / LEVEL</th>
             </tr>
             ${rows}
@@ -175,7 +253,15 @@ export async function runLowStockSweep(options: { dryRun?: boolean } = {}): Prom
     if (ok) slackPings += 1
   }
 
-  return { newly_low: items.length, cleared, emailed, recipients, slack_venue_pings: slackPings }
+  return {
+    newly_low: total,
+    newly_low_venue_stock: items.length,
+    newly_low_parts: parts.length,
+    cleared,
+    emailed,
+    recipients,
+    slack_venue_pings: slackPings,
+  }
 }
 
 // ── RMA → stock ─────────────────────────────────────────────────────────────

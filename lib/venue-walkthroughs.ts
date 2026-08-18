@@ -12,6 +12,12 @@ import { query, getClient } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
 import { brandedEmail } from '@/lib/email-templates'
 import { getRecipients } from '@/lib/ticket-digests'
+import {
+  resolveTicketRouting,
+  recordTicketCreated,
+  deliverTicketCreated,
+  type TicketDeliveryResult,
+} from '@/lib/ticket-create'
 
 export type WalkthroughItemType = 'screen' | 'system' | 'custom'
 export type WalkthroughResultValue = 'operating' | 'issue'
@@ -199,12 +205,24 @@ export async function getWalkthrough(walkthroughId: string) {
 /**
  * Recipients for the submitted-walk summary.
  *
- * "a summary gets received by the same emails in the ticket system" — so the
- * default IS the ticket open-review list rather than a copy of it, and a
- * `walkthrough_summary_recipients` row in app_settings can override it later
- * without a deploy, matching how the ticket digests already work.
+ * "a summary gets received by the same emails in the ticket system."
+ *
+ * In this system that phrase has one literal answer: `venues.distribution_emails`,
+ * the list every Case email goes to when a ticket is raised, updated or
+ * commented on at that venue. So the venue's own list is the primary audience,
+ * and the walk-thru summary lands beside the ticket it generated.
+ *
+ * Ops leadership is merged in on top rather than replacing it, because Joe asked
+ * in the same message for workflow completions to "come to us" — and 177 of the
+ * 250 venues have no distribution list yet, so a venue-only rule would send a
+ * clean walk-thru into nowhere. Merged and de-duplicated, one person on both
+ * lists is still mailed once.
+ *
+ * A `walkthrough_summary_recipients` row in app_settings overrides the whole
+ * resolution without a deploy, and an explicit empty string turns the summary
+ * off, matching how the ticket digests already behave.
  */
-export async function getSummaryRecipients(): Promise<string[]> {
+export async function getSummaryRecipients(venueId?: string | null): Promise<string[]> {
   const override = await query(
     `SELECT value FROM app_settings WHERE key = 'walkthrough_summary_recipients'`,
   )
@@ -214,7 +232,30 @@ export async function getSummaryRecipients(): Promise<string[]> {
     const parsed = stored.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s.includes('@'))
     if (parsed.length > 0) return parsed
   }
-  return getRecipients('open-review')
+
+  const venueList: string[] = []
+  if (venueId) {
+    const venueRow = await query(
+      `SELECT distribution_emails FROM venues WHERE id = $1`,
+      [venueId],
+    )
+    const stored = venueRow.rows[0]?.distribution_emails
+    if (Array.isArray(stored)) {
+      venueList.push(...stored.map((e: string) => String(e).trim()).filter((e) => e.includes('@')))
+    }
+  }
+
+  const opsList = await getRecipients('open-review')
+
+  const seen = new Set<string>()
+  const merged: string[] = []
+  for (const email of [...venueList, ...opsList]) {
+    const key = email.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(email)
+  }
+  return merged
 }
 
 export interface SubmitWalkthroughResult {
@@ -224,6 +265,8 @@ export interface SubmitWalkthroughResult {
   ticket_number: number | null
   summary_sent: boolean
   recipients: string[]
+  /** What the generated ticket actually did on its way out. Null when clean. */
+  ticket_delivery: TicketDeliveryResult | null
 }
 
 export async function submitWalkthrough(input: {
@@ -239,6 +282,18 @@ export async function submitWalkthrough(input: {
   // ticket status constraint rejected the first live submit.
   let ticketId: string | null = null
   let ticketNumber: number | null = null
+  // Held so the ticket can be announced AFTER the commit — a Slack post or an
+  // email about a ticket that then rolls back would be a lie.
+  let createdTicket: {
+    id: string
+    ticket_number: number
+    title: string
+    priority: string | null
+    status: string | null
+    category: string | null
+  } | null = null
+  let ticketAssignedTo: string | null = null
+  let ticketDescription = ''
 
   const client = await getClient()
   try {
@@ -292,22 +347,38 @@ export async function submitWalkthrough(input: {
         ...(meta.notes ? ['', `Notes: ${meta.notes}`] : []),
       ].join('\n')
 
+      // Routed by the same assignment rules and SLA policy as a ticket raised
+      // by hand — an automatic ticket that nobody owns and that no clock is
+      // running on is not really in the queue.
+      const routing = await resolveTicketRouting({
+        venueId: meta.venue_id,
+        category: 'general',
+        priority: 'medium',
+      })
+
       // `new` is this system's open state — `tickets_status_check` allows
       // new / on_hold / in_progress / escalated / closed only, despite the
       // column defaulting to 'open'.
       const ticket = await client.query(
-        `INSERT INTO tickets (venue_id, created_by, title, description, priority, status, category, source, ticket_type)
-         VALUES ($1, $2, $3, $4, 'medium', 'new', 'general', 'walkthrough', 'support')
-         RETURNING id, ticket_number`,
+        `INSERT INTO tickets (venue_id, created_by, assigned_to, title, description, priority, status,
+                              category, source, ticket_type, sla_response_due, sla_resolution_due)
+         VALUES ($1, $2, $3, $4, $5, 'medium', 'new', 'general', 'walkthrough', 'support', $6, $7)
+         RETURNING id, ticket_number, title, priority, status, category`,
         [
           meta.venue_id,
           input.submittedBy,
+          routing.assignedTo,
           `Walk-thru issues — ${meta.venue_name} (${pending.rows.length})`,
           description,
+          routing.slaResponseDue,
+          routing.slaResolutionDue,
         ],
       )
       ticketId = ticket.rows[0].id
       ticketNumber = ticket.rows[0].ticket_number
+      createdTicket = ticket.rows[0]
+      ticketAssignedTo = routing.assignedTo
+      ticketDescription = description
 
       await client.query(
         `UPDATE venue_walkthroughs SET generated_ticket_id = $2, updated_at = NOW() WHERE id = $1`,
@@ -328,7 +399,27 @@ export async function submitWalkthrough(input: {
 
   const issues = walkthrough.items.filter((item: any) => item.result === 'issue')
 
-  const recipients = await getSummaryRecipients()
+  // The auto-ticket now announces itself exactly like one raised by hand:
+  // activity feed, the venue's Slack channel, the venue's ticket distribution
+  // list and the CRM mirror. Before this it existed only as a database row.
+  let ticketDelivery: TicketDeliveryResult | null = null
+  if (createdTicket) {
+    await recordTicketCreated({
+      ticket: createdTicket,
+      venueName: walkthrough.venue_name,
+      createdBy: input.submittedBy,
+      createdByName: input.submittedByName,
+    })
+    ticketDelivery = await deliverTicketCreated({
+      ticket: createdTicket,
+      venueId: walkthrough.venue_id,
+      venueName: walkthrough.venue_name,
+      description: ticketDescription,
+      assignedTo: ticketAssignedTo,
+    })
+  }
+
+  const recipients = await getSummaryRecipients(walkthrough.venue_id)
   let summarySent = false
   if (recipients.length > 0) {
     const rows = walkthrough.items
@@ -392,5 +483,6 @@ export async function submitWalkthrough(input: {
     ticket_number: ticketNumber,
     summary_sent: summarySent,
     recipients,
+    ticket_delivery: ticketDelivery,
   }
 }
