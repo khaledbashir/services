@@ -10,6 +10,7 @@ import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tr
 import { loadDesignAssignmentSummaries, splitDesignAssignments } from '@/lib/work-assignment-summaries'
 import { loadTriCodeMap, upsertTriCode } from '@/lib/tricode-side-tables'
 import { logDesignActivity } from '@/lib/design-activity'
+import { assessDesignBrief } from '@/lib/design-brief'
 
 function normalizeTwentyStatus(raw: string | null | undefined): string {
   if (!raw) return 'request_submitted'
@@ -317,6 +318,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'tricode is required' }, { status: 400 })
     }
 
+    // Brief gating (Charlie 2026-08-19, Daniel Croci Apr 2026). A ticket a
+    // designer cannot work from does not fail loudly — it turns into revision
+    // rounds on work ANC already runs at a loss. Intake is the cheap moment.
+    //
+    // This gates the human path only. The old tracker's importer writes rows
+    // directly in scripts/import-wrike-airtable.ts and never reaches this route,
+    // so historical syncing is unaffected.
+    const brief = assessDesignBrief({
+      notes,
+      boardsRequested: boards_requested,
+      sizesRequested: sizes_requested,
+      projectFileLocation: project_file_location,
+    })
+    const briefWaived = body.allow_incomplete_brief === true
+    if (!brief.complete && !briefWaived) {
+      return NextResponse.json(
+        {
+          error: 'This brief is not complete enough for a designer to start.',
+          missing: brief.missing,
+          // The caller can proceed anyway, but has to say so — and it is recorded.
+          hint: 'Resend with allow_incomplete_brief: true to submit it as-is.',
+        },
+        { status: 422 },
+      )
+    }
+
     if (isTwentyBackedEnabled('DESIGNS')) {
       try {
         const created = await Designs.create({
@@ -417,7 +444,23 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ design_request: created })
+    // A waived brief is allowed but never invisible — the ticket carries who
+    // submitted it short and what was missing, so the pattern is answerable
+    // rather than anecdotal.
+    if (briefWaived && !brief.complete) {
+      await logDesignActivity({
+        designRequestId: created.id,
+        eventType: 'note',
+        actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+        toValue: 'incomplete_brief_submitted',
+        detail: { missing: brief.missing, directionLength: brief.directionLength },
+      })
+    }
+
+    return NextResponse.json({
+      design_request: created,
+      brief: { complete: brief.complete, missing: brief.missing, waived: briefWaived && !brief.complete },
+    })
   } catch (err) {
     console.error('Error creating design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -171,6 +171,11 @@ export default function DesignsPage() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  // Brief gating (Charlie 2026-08-19, Daniel Apr 2026). When the server judges a
+  // brief too thin to work from it answers 422 with what is missing. Holding it
+  // here rather than in formError lets the panel list the gaps and offer a
+  // deliberate override, instead of a red line the requester cannot act on.
+  const [briefMissing, setBriefMissing] = useState<string[] | null>(null)
   // Per-designer + randos filters added 2026-04-23 per Alexis's ask:
   //   "The ability to have dashboards specific to the person will be very helpful."
   // `designerFilter` = 'all' | 'mine' | <staff_id>
@@ -568,8 +573,8 @@ export default function DesignsPage() {
     }
   }
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e: FormEvent | null, waiveBrief = false) => {
+    e?.preventDefault()
     if (!formData.job_title.trim()) return
     if (!formData.venue_id) {
       setFormError('Venue is required.')
@@ -582,12 +587,14 @@ export default function DesignsPage() {
     }
     setSubmitting(true)
     setFormError(null)
+    if (!waiveBrief) setBriefMissing(null)
     try {
       const res = await fetch('/api/design-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          allow_incomplete_brief: waiveBrief,
           venue_id: formData.venue_id || null,
           designer_id: formData.designer_ids[0] || null,
           enterprise_contact_id: formData.enterprise_contact_ids[0] || null,
@@ -599,8 +606,15 @@ export default function DesignsPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+        // 422 is not a failure to report — it is the brief gate asking for the
+        // missing pieces, so it renders as a checklist rather than an error.
+        if (res.status === 422 && Array.isArray(err?.missing) && err.missing.length) {
+          setBriefMissing(err.missing)
+          return
+        }
         throw new Error(err?.error || `Could not create request (${res.status})`)
       }
+      setBriefMissing(null)
       setFormData({
         venue_id: '',
         company_name: '',
@@ -928,6 +942,32 @@ export default function DesignsPage() {
                   {formError}
                 </div>
               )}
+              {briefMissing && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-amber-900">
+                    A designer could not start from this yet
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {briefMissing.map((item) => (
+                      <li key={item} className="flex gap-2 text-sm text-amber-900">
+                        <span aria-hidden="true" className="text-amber-500">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2.5 text-xs text-amber-800">
+                    Filling these in now saves a revision round later.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleSubmit(null, true)}
+                    disabled={submitting}
+                    className="mt-3 text-xs font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950 disabled:opacity-50"
+                  >
+                    Submit as-is anyway
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Job Title <span className="text-red-500">*</span></label>
                 <input
@@ -1188,7 +1228,10 @@ export default function DesignsPage() {
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false)
+                    setBriefMissing(null)
+                  }}
                   className="h-10 px-4 rounded-xl text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
                 >
                   Cancel
