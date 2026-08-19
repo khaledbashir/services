@@ -1,6 +1,7 @@
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/email'
 import { brandedEmail } from '@/lib/email-templates'
+import { recordDeliveries, type DeliveryAttempt } from '@/lib/notification-log'
 import { sendSlackMessage } from '@/lib/slack'
 import {
   renderStatusEmail,
@@ -144,6 +145,7 @@ export async function notifyAssigneesOfStatusChange(input: NotificationInput): P
 
   const summary: NotificationSummary = { ...empty, target_count: staff.rows.length }
   const emailedAlready = new Set<string>()
+  const attempts: DeliveryAttempt[] = []
 
   for (const person of staff.rows) {
     let reached = false
@@ -168,6 +170,15 @@ export async function notifyAssigneesOfStatusChange(input: NotificationInput): P
         summary.slack_sent_count += 1
         reached = true
       }
+      attempts.push({
+        kind: input.kind,
+        recordId: input.recordId,
+        staffId: person.id ? String(person.id) : null,
+        channel: 'slack',
+        recipient: slackUserId,
+        ok,
+        reason: ok ? null : 'slack_send_failed',
+      })
     }
 
     const emailKey = email ? email.toLowerCase() : ''
@@ -196,11 +207,42 @@ export async function notifyAssigneesOfStatusChange(input: NotificationInput): P
         summary.email_sent_count += 1
         reached = true
       }
+      attempts.push({
+        kind: input.kind,
+        recordId: input.recordId,
+        staffId: person.id ? String(person.id) : null,
+        channel: 'email',
+        recipient: email,
+        ok,
+        reason: ok ? null : 'email_send_failed',
+      })
     }
 
-    if (reached) summary.sent_count += 1
-    else summary.skipped_count += 1
+    if (reached) {
+      summary.sent_count += 1
+    } else {
+      summary.skipped_count += 1
+      // The original bug, made loud. Somebody assigned to this ticket was told
+      // nothing on any channel — record it as its own event so the watchdog and
+      // the health endpoint can see it without inferring it from a percentage.
+      const why = !slackUserId && !email ? 'no_slack_id_and_no_email' : 'all_channels_failed'
+      console.error(
+        `[assignee-status-notifications] ${input.kind} ${input.recordId}: assignee ${person.id} was not reached (${why})`,
+      )
+      attempts.push({
+        kind: input.kind,
+        recordId: input.recordId,
+        staffId: person.id ? String(person.id) : null,
+        channel: 'none',
+        recipient: null,
+        ok: false,
+        reason: why,
+      })
+    }
   }
+
+  // Audit last, and never let it interfere with what it is auditing.
+  await recordDeliveries(attempts).catch(() => {})
 
   return summary
 }

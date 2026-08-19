@@ -690,6 +690,24 @@ async function runMigrations() {
     // Soft-delete (Alexis 2026-06-24): deleting a request hides it from every
     // view but keeps the row recoverable. All GET queries filter deleted_at IS
     // NULL; the [id] DELETE handlers stamp NOW(). Additive, backward-compatible.
+    // Every notification attempt, per person per channel. The status-change
+    // notifier used to fail silently — no Slack id meant no message, no error
+    // and no record, so 99 of 189 staff heard nothing for months and nobody
+    // could tell. An attempt that is written down cannot go unnoticed: this is
+    // what /api/health/notifications and the watchdog cron read.
+    await client.query(`CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      kind TEXT NOT NULL,
+      record_id TEXT,
+      staff_id UUID,
+      channel TEXT NOT NULL,
+      recipient TEXT,
+      ok BOOLEAN NOT NULL,
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notification_deliveries_created ON notification_deliveries(created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notification_deliveries_failed ON notification_deliveries(created_at DESC) WHERE ok = false`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
     await client.query(`ALTER TABLE print_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
     await client.query(`ALTER TABLE cg_design_requests ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`)
