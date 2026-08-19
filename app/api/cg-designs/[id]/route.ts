@@ -7,6 +7,7 @@ import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { CgDesigns, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import {
+  emptyStatusNotification,
   getCgDesignAssigneeIds,
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
@@ -162,7 +163,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
               (prior as any)?.cgDesignerId,
             ]),
           })
-        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+        : emptyStatusNotification()
       return NextResponse.json({ cg_design_request: { id: updated.id, job_title: updated.clientTriCode, status: updated.status }, assignee_notifications: notificationSummary })
     }
 
@@ -228,7 +229,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           path: `/cg-designs/${params.id}`,
           assigneeIds: await getCgDesignAssigneeIds(params.id),
         })
-      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+      : emptyStatusNotification()
 
     if (normalizedNextStatus && normalizedNextStatus !== access.record.status) {
       await logCgDesignActivity({

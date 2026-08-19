@@ -15,6 +15,7 @@ import { normalizeContentScheduleStatus } from '@/lib/content-schedule-status'
 import { normalizeVenueTriCode, resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
+  emptyStatusNotification,
   getContentScheduleAssigneeIds,
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
@@ -200,7 +201,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
               (updated as any).operatorId,
             ]),
           })
-        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+        : emptyStatusNotification()
       return NextResponse.json({ content_schedule: reshaped, assignee_notifications: notificationSummary })
     }
 
@@ -274,7 +275,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           path: `/content-schedules/${params.id}`,
           assigneeIds: await getContentScheduleAssigneeIds(params.id),
         })
-      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+      : emptyStatusNotification()
 
     return NextResponse.json({ content_schedule: result.rows[0], assignee_notifications: notificationSummary })
   } catch (err) {

@@ -1,7 +1,14 @@
 import { query } from '@/lib/db'
+import { sendEmail } from '@/lib/email'
+import { brandedEmail } from '@/lib/email-templates'
 import { sendSlackMessage } from '@/lib/slack'
+import {
+  renderStatusEmail,
+  resolveStatusDelivery,
+  type WorkKind,
+} from '@/lib/assignee-status-email'
 
-type WorkKind = 'Design Request' | 'CG Request' | 'Content Schedule'
+export { renderStatusEmail, resolveStatusDelivery } from '@/lib/assignee-status-email'
 
 type NotificationInput = {
   kind: WorkKind
@@ -15,8 +22,17 @@ type NotificationInput = {
 
 type NotificationSummary = {
   target_count: number
+  /** Reached on at least one channel. */
   sent_count: number
+  /** Reached on no channel at all — no Slack id AND no email on file. */
   skipped_count: number
+  slack_sent_count: number
+  email_sent_count: number
+}
+
+/** Zeroed summary for the "status did not actually change" branches. */
+export function emptyStatusNotification(): NotificationSummary {
+  return { target_count: 0, sent_count: 0, skipped_count: 0, slack_sent_count: 0, email_sent_count: 0 }
 }
 
 function appBaseUrl() {
@@ -85,14 +101,35 @@ export async function getContentScheduleAssigneeIds(recordId: string, fallbackId
   return uniqueIds([...fallbackIds, ...result.rows.map((row) => row.staff_id)])
 }
 
+/**
+ * Tell everyone assigned to a ticket that its status moved.
+ *
+ * This used to be Slack-DM-only, and silently dropped anyone without a Slack id
+ * linked — 99 of 189 active staff at the time of writing, every one of whom has
+ * an email address on file. Half the company was working a dashboard that never
+ * told them anything had changed, which is why Alexis's team kept working in the
+ * old tracker instead (asked 2026-08-19, with Joe endorsing: "anything is moved
+ * from status to status. If anyone's assigned to something" — and email
+ * explicitly preferred over Slack).
+ *
+ * Email is now the channel everyone gets. The Slack DM is left exactly as it was
+ * for the people who already had it, so nobody loses a notification they relied
+ * on. Someone with both gets both.
+ */
 export async function notifyAssigneesOfStatusChange(input: NotificationInput): Promise<NotificationSummary> {
-  const assigneeIds = uniqueIds(input.assigneeIds)
-  if (!assigneeIds.length) {
-    return { target_count: 0, sent_count: 0, skipped_count: 0 }
+  const empty: NotificationSummary = {
+    target_count: 0,
+    sent_count: 0,
+    skipped_count: 0,
+    slack_sent_count: 0,
+    email_sent_count: 0,
   }
 
+  const assigneeIds = uniqueIds(input.assigneeIds)
+  if (!assigneeIds.length) return empty
+
   const staff = await query(
-    `SELECT id, full_name, slack_user_ids
+    `SELECT id, full_name, slack_user_ids, email
      FROM staff
      WHERE id::text = ANY($1::text[])
        AND COALESCE(is_active, true) = true`,
@@ -101,38 +138,71 @@ export async function notifyAssigneesOfStatusChange(input: NotificationInput): P
 
   const title = input.title?.trim() || input.recordId
   const statusLabel = labelStatus(input.status)
-  const previous = input.previousStatus ? ` from ${labelStatus(input.previousStatus)}` : ''
+  const previousLabel = input.previousStatus ? labelStatus(input.previousStatus) : null
+  const previous = previousLabel ? ` from ${previousLabel}` : ''
   const url = `${appBaseUrl()}${input.path}`
-  let sent = 0
-  let skipped = 0
+
+  const summary: NotificationSummary = { ...empty, target_count: staff.rows.length }
+  const emailedAlready = new Set<string>()
 
   for (const person of staff.rows) {
-    const slackUserIds = Array.isArray(person.slack_user_ids) ? person.slack_user_ids.filter(Boolean) : []
-    const slackUserId = slackUserIds[0]
-    if (!slackUserId) {
-      skipped += 1
-      continue
+    let reached = false
+    const { slackUserId, email } = resolveStatusDelivery(person)
+
+    if (slackUserId) {
+      const ok = await sendSlackMessage({
+        channel: slackUserId,
+        text: `${input.kind} status changed${previous} to ${statusLabel}: ${title}\n${url}`,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*${input.kind} status changed*${previous} to *${statusLabel}*\n${title}`,
+            },
+          },
+          { type: 'section', text: { type: 'mrkdwn', text: `<${url}|Open in dashboard>` } },
+        ],
+      })
+      if (ok) {
+        summary.slack_sent_count += 1
+        reached = true
+      }
     }
 
-    const ok = await sendSlackMessage({
-      channel: slackUserId,
-      text: `${input.kind} status changed${previous} to ${statusLabel}: ${title}\n${url}`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*${input.kind} status changed*${previous} to *${statusLabel}*\n${title}`,
-          },
-        },
-        { type: 'section', text: { type: 'mrkdwn', text: `<${url}|Open in dashboard>` } },
-      ],
-    })
-    if (ok) sent += 1
-    else skipped += 1
+    const emailKey = email ? email.toLowerCase() : ''
+    if (email && !emailedAlready.has(emailKey)) {
+      emailedAlready.add(emailKey)
+      const rendered = renderStatusEmail({
+        fullName: typeof person.full_name === 'string' ? person.full_name : null,
+        kind: input.kind,
+        title,
+        statusLabel,
+        previousLabel,
+        url,
+      })
+      const subject = rendered.subject
+      const html = brandedEmail({
+        title: rendered.title,
+        subtitle: rendered.subtitle,
+        bodyHtml: rendered.bodyHtml,
+      })
+      // Best effort: a mail failure must never mask the status change itself.
+      const ok = await sendEmail([email], subject, html).catch((err) => {
+        console.error('[assignee-status-notifications] status email failed:', err)
+        return false
+      })
+      if (ok) {
+        summary.email_sent_count += 1
+        reached = true
+      }
+    }
+
+    if (reached) summary.sent_count += 1
+    else summary.skipped_count += 1
   }
 
-  return { target_count: staff.rows.length, sent_count: sent, skipped_count: skipped }
+  return summary
 }
 
 function uniqueIds(ids: Array<string | null | undefined>) {

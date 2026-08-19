@@ -13,6 +13,7 @@ import { sendAssignmentEmail } from '@/lib/assignment-emails'
 import { resolveVenueIdFromTriCode } from '@/lib/venue-tricodes'
 import { upsertTriCode, getTriCode } from '@/lib/tricode-side-tables'
 import {
+  emptyStatusNotification,
   getDesignRequestAssigneeIds,
   notifyAssigneesOfStatusChange,
 } from '@/lib/assignee-status-notifications'
@@ -376,7 +377,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
               (prior as any)?.designAssigneeId,
             ]),
           })
-        : { target_count: 0, sent_count: 0, skipped_count: 0 }
+        : emptyStatusNotification()
 
       return NextResponse.json({
         // Normalize Twenty's STATUS_* back to dashboard vocab so the
@@ -582,7 +583,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           path: `/designs/${params.id}`,
           assigneeIds: await getDesignRequestAssigneeIds(params.id),
         })
-      : { target_count: 0, sent_count: 0, skipped_count: 0 }
+      : emptyStatusNotification()
 
     return NextResponse.json({ design_request: result.rows[0], proof_share: proofShare, assignee_notifications: notificationSummary })
   } catch (err) {
