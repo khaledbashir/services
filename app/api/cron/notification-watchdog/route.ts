@@ -20,7 +20,9 @@ import { sendSlackMessage } from '@/lib/slack'
  * all over again.
  *
  * `?force=1` alerts even when healthy, so the alert path itself can be proven
- * without waiting for a real outage.
+ * without waiting for a real outage. Pair it with `?channel=` to send that proof
+ * somewhere private — the default channel is a real team channel, and a drill
+ * that looks like an incident is worse than no drill.
  */
 
 const ALERT_CHANNEL = process.env.SLACK_ALERT_CHANNEL || process.env.SLACK_DEFAULT_CHANNEL || ''
@@ -30,6 +32,11 @@ export async function GET(request: NextRequest) {
   const force = request.nextUrl.searchParams.get('force') === '1'
   const rawHours = Number(request.nextUrl.searchParams.get('hours'))
   const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(Math.floor(rawHours), 720) : 24
+
+  // Override the destination for a drill. Only honored alongside ?force=1 so a
+  // real alert can never be quietly redirected away from the people who need it.
+  const channelOverride = force ? (request.nextUrl.searchParams.get('channel') || '').trim() : ''
+  const channel = channelOverride || ALERT_CHANNEL
 
   const health = await notificationHealth(hours)
   const shouldAlert = !health.healthy || force
@@ -53,9 +60,9 @@ export async function GET(request: NextRequest) {
     `${health.delivered} delivered, ${health.failed} failed, ${health.unreachable_events} reached nobody · ` +
     `mail credential ${health.mail_configured ? 'present' : 'MISSING'}`
 
-  if (ALERT_CHANNEL) {
+  if (channel) {
     result.slack_sent = await sendSlackMessage({
-      channel: ALERT_CHANNEL,
+      channel,
       text: `${headline}\n${lines.join('\n')}\n${detail}`,
       blocks: [
         { type: 'section', text: { type: 'mrkdwn', text: `*${headline}*\n${lines.map((l) => `• ${l}`).join('\n')}` } },
