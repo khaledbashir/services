@@ -10,7 +10,12 @@
  */
 
 import { query } from '@/lib/db'
-import { sendSlackMessage, ticketActionBlock } from '@/lib/slack'
+import {
+  sendSlackMessageDetailed,
+  ticketActionBlock,
+  buildTicketDescriptionTeaser,
+  buildTicketDescriptionThreadBlocks,
+} from '@/lib/slack'
 import { applyTicketClose, applyTicketInProgress } from '@/lib/ticket-close'
 import { sendTicketDistributionEmail } from '@/lib/email'
 import { notifyCustomerReply } from '@/lib/customer-notify'
@@ -127,15 +132,34 @@ export async function postTicketComment({
         if (m.id === actor.userId) continue
         const slackUserId = (m.slack_user_ids || [])[0]
         if (!slackUserId) continue
-        sendSlackMessage({
-          channel: slackUserId,
-          text: `🔔 ${actor.fullName || 'A teammate'} tagged you on Case #${caseNumDm}`,
-          blocks: [
-            { type: 'section', text: { type: 'mrkdwn', text: `🔔 *${actor.fullName || 'A teammate'} tagged you on Case #${caseNumDm}*\n*${ti.title}* @ ${ti.venue_name}` } },
-            { type: 'section', text: { type: 'mrkdwn', text: `> ${String(body).substring(0, 300)}${String(body).length > 300 ? '...' : ''}` } },
-            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: ticketUrl, style: 'primary' }] },
-          ],
-        })
+        const dmTeaser = buildTicketDescriptionTeaser(String(body))
+        void (async () => {
+          try {
+            const dm = await sendSlackMessageDetailed({
+              channel: slackUserId,
+              text: `🔔 ${actor.fullName || 'A teammate'} tagged you on Case #${caseNumDm}`,
+              blocks: [
+                { type: 'section', text: { type: 'mrkdwn', text: `🔔 *${actor.fullName || 'A teammate'} tagged you on Case #${caseNumDm}*\n*${ti.title}* @ ${ti.venue_name}` } },
+                // A comment can be attachments only — an empty section is an API error.
+                ...(dmTeaser.text ? [{ type: 'section', text: { type: 'mrkdwn', text: dmTeaser.text } }] : []),
+                { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View Ticket' }, url: ticketUrl, style: 'primary' }] },
+              ],
+            })
+            if (dmTeaser.hasMore && dm.ok && dm.ts) {
+              await sendSlackMessageDetailed({
+                channel: slackUserId,
+                thread_ts: dm.ts,
+                text: `Full note for Case #${caseNumDm}`,
+                blocks: [
+                  { type: 'context', elements: [{ type: 'mrkdwn', text: `:memo: *Full note — Case #${caseNumDm}*` }] },
+                  ...buildTicketDescriptionThreadBlocks(String(body)),
+                ],
+              })
+            }
+          } catch (dmErr) {
+            console.error('[mentions] DM dispatch failed:', dmErr)
+          }
+        })()
       }
     }
   } catch (mentionErr) {
@@ -160,15 +184,39 @@ export async function postTicketComment({
         : `${emoji} *Case #${caseNum} — New ${label}*\n*${ti.title}*`
       const authorLine = `*${actor.fullName || 'User'}*${via === 'slack' ? ' _(from Slack)_' : ''} ${isInternal ? '_(internal)_' : ''}`
       const statusAfter = closed ? 'closed' : movedInProgress ? 'in_progress' : ti.status
-      sendSlackMessage({
-        channel: channelId,
-        text: `${emoji} Case #${caseNum} — ${label} by ${actor.fullName || 'User'}`,
-        blocks: [
-          { type: 'section', text: { type: 'mrkdwn', text: heading } },
-          { type: 'section', text: { type: 'mrkdwn', text: `${authorLine}:\n> ${body.substring(0, 300)}${body.length > 300 ? '...' : ''}` } },
-          ticketActionBlock(ticketId, statusAfter),
-        ],
-      })
+      // Chris D 2026-08-19: "Can the notes come through in slack with the full
+      // note?" — a note was cut dead at 300 characters with nothing behind it,
+      // so Steve's note ended mid-word at "the issue ap…" and the rest existed
+      // only on the ticket. Ticket descriptions already solved this in Joe's
+      // 2026-05-04 shape: scannable card in channel, full body in the thread.
+      // Notes now do the same thing.
+      const noteTeaser = buildTicketDescriptionTeaser(String(body))
+      void (async () => {
+        try {
+          const posted = await sendSlackMessageDetailed({
+            channel: channelId,
+            text: `${emoji} Case #${caseNum} — ${label} by ${actor.fullName || 'User'}`,
+            blocks: [
+              { type: 'section', text: { type: 'mrkdwn', text: heading } },
+              { type: 'section', text: { type: 'mrkdwn', text: `${authorLine}:${noteTeaser.text ? `\n${noteTeaser.text}` : ''}` } },
+              ticketActionBlock(ticketId, statusAfter),
+            ],
+          })
+          if (noteTeaser.hasMore && posted.ok && posted.ts) {
+            await sendSlackMessageDetailed({
+              channel: channelId,
+              thread_ts: posted.ts,
+              text: `Full note for Case #${caseNum}`,
+              blocks: [
+                { type: 'context', elements: [{ type: 'mrkdwn', text: `:memo: *Full note — Case #${caseNum}*` }] },
+                ...buildTicketDescriptionThreadBlocks(String(body)),
+              ],
+            })
+          }
+        } catch (slackErr) {
+          console.error('[ticket-comment] slack notification failed:', slackErr)
+        }
+      })()
     }
   }
 
