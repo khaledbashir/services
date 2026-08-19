@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createJWT } from '@/lib/auth'
+import { dashboardUrl } from '@/lib/app-url'
 import { query } from '@/lib/db'
 import {
   assertAllowedEmail,
@@ -15,8 +16,15 @@ import {
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function loginRedirect(request: NextRequest, reason: string) {
-  const url = new URL('/login', request.url)
+/**
+ * Behind the reverse proxy `request.url` is the container-internal address
+ * (`http://localhost:80/...`), so building a redirect from it sends the user's
+ * browser to their OWN machine — ERR_CONNECTION_REFUSED, every time. Every
+ * redirect out of the SSO flow must be absolute against the canonical public
+ * host instead. (Jireh, 2026-08-19: signed in fine, landed on localhost.)
+ */
+function loginRedirect(_request: NextRequest, reason: string) {
+  const url = new URL(dashboardUrl('/login'))
   url.searchParams.set('error', reason)
   return NextResponse.redirect(url)
 }
@@ -78,7 +86,7 @@ export async function GET(request: NextRequest) {
     await query('UPDATE staff SET last_login_at = NOW() WHERE id = $1', [staff.userId]).catch(() => {})
 
     const token = await createJWT(staff)
-    const completeUrl = new URL('/login/sso-complete', request.url)
+    const completeUrl = new URL(dashboardUrl('/login/sso-complete'))
     completeUrl.searchParams.set('redirect', redirect)
 
     const response = NextResponse.redirect(completeUrl)

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { dashboardUrl } from '@/lib/app-url'
 import {
   getMicrosoftConfig,
   getMicrosoftDiscovery,
@@ -45,7 +46,9 @@ export async function GET(request: NextRequest) {
     return response
   } catch (err) {
     console.error('[Microsoft SSO start] error:', err)
-    const url = new URL('/login', request.url)
+    // Absolute against the canonical host — `request.url` is localhost behind
+    // the proxy and would bounce the browser to the user's own machine.
+    const url = new URL(dashboardUrl('/login'))
     url.searchParams.set('error', 'microsoft_config')
     return NextResponse.redirect(url)
   }
