@@ -12,6 +12,7 @@
     "test:impersonation": "node --test tests/portal-impersonation.test.mjs",
     "test:realtime-voice": "node --test tests/realtime-voice-contract.test.mjs",
     "test:ticket-digests": "node --test tests/ticket-digests.test.mjs",
+    "test:workflow-notify": "node --test tests/workflow-notify-policy.test.mjs",
     "test:realtime-voice:live": "node tests/realtime-voice-live.mjs",
     "ai:sync-skills": "node scripts/generate-ai-skill-manifest.mjs",
     "ai:check-skills": "node scripts/generate-ai-skill-manifest.mjs --check",

@@ -22,8 +22,15 @@ import { sendSlackMessage } from '@/lib/slack'
 import { sendEmail } from '@/lib/email'
 import { brandedEmail } from '@/lib/email-templates'
 import { getRecipients } from '@/lib/ticket-digests'
+import {
+  ALWAYS_STEPS_SETTING,
+  EMAIL_STEPS_SETTING,
+  NOTIFY_STEPS_SETTING,
+  resolveStepDelivery,
+  type WorkflowStepType,
+} from '@/lib/workflow-notify-policy'
 
-export type WorkflowStepType = 'check_in' | 'game_ready' | 'post_game_report'
+export type { WorkflowStepType }
 
 const STEP_LABELS: Record<WorkflowStepType, { label: string; emoji: string }> = {
   check_in: { label: 'Checked in', emoji: ':white_check_mark:' },
@@ -99,19 +106,24 @@ async function alwaysNotifyEmails(): Promise<string[]> {
 }
 
 /**
- * Which steps notify the leads. Defaults to all three because Joe named
- * check-in and post-game explicitly and complained about game-ready too. It
- * reads from app_settings so the volume can be dialled back to post-game only
- * with a one-row change rather than a deploy.
+ * Who hears about this step and down which channel, per the rules in
+ * `workflow-notify-policy`. All three settings live in app_settings so the
+ * volume can be dialled up or down with a one-row change rather than a deploy;
+ * an absent row means the default, an empty row is a deliberate opt-out.
  */
-async function enabledSteps(): Promise<Set<WorkflowStepType>> {
-  const row = await query(
-    `SELECT value FROM app_settings WHERE key = 'workflow_lead_notify_steps'`,
+async function loadDelivery(step: WorkflowStepType) {
+  const rows = await query(
+    `SELECT key, value FROM app_settings WHERE key = ANY($1::text[])`,
+    [[NOTIFY_STEPS_SETTING, EMAIL_STEPS_SETTING, ALWAYS_STEPS_SETTING]],
   )
-  const raw = row.rows[0] ? String(row.rows[0].value ?? '') : ''
-  if (!raw.trim()) return new Set<WorkflowStepType>(['check_in', 'game_ready', 'post_game_report'])
-  const parsed = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean)
-  return new Set(parsed.filter((s): s is WorkflowStepType => s in STEP_LABELS))
+  const stored = new Map<string, string>(
+    rows.rows.map((row: any) => [String(row.key), String(row.value ?? '')]),
+  )
+  return resolveStepDelivery(step, {
+    notifySteps: stored.has(NOTIFY_STEPS_SETTING) ? stored.get(NOTIFY_STEPS_SETTING) : null,
+    emailSteps: stored.has(EMAIL_STEPS_SETTING) ? stored.get(EMAIL_STEPS_SETTING) : null,
+    alwaysSteps: stored.has(ALWAYS_STEPS_SETTING) ? stored.get(ALWAYS_STEPS_SETTING) : null,
+  })
 }
 
 export async function notifyLeadsOfWorkflowStep(
@@ -119,11 +131,14 @@ export async function notifyLeadsOfWorkflowStep(
 ): Promise<WorkflowLeadNotifyResult> {
   if (!input.venueId) return { target_count: 0, sent_count: 0, skipped_count: 0 }
 
-  const steps = await enabledSteps()
-  if (!steps.has(input.step)) return { target_count: 0, sent_count: 0, skipped_count: 0 }
+  const delivery = await loadDelivery(input.step)
+  if (!delivery.notifyLeads) return { target_count: 0, sent_count: 0, skipped_count: 0 }
 
   const leads = await loadVenueLeads(input.venueId)
-  const alwaysEmails = await alwaysNotifyEmails()
+  // Leadership is reached by email and only by email, so a step that may not be
+  // emailed reaches them by nothing — which is the point of the setting.
+  const alwaysEmails =
+    delivery.notifyLeadership && delivery.allowEmail ? await alwaysNotifyEmails() : []
 
   // A venue with nobody recorded as its lead must still report upward — that
   // is precisely the venue leadership most needs to hear about.
@@ -195,10 +210,11 @@ export async function notifyLeadsOfWorkflowStep(
   let sent = 0
   let skipped = 0
   for (const lead of leads) {
-    // Slack DM is the better channel and upgrades automatically as staff Slack
-    // IDs get filled in. Today only one active staff record has one, so email
-    // is what actually reaches the 17 venue leads — without this fallback the
-    // whole feature would resolve the right people and message nobody.
+    // Slack DM is the channel Joe asked for, and since the 2026-08-18 roster
+    // link every venue manager and lead field rep has an id on their record, so
+    // it is the channel that actually carries. Email is the fallback for a lead
+    // who joins before the next link pass — and for a check-in there is no
+    // fallback at all, because a check-in is not worth an email.
     const slackUserId = lead.slack_user_ids[0]
     if (slackUserId) {
       const ok = await sendSlackMessage({
@@ -209,7 +225,7 @@ export async function notifyLeadsOfWorkflowStep(
       if (ok) { sent += 1; continue }
     }
 
-    if (!lead.email) {
+    if (!delivery.allowEmail || !lead.email) {
       skipped += 1
       continue
     }
