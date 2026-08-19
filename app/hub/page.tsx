@@ -1,43 +1,48 @@
 import { DashboardLayout } from '@/components/dashboard-layout'
 
-// Dot colors stay inside the ANC blue/cyan family so the grid reads as one
-// system. Six distinguishable steps, all legible on white and on #151515.
+// Two tones, both from the ANC wordmark, carrying a real distinction: brand
+// blue marks the three systems that own a business workflow, cyan marks the
+// three supporting surfaces. Six shades of one hue would be indistinguishable
+// at 12px, so the dot groups rather than pretends to be a per-app legend.
+const CORE = '#0A52EF'
+const SUPPORT = '#00AEEF'
+
 const apps = [
   {
     name: 'CRM',
     href: 'https://crm.ancsports.net',
     detail: 'Accounts, opportunities, contacts, dashboards, reports, and Scout.',
-    color: '#0A52EF',
+    color: CORE,
   },
   {
     name: 'Proposal Engine',
     href: 'https://proposals.anc.com/hub',
     detail: 'Estimates, RFP analysis, proposal generation, and scoping workbooks.',
-    color: '#00AEEF',
+    color: CORE,
   },
   {
     name: 'Services Dashboard',
     href: '/dashboard',
     detail: 'Events, venues, staffing, tickets, workflows, and service operations.',
-    color: '#4F86FF',
+    color: CORE,
   },
   {
     name: 'Operations Workspace',
     href: '/operations',
     detail: 'Dense ops tables for displays, walkthroughs, maintenance, and assets.',
-    color: '#0055B3',
+    color: SUPPORT,
   },
   {
     name: 'ANC Forms',
     href: 'https://forms.ancsports.net',
     detail: 'Shareable intake forms for CRM and operations workflows.',
-    color: '#56C8F2',
+    color: SUPPORT,
   },
   {
     name: 'Operator Docs',
     href: 'https://docs.ancsports.net',
     detail: 'Guides, runbooks, workflows, and training notes.',
-    color: '#80A8FF',
+    color: SUPPORT,
   },
 ]
 
