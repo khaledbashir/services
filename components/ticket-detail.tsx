@@ -170,6 +170,9 @@ export function TicketDetail({
   // dashboard it looks like nothing and gets scanned straight past. The header
   // button below jumps here and puts the cursor in the box.
   const emailReplyRef = useRef<HTMLTextAreaElement>(null)
+  const [newClientEmail, setNewClientEmail] = useState('')
+  const [addingClientEmail, setAddingClientEmail] = useState(false)
+  const [clientEmailError, setClientEmailError] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [attachmentCaption, setAttachmentCaption] = useState('')
@@ -284,6 +287,54 @@ export function TicketDetail({
       })
       if (res.ok) await fetchData()
     } catch {}
+  }
+
+  /**
+   * Add a client address to the venue's list without leaving the ticket.
+   *
+   * Jireh asked for the client emails to be "more visible so you can see and add
+   * more easily". They were neither: the ticket carries ONE contact_email, and
+   * the list a reply actually goes to lives on the venue, three pages away,
+   * showing here only as a "no list" badge. Writing it to the venue rather than
+   * the ticket is the point — it fixes this ticket and every future one for that
+   * venue, which is what he was describing.
+   */
+  const addClientEmail = async (e: FormEvent) => {
+    e.preventDefault()
+    const email = newClientEmail.trim()
+    if (!email) return
+    if (!ticket?.venue_id) {
+      setClientEmailError('This ticket has no venue, so there is no list to add to.')
+      return
+    }
+    if (!emailPattern.test(email)) {
+      setClientEmailError('That does not look like an email address.')
+      return
+    }
+    if (allDistributionEmails.some(existing => existing.toLowerCase() === email.toLowerCase())) {
+      setClientEmailError('That address is already on the list.')
+      return
+    }
+    setAddingClientEmail(true)
+    setClientEmailError(null)
+    try {
+      const res = await fetch(`/api/venues/${ticket.venue_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ distribution_emails: [...allDistributionEmails, email] }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setClientEmailError(err?.error || 'That address could not be saved.')
+        return
+      }
+      setNewClientEmail('')
+      await fetchData()
+    } catch {
+      setClientEmailError('That address could not be saved.')
+    } finally {
+      setAddingClientEmail(false)
+    }
   }
 
   const addAssignee = async (staffId: string) => {
@@ -633,6 +684,13 @@ export function TicketDetail({
   const noClientRecipient = replyTargetEmails.length > 0 && externalRecipients.length === 0
   const mixedRecipients = internalRecipients.length > 0 && externalRecipients.length > 0
   const recipientReady = replyTargetEmails.length > 0 && !noClientRecipient
+  // One row per address, each keeping its own provenance. The fallback chain
+  // only ever yields a single address, so it becomes a one-row list.
+  const replyTargetDetails = recipientSources.length
+    ? recipientSources
+    : replyTarget
+      ? [{ email: replyTarget.email, source: replyTarget.source }]
+      : []
   const displayAttachments: TicketAttachment[] = [
     ...(ticket.image_url ? [{
       id: 'original-ticket-image',
@@ -676,6 +734,80 @@ export function TicketDetail({
             Merged from: {ticket.merged_from_numbers.map((n) => `T-${String(n).padStart(5, '0')}`).join(', ')}
           </div>
         )}
+
+        {/*
+          Print sheet — never on screen, the only thing on paper.
+
+          Built separately rather than by restyling the page because the page is
+          tabbed: whatever is printed would otherwise depend on which tab happens
+          to be open. And because this goes to a customer, it is client-safe by
+          construction — internal notes are filtered out here, not hidden by CSS
+          someone can undo later.
+        */}
+        <div className="ticket-print-sheet hidden">
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '2px solid #0A52EF', paddingBottom: 10, marginBottom: 18 }}>
+            <img src="/ANC_Logo_2023_blue.png" alt="ANC" style={{ width: 132, height: 'auto' }} />
+            <div style={{ textAlign: 'right', fontSize: 11, color: '#6B7280', lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>Service Ticket {caseNum}</div>
+              <div>{ticket.venue_name || 'ANC Support'}</div>
+            </div>
+          </div>
+
+          <h1 style={{ fontSize: 19, fontWeight: 600, margin: '0 0 14px', lineHeight: 1.3 }}>{ticket.title}</h1>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, marginBottom: 18 }} className="print-avoid-break">
+            <tbody>
+              {[
+                ['Status', statusSteps.find(s => s.key === ticket.status)?.label || ticket.status],
+                ['Priority', pri.label],
+                ['Category', categoryLabels[ticket.category] || ticket.category || '—'],
+                ['Opened', `${ticket.created_date} by ${ticket.created_by_name}`],
+                ['Assigned to', ticket.assigned_to_name || 'Unassigned'],
+                ['Site contact', [ticket.contact_name, ticket.contact_email, ticket.contact_phone].filter(Boolean).join(' · ') || '—'],
+              ].map(([label, value]) => (
+                <tr key={label as string}>
+                  <td style={{ padding: '5px 12px 5px 0', color: '#6B7280', width: 110, verticalAlign: 'top', whiteSpace: 'nowrap' }}>{label}</td>
+                  <td style={{ padding: '5px 0', color: '#111827', fontWeight: 500 }}>{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {(ticket.description || ticket.original_message) && (
+            <div className="print-avoid-break" style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A52EF', marginBottom: 6 }}>Reported issue</div>
+              <div style={{ fontSize: 11.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.description || ticket.original_message}</div>
+            </div>
+          )}
+
+          {(() => {
+            const shareable = comments.filter(c => !c.is_internal && (c.body || '').trim())
+            if (!shareable.length) return null
+            return (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A52EF', marginBottom: 6 }}>Updates</div>
+                {shareable.map(c => (
+                  <div key={c.id} className="print-avoid-break" style={{ borderLeft: '2px solid #DDE3EE', paddingLeft: 10, margin: '0 0 10px' }}>
+                    <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }}>{c.author_name} · {c.created_date}</div>
+                    <div style={{ fontSize: 11.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{c.body}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {resolutionNotes && (
+            <div className="print-avoid-break" style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A52EF', marginBottom: 6 }}>Resolution</div>
+              <div style={{ fontSize: 11.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{resolutionNotes}</div>
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #DDE3EE', paddingTop: 8, fontSize: 10, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
+            <span>ANC Sports Enterprises · www.anc.com · (914) 696-2100</span>
+            <span>{caseNum}</span>
+          </div>
+        </div>
 
         {/* ── Header ── */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-5 space-y-4">
@@ -1667,6 +1799,59 @@ export function TicketDetail({
                                 )}
                               </div>
                             )}
+
+                            <div data-ai-target="ticket-email-recipients" className="rounded-lg border border-zinc-200 bg-white">
+                              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Who this reaches</span>
+                                <span className="text-[11px] text-zinc-400">
+                                  {externalRecipients.length} client · {internalRecipients.length} ANC
+                                </span>
+                              </div>
+                              {replyTargetDetails.length > 0 ? (
+                                <ul className="divide-y divide-zinc-50">
+                                  {replyTargetDetails.map(recipient => {
+                                    const internal = isInternalEmail(recipient.email)
+                                    return (
+                                      <li key={recipient.email} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
+                                        <span className="min-w-0 truncate text-sm text-zinc-800">{recipient.email}</span>
+                                        <span className="flex flex-shrink-0 items-center gap-2">
+                                          <span className="text-[11px] text-zinc-400">{recipient.source}</span>
+                                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${internal ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>
+                                            {internal ? 'ANC' : 'Client'}
+                                          </span>
+                                        </span>
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              ) : (
+                                <p className="px-3 py-3 text-xs text-zinc-400">No client email on file for this ticket yet.</p>
+                              )}
+                              {ticket.venue_id && (
+                                <form onSubmit={addClientEmail} className="flex flex-wrap items-center gap-2 border-t border-zinc-100 bg-zinc-50/70 px-3 py-2.5">
+                                  <input
+                                    type="email"
+                                    data-ai-target="ticket-add-client-email"
+                                    aria-label="Add a client email to this venue"
+                                    value={newClientEmail}
+                                    onChange={e => { setNewClientEmail(e.target.value); setClientEmailError(null) }}
+                                    placeholder="client@venue.com"
+                                    className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-[#0A52EF]"
+                                  />
+                                  <button
+                                    type="submit"
+                                    data-ai-target="ticket-add-client-email-save"
+                                    disabled={addingClientEmail || !newClientEmail.trim()}
+                                    className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    {addingClientEmail ? 'Adding' : 'Add'}
+                                  </button>
+                                  <p className={`w-full text-[11px] ${clientEmailError ? 'text-rose-600' : 'text-zinc-400'}`}>
+                                    {clientEmailError || `Saved to ${ticket.venue_name || 'this venue'} — used on this ticket and every future one.`}
+                                  </p>
+                                </form>
+                              )}
+                            </div>
 
                             <div className="rounded-lg border border-zinc-200 bg-white">
                               <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2 text-xs">

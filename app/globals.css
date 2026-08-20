@@ -664,3 +664,43 @@ body {
     padding: 0 !important;
   }
 }
+
+/*
+ * Printing a ticket.
+ *
+ * "Print View" used to be a bare window.print() with no print rules anywhere on
+ * the page, so it printed the dashboard: the nav rail, the tab bar, the buttons,
+ * every hover surface. Jireh tried to send one to a client and said it needed
+ * work. It did.
+ *
+ * Everything is hidden and only the print sheet is shown, which is the one
+ * technique that does not require reaching up into the dashboard shell to hide
+ * its chrome. Scoped with :has() so it can only ever fire on a page that
+ * actually contains a ticket sheet — an unscoped `body *` rule here would print
+ * every other page in the app blank. Where :has() is missing the rule simply
+ * does not apply and printing behaves as it did before.
+ */
+@media print {
+  body:has(.ticket-print-sheet) * {
+    visibility: hidden !important;
+  }
+  body:has(.ticket-print-sheet) .ticket-print-sheet,
+  body:has(.ticket-print-sheet) .ticket-print-sheet * {
+    visibility: visible !important;
+  }
+  body:has(.ticket-print-sheet) .ticket-print-sheet {
+    display: block !important;
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    color: #111827;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .ticket-print-sheet .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
