@@ -28,6 +28,7 @@ interface DesignRequestDetail {
   final_file_name: string | null
   final_duration: string | null
   notes: string | null
+  client_brief: string | null
   boards_requested: string | null
   sizes_requested: string | null
   designer_id: string | null
@@ -157,6 +158,7 @@ export function DesignDetailBody({
   const [saving, setSaving] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
+  const [clientBriefDraft, setClientBriefDraft] = useState('')
   const [hoursSpentDraft, setHoursSpentDraft] = useState('')
   const [boardsDraft, setBoardsDraft] = useState('')
   const [finalLinkDraft, setFinalLinkDraft] = useState('')
@@ -180,6 +182,7 @@ export function DesignDetailBody({
       setDr(d)
       setStaffList(staffData.staff || [])
       setNotesDraft(d?.notes || '')
+      setClientBriefDraft(d?.client_brief || '')
       setHoursSpentDraft(d?.hours_spent?.toString() || '')
       setBoardsDraft(d?.boards_requested || '')
       setFinalLinkDraft(d?.ftp_final_link || '')
@@ -605,6 +608,24 @@ export function DesignDetailBody({
                   placeholder="e.g. 2× main scoreboards (1920x1080), 1× ribbon (960x540)"
                 />
               </Field>
+              {/* The client's request in their own words. Summarising it is
+                  where the detail was being lost — the designer only ever sees
+                  the ticket, so the email has to live on the ticket. Sits above
+                  Notes because it is the source, and Notes is the reading of it. */}
+              <Field label="Client's Request (paste the email)">
+                <textarea
+                  data-ai-target="client-brief"
+                  value={clientBriefDraft}
+                  onChange={(e) => setClientBriefDraft(e.target.value)}
+                  onBlur={() => clientBriefDraft !== (dr.client_brief || '') && updateField({ client_brief: clientBriefDraft })}
+                  rows={7}
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y font-mono text-[12.5px] leading-relaxed"
+                  placeholder="Paste the client's email here, exactly as they sent it — creative direction, callouts, references, all of it."
+                />
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  Kept word-for-word. Paste the whole email rather than retyping a summary — it is less work, and nothing gets lost.
+                </p>
+              </Field>
               <Field label="Notes / Brief">
                 <textarea
                   data-ai-target="notes-brief"
@@ -613,7 +634,7 @@ export function DesignDetailBody({
                   onBlur={() => notesDraft !== (dr.notes || '') && updateField({ notes: notesDraft })}
                   rows={4}
                   className="w-full rounded-lg ring-1 ring-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white resize-y"
-                  placeholder="What the client wants + any specific callouts"
+                  placeholder="ANC's own notes on top of the client's request"
                 />
               </Field>
             </StageCard>

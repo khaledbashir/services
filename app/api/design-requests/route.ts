@@ -294,6 +294,7 @@ export async function POST(request: NextRequest) {
       final_file_name,
       final_duration,
       notes,
+      client_brief,
       boards_requested,
       sizes_requested,
       designer_id,
@@ -327,6 +328,7 @@ export async function POST(request: NextRequest) {
     // so historical syncing is unaffected.
     const brief = assessDesignBrief({
       notes,
+      clientBrief: client_brief,
       boardsRequested: boards_requested,
       sizesRequested: sizes_requested,
       projectFileLocation: project_file_location,
@@ -377,12 +379,12 @@ export async function POST(request: NextRequest) {
     const result = await query(
       `INSERT INTO design_requests (
         venue_id, company_name, job_title, tricode, ftp_proof_link, ftp_final_link, project_file_location,
-        final_file_name, final_duration, notes, boards_requested, sizes_requested,
+        final_file_name, final_duration, notes, client_brief, boards_requested, sizes_requested,
         designer_id, enterprise_contact_id, status, hours_estimated, hours_spent, due_date, is_rando, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
-        $8, $9, $10, $11, $12,
-        $13, $14, $15, $16, $17, $18, $19, NOW()
+        $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19, $20, NOW()
       )
       RETURNING id, job_title, status, is_rando`,
       [
@@ -396,6 +398,7 @@ export async function POST(request: NextRequest) {
         final_file_name?.trim() || null,
         final_duration?.trim() || null,
         notes?.trim() || null,
+        client_brief?.trim() || null,
         boards_requested?.trim() || null,
         sizes_requested?.trim() || null,
         designer_id || null,

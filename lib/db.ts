@@ -580,6 +580,12 @@ async function runMigrations() {
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_by_name TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_by_email TEXT`)
     await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS qc_approved_at TIMESTAMPTZ`)
+    // The client's own words, kept verbatim — normally the request email pasted
+    // in whole. `notes` is the account manager's summary of it, and summarising
+    // is where the detail was being lost: Charlie, 2026-08-20, "the descriptions
+    // I've seen on emails are not on this brief." Separate column so neither
+    // one overwrites the other.
+    await client.query(`ALTER TABLE design_requests ADD COLUMN IF NOT EXISTS client_brief TEXT`)
     await client.query(`CREATE TABLE IF NOT EXISTS design_request_designers (
       design_request_id UUID NOT NULL REFERENCES design_requests(id) ON DELETE CASCADE,
       staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

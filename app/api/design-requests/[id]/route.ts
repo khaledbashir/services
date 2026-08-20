@@ -31,6 +31,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   'final_file_name',
   'final_duration',
   'notes',
+  'client_brief',
   'boards_requested',
   'sizes_requested',
   'designer_id',
@@ -56,7 +57,7 @@ const ALLOWED_STATUSES = new Set([
 function normalizeValue(key: string, value: any) {
   if (value === undefined) return undefined
   if (['venue_id', 'designer_id', 'enterprise_contact_id'].includes(key)) return value || null
-  if (['company_name', 'client_name', 'client_email', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'project_file_location', 'final_file_name', 'final_duration', 'notes', 'boards_requested', 'sizes_requested'].includes(key)) {
+  if (['company_name', 'client_name', 'client_email', 'job_title', 'tricode', 'ftp_proof_link', 'ftp_final_link', 'project_file_location', 'final_file_name', 'final_duration', 'notes', 'client_brief', 'boards_requested', 'sizes_requested'].includes(key)) {
     return typeof value === 'string' ? value.trim() || null : value
   }
   if (key === 'status') return ALLOWED_STATUSES.has(value) ? value : undefined
@@ -84,7 +85,7 @@ async function getAccessibleRecord(request: NextRequest, id: string, minRole: 't
   const result = await query(
     `SELECT dr.id, dr.venue_id, dr.job_title, dr.company_name, dr.tricode,
             dr.ftp_proof_link, dr.legacy_ftp_proof_link, dr.ftp_final_link, dr.project_file_location, dr.final_file_name, dr.final_duration,
-            dr.notes, dr.boards_requested, dr.sizes_requested, dr.designer_id,
+            dr.notes, dr.client_brief, dr.boards_requested, dr.sizes_requested, dr.designer_id,
             dr.enterprise_contact_id, dr.status, dr.hours_estimated, dr.hours_spent,
             dr.due_date, dr.is_rando, dr.created_at, dr.updated_at,
             dr.qc_approved_by_name, dr.qc_approved_by_email, dr.qc_approved_at,

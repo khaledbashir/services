@@ -383,6 +383,7 @@ export default function DesignsPage() {
     project_file_location: '',
     ftp_final_link: '',
     ftp_proof_link: '',
+    client_brief: '',
     notes: '',
     is_rando: false,
   })
@@ -631,6 +632,7 @@ export default function DesignsPage() {
         project_file_location: '',
         ftp_final_link: '',
         ftp_proof_link: '',
+        client_brief: '',
         notes: '',
         is_rando: false,
       })
@@ -1215,12 +1217,28 @@ export default function DesignsPage() {
               </div>
 
               <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">
+                  Client&apos;s Request — paste the email
+                </label>
+                <textarea
+                  value={formData.client_brief}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, client_brief: e.target.value }))}
+                  rows={7}
+                  placeholder="Paste the client's email here, exactly as they sent it — creative direction, callouts, references, all of it."
+                  className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm font-mono text-[12.5px] leading-relaxed focus:ring-2 focus:ring-[#0A52EF]/30 outline-none resize-y bg-white"
+                />
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  Kept word-for-word for the designer. Pasting the whole email is less work than retyping a summary, and nothing gets lost on the way.
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 mb-1.5">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                   rows={3}
-                  placeholder="Brand assets, delivery format, anything the designer needs to know…"
+                  placeholder="ANC's own notes on top of the client's request…"
                   className="w-full rounded-lg ring-1 ring-zinc-200 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none resize-none bg-white"
                 />
               </div>

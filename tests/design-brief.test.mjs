@@ -118,3 +118,78 @@ test('the regexes are stateless across calls', () => {
   const second = assessDesignBrief(input)
   assert.deepEqual(first, second, 'the same brief must assess identically every time')
 })
+
+// ── The client's own words (2026-08-20) ──────────────────────────────────────
+// Charlie, reading real tickets on the second call: "the descriptions I've seen
+// on emails are not on this brief." The account manager reads the client email
+// and types a summary; the detail never leaves the inbox. `clientBrief` is the
+// email kept verbatim, and the gate has to treat it as real direction —
+// otherwise pasting the whole thing in still fails the check that asked for it.
+
+const PASTED_EMAIL = [
+  'Hi team — for the Kia Telluride takeover this Thursday:',
+  'courtside tables and basket stanchions should stay static, no motion.',
+  'The ribbon can carry the fly-in treatment we used for the last combo.',
+  'Six vehicle photos are attached; please swap the car photo once the new',
+  'asset lands. This car runs 100% of the week.',
+].join(' ')
+
+test('a pasted client email carries the brief on its own', () => {
+  const r = assessDesignBrief({
+    clientBrief: PASTED_EMAIL,
+    notes: null,
+    boardsRequested: 'Courtside, Ribbon',
+    sizesRequested: null,
+    projectFileLocation: null,
+  })
+  assert.equal(r.complete, true, r.missing.join(' | '))
+})
+
+test('a thin summary is rescued by the pasted email beside it', () => {
+  const thin = {
+    notes: 'Create courtside',
+    boardsRequested: 'Courtside',
+    sizesRequested: null,
+    projectFileLocation: null,
+  }
+  // The exact ticket Charlie opened, before and after the client's words exist.
+  assert.equal(assessDesignBrief(thin).complete, false)
+  assert.equal(assessDesignBrief({ ...thin, clientBrief: PASTED_EMAIL }).complete, true)
+})
+
+test('an empty client brief changes nothing', () => {
+  const base = {
+    notes: 'Create courtside',
+    boardsRequested: 'Courtside',
+    sizesRequested: null,
+    projectFileLocation: null,
+  }
+  for (const empty of [null, undefined, '', '   ']) {
+    const r = assessDesignBrief({ ...base, clientBrief: empty })
+    assert.equal(r.complete, false, `clientBrief=${JSON.stringify(empty)} must not pass the gate`)
+  }
+})
+
+test('a client brief that is only a link is still only a link', () => {
+  const r = assessDesignBrief({
+    clientBrief: 'Wrike: https://www.wrike.com/open.htm?id=1234567',
+    notes: null,
+    boardsRequested: 'Ribbon',
+    sizesRequested: null,
+    projectFileLocation: null,
+  })
+  assert.equal(r.complete, false)
+  assert.match(r.missing.join(' '), /only a link/)
+})
+
+test('assets named in the client email satisfy the assets gate', () => {
+  // The direction lives in notes; only the pasted email mentions the artwork.
+  const r = assessDesignBrief({
+    notes: 'Ribbon takeover for Thursday, fly-in treatment, hold the final frame for four seconds.',
+    clientBrief: 'Six vehicle photos are attached for this one.',
+    boardsRequested: 'Ribbon',
+    sizesRequested: null,
+    projectFileLocation: null,
+  })
+  assert.equal(r.complete, true, r.missing.join(' | '))
+})

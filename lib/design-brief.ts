@@ -24,6 +24,13 @@
 export type DesignBriefInput = {
   /** The creative direction — what to make and how. */
   notes?: string | null
+  /**
+   * The client's own words, kept verbatim — normally the request email pasted
+   * in whole. Counts as direction in its own right: when an account manager
+   * summarises, detail is lost between the inbox and the ticket, and the
+   * summary is the only thing a designer ever sees.
+   */
+  clientBrief?: string | null
   /** Which boards / screens the work is for. */
   boardsRequested?: string | null
   /** Board dimensions or pixel specs. */
@@ -77,6 +84,19 @@ function present(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+/**
+ * Every place a designer could read direction from, as one string.
+ *
+ * The pasted client email and the account manager's notes are both direction;
+ * either alone can carry the whole brief, and a thin summary sitting beside a
+ * full pasted email is complete even though the summary is not.
+ */
+function directionSources(input: DesignBriefInput): string {
+  return [input.clientBrief, input.notes]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n\n')
+}
+
 export function assessDesignBrief(input: DesignBriefInput): DesignBriefAssessment {
   const missing: string[] = []
 
@@ -85,9 +105,10 @@ export function assessDesignBrief(input: DesignBriefInput): DesignBriefAssessmen
   // learns nothing. Such a ticket usually keeps a short label ("Wrike:",
   // "Assets:"), so anything under LABEL_RESIDUE_CHARS beside a reference is
   // still just a link, and saying so is more useful than "too short".
-  const direction = stripReferences(input.notes)
-  const carriesReference = hasReference(input.notes)
-  if (direction.length === 0 && !present(input.notes)) {
+  const briefText = directionSources(input)
+  const direction = stripReferences(briefText)
+  const carriesReference = hasReference(briefText)
+  if (direction.length === 0 && !present(briefText)) {
     missing.push('Creative direction — what should be designed, and how.')
   } else if (carriesReference && direction.length < LABEL_RESIDUE_CHARS) {
     missing.push('Creative direction — this brief is only a link. Say what should be made.')
@@ -108,7 +129,7 @@ export function assessDesignBrief(input: DesignBriefInput): DesignBriefAssessmen
   // Assets can be named in the direction itself ("assets are located here") or
   // recorded in the location field. Only complain when neither exists.
   const mentionsAssets = /asset|artwork|logo|supplied|provided|attach|footage|photo|image/i.test(
-    String(input.notes || ''),
+    briefText,
   )
   if (!present(input.projectFileLocation) && !mentionsAssets && !carriesReference) {
     missing.push('Assets — where the supplied files are, or a note that none are needed.')
