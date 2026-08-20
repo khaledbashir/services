@@ -87,6 +87,25 @@ function extractInboundEmail(comment: Comment) {
   return extractEmail(fromHeader) || extractEmail(body.match(/^From:\s*(.+)$/im)?.[1]) || null
 }
 
+/**
+ * An ANC address is us, not the customer.
+ *
+ * A venue's distribution list can hold ANC staff only — Capital One Arena's held
+ * one address, Jireh's own — and the composer showed it as a ready recipient
+ * labelled "Ticket correspondent". Someone writing a client update there is
+ * writing to themselves, sends it, and believes the client has been told. So the
+ * addresses get classified and the composer says which kind it is about to mail.
+ *
+ * A warning, never a block: emailing the internal list deliberately is a normal
+ * thing to want.
+ */
+const INTERNAL_EMAIL_DOMAINS = ['anc.com', 'ancsports.net']
+
+function isInternalEmail(email: string) {
+  const domain = email.trim().toLowerCase().split('@')[1] || ''
+  return INTERNAL_EMAIL_DOMAINS.some(known => domain === known || domain.endsWith(`.${known}`))
+}
+
 const priorityConfig: Record<string, { color: string; label: string }> = {
   low: { color: 'text-zinc-500 bg-zinc-50 border-zinc-200', label: 'Low' },
   medium: { color: 'text-amber-700 bg-amber-50 border-amber-200', label: 'Medium' },
@@ -146,6 +165,11 @@ export function TicketDetail({
     | null
   >(null)
   const [emailReply, setEmailReply] = useState('')
+  // The composer lives behind the Emails tab, and that tab only carries a count
+  // once a ticket already has email on it — so on a ticket raised in the
+  // dashboard it looks like nothing and gets scanned straight past. The header
+  // button below jumps here and puts the cursor in the box.
+  const emailReplyRef = useRef<HTMLTextAreaElement>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [attachmentCaption, setAttachmentCaption] = useState('')
@@ -569,11 +593,28 @@ export function TicketDetail({
   // Mirror the email-reply route: a reply goes to whoever is actually
   // corresponding (latest inbound) plus the venue's distribution list; the
   // single stored contact is only a fallback when there is no real recipient.
-  const replyRecipients = Array.from(new Set(
-    [latestInboundEmail, ...allDistributionEmails].filter((e): e is string => !!e && e.includes('@'))
-  ))
-  const replyTarget = replyRecipients.length
-    ? { email: replyRecipients.join(', '), source: replyRecipients.length > 1 ? 'Venue contact list' : 'Ticket correspondent' }
+  //
+  // Each address keeps where it came from. The old label was derived from the
+  // COUNT — one address read as "Ticket correspondent" even when it came from
+  // the venue list and nobody had corresponded at all.
+  const recipientSources: { email: string; source: string }[] = []
+  const seenRecipients = new Set<string>()
+  const addRecipient = (email: string | null | undefined, source: string) => {
+    if (!email || !email.includes('@')) return
+    const key = email.trim().toLowerCase()
+    if (seenRecipients.has(key)) return
+    seenRecipients.add(key)
+    recipientSources.push({ email: email.trim(), source })
+  }
+  addRecipient(latestInboundEmail, 'Ticket correspondent')
+  allDistributionEmails.forEach(email => addRecipient(email, 'Venue contact list'))
+
+  const replyRecipients = recipientSources.map(r => r.email)
+  const replyTarget = recipientSources.length
+    ? {
+        email: replyRecipients.join(', '),
+        source: Array.from(new Set(recipientSources.map(r => r.source))).join(' + '),
+      }
     : ticket.contact_email
       ? { email: ticket.contact_email, source: 'Ticket contact' }
       : ticket.venue_contact_email
@@ -581,6 +622,17 @@ export function TicketDetail({
         : extractEmail(ticket.original_message) || extractEmail(ticket.description)
           ? { email: (extractEmail(ticket.original_message) || extractEmail(ticket.description))!, source: 'Original message' }
           : null
+
+  // Who this reply would actually land on, split into people at ANC and people
+  // outside it, so the composer can say so before anything is sent.
+  const replyTargetEmails = replyTarget
+    ? replyTarget.email.split(',').map(e => e.trim()).filter(Boolean)
+    : []
+  const externalRecipients = replyTargetEmails.filter(email => !isInternalEmail(email))
+  const internalRecipients = replyTargetEmails.filter(isInternalEmail)
+  const noClientRecipient = replyTargetEmails.length > 0 && externalRecipients.length === 0
+  const mixedRecipients = internalRecipients.length > 0 && externalRecipients.length > 0
+  const recipientReady = replyTargetEmails.length > 0 && !noClientRecipient
   const displayAttachments: TicketAttachment[] = [
     ...(ticket.image_url ? [{
       id: 'original-ticket-image',
@@ -661,6 +713,33 @@ export function TicketDetail({
             </div>
             {/* Action buttons — SF style */}
             <div className="flex items-center gap-2 flex-shrink-0 xl:ml-auto">
+              {!isVoicemailTicket && (
+                <button
+                  data-ai-target="ticket-email-client"
+                  onClick={() => {
+                    setActiveTab('emails')
+                    // After the tab renders, not before it.
+                    requestAnimationFrame(() => {
+                      emailReplyRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                      emailReplyRef.current?.focus()
+                    })
+                  }}
+                  title={
+                    replyTarget
+                      ? noClientRecipient
+                        ? `Only ANC addresses on file: ${replyTarget.email}`
+                        : `Replies to ${replyTarget.email}`
+                      : 'No contact email on this ticket yet'
+                  }
+                  className="px-3 py-2 bg-[#0A52EF] text-white rounded-lg text-xs font-semibold hover:bg-[#0840C0] transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                  Email Client
+                  {(!replyTarget || noClientRecipient) && (
+                    <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-amber-300" aria-hidden="true"></span>
+                  )}
+                </button>
+              )}
               {ticket.status !== 'closed' && (
                 <button
                   data-ai-target="ticket-mark-complete"
@@ -1546,19 +1625,48 @@ export function TicketDetail({
                                   <span className="text-zinc-300">from</span>
                                   <span className="font-medium text-zinc-700">support@anc.com</span>
                                   <span className="text-zinc-300">to</span>
-                                  <span className={`truncate font-semibold ${replyTarget ? 'text-zinc-900' : 'text-amber-700'}`}>
+                                  <span className={`truncate font-semibold ${!replyTarget || noClientRecipient ? 'text-amber-700' : 'text-zinc-900'}`}>
                                     {replyTarget ? replyTarget.email : 'No contact email'}
                                   </span>
+                                  {noClientRecipient && (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                      ANC {internalRecipients.length > 1 ? 'addresses' : 'address'} — not the client
+                                    </span>
+                                  )}
+                                  {mixedRecipients && (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                      includes {internalRecipients.length} ANC {internalRecipients.length > 1 ? 'addresses' : 'address'}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="mt-0.5 truncate text-[11px] text-zinc-400">Case {caseNum} · {ticket.venue_name || 'ANC Support'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">Microsoft</span>
-                              <span className={`h-2 w-2 rounded-full ${replyTarget ? 'bg-emerald-500' : 'bg-amber-500'}`} title={replyTarget ? 'Ready to send' : 'Recipient needed'}></span>
+                              <span
+                                className={`h-2 w-2 rounded-full ${recipientReady ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                title={recipientReady ? 'Ready to send' : replyTarget ? 'Goes to ANC, not the client' : 'Recipient needed'}
+                              ></span>
                             </div>
                           </div>
                           <div className="space-y-3 p-4">
+
+                            {(noClientRecipient || mixedRecipients) && (
+                              <div data-ai-target="ticket-email-internal-warning" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                                {noClientRecipient ? (
+                                  <>
+                                    <span className="font-semibold">This goes to ANC, not the client.</span>{' '}
+                                    {internalRecipients.join(', ')} {internalRecipients.length > 1 ? 'are' : 'is'} on our own domain, and {internalRecipients.length > 1 ? 'they are' : 'it is'} the only {internalRecipients.length > 1 ? 'addresses' : 'address'} on file for this ticket. Add the customer&rsquo;s contact to {ticket.venue_name || 'the venue'} and it will route to them here and on every future ticket.
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="font-semibold">Some of these are ANC addresses.</span>{' '}
+                                    {internalRecipients.join(', ')} {internalRecipients.length > 1 ? 'are' : 'is'} on our own domain — a client-facing reply here reaches {externalRecipients.length > 1 ? 'the customers' : 'the customer'} and us together.
+                                  </>
+                                )}
+                              </div>
+                            )}
 
                             <div className="rounded-lg border border-zinc-200 bg-white">
                               <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2 text-xs">
@@ -1568,6 +1676,7 @@ export function TicketDetail({
                               <textarea
                                 data-ai-target="ticket-email-reply"
                                 aria-label="Ticket client email reply"
+                                ref={emailReplyRef}
                                 value={emailReply}
                                 onChange={(e) => setEmailReply(e.target.value)}
                                 placeholder="Write a clear client-facing reply..."
@@ -1575,7 +1684,13 @@ export function TicketDetail({
                                 className="min-h-[230px] w-full resize-none border-0 bg-transparent px-3 py-3 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 focus:ring-0"
                               />
                               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
-                                <div className="text-[11px] text-zinc-500">{replyTarget ? `Route: ${replyTarget.source}` : 'Add a contact email before sending.'}</div>
+                                <div className={`text-[11px] ${noClientRecipient ? 'text-amber-700' : 'text-zinc-500'}`}>
+                                  {replyTarget
+                                    ? noClientRecipient
+                                      ? `Route: ${replyTarget.source} — ANC only`
+                                      : `Route: ${replyTarget.source}`
+                                    : 'Add a contact email before sending.'}
+                                </div>
                                 <button
                                   type="submit"
                                   data-ai-target="ticket-email-send"
