@@ -23,13 +23,14 @@ interface SlackMessage {
   thread_ts?: string
 }
 
-export async function slackApi(method: string, body: any) {
-  if (!SLACK_BOT_TOKEN) throw new Error('SLACK_BOT_TOKEN not set')
+export async function slackApi(method: string, body: any, token?: string) {
+  const bearer = token || SLACK_BOT_TOKEN
+  if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+      'Authorization': `Bearer ${bearer}`,
     },
     body: JSON.stringify(body),
   })

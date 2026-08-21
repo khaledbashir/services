@@ -25,6 +25,21 @@ import {
 /** Slack sends at most a handful; this bounds a pathological message. */
 const MAX_LINKS = 5
 
+/**
+ * Link previews come from their own Slack app.
+ *
+ * The @ANC app runs in Socket Mode — Slack disables its Request URL and hands
+ * every event to OpenClaw's websocket, so nothing has reached this endpoint
+ * since 2 July. A second app, HTTP-only and holding just links:read /
+ * links:write, keeps previews entirely clear of the running bot: no compiled
+ * provider to patch, no second socket to steal the bot's events, and nothing
+ * to re-apply on the next OpenClaw upgrade.
+ *
+ * Falls back to the main token so a single-app workspace still works.
+ */
+const unfurlToken = (): string | undefined =>
+  process.env.SLACK_UNFURL_BOT_TOKEN || undefined
+
 async function describeRecord(link: Extract<CrmLink, { kind: 'record' }>): Promise<CardFacts> {
   const fallback = fallbackCard(link)
   try {
@@ -87,11 +102,11 @@ export async function handleSlackLinkShared(event: any): Promise<number> {
   const count = Object.keys(unfurls).length
   if (!count) return 0
 
-  const res: any = await slackApi('chat.unfurl', {
-    channel: event.channel,
-    ts: event.message_ts,
-    unfurls,
-  })
+  const res: any = await slackApi(
+    'chat.unfurl',
+    { channel: event.channel, ts: event.message_ts, unfurls },
+    unfurlToken(),
+  )
   if (!res?.ok) {
     console.error('[slack-unfurl] chat.unfurl refused:', res?.error, Object.keys(unfurls))
     return 0

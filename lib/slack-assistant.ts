@@ -5,6 +5,17 @@ import type { AgentRole } from '@/lib/ai/types'
 import { slackApi } from '@/lib/slack'
 
 const SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || ''
+/**
+ * A second Slack app signs the link-preview traffic.
+ *
+ * The @ANC app runs in Socket Mode, which means Slack disables its Request URL
+ * and delivers every event over OpenClaw's websocket instead — nothing has
+ * reached this endpoint since 2 July, when Socket Mode went on. Rather than
+ * patch the running bot's compiled provider to forward one more event type,
+ * link previews get their own app that talks plain HTTP to this URL. It signs
+ * with its own secret, so both are accepted here.
+ */
+const UNFURL_SIGNING_SECRET = process.env.SLACK_UNFURL_SIGNING_SECRET || ''
 const CLAW_STAFF_ID = process.env.OPENCLAW_CLAW_STAFF_ID || '7fb556c3-5d2d-430a-b3dc-42f58d79be33'
 
 export interface SlackResolvedCaller {
@@ -14,7 +25,8 @@ export interface SlackResolvedCaller {
 }
 
 export function verifySlackSignature(headers: Headers, rawBody: string): boolean {
-  if (!SIGNING_SECRET) return false
+  const secrets = [SIGNING_SECRET, UNFURL_SIGNING_SECRET].filter(Boolean)
+  if (!secrets.length) return false
   const timestamp = headers.get('x-slack-request-timestamp') || ''
   const signature = headers.get('x-slack-signature') || ''
   if (!timestamp || !signature) return false
@@ -23,12 +35,15 @@ export function verifySlackSignature(headers: Headers, rawBody: string): boolean
   if (!Number.isFinite(age) || age > 60 * 5) return false
 
   const base = `v0:${timestamp}:${rawBody}`
-  const expected = `v0=${crypto.createHmac('sha256', SIGNING_SECRET).update(base).digest('hex')}`
-  try {
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-  } catch {
-    return false
-  }
+  // Every secret is checked, and the comparison stays constant-time.
+  return secrets.some((secret) => {
+    const expected = `v0=${crypto.createHmac('sha256', secret).update(base).digest('hex')}`
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    } catch {
+      return false
+    }
+  })
 }
 
 export async function markSlackEventProcessed(eventId: string): Promise<boolean> {
