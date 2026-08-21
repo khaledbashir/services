@@ -9,6 +9,7 @@ import { dashboardUrl } from '@/lib/app-url'
 import { jwtVerify } from 'jose'
 import * as fs from 'fs'
 import { sendTicketDistributionEmail } from '@/lib/email'
+import { describeStatusChange } from '@/lib/ticket-history'
 import { syncTicketsToTwenty } from '@/lib/twenty-sync'
 import { awardPointsOnce } from '@/lib/gamification'
 import { notifyCustomerStatus } from '@/lib/customer-notify'
@@ -376,7 +377,10 @@ export async function PATCH(
         ticketTitle: oldTicket.title,
         ticketNumber: oldTicket.ticket_number || result.rows[0]?.ticket_number,
         type: 'updated',
-        detail: `Status updated: ${oldTicket.status} → ${status}`,
+        // "new → in_progress" is a database value in a client's inbox; the
+        // sentence is built in one place now (Jireh 2026-08-21).
+        detail: describeStatusChange(oldTicket.status, status),
+        ticketId: params.id,
         resolution: status === 'closed' ? resolution_notes : undefined,
         authorName: user?.fullName || user?.email || null,
       }).catch(err => console.error('[email] Ticket update email failed:', err))

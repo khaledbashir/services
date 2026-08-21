@@ -1,6 +1,9 @@
 import { query } from '@/lib/db'
 import { getSupportMailboxHandle } from '@/lib/crm-support-email'
 import { ticketUpdateByline } from '@/lib/ticket-update-byline'
+import { ticketHistoryHtml } from '@/lib/ticket-history'
+import { ticketEmailHtml } from '@/lib/ticket-email-template'
+import { fetchTicketHistory } from '@/lib/ticket-history-query'
 
 const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send'
 
@@ -97,23 +100,6 @@ export async function sendEmail(
   }
 }
 
-/**
- * Build the standard ANC ticket email HTML template.
- */
-function ticketEmailHtml(caseNum: string, title: string, venueName: string, bodyContent: string): string {
-  return `<div style="font-family:sans-serif;max-width:600px">
-    <div style="background:#002C73;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-      <h2 style="margin:0;font-size:16px">Case ${caseNum} — ${title}</h2>
-      <p style="margin:4px 0 0;opacity:0.7;font-size:13px">${venueName}</p>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
-      ${bodyContent}
-      <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
-      <p style="margin:0;font-size:12px;color:#94a3b8">Reply to this email to add a comment to this ticket.</p>
-      <p style="margin:0;font-size:12px;color:#94a3b8">This is an automated notification from ANC Sports Operations.</p>
-    </div>
-  </div>`
-}
 
 /**
  * Send a customer-portal invite email with the personal invite link.
@@ -227,6 +213,20 @@ export function parseTicketReplyAddress(toAddress: string): number | null {
 /**
  * Send distribution emails for a ticket event (created, updated, commented).
  */
+/**
+ * The ticket's id from its number. Its own function so a failure here costs
+ * the email its history section and nothing else.
+ */
+async function resolveTicketId(ticketNumber: number): Promise<string | null> {
+  try {
+    const res = await query(`SELECT id FROM tickets WHERE ticket_number = $1 LIMIT 1`, [ticketNumber])
+    return res.rows[0]?.id || null
+  } catch (error) {
+    console.error('[email] could not resolve ticket id for case', ticketNumber, error)
+    return null
+  }
+}
+
 export async function sendTicketDistributionEmail(opts: {
   venueId: string
   ticketTitle: string
@@ -238,6 +238,12 @@ export async function sendTicketDistributionEmail(opts: {
   authorName?: string | null
   /** When it was written. Defaults to send time. */
   occurredAt?: Date | string | null
+  /**
+   * The ticket's id, so the email can carry what already happened on it
+   * (Jireh 2026-08-21). Resolved from the ticket number when the caller does
+   * not have it to hand, so no call site had to change to get the trail.
+   */
+  ticketId?: string | null
 }): Promise<{ sent: boolean; recipient_count: number; reason?: 'no_list' | 'send_failed' }> {
   const venueRes = await query(
     `SELECT name, distribution_emails FROM venues WHERE id = $1`,
@@ -270,6 +276,22 @@ export async function sendTicketDistributionEmail(opts: {
     bodyContent = `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Update:</strong>${byline} ${opts.detail}</p>
       ${opts.resolution ? `<p style="margin:0 0 12px;font-size:14px;color:#334155"><strong>Resolution:</strong> ${opts.resolution}</p>` : ''}`
   }
+
+  // What already happened on this ticket, under the new update. Only on a
+  // follow-up: a ticket announcing its own creation has no history, and the
+  // fetch is skipped rather than run to find nothing.
+  let historyHtml = ''
+  if (opts.type !== 'created') {
+    const ticketId = opts.ticketId || (await resolveTicketId(opts.ticketNumber))
+    if (ticketId) {
+      const { entries, more } = await fetchTicketHistory(ticketId, {
+        before: opts.occurredAt,
+        exclude: opts.detail,
+      })
+      historyHtml = ticketHistoryHtml(entries, { more })
+    }
+  }
+  bodyContent += historyHtml
 
   // Outbound ticket distribution goes through SendGrid (transactional).
   // replyTo is set to the monitored support mailbox so client replies thread
