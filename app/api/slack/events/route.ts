@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cleanSlackPrompt, markSlackEventProcessed, resolveSlackCaller, runSlackAssistantTurn, verifySlackSignature } from '@/lib/slack-assistant'
 import { sendSlackMessage } from '@/lib/slack'
 import { handleSlackReactionAdded, captureDirectMessageToInbox } from '@/lib/slack-inbox'
+import { handleSlackServiceDeskEvent } from '@/lib/slack-service-desk'
 import { captureCodexMention, shouldCaptureCodexMention } from '@/lib/codex-request-inbox'
+import { handleSlackLinkShared } from '@/lib/slack-crm-unfurl-handler'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -89,6 +91,9 @@ export async function POST(request: NextRequest) {
     void handleSlackReactionAdded(body.event).catch((err) => {
       console.error('Slack inbox reaction capture failed:', err)
     })
+    void handleSlackServiceDeskEvent(body.event).catch((err) => {
+      console.error('Slack service desk reaction capture failed:', err)
+    })
   } else if (
     body.event?.type === 'message' &&
     body.event?.channel_type === 'im' &&
@@ -99,6 +104,21 @@ export async function POST(request: NextRequest) {
     // Non-@-mention DM to the bot — capture to inbox (doesn't reply).
     void captureDirectMessageToInbox(body.event).catch((err) => {
       console.error('Slack inbox DM capture failed:', err)
+    })
+  }
+
+  if (body.event?.type === 'message') {
+    void handleSlackServiceDeskEvent(body.event).catch((err) => {
+      console.error('Slack service desk message capture failed:', err)
+    })
+  }
+
+  // A CRM link pasted in a channel gets an ANC card instead of a bare URL
+  // (Jireh 2026-08-21). Fire-and-forget, like every other capture here, so a
+  // slow CRM read cannot eat Slack's 3-second ack window.
+  if (body.event?.type === 'link_shared') {
+    void handleSlackLinkShared(body.event).catch((err) => {
+      console.error('Slack CRM link unfurl failed:', err)
     })
   }
 

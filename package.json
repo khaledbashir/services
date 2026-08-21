@@ -21,7 +21,8 @@
     "test:status-notify": "node --test tests/assignee-status-notify.test.mjs",
     "test:notify-health": "node --test tests/notification-health-rules.test.mjs",
     "test:design-brief": "node --test tests/design-brief.test.mjs",
-    "test:ticket-history": "node --test tests/ticket-history.test.mjs"
+    "test:ticket-history": "node --test tests/ticket-history.test.mjs",
+    "test:slack-unfurl": "node --test tests/slack-crm-unfurl.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
