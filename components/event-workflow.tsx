@@ -181,10 +181,19 @@ export function WorkflowBody({ eventId }: { eventId: string }) {
         setPostGameEditable(data.postGameEditable !== false)
         setPostGameEditWindowEndsAt(data.postGameEditWindowEndsAt || null)
         setPostGameFormOpen(!data.workflow?.post_game_submitted)
-        if (data.viewer?.role === 'technician' && data.viewer?.userId) {
-          setSelectedTech(data.viewer.userId)
-        } else if ((data.assignedTechs?.length || 0) > 0) {
-          setSelectedTech(data.assignedTechs[0].id)
+        // Whoever opened the link is the person the reminder was addressed to, so
+        // default to them whenever they are on this event's crew — role is not the
+        // question, identity is. Managers and admins are assigned to events too, and
+        // gating this on role === 'technician' silently landed all 47 of them on the
+        // first name in the crew list instead of their own.
+        const viewerId: string | undefined = data.viewer?.userId
+        const assigned: Staff[] = data.assignedTechs || []
+        const viewerIsAssigned = !!viewerId && assigned.some((tech) => tech.id === viewerId)
+        if (viewerId && (viewerIsAssigned || data.viewer?.role === 'technician')) {
+          setSelectedTech(viewerId)
+        } else if (assigned.length > 0) {
+          // Not on the crew — a manager covering for someone. Keep the old default.
+          setSelectedTech(assigned[0].id)
         } else if ((data.allStaff?.length || 0) > 0) {
           setSelectedTech(data.allStaff[0].id)
         }
