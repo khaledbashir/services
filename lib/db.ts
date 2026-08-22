@@ -391,6 +391,14 @@ async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_status ON codex_request_inbox(status, created_at DESC)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_created ON codex_request_inbox(created_at DESC)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_codex_request_inbox_source_url ON codex_request_inbox(source_url) WHERE source_url IS NOT NULL`)
+    // One Slack mention arrives as two events (app_mention and message), so the
+    // message itself is the identity. The old dedupe hung off source_url, which
+    // arrives null when the permalink lookup fails — and a null never conflicts,
+    // so nothing deduped and every request was filed and announced twice.
+    await client.query(`DELETE FROM codex_request_inbox a USING codex_request_inbox b
+      WHERE a.channel_id = b.channel_id AND a.message_ts = b.message_ts AND a.ctid > b.ctid`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_codex_request_inbox_message
+      ON codex_request_inbox(channel_id, message_ts)`)
 
     // Slack-native service desk configuration. This is the Ravenna-style
     // channel binding layer for ANC: a Slack channel can be connected to a

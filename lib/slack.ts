@@ -23,6 +23,27 @@ interface SlackMessage {
   thread_ts?: string
 }
 
+/**
+ * Slack's older Web API methods (users.info, conversations.info,
+ * chat.getPermalink) do NOT accept a JSON body — they take form-encoded
+ * arguments and answer a JSON one with `invalid_arguments`, or worse, with a
+ * plausible-looking `user_not_found`. Anything reading a record rather than
+ * posting one should come through here.
+ */
+export async function slackApiForm(method: string, params: Record<string, string>, token?: string) {
+  const bearer = token || SLACK_BOT_TOKEN
+  if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+      'Authorization': `Bearer ${bearer}`,
+    },
+    body: new URLSearchParams(params).toString(),
+  })
+  return res.json()
+}
+
 export async function slackApi(method: string, body: any, token?: string) {
   const bearer = token || SLACK_BOT_TOKEN
   if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')

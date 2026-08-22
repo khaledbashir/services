@@ -1,5 +1,5 @@
 import { query } from '@/lib/db'
-import { slackApi, sendSlackMessage } from '@/lib/slack'
+import { slackApiForm, sendSlackMessage } from '@/lib/slack'
 
 const REQUEST_HINTS = [
   'can you',
@@ -44,11 +44,24 @@ function looksLikeRequest(text: string): boolean {
   return REQUEST_HINTS.some((hint) => cleaned.includes(hint))
 }
 
+/**
+ * Slack fires app_mention whenever the bot is NAMED, anywhere in the text. A
+ * sentence like "for private ones, invite @ANC and it picks them up" is a
+ * passing reference, not an instruction — and it was being filed as a request
+ * against its own author. Being addressed means the mention leads the message.
+ */
+export function addressesTheBot(text: string, botUserId?: string): boolean {
+  if (!botUserId) return false
+  const leading = new RegExp(`^[\\s>*_~]*<@${botUserId}>`)
+  return leading.test(String(text || ''))
+}
+
 export function shouldCaptureCodexMention(event: any, botUserId?: string): boolean {
   if (!enabled()) return false
   if (!event || event.subtype === 'bot_message' || event.bot_id) return false
-  if (event.type !== 'app_mention' && !(botUserId && typeof event.text === 'string' && event.text.includes(`<@${botUserId}>`))) return false
-  return looksLikeRequest(typeof event.text === 'string' ? event.text : '')
+  const text = typeof event.text === 'string' ? event.text : ''
+  if (!addressesTheBot(text, botUserId)) return false
+  return looksLikeRequest(text)
 }
 
 function titleFrom(text: string): string {
@@ -73,7 +86,7 @@ function suggestedSkillFor(text: string): string {
 async function lookupUserLabel(userId?: string): Promise<string | null> {
   if (!userId) return null
   try {
-    const res: any = await slackApi('users.info', { user: userId })
+    const res: any = await slackApiForm('users.info', { user: userId })
     if (res?.ok && res.user) {
       return res.user.profile?.display_name || res.user.real_name || res.user.name || userId
     }
@@ -84,7 +97,7 @@ async function lookupUserLabel(userId?: string): Promise<string | null> {
 async function lookupChannelLabel(channelId?: string): Promise<string | null> {
   if (!channelId) return null
   try {
-    const res: any = await slackApi('conversations.info', { channel: channelId })
+    const res: any = await slackApiForm('conversations.info', { channel: channelId })
     if (res?.ok && res.channel) return res.channel.name || channelId
   } catch {}
   return channelId
@@ -92,7 +105,7 @@ async function lookupChannelLabel(channelId?: string): Promise<string | null> {
 
 async function getPermalink(channelId: string, ts: string): Promise<string | null> {
   try {
-    const res: any = await slackApi('chat.getPermalink', { channel: channelId, message_ts: ts })
+    const res: any = await slackApiForm('chat.getPermalink', { channel: channelId, message_ts: ts })
     if (res?.ok && typeof res.permalink === 'string') return res.permalink
   } catch {}
   return null
@@ -115,6 +128,10 @@ export async function captureCodexMention(event: any, botUserId?: string): Promi
   const title = titleFrom(rawText)
   const suggestedSkill = suggestedSkillFor(rawText)
 
+  // Keyed on the message itself, not on its permalink. Slack delivers one
+  // mention as TWO events (app_mention and message), and the permalink was
+  // arriving null — and in Postgres a null never conflicts, so the old
+  // ON CONFLICT (source_url) silently deduped nothing and posted twice.
   const inserted = await query(
     `INSERT INTO codex_request_inbox (
        requester_slack_user_id, requester_name, channel_id, channel_name,
@@ -122,13 +139,14 @@ export async function captureCodexMention(event: any, botUserId?: string): Promi
        suggested_skill
      )
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     ON CONFLICT (source_url) DO UPDATE
+     ON CONFLICT (channel_id, message_ts) DO UPDATE
        SET updated_at = NOW(),
            raw_text = EXCLUDED.raw_text,
            cleaned_text = EXCLUDED.cleaned_text,
            title = EXCLUDED.title,
+           source_url = COALESCE(EXCLUDED.source_url, codex_request_inbox.source_url),
            suggested_skill = EXCLUDED.suggested_skill
-     RETURNING id, status`,
+     RETURNING id, status, (xmax = 0) AS is_new`,
     [
       requesterSlackUserId,
       requesterName,
@@ -145,6 +163,9 @@ export async function captureCodexMention(event: any, botUserId?: string): Promi
   )
 
   const row = inserted.rows[0]
+  // The second event for the same message updates the row; it must not post a
+  // second card.
+  if (!row?.is_new) return { captured: true, suppressAssistant: true }
   const label = requesterName || 'Slack'
   const reply = [
     `Tracked for Ahmad/Codex: *${title}*`,
