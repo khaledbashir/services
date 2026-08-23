@@ -1,5 +1,12 @@
 import { ticketCategoryLabel } from '@/lib/ticket-categories'
 import { DASHBOARD_URL } from '@/lib/app-url'
+import { recordDeliveries } from '@/lib/notification-log'
+import {
+  ancWorkspaceToken,
+  isChannelId,
+  primaryToken,
+  sendWithWorkspaceFallback,
+} from '@/lib/slack-workspace'
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || ''
 
@@ -21,6 +28,63 @@ interface SlackMessage {
   text: string
   blocks?: any[]
   thread_ts?: string
+  /**
+   * Write this post into `notification_deliveries` so the watchdog can see it.
+   *
+   * The audit trail was built for staff DMs and never covered channel posts,
+   * which is how 129 venue channels went dark on 2026-08-22 without the
+   * watchdog making a sound. Set it on anything a stakeholder is waiting for.
+   */
+  audit?: { kind: string; recordId?: string | null }
+}
+
+async function slackFetch(
+  method: string,
+  bearer: string,
+  payload: { json?: any; form?: Record<string, string> },
+) {
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': payload.form
+        ? 'application/x-www-form-urlencoded; charset=utf-8'
+        : 'application/json',
+      'Authorization': `Bearer ${bearer}`,
+    },
+    body: payload.form
+      ? new URLSearchParams(payload.form).toString()
+      : JSON.stringify(payload.json),
+  })
+  return res.json()
+}
+
+/**
+ * Every outbound Slack call goes through here so that exactly one place knows
+ * ANC spans two workspaces (see `lib/slack-workspace.ts`). A channel id from
+ * the staff workspace is unreachable with the ANC-Project token and answers
+ * `channel_not_found`; when that happens the same call is tried once against
+ * the other workspace and the winning token is remembered for that channel.
+ *
+ * An explicitly passed token is never second-guessed — callers that hand one in
+ * are addressing a specific workspace on purpose.
+ */
+async function slackDispatch(
+  method: string,
+  payload: { json?: any; form?: Record<string, string> },
+  channel: unknown,
+  token?: string,
+) {
+  if (token) return slackFetch(method, token, payload)
+
+  if (!isChannelId(channel)) {
+    const bearer = primaryToken() || SLACK_BOT_TOKEN
+    if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')
+    return slackFetch(method, bearer, payload)
+  }
+
+  return sendWithWorkspaceFallback(String(channel), (bearer) =>
+    slackFetch(method, bearer, payload),
+  )
 }
 
 /**
@@ -31,31 +95,11 @@ interface SlackMessage {
  * posting one should come through here.
  */
 export async function slackApiForm(method: string, params: Record<string, string>, token?: string) {
-  const bearer = token || SLACK_BOT_TOKEN
-  if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')
-  const res = await fetch(`https://slack.com/api/${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
-      'Authorization': `Bearer ${bearer}`,
-    },
-    body: new URLSearchParams(params).toString(),
-  })
-  return res.json()
+  return slackDispatch(method, { form: params }, params?.channel, token)
 }
 
 export async function slackApi(method: string, body: any, token?: string) {
-  const bearer = token || SLACK_BOT_TOKEN
-  if (!bearer) throw new Error('SLACK_BOT_TOKEN not set')
-  const res = await fetch(`https://slack.com/api/${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${bearer}`,
-    },
-    body: JSON.stringify(body),
-  })
-  return res.json()
+  return slackDispatch(method, { json: body }, body?.channel, token)
 }
 
 export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
@@ -64,8 +108,26 @@ export async function sendSlackMessage(msg: SlackMessage): Promise<boolean> {
 }
 
 export async function sendSlackMessageDetailed(msg: SlackMessage & { thread_ts?: string }): Promise<{ ok: boolean; ts?: string; channel?: string }> {
-  if (!SLACK_BOT_TOKEN) {
+  const { audit, ...post } = msg
+
+  /** Best-effort audit row. Never allowed to delay or break the message. */
+  const record = (ok: boolean, reason?: string) => {
+    if (!audit) return
+    void recordDeliveries([
+      {
+        kind: audit.kind,
+        recordId: audit.recordId ?? null,
+        channel: 'slack',
+        recipient: msg.channel,
+        ok,
+        reason: reason ?? null,
+      },
+    ]).catch(() => {})
+  }
+
+  if (!primaryToken() && !ancWorkspaceToken()) {
     console.warn('SLACK_BOT_TOKEN not set, skipping Slack notification')
+    record(false, 'no_slack_token')
     return { ok: false }
   }
   if (globalMuted()) {
@@ -74,20 +136,26 @@ export async function sendSlackMessageDetailed(msg: SlackMessage & { thread_ts?:
   }
 
   try {
-    const data = await slackApi('chat.postMessage', msg)
+    const data = await slackApi('chat.postMessage', post)
     if (!data.ok) {
-      console.error('Slack API error:', data.error)
+      // Name the channel. A bare `channel_not_found` in the log is what let a
+      // whole workspace of venues go dark without anyone being able to tell
+      // which venues, or how many.
+      console.error('Slack API error:', data.error, '- channel:', msg.channel)
+      record(false, String(data.error || 'slack_error'))
       return { ok: false }
     }
+    record(true)
     return { ok: true, ts: data.ts, channel: data.channel }
   } catch (err) {
     console.error('Failed to send Slack message:', err)
+    record(false, 'request_failed')
     return { ok: false }
   }
 }
 
 export async function deleteSlackMessage(channel: string, ts: string): Promise<boolean> {
-  if (!SLACK_BOT_TOKEN) {
+  if (!primaryToken() && !ancWorkspaceToken()) {
     console.warn('SLACK_BOT_TOKEN not set, skipping Slack message delete')
     return false
   }
@@ -381,7 +449,10 @@ export async function sendTicketNotification(ticket: {
 }, action: 'created' | 'updated' | 'resolved', channel: string): Promise<boolean> {
   const main = formatTicketNotification(ticket, action)
   main.channel = channel
-  const res = await sendSlackMessageDetailed(main)
+  const res = await sendSlackMessageDetailed({
+    ...main,
+    audit: { kind: `ticket_${action}`, recordId: ticket.id || null },
+  })
   if (!res.ok) return false
   // Did the teaser truncate? If so, post the full body in-thread.
   const desc = (ticket.description || '').trim()

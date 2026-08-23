@@ -201,6 +201,7 @@ export async function postTicketComment({
               { type: 'section', text: { type: 'mrkdwn', text: `${authorLine}:${noteTeaser.text ? `\n${noteTeaser.text}` : ''}` } },
               ticketActionBlock(ticketId, statusAfter),
             ],
+            audit: { kind: 'ticket_comment', recordId: ticketId },
           })
           if (noteTeaser.hasMore && posted.ok && posted.ts) {
             await sendSlackMessageDetailed({

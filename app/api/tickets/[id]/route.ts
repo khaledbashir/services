@@ -277,6 +277,7 @@ export async function PATCH(
             { type: 'section', text: { type: 'mrkdwn', text: `${emoji} *Case #${caseNum} ${action}*\n*${oldTicket.title}*\nStatus: ${fmtStatus(oldTicket.status)} → ${fmtStatus(status)}` } },
             ticketActionBlock(params.id, status),
           ],
+          audit: { kind: 'ticket_status_changed', recordId: params.id },
         })
       }
     }
