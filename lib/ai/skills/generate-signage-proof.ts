@@ -9,11 +9,7 @@ import {
   type PackagePlan,
 } from '@/lib/ai/signage-planner'
 import type { Skill } from '@/lib/ai/types'
-
-const AI_MODEL = process.env.POLLINATIONS_IMAGE_MODEL || 'flux'
-const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5'
-const AI_SIZE = '1024x1024'
-const AI_QUALITY = 'low'
+import { generateImage, isImageGenerationConfigured, type ImageProviderName } from '@/lib/ai/image-provider'
 
 function getPollinationsKey(args: Record<string, unknown>): string {
   if (args.pollinations_api_key && typeof args.pollinations_api_key === 'string') return args.pollinations_api_key
@@ -79,69 +75,6 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
   return ctx
 }
 
-async function generateImage(prompt: string, apiKey: string, provider: 'pollinations' | 'openai'): Promise<Buffer> {
-  if (provider === 'pollinations') {
-    return generatePollinationsImage(prompt, apiKey)
-  }
-
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENAI_IMAGE_MODEL,
-      prompt,
-      n: 1,
-      size: AI_SIZE,
-      quality: AI_QUALITY,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`OpenAI image gen ${res.status}: ${body.slice(0, 300)}`)
-  }
-  const data = await res.json() as { data?: Array<{ b64_json?: string; url?: string }> }
-  const item = data.data?.[0]
-  if (!item) throw new Error('Empty image response')
-  if (item.b64_json) return Buffer.from(item.b64_json, 'base64')
-  if (item.url) {
-    const img = await fetch(item.url)
-    return Buffer.from(await img.arrayBuffer())
-  }
-  throw new Error('No image data in response')
-}
-
-async function generatePollinationsImage(prompt: string, apiKey: string): Promise<Buffer> {
-  const baseUrl = (process.env.POLLINATIONS_BASE_URL || 'https://gen.pollinations.ai').replace(/\/$/, '')
-  const params = new URLSearchParams({
-    model: AI_MODEL,
-    width: '1024',
-    height: '1024',
-    enhance: 'true',
-  })
-
-  const res = await fetch(`${baseUrl}/image/${encodeURIComponent(prompt)}?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'image/*' },
-    signal: AbortSignal.timeout(120_000),
-  })
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Pollinations image gen ${res.status}: ${body.slice(0, 300)}`)
-  }
-
-  const contentType = res.headers.get('content-type') || ''
-  if (!contentType.startsWith('image/')) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Pollinations returned non-image response: ${body.slice(0, 300)}`)
-  }
-
-  return Buffer.from(await res.arrayBuffer())
-}
-
 function storagePrompt(prompt: string, plan: PackagePlan): string {
   const summary = JSON.stringify({
     planning_version: plan.planning_version,
@@ -189,10 +122,14 @@ const skill: Skill = {
     const id = String(args.design_request_id || '').trim()
     if (!id) throw new Error('design_request_id is required')
 
+    // Keys passed as tool arguments still win; everything else — which
+    // providers exist, what order they are tried, what happens when one is
+    // down — is the shared image provider's job.
+    const apiKeyOverrides: Partial<Record<ImageProviderName, string>> = {}
     const pollinationsKey = getPollinationsKey(args)
     const openAiKey = getOpenAIKey(args)
-    const imageProvider: 'pollinations' | 'openai' = pollinationsKey ? 'pollinations' : 'openai'
-    const apiKey = pollinationsKey || openAiKey
+    if (pollinationsKey) apiKeyOverrides.pollinations = pollinationsKey
+    if (openAiKey) apiKeyOverrides.openai = openAiKey
 
     let designCtx: DesignContext
     try {
@@ -231,13 +168,13 @@ const skill: Skill = {
       }
     }
 
-    if (!apiKey) {
+    if (!isImageGenerationConfigured({ apiKeys: apiKeyOverrides })) {
       return {
         ok: false,
         error: {
           code: 'no_api_key',
           message: 'No image generation key configured',
-          suggestion: 'Configure POLLINATIONS_API_KEY or OPENAI_API_KEY, or pass pollinations_api_key/api_key.',
+          suggestion: 'Configure GEMINI_API_KEY, OPENAI_API_KEY or POLLINATIONS_API_KEY, or pass pollinations_api_key/api_key.',
         },
         text_summary: 'No image generation key available',
         plan,
@@ -268,9 +205,9 @@ const skill: Skill = {
       }
     }
 
-    let bytes: Buffer
+    let image: Awaited<ReturnType<typeof generateImage>>
     try {
-      bytes = await generateImage(prompt, apiKey, imageProvider)
+      image = await generateImage(prompt, { apiKeys: apiKeyOverrides })
     } catch (err: any) {
       return {
         ok: false,
@@ -281,8 +218,11 @@ const skill: Skill = {
       }
     }
 
-    const filename = `ai-signage-proof-${Date.now()}.png`
-    const contentType = 'image/png'
+    const bytes = image.bytes
+    // Name the file after what it actually is — providers do not all return PNG.
+    const filename = `ai-signage-proof-${Date.now()}.${image.extension}`
+    const contentType = image.contentType
+    const aiModel = `${image.provider}:${image.model}`
 
     let storageBackend: 's3' | 'postgres_bytea' = 'postgres_bytea'
     let storageKey: string | null = null
@@ -324,7 +264,7 @@ const skill: Skill = {
         storageBackend,
         storageEtag,
         storagePrompt(prompt, plan),
-        imageProvider === 'pollinations' ? `pollinations:${AI_MODEL}` : `openai:${OPENAI_IMAGE_MODEL}`,
+        aiModel,
       ]
     )
 
@@ -344,7 +284,7 @@ const skill: Skill = {
         uploaded_at: inserted.rows[0].created_at,
         version: Number(inserted.rows[0].version || 1),
         is_ai_generated: true,
-        ai_model: imageProvider === 'pollinations' ? `pollinations:${AI_MODEL}` : `openai:${OPENAI_IMAGE_MODEL}`,
+        ai_model: aiModel,
         download_url: downloadUrl,
       },
       plan,

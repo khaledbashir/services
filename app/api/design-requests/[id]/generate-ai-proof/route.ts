@@ -9,18 +9,7 @@ import {
   type DesignContext,
   type PackagePlan,
 } from '@/lib/ai/signage-planner'
-
-const OPENAI_KEY = process.env.OPENAI_API_KEY || (() => {
-  try {
-    const list = JSON.parse(process.env.AI_PROVIDERS_JSON || '[]')
-    const openai = Array.isArray(list) ? list.find((p: any) => p?.name === 'openai' && p?.apiKey) : null
-    return openai?.apiKey || ''
-  } catch {
-    return ''
-  }
-})()
-
-const AI_MODEL = 'gpt-image-1.5'
+import { generateImage, isImageGenerationConfigured } from '@/lib/ai/image-provider'
 
 async function loadDesignContext(id: string): Promise<DesignContext> {
   const ctx: DesignContext = {
@@ -69,38 +58,6 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
   }
 
   return ctx
-}
-
-async function generateImage(prompt: string): Promise<Buffer> {
-  if (!OPENAI_KEY) throw new Error('OpenAI API key not configured')
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: AI_MODEL,
-      prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'low',
-    }),
-    signal: AbortSignal.timeout(120_000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`OpenAI image gen ${res.status}: ${body.slice(0, 300)}`)
-  }
-  const data = await res.json() as { data?: Array<{ b64_json?: string; url?: string }> }
-  const item = data.data?.[0]
-  if (!item) throw new Error('Empty image response')
-  if (item.b64_json) return Buffer.from(item.b64_json, 'base64')
-  if (item.url) {
-    const img = await fetch(item.url)
-    return Buffer.from(await img.arrayBuffer())
-  }
-  throw new Error('No image data in response')
 }
 
 function storagePrompt(prompt: string, plan: PackagePlan): string {
@@ -159,7 +116,7 @@ async function handle(request: NextRequest, params: { id: string }) {
     }
   }
 
-  if (!OPENAI_KEY) {
+  if (!isImageGenerationConfigured()) {
     return NextResponse.json({ error: 'AI image generation is not configured on this environment' }, { status: 501 })
   }
 
@@ -173,16 +130,20 @@ async function handle(request: NextRequest, params: { id: string }) {
   const plan = buildPlan(ctx)
   const prompt = buildImagePrompt(ctx, plan)
 
-  let bytes: Buffer
+  let image: Awaited<ReturnType<typeof generateImage>>
   try {
-    bytes = await generateImage(prompt)
+    image = await generateImage(prompt)
   } catch (err: any) {
     console.error('[generate-ai-proof] image gen failed:', err)
     return NextResponse.json({ error: err?.message || 'AI image generation failed' }, { status: 502 })
   }
 
-  const filename = `ai-signage-proof-${Date.now()}.png`
-  const contentType = 'image/png'
+  const bytes = image.bytes
+  // Name the file after what it actually is. Providers do not all return PNG,
+  // and a .png holding JPEG bytes fails to open on a designer's desk.
+  const filename = `ai-signage-proof-${Date.now()}.${image.extension}`
+  const contentType = image.contentType
+  const aiModel = `${image.provider}/${image.model}`
 
   let storageBackend: 's3' | 'postgres_bytea' = 'postgres_bytea'
   let storageKey: string | null = null
@@ -229,7 +190,7 @@ async function handle(request: NextRequest, params: { id: string }) {
       storageBackend,
       storageEtag,
       storagePrompt(prompt, plan),
-      AI_MODEL,
+      aiModel,
     ]
   )
 
@@ -257,7 +218,7 @@ async function handle(request: NextRequest, params: { id: string }) {
       uploaded_at: inserted.rows[0].created_at,
       version: Number(inserted.rows[0].version || 1),
       is_ai_generated: true,
-      ai_model: AI_MODEL,
+      ai_model: aiModel,
       download_url: downloadUrl,
     },
     plan,
