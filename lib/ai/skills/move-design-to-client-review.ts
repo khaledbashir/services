@@ -21,17 +21,27 @@ const skill: Skill = {
     )
     if (r.rows.length === 0) return { ok: false, error: 'Design request not found' }
     try {
-      const share = await createDesignProofShare({ designRequestId: String(args.design_request_id) })
+      const outcome = await createDesignProofShare({ designRequestId: String(args.design_request_id) })
+      if (!outcome.ok) {
+        // Nothing to show a client — say so plainly rather than reporting a
+        // proof that was never sent.
+        return {
+          design_request: r.rows[0],
+          proof_error:
+            'No proof link was sent — this ticket has no proof files attached. Attach the proof, then move it to Client Review again.',
+          _ui_action: { type: 'refresh' },
+        }
+      }
       await query(
         `UPDATE design_requests SET ftp_proof_link = $1
          WHERE id = $2 AND (ftp_proof_link IS NULL OR ftp_proof_link = '')`,
-        [share.url, args.design_request_id]
+        [outcome.url, args.design_request_id]
       )
       return {
         design_request: r.rows[0],
-        proof_url: share.url,
-        emailed: share.emailed,
-        client_email: share.client_email,
+        proof_url: outcome.url,
+        emailed: outcome.emailed,
+        client_email: outcome.client_email,
         _ui_action: { type: 'refresh' },
       }
     } catch (err) {

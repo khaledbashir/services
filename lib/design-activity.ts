@@ -16,6 +16,9 @@ export type DesignActivityType =
   | 'time_logged'
   | 'proof_created'
   | 'proof_sent'
+  // Client Review was reached but the ticket had no proof to show, so no
+  // client link was minted and the ticket's existing link was left alone.
+  | 'proof_blocked'
   | 'client_response'
   | 'client_upload'
   | 'assigned'

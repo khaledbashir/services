@@ -261,6 +261,8 @@ export function buildPublicUrl(token: string): string {
   return `${getPublicBaseUrl()}/proof/${token}`
 }
 
+export { isManagedProofUrl } from './proof-url'
+
 /**
  * Build the HTML body for a proof-ready email sent to a client.
  * Returns a complete, self-contained HTML document so any email client

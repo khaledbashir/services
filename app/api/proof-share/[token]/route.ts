@@ -9,6 +9,7 @@ import {
   fetchAttachmentsForRecord,
   classifyFile,
 } from '@/lib/proof-share'
+import { selectLegacyProofUrl } from '@/lib/proof-url'
 import { buildFtpAttachmentId, listProofFiles, isConfigured as ftpConfigured } from '@/lib/proof-ftp'
 import {
   isManifestStale,
@@ -180,8 +181,8 @@ export async function GET(
     if (share.twenty_object_type === 'localDesignRequest' || share.twenty_object_type === 'designRequest') {
       const dr = await query(
         `SELECT dr.id, dr.job_title, dr.status, dr.client_name, dr.client_email,
-                dr.ftp_proof_link, dr.ftp_final_link, dr.notes, v.name AS venue_name,
-                dr.company_name
+                dr.ftp_proof_link, dr.legacy_ftp_proof_link, dr.ftp_final_link, dr.notes,
+                v.name AS venue_name, dr.company_name
          FROM design_requests dr LEFT JOIN venues v ON v.id = dr.venue_id
          WHERE dr.id = $1`,
         [share.twenty_record_id]
@@ -195,6 +196,7 @@ export async function GET(
         client_name: null,
         client_email: null,
         ftp_proof_link: null,
+        legacy_ftp_proof_link: null,
         ftp_final_link: null,
         notes: null,
         venue_name: null,
@@ -239,14 +241,27 @@ export async function GET(
           uploadedAt: f.created_at,
         })
       }
-      // Append legacy FTP link if no uploaded files (legacy records only)
-      if (attachments.length === 0 && row.ftp_proof_link) {
+      // Nothing uploaded — fall back to the pre-dashboard workspace link, if
+      // this ticket still carries one.
+      //
+      // NEVER fall back to `ftp_proof_link` without the managed-URL guard.
+      // Minting a share OVERWRITES that column with this page's own URL and
+      // moves the original workspace link to `legacy_ftp_proof_link`, so the
+      // unguarded read produced a card that linked to the page the client was
+      // already on — which is exactly how an empty proof read as "expired".
+      // Records that never got converted still hold their workspace URL in
+      // `ftp_proof_link` and are served by the second candidate.
+      const legacyProofUrl = selectLegacyProofUrl(
+        row.legacy_ftp_proof_link,
+        row.ftp_proof_link
+      )
+      if (attachments.length === 0 && legacyProofUrl) {
         attachments.push({
           id: 'proof-link',
-          name: 'Proof (legacy FTP)',
+          name: 'Open proof in ANC Workspace',
           extension: 'link',
           category: 'link',
-          fileUrl: row.ftp_proof_link,
+          fileUrl: legacyProofUrl,
           displayNumber: 1,
           version: 1,
           lastViewedAt: null,

@@ -5,9 +5,53 @@ import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
 
+export interface DesignProofShare {
+  token: string
+  url: string
+  emailed: boolean
+  client_email: string | null
+}
+
+/**
+ * Either a live share, or the reason we refused to mint one. Callers MUST
+ * branch on `ok` — see the `no_proof_files` note on createDesignProofShare.
+ */
+export type DesignProofShareOutcome =
+  | ({ ok: true } & DesignProofShare)
+  | { ok: false; reason: 'no_proof_files'; existingProofUrl: string | null }
+
+/**
+ * Count everything this ticket could actually SHOW a client: files uploaded
+ * through the dashboard (MinIO/bytea, `design_request_files`) plus any share
+ * already pointed at a folder on the FTP. A ticket with neither has no proof.
+ */
+async function countProofSources(designRequestId: string): Promise<number> {
+  const [uploaded, ftpBacked] = await Promise.all([
+    query(
+      `SELECT count(*)::int AS n FROM design_request_files WHERE design_request_id = $1`,
+      [designRequestId]
+    ).catch(() => ({ rows: [{ n: 0 }] })),
+    query(
+      `SELECT count(*)::int AS n FROM proof_shares
+       WHERE twenty_record_id = $1 AND ftp_folder_path IS NOT NULL`,
+      [designRequestId]
+    ).catch(() => ({ rows: [{ n: 0 }] })),
+  ])
+  return Number(uploaded.rows[0]?.n || 0) + Number(ftpBacked.rows[0]?.n || 0)
+}
+
 /**
  * Generate a proof share link for a design request and email the client.
  * Idempotent: if an unanswered share already exists it's reused.
+ *
+ * Refuses with `no_proof_files` when the ticket has nothing to show. This is
+ * the fix for a real production failure (Citizens Bank 2026 / FIFA 2026 - New
+ * York, 2026-07-21): moving a ticket to Client Review minted a share against a
+ * ticket whose proof only ever lived on the legacy workspace, then the caller
+ * overwrote `ftp_proof_link` with the new URL. The client-facing page was
+ * empty, the working workspace link was displaced, and the designer was told
+ * the proof had been sent. A link with no proof behind it is worse than no
+ * link — so we do not create one, and the caller leaves the old link intact.
  *
  * When TWENTY_BACKED_DESIGNS=1, the design lives in Twenty, so we pull
  * metadata via the REST API rather than the local `design_requests` table.
@@ -16,7 +60,7 @@ export async function createDesignProofShare(params: {
   designRequestId: string
   createdByName?: string | null
   createdByEmail?: string | null
-}): Promise<{ token: string; url: string; emailed: boolean; client_email: string | null }> {
+}): Promise<DesignProofShareOutcome> {
   const { designRequestId, createdByName, createdByEmail } = params
 
   let dr: {
@@ -75,6 +119,16 @@ export async function createDesignProofShare(params: {
     [objectType, designRequestId]
   )
 
+  // Gate BOTH paths, not just the insert: reusing an unanswered share that is
+  // itself empty hands the client the same dead page a second time.
+  if ((await countProofSources(designRequestId)) === 0) {
+    return {
+      ok: false,
+      reason: 'no_proof_files',
+      existingProofUrl: dr.ftp_proof_link || null,
+    }
+  }
+
   let token: string
   if (existing.rows.length > 0) {
     token = existing.rows[0].token
@@ -103,7 +157,7 @@ export async function createDesignProofShare(params: {
     emailed = await sendEmail([dr.client_email], subject, html, createdByEmail || undefined)
   }
 
-  return { token, url, emailed, client_email: dr.client_email }
+  return { ok: true, token, url, emailed, client_email: dr.client_email }
 }
 
 function renderProofEmail(p: { clientFirst: string; jobTitle: string; url: string; venueName: string }): string {

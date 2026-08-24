@@ -11,6 +11,7 @@ import { CommentThread } from '@/components/comment-thread'
 import DesignActivityTimeline from '@/components/design-activity-timeline'
 
 import { INTERNAL_CATEGORIES, labelForCategory } from '@/lib/design-internal-category'
+import { isManagedProofUrl } from '@/lib/proof-url'
 
 interface DesignRequestDetail {
   id: string
@@ -109,15 +110,6 @@ function formatRelative(s: string | null | undefined): string {
 
 const PROOF_WORKFLOW_CUTOFF = process.env.NEXT_PUBLIC_PROOF_WORKFLOW_CUTOFF || '2026-07-10T00:00:00Z'
 
-function isManagedProofUrl(value: string | null | undefined): boolean {
-  if (!value) return false
-  try {
-    return /^\/proof\/[A-Za-z0-9_-]+\/?$/.test(new URL(value).pathname)
-  } catch {
-    return false
-  }
-}
-
 function usesNewProofWorkflow(request: DesignRequestDetail): boolean {
   if (isManagedProofUrl(request.ftp_proof_link)) return true
   const createdAt = new Date(request.created_at).getTime()
@@ -156,6 +148,7 @@ export function DesignDetailBody({
   }, [])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [proofWarning, setProofWarning] = useState<string | null>(null)
   const [duplicating, setDuplicating] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
   const [clientBriefDraft, setClientBriefDraft] = useState('')
@@ -208,6 +201,11 @@ export function DesignDetailBody({
         body: JSON.stringify(payload),
       })
       if (res.ok) {
+        // Moving to Client Review with nothing attached mints no client link.
+        // That used to pass silently, so the designer believed a proof had
+        // gone out — surface it on the ticket instead.
+        const data = await res.json().catch(() => ({} as { proof_warning?: string | null }))
+        setProofWarning(data?.proof_warning || null)
         await fetchData()
         // Let any host board (the embedded panel case) refresh so a status
         // change moves the card to its new column without a manual reload.
@@ -530,6 +528,12 @@ export function DesignDetailBody({
                   placeholder="Set automatically when you pick a proof folder on the FTP"
                 />
               </Field>
+              {proofWarning && (
+                <div className="rounded-lg bg-amber-50 ring-1 ring-amber-300 p-3 text-sm">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-amber-800 mb-1">No proof link sent</div>
+                  <p className="text-amber-900 leading-relaxed">{proofWarning}</p>
+                </div>
+              )}
               {legacyProofUrl && (
                 <div className="rounded-lg bg-blue-50 ring-1 ring-blue-200 p-3 text-sm">
                   <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1">Historical client link</div>

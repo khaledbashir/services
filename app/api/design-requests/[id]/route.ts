@@ -5,7 +5,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole, isAuthError } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
-import { createDesignProofShare } from '@/lib/design-proof'
+import { createDesignProofShare, type DesignProofShare } from '@/lib/design-proof'
+
+/**
+ * Shown to the designer when Client Review is reached with nothing attached.
+ * Names the two ways to give the ticket a proof, because the failure is not
+ * something they can act on otherwise.
+ */
+const PROOF_WARNING_NO_FILES =
+  'No proof link was sent — this ticket has no proof files attached. Upload the proof or pick its folder in the content library, then move it to Client Review again. The existing link on the ticket is unchanged.'
 import { Designs, isTwentyBackedEnabled } from '@/lib/twenty-ops'
 import { awardPointsOnce } from '@/lib/gamification'
 import { logDesignActivity, type DesignActivityType } from '@/lib/design-activity'
@@ -336,14 +344,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
       }
 
-      let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null
+      let proofShare: DesignProofShare | null = null
+      let proofWarning: string | null = null
       if (transitioningToClientReview) {
         try {
-          proofShare = await createDesignProofShare({
+          const outcome = await createDesignProofShare({
             designRequestId: params.id,
             createdByName: auth.fullName || null,
             createdByEmail: auth.email || null,
           })
+          if (!outcome.ok) {
+            // Same rule as the local path: no proof, no link, and the URL
+            // already on the record is left alone.
+            proofWarning = PROOF_WARNING_NO_FILES
+            await logDesignActivity({
+              designRequestId: params.id,
+              eventType: 'proof_blocked',
+              actor: { userId: auth.userId, fullName: auth.fullName, email: auth.email },
+              detail: { reason: outcome.reason, existingProofUrl: outcome.existingProofUrl },
+            })
+          } else {
+          proofShare = outcome
           // Keep proofLink denormalised on Twenty so anyone reading the Twenty
           // record directly (Jireh via CRM) sees the same URL clients received.
           if (proofShare?.url) {
@@ -360,8 +381,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
               },
             })
           }
+          }
         } catch (err) {
           console.error('[design-requests PATCH twenty-backed] proof share creation failed:', err)
+          proofWarning = 'The proof link could not be generated. The previous link on this ticket is unchanged.'
         }
       }
 
@@ -389,6 +412,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           status: ((updated.status || '') + '').replace(/^STATUS_/i, '').toLowerCase() || 'request_submitted',
         },
         proof_share: proofShare,
+        proof_warning: proofWarning,
         assignee_notifications: notificationSummary,
       })
     }
@@ -534,43 +558,58 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // proof link and email the client. Idempotent: if a live share already
     // exists for this record we reuse it, so dragging back and forth doesn't
     // spam the client.
-    let proofShare: { token: string; url: string; emailed: boolean; client_email: string | null } | null = null
+    let proofShare: DesignProofShare | null = null
+    let proofWarning: string | null = null
     if (transitioningToClientReview) {
       try {
-        proofShare = await createDesignProofShare({
+        const outcome = await createDesignProofShare({
           designRequestId: params.id,
           createdByName: access.auth.fullName || null,
           createdByEmail: access.auth.email || null,
         })
-        // Keep the denormalized ftp_proof_link field in sync with the client
-        // review URL. Uploads may temporarily place an internal download URL
-        // here; the Client Review transition should always replace it with
-        // the public proof-share link.
-        await query(
-          `UPDATE design_requests
-           SET legacy_ftp_proof_link = COALESCE(
-                 legacy_ftp_proof_link,
-                 CASE
-                   WHEN ftp_proof_link IS NOT NULL
-                    AND ftp_proof_link !~ '/proof/[A-Za-z0-9_-]+/?$'
-                   THEN ftp_proof_link
-                   ELSE NULL
-                 END
-               ),
-               ftp_proof_link = $1
-           WHERE id = $2`,
-          [proofShare.url, params.id]
-        )
-        if (proofShare?.token) {
+        if (!outcome.ok) {
+          // No proof to show. Leave `ftp_proof_link` exactly as it is — if it
+          // still holds a working workspace link, overwriting it with an empty
+          // managed page is how the proof gets lost. Surface it instead of
+          // reporting a proof that was never sent.
+          proofWarning = PROOF_WARNING_NO_FILES
+          await logDesignActivity({
+            designRequestId: params.id,
+            eventType: 'proof_blocked',
+            actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
+            detail: { reason: outcome.reason, existingProofUrl: outcome.existingProofUrl },
+          })
+        } else {
+          proofShare = outcome
+          // Keep the denormalized ftp_proof_link field in sync with the client
+          // review URL. Uploads may temporarily place an internal download URL
+          // here; the Client Review transition should always replace it with
+          // the public proof-share link.
+          await query(
+            `UPDATE design_requests
+             SET legacy_ftp_proof_link = COALESCE(
+                   legacy_ftp_proof_link,
+                   CASE
+                     WHEN ftp_proof_link IS NOT NULL
+                      AND ftp_proof_link !~ '/proof/[A-Za-z0-9_-]+/?$'
+                     THEN ftp_proof_link
+                     ELSE NULL
+                   END
+                 ),
+                 ftp_proof_link = $1
+             WHERE id = $2`,
+            [outcome.url, params.id]
+          )
           await logDesignActivity({
             designRequestId: params.id,
             eventType: 'proof_sent',
             actor: { userId: access.auth.userId, fullName: access.auth.fullName, email: access.auth.email },
-            detail: { emailed: proofShare.emailed, clientEmail: proofShare.client_email },
+            detail: { emailed: outcome.emailed, clientEmail: outcome.client_email },
           })
         }
       } catch (err) {
         console.error('Proof share creation failed:', err)
+        proofWarning = 'The proof link could not be generated. The previous link on this ticket is unchanged.'
       }
     }
 
@@ -586,7 +625,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         })
       : emptyStatusNotification()
 
-    return NextResponse.json({ design_request: result.rows[0], proof_share: proofShare, assignee_notifications: notificationSummary })
+    return NextResponse.json({
+      design_request: result.rows[0],
+      proof_share: proofShare,
+      proof_warning: proofWarning,
+      assignee_notifications: notificationSummary,
+    })
   } catch (err) {
     console.error('Error updating design request:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

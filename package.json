@@ -23,7 +23,8 @@
     "test:design-brief": "node --test tests/design-brief.test.mjs",
     "test:ticket-history": "node --test tests/ticket-history.test.mjs",
     "test:slack-unfurl": "node --test tests/slack-crm-unfurl.test.mjs",
-    "test:slack-workspace": "node --test tests/slack-workspace.test.mjs"
+    "test:slack-workspace": "node --test tests/slack-workspace.test.mjs",
+    "test:proof-links": "node --test tests/proof-link-integrity.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
