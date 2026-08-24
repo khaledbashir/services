@@ -121,6 +121,15 @@ const statusSteps = [
 ]
 const categoryLabels: Record<string, string> = TICKET_CATEGORY_LABELS
 
+/** An address this venue has corresponded with, offered for the list it is missing from. */
+interface KnownVenueEmail {
+  email: string
+  timesUsed: number
+  lastUsedAt: string | null
+  lastSource: string | null
+  internal: boolean
+}
+
 type TimelineFilter = 'all' | 'comments' | 'emails' | 'changes'
 type ContentTab = 'timeline' | 'details' | 'description' | 'emails' | 'attachments' | 'notes'
 
@@ -173,6 +182,11 @@ export function TicketDetail({
   const [newClientEmail, setNewClientEmail] = useState('')
   const [addingClientEmail, setAddingClientEmail] = useState(false)
   const [clientEmailError, setClientEmailError] = useState<string | null>(null)
+  // Addresses this venue has corresponded with that are not on its list yet, so a
+  // contact can be picked out of the venue's own history instead of retyped.
+  const [knownEmails, setKnownEmails] = useState<KnownVenueEmail[]>([])
+  const [showKnownEmails, setShowKnownEmails] = useState(false)
+  const [removingClientEmail, setRemovingClientEmail] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [attachmentCaption, setAttachmentCaption] = useState('')
@@ -249,6 +263,20 @@ export function TicketDetail({
 
   useEffect(() => { fetchData() }, [params.id])
 
+  // The venue's own correspondence history, reloaded whenever its list changes so a
+  // just-added address leaves the suggestions and a just-removed one comes back.
+  const venueId = ticket?.venue_id
+  const distributionKey = (ticket?.venue_distribution_emails || []).join(',')
+  useEffect(() => {
+    if (!venueId) { setKnownEmails([]); return }
+    let cancelled = false
+    fetch(`/api/venues/${venueId}/known-emails`)
+      .then(r => (r.ok ? r.json() : { emails: [] }))
+      .then(d => { if (!cancelled) setKnownEmails(d.emails || []) })
+      .catch(() => { if (!cancelled) setKnownEmails([]) })
+    return () => { cancelled = true }
+  }, [venueId, distributionKey])
+
   useEffect(() => {
     if (!showMergeModal) return
     fetch('/api/tickets?limit=500')
@@ -299,6 +327,30 @@ export function TicketDetail({
    * the ticket is the point — it fixes this ticket and every future one for that
    * venue, which is what he was describing.
    */
+  const saveDistributionEmails = async (next: string[], failure: string): Promise<boolean> => {
+    if (!ticket?.venue_id) {
+      setClientEmailError('This ticket has no venue, so there is no list to change.')
+      return false
+    }
+    try {
+      const res = await fetch(`/api/venues/${ticket.venue_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ distribution_emails: next }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setClientEmailError(err?.error || failure)
+        return false
+      }
+      await fetchData()
+      return true
+    } catch {
+      setClientEmailError(failure)
+      return false
+    }
+  }
+
   const addClientEmail = async (e: FormEvent) => {
     e.preventDefault()
     const email = newClientEmail.trim()
@@ -317,24 +369,47 @@ export function TicketDetail({
     }
     setAddingClientEmail(true)
     setClientEmailError(null)
-    try {
-      const res = await fetch(`/api/venues/${ticket.venue_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ distribution_emails: [...allDistributionEmails, email] }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setClientEmailError(err?.error || 'That address could not be saved.')
-        return
-      }
-      setNewClientEmail('')
-      await fetchData()
-    } catch {
-      setClientEmailError('That address could not be saved.')
-    } finally {
-      setAddingClientEmail(false)
-    }
+    const saved = await saveDistributionEmails(
+      [...allDistributionEmails, email],
+      'That address could not be saved.',
+    )
+    if (saved) setNewClientEmail('')
+    setAddingClientEmail(false)
+  }
+
+  /**
+   * Put an address the venue has written to before straight onto its list.
+   *
+   * The same save path as typing it, so an address picked here is a real list
+   * entry — not a one-off recipient that disappears after this reply.
+   */
+  const pickKnownEmail = async (email: string) => {
+    if (allDistributionEmails.some(existing => existing.toLowerCase() === email.toLowerCase())) return
+    setAddingClientEmail(true)
+    setClientEmailError(null)
+    const saved = await saveDistributionEmails(
+      [...allDistributionEmails, email],
+      'That address could not be saved.',
+    )
+    if (saved) { setShowKnownEmails(false); setNewClientEmail('') }
+    setAddingClientEmail(false)
+  }
+
+  /**
+   * Take an address off the venue's list — the "way to edit list" half of the ask.
+   *
+   * Only addresses that came FROM the list can be removed. An address that is on
+   * the ticket because someone wrote in from it is not ours to delete; it goes away
+   * when the correspondence does.
+   */
+  const removeClientEmail = async (email: string) => {
+    setRemovingClientEmail(email)
+    setClientEmailError(null)
+    await saveDistributionEmails(
+      allDistributionEmails.filter(existing => existing.toLowerCase() !== email.toLowerCase()),
+      'That address could not be removed.',
+    )
+    setRemovingClientEmail(null)
   }
 
   const addAssignee = async (staffId: string) => {
@@ -1811,6 +1886,12 @@ export function TicketDetail({
                                 <ul className="divide-y divide-zinc-50">
                                   {replyTargetDetails.map(recipient => {
                                     const internal = isInternalEmail(recipient.email)
+                                    // Only a venue-list entry is ours to take off. Someone who
+                                    // wrote in is on this ticket because they wrote in.
+                                    const onVenueList = allDistributionEmails.some(
+                                      existing => existing.toLowerCase() === recipient.email.toLowerCase()
+                                    )
+                                    const removing = removingClientEmail?.toLowerCase() === recipient.email.toLowerCase()
                                     return (
                                       <li key={recipient.email} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
                                         <span className="min-w-0 truncate text-sm text-zinc-800">{recipient.email}</span>
@@ -1819,6 +1900,19 @@ export function TicketDetail({
                                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${internal ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>
                                             {internal ? 'ANC' : 'Client'}
                                           </span>
+                                          {onVenueList && ticket.venue_id && (
+                                            <button
+                                              type="button"
+                                              data-ai-target="ticket-remove-client-email"
+                                              onClick={() => removeClientEmail(recipient.email)}
+                                              disabled={removing}
+                                              aria-label={`Remove ${recipient.email} from ${ticket.venue_name || 'this venue'}`}
+                                              title={`Remove from ${ticket.venue_name || 'this venue'}`}
+                                              className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
+                                              {removing ? 'Removing' : 'Remove'}
+                                            </button>
+                                          )}
                                         </span>
                                       </li>
                                     )
@@ -1838,6 +1932,17 @@ export function TicketDetail({
                                     placeholder="client@venue.com"
                                     className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-[#0A52EF]"
                                   />
+                                  {knownEmails.length > 0 && (
+                                    <button
+                                      type="button"
+                                      data-ai-target="ticket-known-emails-toggle"
+                                      onClick={() => setShowKnownEmails(open => !open)}
+                                      aria-expanded={showKnownEmails}
+                                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+                                    >
+                                      Previous {knownEmails.length} <span aria-hidden="true">{showKnownEmails ? '▴' : '▾'}</span>
+                                    </button>
+                                  )}
                                   <button
                                     type="submit"
                                     data-ai-target="ticket-add-client-email-save"
@@ -1849,6 +1954,37 @@ export function TicketDetail({
                                   <p className={`w-full text-[11px] ${clientEmailError ? 'text-rose-600' : 'text-zinc-400'}`}>
                                     {clientEmailError || `Saved to ${ticket.venue_name || 'this venue'} — used on this ticket and every future one.`}
                                   </p>
+
+                                  {/* The venue's own correspondence history — pick instead of retype. */}
+                                  {showKnownEmails && knownEmails.length > 0 && (
+                                    <ul
+                                      data-ai-target="ticket-known-emails-list"
+                                      className="max-h-56 w-full overflow-y-auto rounded-md border border-zinc-200 bg-white"
+                                    >
+                                      {knownEmails.map(known => (
+                                        <li key={known.email} className="border-b border-zinc-50 last:border-b-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => pickKnownEmail(known.email)}
+                                            disabled={addingClientEmail}
+                                            className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2 text-left transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                          >
+                                            <span className="min-w-0 truncate text-xs text-zinc-800">{known.email}</span>
+                                            <span className="flex flex-shrink-0 items-center gap-2 text-[11px] text-zinc-400">
+                                              <span>
+                                                {known.lastSource}
+                                                {known.timesUsed > 1 ? ` · ${known.timesUsed}×` : ''}
+                                                {known.lastUsedAt ? ` · ${new Date(known.lastUsedAt).toLocaleDateString()}` : ''}
+                                              </span>
+                                              {known.internal && (
+                                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">ANC</span>
+                                              )}
+                                            </span>
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </form>
                               )}
                             </div>
