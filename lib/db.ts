@@ -850,7 +850,8 @@ async function runMigrations() {
 
     // ============================================================
     // service_types + venue_services — per-venue contracted services
-    // (Joe's Apr 16 list: White Glove, Break/Fix, Event Support, etc.)
+    // (Joe's Apr 16 list, renamed 2026-08-24: Turnkey LED Maintenance,
+    //  White Glove LED Maintenance, Event Support, etc.)
     // ============================================================
     await client.query(`CREATE TABLE IF NOT EXISTS service_types (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -928,10 +929,25 @@ async function runMigrations() {
       $$;
     `)
 
+    // Service-offering verbiage change (Alexis, 2026-08-24). Rename in place so
+    // every venue_services / client_services toggle survives — a plain re-seed
+    // under the new names would leave the old rows orphaned and duplicate the list.
+    const serviceTypeRenames: Array<[string, string]> = [
+      ['White Glove Maintenance', 'Turnkey LED Maintenance'],
+      ['Break/Fix Maintenance', 'White Glove LED Maintenance'],
+    ]
+    for (const [oldName, newName] of serviceTypeRenames) {
+      await client.query(
+        `UPDATE service_types SET name = $2 WHERE name = $1
+           AND NOT EXISTS (SELECT 1 FROM service_types s2 WHERE s2.name = $2)`,
+        [oldName, newName]
+      )
+    }
+
     // Seed Joe's canonical contracted-service list. Idempotent via ON CONFLICT.
     const joeServices: Array<[string, string]> = [
-      ['White Glove Maintenance', 'Proactive scheduled maintenance with premium response SLA'],
-      ['Break/Fix Maintenance', 'Reactive repair dispatch when something breaks'],
+      ['Turnkey LED Maintenance', 'Proactive scheduled maintenance with premium response SLA'],
+      ['White Glove LED Maintenance', 'Reactive repair dispatch when something breaks'],
       ['Event Support', 'On-site technical support during events — events at this venue must be assigned to staff'],
       ['Walkthroughs', 'Scheduled venue walkthroughs and inspections'],
       ['Operations', 'Day-to-day operational support and coordination'],

@@ -19,12 +19,12 @@ const AUDIT_RECIPES: AuditRecipe[] = [
   {
     icon: '🏟️',
     label: 'Uncovered-venue opportunity map',
-    prompt: 'List the venues with NO Tech Support / Break-Fix / Event Support contracts but high event volume or open tickets. For each, recommend the right tier of service contract to pitch and rough monthly pricing using web-searched industry benchmarks. Build a dashboard showing the top 15 opportunities ranked by combined event load + ticket count.',
+    prompt: 'List the venues with NO Tech Support / White Glove LED Maintenance / Event Support contracts but high event volume or open tickets. For each, recommend the right tier of service contract to pitch and rough monthly pricing using web-searched industry benchmarks. Build a dashboard showing the top 15 opportunities ranked by combined event load + ticket count.',
   },
   {
     icon: '📈',
     label: 'Pricing-power audit',
-    prompt: 'Audit ANC\'s current contracted-service pricing against market rates. For each service (Tech Support, Break-Fix, Event Support, White Glove, Walkthroughs, LiveSync, VisionStats, Parts), web-search what comparable LED / display service shops charge. Verdict per service: under / at / above market. End with the biggest underpriced service ANC could raise rates on. Cite sources.',
+    prompt: 'Audit ANC\'s current contracted-service pricing against market rates. For each service (Tech Support, White Glove LED Maintenance, Event Support, Turnkey LED Maintenance, Walkthroughs, LiveSync, VisionStats, Parts), web-search what comparable LED / display service shops charge. Verdict per service: under / at / above market. End with the biggest underpriced service ANC could raise rates on. Cite sources.',
   },
   {
     icon: '🎨',
