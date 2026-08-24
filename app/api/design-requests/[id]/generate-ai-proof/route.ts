@@ -31,6 +31,7 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
     boards: null,
     sizes: null,
     notes: null,
+    clientBrief: null,
   }
 
   if (isTwentyBackedEnabled('DESIGNS')) {
@@ -47,7 +48,7 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
 
   const r = await query(
     `SELECT dr.job_title, dr.company_name, dr.tricode, dr.boards_requested, dr.sizes_requested,
-            dr.notes, v.name as venue_name
+            dr.notes, dr.client_brief, v.name as venue_name
      FROM design_requests dr LEFT JOIN venues v ON v.id = dr.venue_id
      WHERE dr.id = $1`,
     [id]
@@ -59,6 +60,9 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
     ctx.client = ctx.client || row.company_name || null
     ctx.tricode = ctx.tricode || row.tricode || null
     ctx.venue = row.venue_name || null
+    // The client's own words (client_brief) are the request; `notes` is the
+    // account manager's summary of it. The planner reads both.
+    ctx.clientBrief = ctx.clientBrief || row.client_brief || null
     ctx.boards = ctx.boards || row.boards_requested || null
     ctx.sizes = ctx.sizes || row.sizes_requested || null
     ctx.notes = ctx.notes || row.notes || null

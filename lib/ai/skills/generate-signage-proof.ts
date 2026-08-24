@@ -10,9 +10,15 @@ import {
 } from '@/lib/ai/signage-planner'
 import type { Skill } from '@/lib/ai/types'
 
-const AI_MODEL = 'gpt-image-1.5'
+const AI_MODEL = process.env.POLLINATIONS_IMAGE_MODEL || 'flux'
+const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5'
 const AI_SIZE = '1024x1024'
 const AI_QUALITY = 'low'
+
+function getPollinationsKey(args: Record<string, unknown>): string {
+  if (args.pollinations_api_key && typeof args.pollinations_api_key === 'string') return args.pollinations_api_key
+  return process.env.POLLINATIONS_API_KEY || ''
+}
 
 function getOpenAIKey(args: Record<string, unknown>): string {
   if (args.api_key && typeof args.api_key === 'string') return args.api_key
@@ -33,6 +39,7 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
     boards: null,
     sizes: null,
     notes: null,
+    clientBrief: null,
   }
 
   if (isTwentyBackedEnabled('DESIGNS')) {
@@ -49,7 +56,7 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
 
   const r = await query(
     `SELECT dr.job_title, dr.company_name, dr.tricode, dr.boards_requested, dr.sizes_requested,
-            dr.notes, v.name as venue_name
+            dr.notes, dr.client_brief, v.name as venue_name
      FROM design_requests dr LEFT JOIN venues v ON v.id = dr.venue_id
      WHERE dr.id = $1`,
     [id]
@@ -61,6 +68,9 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
     ctx.client = ctx.client || row.company_name || null
     ctx.tricode = ctx.tricode || row.tricode || null
     ctx.venue = row.venue_name || null
+    // The client's own words (client_brief) are the request; `notes` is the
+    // account manager's summary of it. The planner reads both.
+    ctx.clientBrief = ctx.clientBrief || row.client_brief || null
     ctx.boards = ctx.boards || row.boards_requested || null
     ctx.sizes = ctx.sizes || row.sizes_requested || null
     ctx.notes = ctx.notes || row.notes || null
@@ -69,7 +79,11 @@ async function loadDesignContext(id: string): Promise<DesignContext> {
   return ctx
 }
 
-async function generateImage(prompt: string, apiKey: string): Promise<Buffer> {
+async function generateImage(prompt: string, apiKey: string, provider: 'pollinations' | 'openai'): Promise<Buffer> {
+  if (provider === 'pollinations') {
+    return generatePollinationsImage(prompt, apiKey)
+  }
+
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -77,7 +91,7 @@ async function generateImage(prompt: string, apiKey: string): Promise<Buffer> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: AI_MODEL,
+      model: OPENAI_IMAGE_MODEL,
       prompt,
       n: 1,
       size: AI_SIZE,
@@ -98,6 +112,34 @@ async function generateImage(prompt: string, apiKey: string): Promise<Buffer> {
     return Buffer.from(await img.arrayBuffer())
   }
   throw new Error('No image data in response')
+}
+
+async function generatePollinationsImage(prompt: string, apiKey: string): Promise<Buffer> {
+  const baseUrl = (process.env.POLLINATIONS_BASE_URL || 'https://gen.pollinations.ai').replace(/\/$/, '')
+  const params = new URLSearchParams({
+    model: AI_MODEL,
+    width: '1024',
+    height: '1024',
+    enhance: 'true',
+  })
+
+  const res = await fetch(`${baseUrl}/image/${encodeURIComponent(prompt)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'image/*' },
+    signal: AbortSignal.timeout(120_000),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Pollinations image gen ${res.status}: ${body.slice(0, 300)}`)
+  }
+
+  const contentType = res.headers.get('content-type') || ''
+  if (!contentType.startsWith('image/')) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Pollinations returned non-image response: ${body.slice(0, 300)}`)
+  }
+
+  return Buffer.from(await res.arrayBuffer())
 }
 
 function storagePrompt(prompt: string, plan: PackagePlan): string {
@@ -129,7 +171,11 @@ const skill: Skill = {
       },
       api_key: {
         type: 'string',
-        description: 'Optional OpenAI API key override. If not provided, uses the server-configured key.',
+        description: 'Optional OpenAI API key override. Used only when Pollinations is not configured.',
+      },
+      pollinations_api_key: {
+        type: 'string',
+        description: 'Optional Pollinations API key override. If not provided, uses POLLINATIONS_API_KEY.',
       },
       dry_run: {
         type: 'boolean',
@@ -143,7 +189,10 @@ const skill: Skill = {
     const id = String(args.design_request_id || '').trim()
     if (!id) throw new Error('design_request_id is required')
 
-    const apiKey = getOpenAIKey(args)
+    const pollinationsKey = getPollinationsKey(args)
+    const openAiKey = getOpenAIKey(args)
+    const imageProvider: 'pollinations' | 'openai' = pollinationsKey ? 'pollinations' : 'openai'
+    const apiKey = pollinationsKey || openAiKey
 
     let designCtx: DesignContext
     try {
@@ -187,10 +236,10 @@ const skill: Skill = {
         ok: false,
         error: {
           code: 'no_api_key',
-          message: 'OpenAI API key not configured',
-          suggestion: 'Configure OPENAI_API_KEY env var or pass api_key parameter.',
+          message: 'No image generation key configured',
+          suggestion: 'Configure POLLINATIONS_API_KEY or OPENAI_API_KEY, or pass pollinations_api_key/api_key.',
         },
-        text_summary: 'No OpenAI API key available',
+        text_summary: 'No image generation key available',
         plan,
       }
     }
@@ -221,7 +270,7 @@ const skill: Skill = {
 
     let bytes: Buffer
     try {
-      bytes = await generateImage(prompt, apiKey)
+      bytes = await generateImage(prompt, apiKey, imageProvider)
     } catch (err: any) {
       return {
         ok: false,
@@ -264,7 +313,19 @@ const skill: Skill = {
        FROM design_request_files
        WHERE design_request_id = $1
        RETURNING id, filename, mime_type, size_bytes, storage_backend, created_at, version`,
-      [id, filename, contentType, bytes.byteLength, byteaData, ctx.userId, storageKey, storageBackend, storageEtag, storagePrompt(prompt, plan), AI_MODEL]
+      [
+        id,
+        filename,
+        contentType,
+        bytes.byteLength,
+        byteaData,
+        ctx.userId,
+        storageKey,
+        storageBackend,
+        storageEtag,
+        storagePrompt(prompt, plan),
+        imageProvider === 'pollinations' ? `pollinations:${AI_MODEL}` : `openai:${OPENAI_IMAGE_MODEL}`,
+      ]
     )
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://services.ancsports.net'
@@ -283,7 +344,7 @@ const skill: Skill = {
         uploaded_at: inserted.rows[0].created_at,
         version: Number(inserted.rows[0].version || 1),
         is_ai_generated: true,
-        ai_model: AI_MODEL,
+        ai_model: imageProvider === 'pollinations' ? `pollinations:${AI_MODEL}` : `openai:${OPENAI_IMAGE_MODEL}`,
         download_url: downloadUrl,
       },
       plan,

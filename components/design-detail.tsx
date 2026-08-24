@@ -563,9 +563,14 @@ export function DesignDetailBody({
                     onFolderChosen={(path) => setProofFolderPath(path)}
                     onCreated={() => fetchData()}
                   />
-                  <AIFirstDraftButton designRequestId={dr.id} />
                 </>
               )}
+              {/* AI First Draft belongs to BOTH proof workflows. It used to sit
+                  inside the legacy branch only, so it silently disappeared for
+                  every request created on or after the 2026-07-10 managed-proof
+                  cutoff — the endpoint stayed live, the button just stopped
+                  rendering. Keep it outside the branch. */}
+              <AIFirstDraftButton designRequestId={dr.id} />
               {dr.qc_approved_by_name && (
                 <div className="flex items-center gap-2 rounded-lg bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-sm text-emerald-700">
                   <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center flex-shrink-0">✓</span>

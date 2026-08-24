@@ -47,6 +47,23 @@ export interface DesignContext {
   boards: string | null
   sizes: string | null
   notes: string | null
+  /**
+   * The request exactly as the client wrote it (`design_requests.client_brief`,
+   * added 2026-08-20). `notes` is the account manager's typed summary; this is
+   * the source it was summarised from. Read both — never one instead of the
+   * other — via `briefText()`.
+   */
+  clientBrief: string | null
+}
+
+/**
+ * Everything a planner step means when it says "the brief": the client's own
+ * words first, the account manager's summary after. Before this existed the
+ * planner only ever saw `notes`, so the AI drafted off a paraphrase of the
+ * request instead of the request.
+ */
+export function briefText(ctx: DesignContext): string {
+  return [ctx.clientBrief, ctx.notes].map(s => (s || '').trim()).filter(Boolean).join('\n\n')
 }
 
 export interface ZoneBand {
@@ -461,7 +478,7 @@ export function inferEventType(text: string): string | null {
 }
 
 export function classifyRequest(ctx: DesignContext, boardCount: number): RequestType {
-  const text = `${ctx.title} ${ctx.notes || ''} ${ctx.boards || ''}`.toLowerCase()
+  const text = `${ctx.title} ${briefText(ctx)} ${ctx.boards || ''}`.toLowerCase()
   if (/final score|\bfinal\b/.test(text) || /\b\d{1,3}\s*[-:]\s*\d{1,3}\b/.test(text)) return 'final_score'
   if (/countdown|puck drop|tip-?off|kickoff/.test(text) || /\b\d{1,2}:\d{2}\b/.test(text)) return 'countdown'
   if (/logo loop|repeating logo|logo strip/.test(text)) return 'logo_loop'
@@ -707,7 +724,7 @@ export function buildBoards(ctx: DesignContext): { boards: BoardPlan[]; assumpti
     const guessedType = inferBoardType(boardNames[i] || '', ratio)
     const name = boardNames[i] || inferBoardName(i, guessedType)
     const boardType = inferBoardType(name, ratio)
-    const notes = `${ctx.notes || ''} ${ctx.boards || ''} ${ctx.sizes || ''}`
+    const notes = `${briefText(ctx)} ${ctx.boards || ''} ${ctx.sizes || ''}`
     const safeZone = resolveSafeZone(boardType, ratio, notes)
     const bendZones = resolveBendZones(boardType, ratio, notes)
     const cameraBreaks = resolveCameraBreaks(boardType, notes)
@@ -737,7 +754,7 @@ export function buildBoards(ctx: DesignContext): { boards: BoardPlan[]; assumpti
 // ── Creative Brief ─────────────────────────────────────────────────
 
 export function buildCreativeBrief(ctx: DesignContext, requestType: RequestType, boards: BoardPlan[]): CreativeBrief {
-  const allText = `${ctx.title} ${ctx.notes || ''} ${ctx.client || ''}`
+  const allText = `${ctx.title} ${briefText(ctx)} ${ctx.client || ''}`
   const matchup = extractMatchup(allText)
   const scoreOrCountdown = extractScoreOrCountdown(allText)
   const sponsor = extractSponsor(allText)
@@ -803,7 +820,7 @@ export function buildProofPreview(board: BoardPlan, requestType: RequestType, br
 // ── Normalized Request ─────────────────────────────────────────────
 
 export function buildNormalizedRequest(ctx: DesignContext, requestType: RequestType, boards: BoardPlan[], assumptions: string[]): NormalizedRequest {
-  const allText = compact(`${ctx.title} ${ctx.notes || ''} ${ctx.boards || ''} ${ctx.sizes || ''}`, 700)
+  const allText = compact(`${ctx.title} ${briefText(ctx)} ${ctx.boards || ''} ${ctx.sizes || ''}`, 700)
   const rule = REQUEST_RULES[requestType]
   const explicitConstraints = [
     ctx.boards ? `Requested boards: ${compact(ctx.boards, 220)}` : '',
@@ -850,7 +867,7 @@ export function selectConceptSystem(sport: string | null, eventType: string | nu
 export function buildPlan(ctx: DesignContext): PackagePlan {
   const { boards, assumptions } = buildBoards(ctx)
   const requestType = classifyRequest(ctx, boards.length)
-  const allText = `${ctx.title} ${ctx.notes || ''} ${ctx.client || ''} ${ctx.boards || ''}`
+  const allText = `${ctx.title} ${briefText(ctx)} ${ctx.client || ''} ${ctx.boards || ''}`
   const sport = inferSport(allText)
   const eventType = inferEventType(allText)
   const conceptSystem = selectConceptSystem(sport, eventType)
@@ -936,7 +953,7 @@ export function buildImagePrompt(ctx: DesignContext, plan: PackagePlan): string 
 
   const venue = compact(ctx.venue) || 'arena venue'
   const title = compact(ctx.title) || 'game-night package'
-  const notes = compact(ctx.notes, 600)
+  const notes = compact(briefText(ctx), 900)
   const assumptions = plan.normalized_request.assumptions.slice(0, 5).join(' ')
   const heroRule = plan.normalized_request.hero_image_allowed
     ? 'Hero imagery is allowed only if it still reads like operational venue signage.'
