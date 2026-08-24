@@ -942,6 +942,17 @@ async function runMigrations() {
            AND NOT EXISTS (SELECT 1 FROM service_types s2 WHERE s2.name = $2)`,
         [oldName, newName]
       )
+      // If the renamed row already exists, an old-named row can only be a stray
+      // re-seed from a build that predates this rename. Drop it when nothing is
+      // attached to it — never when a venue or client still points at it.
+      await client.query(
+        `DELETE FROM service_types st
+          WHERE st.name = $1
+            AND EXISTS (SELECT 1 FROM service_types s2 WHERE s2.name = $2)
+            AND NOT EXISTS (SELECT 1 FROM venue_services v WHERE v.service_type_id = st.id)
+            AND NOT EXISTS (SELECT 1 FROM client_services c WHERE c.service_type_id = st.id)`,
+        [oldName, newName]
+      )
     }
 
     // Seed Joe's canonical contracted-service list. Idempotent via ON CONFLICT.
