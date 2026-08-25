@@ -273,6 +273,31 @@ export function matchScore(
   return total === 0 ? 0 : hit / total
 }
 
+/**
+ * The caller's name as spoken, when the ticket has no contact field.
+ *
+ * Voicemails open the same way every time — "Hi, this is David Reed" — and the
+ * contact_name column is usually empty because the phone system never captured
+ * one. The name is then only in the transcript, where it becomes a match term
+ * and can pull up an unrelated ticket that mentions another David.
+ *
+ * The intake already lifts the callback NUMBER out of a transcript with a
+ * regex; this is the same move for the name. Capitalisation is required in the
+ * original text and at most two words are taken, so "this is broken" and
+ * "this is the third time" yield nothing.
+ */
+const SPEAKER_INTRO = /\b(?:this is|my name is|it'?s)\s+((?:[A-Z][a-z'’-]{1,20})(?:\s+[A-Z][a-z'’-]{1,20})?)/g
+
+export function speakerNames(text: string | null | undefined): string {
+  if (!text) return ''
+  const found: string[] = []
+  for (const m of String(text).matchAll(SPEAKER_INTRO)) {
+    if (m[1]) found.push(m[1])
+    if (found.length >= 3) break
+  }
+  return found.join(' ')
+}
+
 /** Below this a "related issue" suggestion is noise, so it is not shown. */
 export const MATCH_THRESHOLD = 0.18
 

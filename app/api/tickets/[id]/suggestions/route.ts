@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireAuth, isAuthError } from '@/lib/rbac'
 import {
-  normalizePhone, formatPhone, phoneDecision, rankMatches, keywords,
+  normalizePhone, formatPhone, phoneDecision, rankMatches, keywords, speakerNames,
 } from '@/lib/venue-reference'
 
 /**
@@ -67,7 +67,13 @@ export async function GET(
     // The caller's own name is not a symptom. Excluding it (and any bare
     // number — case numbers, callbacks, dates) keeps a voicemail from matching
     // an unrelated ticket that happens to mention another David.
-    const callerNoise = [ticket.contact_name, ticket.contact_phone].filter(Boolean).join(' ')
+    // contact_name is usually empty — the phone system never captured one —
+    // so the name is lifted from the transcript's own "this is …" opener.
+    const callerNoise = [
+      ticket.contact_name,
+      ticket.contact_phone,
+      speakerNames(ticket.original_message),
+    ].filter(Boolean).join(' ')
     const words = keywords(spoken, callerNoise)
     let relatedTickets: any[] = []
     let relatedIssues: any[] = []

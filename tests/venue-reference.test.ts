@@ -12,6 +12,7 @@ import {
   matchScore,
   rankMatches,
   orderSports,
+  speakerNames,
   NO_SPORT_LABEL,
 } from '../lib/venue-reference.ts'
 
@@ -228,4 +229,24 @@ test('excluding the caller kills a name-only match', () => {
   const withName = matchScore(said, 'David Reed asked about invoicing')
   const without = matchScore(said, 'David Reed asked about invoicing', 'David Reed')
   assert.ok(without < withName, `expected ${without} < ${withName}`)
+})
+
+test('the name a caller says at the top of a voicemail is recovered', () => {
+  assert.equal(speakerNames('Oh, the jittery? Yeah. Hi, this is David Reed. You can call…'), 'David Reed')
+  assert.equal(speakerNames('Yes, my name is Shannon Watkins, 041721. I am at Capitol…'), 'Shannon Watkins')
+})
+
+test('"this is broken" is not a name', () => {
+  // The opener is common English. Requiring capitalisation in the original
+  // text keeps ordinary sentences from being read as introductions.
+  assert.equal(speakerNames('this is broken again and it is the third time'), '')
+  assert.equal(speakerNames('the ribbon is out, this is urgent'), '')
+})
+
+test('a spoken name stops driving matches', () => {
+  const said = 'Hi this is David Reed the board is jittery'
+  const words = keywords(said, speakerNames(said))
+  assert.ok(!words.includes('david'))
+  assert.ok(!words.includes('reed'))
+  assert.ok(words.includes('jittery'))
 })
