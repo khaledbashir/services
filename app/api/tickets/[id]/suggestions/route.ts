@@ -64,7 +64,11 @@ export async function GET(
       }
     }
 
-    const words = keywords(spoken)
+    // The caller's own name is not a symptom. Excluding it (and any bare
+    // number — case numbers, callbacks, dates) keeps a voicemail from matching
+    // an unrelated ticket that happens to mention another David.
+    const callerNoise = [ticket.contact_name, ticket.contact_phone].filter(Boolean).join(' ')
+    const words = keywords(spoken, callerNoise)
     let relatedTickets: any[] = []
     let relatedIssues: any[] = []
 
@@ -88,6 +92,7 @@ export async function GET(
         candidates.rows,
         (t: any) => [t.title, t.description, t.resolution_notes].filter(Boolean).join(' '),
         5,
+        callerNoise,
       ).map((s) => ({ ...s.item, score: Number(s.score.toFixed(3)) }))
 
       const issueRows = ticket.venue_id
@@ -109,6 +114,7 @@ export async function GET(
         issueRows.rows,
         (i: any) => [i.title, i.symptom, i.resolution].filter(Boolean).join(' '),
         5,
+        callerNoise,
       ).map((s) => ({ ...s.item, score: Number(s.score.toFixed(3)) }))
     }
 

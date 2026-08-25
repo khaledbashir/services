@@ -211,13 +211,34 @@ const STOPWORDS = new Set([
   'there', 'here', 'im', 'ive', 'dont', 'doesnt', 'isnt', 'thats', 'voicemail',
 ])
 
-/** Words worth matching on — short and common ones carry no signal. */
-export function keywords(text: string | null | undefined): string[] {
+/**
+ * Words worth matching on — short and common ones carry no signal.
+ *
+ * `exclude` takes the caller's own name and anything else that identifies the
+ * person rather than the fault. Seen on a real voicemail: matching on "david",
+ * "reed" and the digits of his phone number can only ever produce a false
+ * match against a ticket that happens to mention another David.
+ *
+ * Bare numbers go too, for the same reason — a case number, a callback number
+ * and a date all tokenise into digits that mean nothing about what broke.
+ * A version like "4.2" splits into "4" and "2" and is dropped either way,
+ * which is correct: no fault is identified by the digit 4.
+ */
+export function keywords(
+  text: string | null | undefined,
+  exclude: string | null | undefined = null,
+): string[] {
   if (!text) return []
+  const blocked = new Set<string>()
+  for (const raw of String(exclude || '').toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw) blocked.add(raw)
+  }
   const seen = new Set<string>()
   for (const raw of String(text).toLowerCase().split(/[^a-z0-9]+/)) {
     if (raw.length < 3) continue
     if (STOPWORDS.has(raw)) continue
+    if (/^\d+$/.test(raw)) continue
+    if (blocked.has(raw)) continue
     seen.add(raw)
   }
   return [...seen]
@@ -235,8 +256,9 @@ export function keywords(text: string | null | undefined): string[] {
 export function matchScore(
   transcript: string | null | undefined,
   candidate: string | null | undefined,
+  exclude: string | null | undefined = null,
 ): number {
-  const a = keywords(transcript)
+  const a = keywords(transcript, exclude)
   if (!a.length) return 0
   const b = new Set(keywords(candidate))
   if (!b.size) return 0
@@ -261,9 +283,10 @@ export function rankMatches<T>(
   candidates: T[],
   textOf: (item: T) => string,
   limit = 5,
+  exclude: string | null | undefined = null,
 ): Suggestion<T>[] {
   return candidates
-    .map((item) => ({ item, score: matchScore(transcript, textOf(item)) }))
+    .map((item) => ({ item, score: matchScore(transcript, textOf(item), exclude) }))
     .filter((s) => s.score >= MATCH_THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)

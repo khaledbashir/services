@@ -201,3 +201,31 @@ test('sports open on the leagues ANC works in, blanks last', () => {
     ['NFL', 'NBA', 'AHL', 'Curling', NO_SPORT_LABEL],
   )
 })
+
+test("the caller's own name and number are not symptoms", () => {
+  // A real voicemail: "Hi, this is David Reed. You can call 561-908-4923…"
+  // Matching on david / reed / the digits can only ever find another David.
+  const said = 'Hi this is David Reed you can call 561 908 4923 the board is jittery'
+  const words = keywords(said, 'David Reed (561) 908-4923')
+  assert.ok(!words.includes('david'))
+  assert.ok(!words.includes('reed'))
+  assert.ok(!words.includes('561'))
+  assert.ok(words.includes('jittery'), 'the actual symptom survives')
+  assert.ok(words.includes('board'))
+})
+
+test('bare numbers never become match terms', () => {
+  // Case numbers, callback numbers and dates all tokenise into digits that
+  // say nothing about what broke.
+  const words = keywords('case 00001907 opened 2026 the processor is offline')
+  assert.ok(!words.includes('00001907'))
+  assert.ok(!words.includes('2026'))
+  assert.ok(words.includes('processor'))
+})
+
+test('excluding the caller kills a name-only match', () => {
+  const said = 'David Reed calling, everything is fine'
+  const withName = matchScore(said, 'David Reed asked about invoicing')
+  const without = matchScore(said, 'David Reed asked about invoicing', 'David Reed')
+  assert.ok(without < withName, `expected ${without} < ${withName}`)
+})
