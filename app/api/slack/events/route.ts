@@ -5,6 +5,7 @@ import { handleSlackReactionAdded, captureDirectMessageToInbox } from '@/lib/sla
 import { handleSlackServiceDeskEvent } from '@/lib/slack-service-desk'
 import { captureCodexMention, shouldCaptureCodexMention } from '@/lib/codex-request-inbox'
 import { handleSlackLinkShared } from '@/lib/slack-crm-unfurl-handler'
+import { captureAhmadSyncSlackMessage } from '@/lib/ahmad-sync-slack'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -110,6 +111,15 @@ export async function POST(request: NextRequest) {
   if (body.event?.type === 'message') {
     void handleSlackServiceDeskEvent(body.event).catch((err) => {
       console.error('Slack service desk message capture failed:', err)
+    })
+  }
+
+  // AhmadSync is a read-only live work board. It captures request-like human
+  // messages (and Ahmad's shipped updates) without adding every Slack line to
+  // the Codex execution queue. Slack retries are deduped by message identity.
+  if (body.event?.type === 'message' || body.event?.type === 'app_mention') {
+    void captureAhmadSyncSlackMessage(body.event, botUserId).catch((err) => {
+      console.error('AhmadSync Slack capture failed:', err)
     })
   }
 

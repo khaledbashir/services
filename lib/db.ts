@@ -400,6 +400,36 @@ async function runMigrations() {
     await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_codex_request_inbox_message
       ON codex_request_inbox(channel_id, message_ts)`)
 
+    // AhmadSync: the read-only live work departures board. This stays separate
+    // from the Codex queue so a visible Slack request is not automatically run.
+    await client.query(`CREATE TABLE IF NOT EXISTS ahmad_sync_events (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      request_id UUID,
+      event_type TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      headline TEXT NOT NULL,
+      detail TEXT,
+      status TEXT NOT NULL DEFAULT 'live',
+      source_channel_id TEXT,
+      source_channel_name TEXT,
+      source_message_ts TEXT,
+      source_thread_ts TEXT,
+      requester_slack_user_id TEXT,
+      source_permalink TEXT
+    )`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS source_channel_id TEXT`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS source_channel_name TEXT`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS source_message_ts TEXT`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS source_thread_ts TEXT`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS requester_slack_user_id TEXT`)
+    await client.query(`ALTER TABLE ahmad_sync_events ADD COLUMN IF NOT EXISTS source_permalink TEXT`)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ahmad_sync_slack_message
+      ON ahmad_sync_events(source_channel_id, source_message_ts, event_type)
+      WHERE source_message_ts IS NOT NULL`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ahmad_sync_created
+      ON ahmad_sync_events(created_at DESC)`)
+
     // Slack-native service desk configuration. This is the Ravenna-style
     // channel binding layer for ANC: a Slack channel can be connected to a
     // venue, set to manual ticket capture, or set to auto-create tickets.
