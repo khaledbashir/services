@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { getAuthUser } from '@/lib/rbac'
 import { getStaffVenueIds, buildVenueFilterClause } from '@/lib/venue-filter'
 import { buildAutomationSelect, classifyVenueAutomationStatus, withComputedAutomation } from '@/lib/venue-automation'
+import { versionStatus, VERSION_STATUS_LABEL, NO_SPORT_LABEL } from '@/lib/venue-reference'
 
 export async function GET(request: NextRequest) {
   try {
@@ -69,6 +70,16 @@ export async function GET(request: NextRequest) {
         ${buildAutomationSelect('v', 'vs', 'st')},
         COUNT(DISTINCT e.id) as event_count,
         COUNT(DISTINCT CASE WHEN ea.event_id IS NOT NULL THEN e.id END) as assigned_count,
+        -- Venue Reference (2026-08-25): the season/version columns the
+        -- all-venues page groups and flags on.
+        v.sport,
+        v.season_start_date,
+        v.cms_version,
+        v.led_firmware_version,
+        v.versions_updated_at,
+        (SELECT COUNT(*)::int FROM venue_equipment ve WHERE ve.venue_id = v.id) as equipment_count,
+        (SELECT COUNT(*)::int FROM venue_documents vd
+          WHERE vd.venue_id = v.id AND vd.is_archived = false) as document_count,
         (
           SELECT COUNT(*)::int
           FROM tickets venue_ticket
@@ -84,14 +95,25 @@ export async function GET(request: NextRequest) {
       LEFT JOIN events e ON v.id = e.venue_id ${dateFilter}
       LEFT JOIN (SELECT DISTINCT event_id FROM event_assignments) ea ON e.id = ea.event_id
       ${whereClause}
-      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active, v.feed_url, v.aliases
+      GROUP BY v.id, v.name, m.name, v.requires_assignment, v.portal_token, v.primary_contact_name, v.primary_contact_email, v.venue_type, v.is_active, v.feed_url, v.aliases, v.sport, v.season_start_date, v.cms_version, v.led_firmware_version, v.versions_updated_at
       ORDER BY v.name`,
       [...vf.params]
     )
     const venues = result.rows.map((row) => {
       const hydrated = withComputedAutomation(row)
+      // The explicit field wins; a venue that has never had one set falls back
+      // to the sport of a linked client so the grouping is useful on day one
+      // rather than after 251 manual edits.
+      const sport = (hydrated.sport || '').trim()
+        || (Array.isArray(hydrated.sports) ? hydrated.sports.filter(Boolean)[0] : '')
+        || null
+      const status = versionStatus(hydrated.season_start_date, hydrated.versions_updated_at)
       return {
         ...hydrated,
+        sport,
+        sport_group: sport || NO_SPORT_LABEL,
+        version_status: status,
+        version_status_label: VERSION_STATUS_LABEL[status],
         ticket_count: Number(hydrated.open_ticket_count) || 0,
         automation_status: classifyVenueAutomationStatus({
           is_active: Boolean(hydrated.is_active),

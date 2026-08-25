@@ -54,12 +54,28 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Two sources, one list: documents uploaded to this venue, plus manuals
+    // and guides attached to equipment models installed here. The second kind
+    // is Steve's "update the manual once" — it appears on every venue running
+    // that gear without anyone re-uploading it, and is marked shared so nobody
+    // deletes it from here thinking it is a local copy.
     const result = await query(
-      `SELECT vd.*, s.full_name as uploaded_by_name
-       FROM venue_documents vd
-       LEFT JOIN staff s ON vd.uploaded_by = s.id
-       WHERE vd.venue_id = $1
-       ORDER BY vd.file_type, vd.created_at DESC`,
+      `SELECT vd.*, s.full_name as uploaded_by_name,
+              false AS is_shared, NULL::text AS shared_from
+         FROM venue_documents vd
+         LEFT JOIN staff s ON vd.uploaded_by = s.id
+        WHERE vd.venue_id = $1 AND vd.is_archived = false
+       UNION ALL
+       SELECT DISTINCT vd.*, s.full_name as uploaded_by_name,
+              true AS is_shared,
+              (e.manufacturer || ' ' || e.model) AS shared_from
+         FROM venue_documents vd
+         JOIN equipment e ON e.id = vd.equipment_id
+         JOIN venue_equipment ve ON ve.equipment_id = e.id AND ve.venue_id = $1
+         LEFT JOIN staff s ON vd.uploaded_by = s.id
+        WHERE vd.is_archived = false
+          AND (vd.venue_id IS NULL OR vd.venue_id <> $1)
+       ORDER BY file_type, created_at DESC`,
       [params.id]
     )
     return NextResponse.json({ documents: result.rows })
@@ -105,11 +121,18 @@ export async function POST(
     const url = `/uploads/venues/documents/${filename}`
     const category = getFileCategory(file.type || '')
 
+    // A document can be pinned to an equipment MODEL (the manual, shown at
+    // every venue running it) or to one installed UNIT (that rack's as-built).
+    // Both null is a plain venue document, exactly as before.
+    const equipmentId = (formData.get('equipment_id') as string) || null
+    const venueEquipmentId = (formData.get('venue_equipment_id') as string) || null
+
     const result = await query(
-      `INSERT INTO venue_documents (venue_id, filename, original_name, file_type, file_size, description, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO venue_documents (venue_id, filename, original_name, file_type, file_size, description, uploaded_by, equipment_id, venue_equipment_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [params.id, url, file.name, fileType || category, file.size, description, auth.userId]
+      [params.id, url, file.name, fileType || category, file.size, description, auth.userId,
+       equipmentId || null, venueEquipmentId || null]
     )
 
     return NextResponse.json({ document: result.rows[0] })

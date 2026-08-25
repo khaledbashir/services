@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/skeleton'
 import { TicketContent, CommentContent } from '@/components/ticket-content'
 import { ATTACHMENT_ACCEPT } from '@/lib/ticket-attachments'
 import { TICKET_CATEGORY_LABELS } from '@/lib/ticket-categories'
+import { TicketCallContext } from '@/components/ticket-call-context'
 import Link from 'next/link'
 
 interface TicketDetail {
@@ -809,6 +810,11 @@ export function TicketDetail({
             Merged from: {ticket.merged_from_numbers.map((n) => `T-${String(n).padStart(5, '0')}`).join(', ')}
           </div>
         )}
+
+        {/* Which venue this caller has reached us about before, and which past
+            tickets sound like what they just said. Renders nothing when there
+            is nothing to say. */}
+        <TicketCallContext ticketId={ticket.id} venueId={ticket.venue_id} />
 
         {/*
           Print sheet — never on screen, the only thing on paper.

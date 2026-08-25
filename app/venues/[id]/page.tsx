@@ -11,6 +11,9 @@ import { InlineEdit } from '@/components/inline-edit'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
 import { formatDate as fmtDate, formatDateTime as fmtDateTime } from '@/lib/format-date'
+import {
+  VenueOverviewTab, VenueHardwareTab, VenueSoftwareTab, VenueDrawingsTab, VenueNovaTab,
+} from './VenueReferenceTabs'
 
 interface VenueDetail {
   id: string
@@ -141,7 +144,7 @@ export default function VenueDetailPage() {
     totalCount: number
   }>({ designRequests: [], cgDesigns: [], printRequests: [], contentSchedules: [], totalCount: 0 })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'events' | 'staff' | 'tickets' | 'specs' | 'documents' | 'creative' | 'settings'>('events')
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'staff' | 'tickets' | 'hardware' | 'software' | 'drawings' | 'nova' | 'specs' | 'documents' | 'creative' | 'settings'>('overview')
   const [venueTickets, setVenueTickets] = useState<Array<{ id: string; title: string; ticket_number: number; status: string; priority: string; created_at: string; assigned_to_name: string | null }>>([])
   const [slackChannelId, setSlackChannelId] = useState('')
   const [savingSlack, setSavingSlack] = useState(false)
@@ -743,9 +746,17 @@ export default function VenueDetailPage() {
 
           {/* Tabs */}
           <div className="border-t border-[#E8E8E8] flex px-6 overflow-x-auto">
-            {(['events', 'staff', 'tickets', 'specs', 'documents', 'creative', 'settings'] as const).map(tab => (
+            {/* Overview leads: it is the splash a tech opens mid-event, and the
+                reference tabs sit next to it so the gear, its versions and its
+                drawings read as one group before the operational tabs. */}
+            {(['overview', 'hardware', 'software', 'drawings', 'nova', 'specs', 'documents', 'events', 'staff', 'tickets', 'creative', 'settings'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-[#0A52EF] text-[#0A52EF]' : 'border-transparent text-zinc-500 hover:text-zinc-700'}`}>
+                {tab === 'overview' && 'Overview'}
+                {tab === 'hardware' && 'Hardware'}
+                {tab === 'software' && 'Software'}
+                {tab === 'drawings' && 'Drawings'}
+                {tab === 'nova' && 'Nova Mapping'}
                 {tab === 'events' && `Events (${upcomingEvents.length})`}
                 {tab === 'staff' && `Staff (${assignedStaff.length})`}
                 {tab === 'tickets' && `Tickets (${venueTickets.length})`}
@@ -759,6 +770,26 @@ export default function VenueDetailPage() {
         </div>
 
         {/* EVENTS TAB */}
+        {activeTab === 'overview' && (
+          <VenueOverviewTab venueId={venueId} isManager={auth.isManager} onJump={(t) => setActiveTab(t as any)} />
+        )}
+
+        {activeTab === 'hardware' && (
+          <VenueHardwareTab venueId={venueId} isManager={auth.isManager} />
+        )}
+
+        {activeTab === 'software' && (
+          <VenueSoftwareTab venueId={venueId} isManager={auth.isManager} />
+        )}
+
+        {activeTab === 'drawings' && (
+          <VenueDrawingsTab venueId={venueId} isManager={auth.isManager} />
+        )}
+
+        {activeTab === 'nova' && (
+          <VenueNovaTab venueId={venueId} isManager={auth.isManager} />
+        )}
+
         {activeTab === 'events' && (
           <div className="space-y-3">
             <div className="flex justify-end gap-2 flex-wrap">
@@ -1602,8 +1633,14 @@ export default function VenueDetailPage() {
                     className="px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:ring-2 focus:ring-[#0A52EF]/30 outline-none bg-white">
                     <option value="document">Document</option>
                     <option value="spec_sheet">Spec Sheet</option>
+                    {/* Anything filed as a drawing, rack photo or image also
+                        appears on the Drawings tab, where it can be pinned as
+                        the rack diagram or signal map and given hotspots. */}
+                    <option value="drawing">Drawing / Signal Flow</option>
+                    <option value="rack_photo">Rack Photo</option>
                     <option value="config">Config File</option>
                     <option value="firmware">Firmware</option>
+                    <option value="manual">Manual</option>
                     <option value="sop">SOP</option>
                     <option value="vendor">Vendor File</option>
                     <option value="image">Image</option>
@@ -1684,6 +1721,9 @@ export default function VenueDetailPage() {
               (() => {
                 const typeGroups: Record<string, { label: string; icon: string; color: string }> = {
                   spec_sheet: { label: 'Spec Sheets', icon: '📋', color: 'blue' },
+                  drawing: { label: 'Drawings & Signal Flow', icon: '📐', color: 'blue' },
+                  rack_photo: { label: 'Rack Photos', icon: '🗄️', color: 'zinc' },
+                  manual: { label: 'Manuals', icon: '📚', color: 'emerald' },
                   config: { label: 'Config Files', icon: '⚙️', color: 'violet' },
                   firmware: { label: 'Firmware', icon: '💾', color: 'amber' },
                   sop: { label: 'SOPs', icon: '📖', color: 'emerald' },

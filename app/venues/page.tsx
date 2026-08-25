@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Skeleton } from '@/components/skeleton'
 import { useAuth } from '@/lib/useAuth'
+import { VenueReferenceList } from './VenueReferenceList'
 
 interface Venue {
   id: string
@@ -21,6 +22,17 @@ interface Venue {
   active_service_count: number
   automation_status: 'auto_sync_active' | 'no_services' | 'no_feed_url' | 'inactive'
   aliases?: string[]
+  // Venue Reference (2026-08-25) — season readiness on the all-venues list.
+  sport?: string | null
+  sport_group?: string
+  season_start_date?: string | null
+  cms_version?: string | null
+  led_firmware_version?: string | null
+  versions_updated_at?: string | null
+  version_status?: 'up_to_date' | 'update_due' | 'overdue' | 'unknown'
+  version_status_label?: string
+  equipment_count?: number
+  document_count?: number
 }
 
 const venueTypeConfig: Record<string, { label: string; badge: string; dot: string }> = {
@@ -51,7 +63,7 @@ export default function VenuesPage() {
   // Joe 2026-05-04 8:56 PM: filter venues by their default-staffing toggle.
   // Mirrors the "Needs Staffing" filter on /events.
   const [staffingFilter, setStaffingFilter] = useState<'all' | 'on' | 'off'>('all')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'reference'>('grid')
   useEffect(() => {
     fetch('/api/preferences?key=venues.viewMode')
       .then(async (response) => {
@@ -59,14 +71,14 @@ export default function VenuesPage() {
         return response.json()
       })
       .then((data) => {
-        if (data.value === 'grid' || data.value === 'list') setViewMode(data.value)
+        if (data.value === 'grid' || data.value === 'list' || data.value === 'reference') setViewMode(data.value)
       })
       .catch((error) => console.error('Failed to load venue view preference:', error))
   }, [])
   const router = useRouter()
   const auth = useAuth()
 
-  const updateViewMode = async (mode: 'grid' | 'list') => {
+  const updateViewMode = async (mode: 'grid' | 'list' | 'reference') => {
     setViewMode(mode)
     try {
       const response = await fetch('/api/preferences', {
@@ -258,6 +270,18 @@ export default function VenuesPage() {
               </svg>
               List
             </button>
+            {/* Steve Solomson 2026-08-25: venues grouped by sport with each
+                one's CMS and firmware version and a readiness flag, so it is
+                obvious who needs updating before their season opens. */}
+            <button onClick={() => void updateViewMode('reference')} title="Reference view"
+              className={`px-3 py-2 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                viewMode === 'reference' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              }`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16M4 12h16M4 19h10M18 17l2 2 3-4" />
+              </svg>
+              Reference
+            </button>
           </div>
         </div>
 
@@ -350,6 +374,8 @@ export default function VenuesPage() {
                 : 'Try adjusting your search or filter.'}
             </p>
           </div>
+        ) : viewMode === 'reference' ? (
+          <VenueReferenceList venues={filtered} />
         ) : viewMode === 'list' ? (
           <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
             <div className="overflow-x-auto">

@@ -2122,6 +2122,206 @@ async function runMigrations() {
       )
     `)
 
+    // ---------------------------------------------------------------------
+    // Venue Reference (Joe + Steve Solomson, 2026-08-25)
+    //
+    // The venue pages already carry events, staff, tickets, display specs and
+    // documents. What they had nowhere to put was the GEAR: a processor's IP,
+    // a sender card's serial, which firmware is on it, which manual explains
+    // it. venue_screens covers LED displays only, so a support tech opening a
+    // venue at 6pm on a game day found no equipment at all.
+    //
+    // Two tables carry it, deliberately split:
+    //   equipment        — the model, once. Manual, training video, the
+    //                      version that IS current, and the faults that belong
+    //                      to the gear rather than the building.
+    //   venue_equipment  — the unit installed at a venue. Its address, its
+    //                      serial, the version actually on it.
+    // A manual therefore lives once and every venue referencing that model
+    // shows it — Steve's "update the manual once" requirement is this join,
+    // not a copy job.
+    // ---------------------------------------------------------------------
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS equipment (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category TEXT NOT NULL DEFAULT 'other',
+        manufacturer TEXT NOT NULL,
+        model TEXT NOT NULL,
+        description TEXT,
+        manual_url TEXT,
+        training_video_url TEXT,
+        -- The version a unit SHOULD be on. venue_equipment.installed_version is
+        -- what it is actually on; the Software tab is the comparison.
+        latest_version TEXT,
+        latest_version_note TEXT,
+        latest_version_updated_at TIMESTAMPTZ,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    // One row per make+model. A second "NovaStar MCTRL4K" is the same gear and
+    // must resolve to the same manual, so the pair is unique.
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_equipment_make_model
+      ON equipment (lower(manufacturer), lower(model))`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS venue_equipment (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        -- Nullable on purpose: a tech logging a one-off box at 6pm should not
+        -- be blocked into creating a catalog entry first. It can be linked later.
+        equipment_id UUID REFERENCES equipment(id) ON DELETE SET NULL,
+        label TEXT NOT NULL,
+        ip_address TEXT,
+        serial_number TEXT,
+        installed_version TEXT,
+        firmware_version TEXT,
+        rack_name TEXT,
+        rack_position TEXT,
+        location_note TEXT,
+        install_date DATE,
+        status TEXT NOT NULL DEFAULT 'active',
+        notes TEXT,
+        updated_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_equipment_venue ON venue_equipment(venue_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_equipment_equipment ON venue_equipment(equipment_id)`)
+
+    // Common issues, split the two ways Steve asked for: a fault that follows
+    // the gear everywhere it is installed, and a quirk that belongs to one
+    // building (Fenway's header row). Same shape, different owner.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS equipment_issues (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        equipment_id UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        symptom TEXT,
+        resolution TEXT,
+        source_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL,
+        created_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_equipment_issues_eq ON equipment_issues(equipment_id)`)
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS venue_issues (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        venue_equipment_id UUID REFERENCES venue_equipment(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        symptom TEXT,
+        resolution TEXT,
+        source_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL,
+        created_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_issues_venue ON venue_issues(venue_id)`)
+
+    // Documents can now hang off a model (the manual, shown at every venue
+    // running it) or off one installed unit (that rack's as-built), while a
+    // plain venue document still works exactly as before — both columns null.
+    await client.query(`ALTER TABLE venue_documents ADD COLUMN IF NOT EXISTS equipment_id UUID REFERENCES equipment(id) ON DELETE SET NULL`)
+    await client.query(`ALTER TABLE venue_documents ADD COLUMN IF NOT EXISTS venue_equipment_id UUID REFERENCES venue_equipment(id) ON DELETE SET NULL`)
+    await client.query(`ALTER TABLE venue_documents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`)
+    await client.query(`ALTER TABLE venue_documents ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_documents_equipment ON venue_documents(equipment_id)`)
+
+    // A shared manual has no venue of its own. venue_id was NOT NULL because
+    // every document used to belong to a building; a catalog document belongs
+    // to a model instead, so the column has to allow null for those rows.
+    await client.query(`ALTER TABLE venue_documents ALTER COLUMN venue_id DROP NOT NULL`)
+
+    // The all-venues page groups by sport and flags who is behind on versions.
+    // Neither existed anywhere: venues carried venue_type ('sports') and a
+    // market, and only 3 of 251 could be reached to a sport through a client.
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS sport TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS season_start_date DATE`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS cms_version TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS led_firmware_version TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS versions_updated_at TIMESTAMPTZ`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS versions_updated_by UUID REFERENCES staff(id)`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS contract_status TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS contract_expires_on DATE`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS livesync_license_status TEXT`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS livesync_license_expires_on DATE`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS rack_document_id UUID REFERENCES venue_documents(id) ON DELETE SET NULL`)
+    await client.query(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS signal_map_document_id UUID REFERENCES venue_documents(id) ON DELETE SET NULL`)
+
+    // A caller's number, remembered against the venues it has called about.
+    // Many-to-many both ways by design: one number can cover several venues
+    // (a travelling tech), one venue takes calls from many numbers.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS venue_phone_numbers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone TEXT NOT NULL,
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        caller_name TEXT,
+        call_count INTEGER NOT NULL DEFAULT 1,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        -- 'backfill' rows were inferred from ticket history and are suggestions;
+        -- 'confirmed' means a human linked it. The picker weights them differently.
+        origin TEXT NOT NULL DEFAULT 'confirmed',
+        confirmed_by UUID REFERENCES staff(id),
+        confirmed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_venue_phone_pair ON venue_phone_numbers (phone, venue_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_venue_phone_lookup ON venue_phone_numbers (phone)`)
+
+    // Rack photo hotspots — a rectangle on a document that points at a real
+    // installed unit, so the picture stays connected to live data.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rack_hotspots (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        document_id UUID NOT NULL REFERENCES venue_documents(id) ON DELETE CASCADE,
+        venue_equipment_id UUID REFERENCES venue_equipment(id) ON DELETE CASCADE,
+        label TEXT,
+        -- Percentages of the rendered image, not pixels: the same hotspot has
+        -- to land correctly on a phone and on a 27-inch monitor.
+        x NUMERIC(6,3) NOT NULL,
+        y NUMERIC(6,3) NOT NULL,
+        w NUMERIC(6,3) NOT NULL,
+        h NUMERIC(6,3) NOT NULL,
+        created_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_rack_hotspots_doc ON rack_hotspots(document_id)`)
+
+    // Sender/receiver card mapping. The sender is an installed unit; the
+    // receiver is a card downstream of one of its ports, optionally tied to
+    // the screen it drives.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nova_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+        sender_equipment_id UUID REFERENCES venue_equipment(id) ON DELETE SET NULL,
+        venue_screen_id UUID REFERENCES venue_screens(id) ON DELETE SET NULL,
+        port TEXT,
+        receiver_label TEXT NOT NULL,
+        receiver_model TEXT,
+        cabinet_row INTEGER,
+        cabinet_col INTEGER,
+        notes TEXT,
+        updated_by UUID REFERENCES staff(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nova_mappings_venue ON nova_mappings(venue_id)`)
+
     migrationRan = true
   } catch (err) {
     console.warn('Migration check:', err)

@@ -13,6 +13,9 @@ import fs from 'fs'
 import { query } from '@/lib/db'
 import { notifyCustomerStatus } from '@/lib/customer-notify'
 import { awardPointsOnce } from '@/lib/gamification'
+import {
+  applyVersionWriteback, readVersionsFromNote, type VersionWriteback,
+} from '@/lib/venue-version-writeback'
 
 export type ClosableTicket = {
   ticket_number: number | string
@@ -39,12 +42,19 @@ export async function applyTicketClose({
   venueName,
   actor,
   resolutionNotes,
+  versionUpdates,
 }: {
   ticketId: string
   ticket: ClosableTicket
   venueName: string
   actor: { userId?: string | null; fullName?: string | null }
   resolutionNotes?: string | null
+  /**
+   * Versions the tech says this ticket changed. Written straight onto the
+   * venue's Software tab so there is no second screen to remember later
+   * (Steve Solomson, 2026-08-25). Omitted by callers that don't collect it.
+   */
+  versionUpdates?: VersionWriteback | null
 }): Promise<TicketCloseResult> {
   const sets = [
     `status = 'closed'`,
@@ -69,6 +79,23 @@ export async function applyTicketClose({
       new_status: 'closed',
     })]
   )
+
+  // Versions the close reported, onto the venue's Software tab. An explicit
+  // field wins; failing that, a resolution note that plainly says what was
+  // upgraded ("CMS updated to v4.2") is read rather than made into a second
+  // form the tech has to fill in.
+  try {
+    const fromNote = versionUpdates ? {} : readVersionsFromNote(resolutionNotes)
+    const updates: VersionWriteback | null =
+      versionUpdates ?? (Object.keys(fromNote).length ? fromNote : null)
+    if (updates) {
+      await applyVersionWriteback(ticketId, ticket.venue_id, updates, actor.userId || null)
+    }
+  } catch (err) {
+    // A version record is not worth failing a close over — the ticket is
+    // already closed and the tech is done.
+    console.warn('[ticket-close] version writeback failed:', err)
+  }
 
   // Portal customer notification — fire-and-forget.
   notifyCustomerStatus({ ticketId }).catch((err) =>
